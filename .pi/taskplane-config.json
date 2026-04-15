@@ -1,0 +1,25 @@
+{
+  "configVersion": 1,
+  "taskRunner": {
+    "project": {
+      "name": "hallucygenie",
+      "description": ""
+    },
+    "paths": {
+      "tasks": "Tasks"
+    },
+    "testing": {
+      "commands": {
+        "unit": "just verify",
+        "build": "just build"
+      }
+    },
+    "taskAreas": {
+      "general": {
+        "path": "Tasks",
+        "prefix": "HG",
+        "context": "Tasks/CONTEXT.md"
+      }
+    }
+  }
+}
