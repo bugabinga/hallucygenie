@@ -1,7 +1,7 @@
 # EXAMPLE-001: Hello World — Status
 
-**Current Step:** Step 2: Verification
-**Status:** 🟡 In Progress
+**Current Step:** Step 3: Delivery
+**Status:** ✅ Complete
 **Last Updated:** 2026-04-15
 **Review Level:** 0
 **Review Counter:** 0
@@ -11,7 +11,7 @@
 ---
 
 ### Step 0: Preflight
-**Status:** ✅ Done
+**Status:** ✅ Complete
 
 - [x] Verify PROMPT.md is readable
 - [x] Verify STATUS.md exists
@@ -19,7 +19,7 @@
 ---
 
 ### Step 1: Create Hello File
-**Status:** ✅ Done
+**Status:** ✅ Complete
 
 - [x] Create `hello-taskplane.md` in project root
 - [x] Add title, date, and task ID (EXAMPLE-001)
@@ -27,14 +27,14 @@
 ---
 
 ### Step 2: Verification
-**Status:** ✅ Done
+**Status:** ✅ Complete
 
 - [x] Verify file exists and matches expected content
 
 ---
 
 ### Step 3: Delivery
-**Status:** ⬜ Not Started
+**Status:** ✅ Complete
 
 
 
@@ -61,6 +61,8 @@
 | 2026-04-15 | Task staged | PROMPT.md and STATUS.md created |
 | 2026-04-15 16:36 | Task started | Runtime V2 lane-runner execution |
 | 2026-04-15 16:36 | Step 0 started | Preflight |
+| 2026-04-15 16:38 | Worker iter 1 | done in 92s, tools: 10 |
+| 2026-04-15 16:38 | Task complete | .DONE created |
 
 ---
 
