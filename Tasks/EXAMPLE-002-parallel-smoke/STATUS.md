@@ -1,7 +1,7 @@
 # EXAMPLE-002: Parallel Smoke — Status
 
-**Current Step:** Step 1: Create Parallel Hello File
-**Status:** 🟡 In Progress
+**Current Step:** Step 3: Delivery
+**Status:** ✅ Complete
 **Last Updated:** 2026-04-15
 **Review Level:** 0
 **Review Counter:** 0
@@ -34,7 +34,7 @@
 ---
 
 ### Step 3: Delivery
-**Status:** ⬜ Not Started
+**Status:** ✅ Complete
 
 
 
@@ -61,6 +61,8 @@
 | 2026-04-15 | Task staged | PROMPT.md and STATUS.md created |
 | 2026-04-15 16:36 | Task started | Runtime V2 lane-runner execution |
 | 2026-04-15 16:36 | Step 0 started | Preflight |
+| 2026-04-15 16:38 | Worker iter 1 | done in 131s, tools: 15 |
+| 2026-04-15 16:38 | Task complete | .DONE created |
 
 ---
 
