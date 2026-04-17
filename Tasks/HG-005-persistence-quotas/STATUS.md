@@ -1,18 +1,21 @@
 # STATUS — HG-005
 
 **Task:** HG-005 — Persistence, Migrations, and Quota Tracking
-**Status:** ⬜ Not Started
+**Iteration:** 1
+**Current Step:** Step 1: Migration Files
+**Last Updated:** 2026-04-17
+**Status:** 🟡 In Progress
 **Started:** —
 **Updated:** —
 
 ## Step Progress
 
 ### Step 0: Preflight
-**Status:** ⬜ Not Started
+**Status:** ✅ Complete
 
-- [ ] Verify db.ts exists
-- [ ] Verify migrations/ directory exists
-- [ ] `just test` passes
+- [x] Verify db.ts exists
+- [x] Verify migrations/ directory exists
+- [x] `just test` passes
 
 ### Step 1: Migration Files
 **Status:** ⬜ Not Started
@@ -58,3 +61,6 @@
 | Step | Finding | Action Taken |
 |------|---------|-------------|
 | — | — | — |
+
+| 2026-04-17 11:52 | Task started | Runtime V2 lane-runner execution |
+| 2026-04-17 11:52 | Step 0 started | Preflight |
