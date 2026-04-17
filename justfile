@@ -6,7 +6,7 @@ install:
     npm install
 
 # Start dev server
- dev:
+dev:
     node --experimental-strip-types --no-warnings server.ts
 
 # Run all unit tests
