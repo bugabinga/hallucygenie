@@ -2,7 +2,7 @@
 
 **Task:** HG-007 — Frontend MVP with UI Tests
 **Iteration:** 1
-**Current Step:** Step 5: Tool Result Rendering
+**Current Step:** Step 6: Playwright E2E Tests
 **Last Updated:** 2026-04-17
 **Status:** 🟡 In Progress
 **Started:** —
@@ -54,11 +54,11 @@
 - [x] E2E tests for each tool type
 
 ### Step 6: Playwright E2E Tests
-**Status:** ⬜ Not Started
+**Status:** ✅ Complete
 
-- [ ] playwright.config.ts for Termux
-- [ ] E2E: streaming, image, TTS, music, steering, history, errors, quota warning
-- [ ] `just test-e2e` passes
+- [x] playwright.config.ts for Termux
+- [x] E2E: streaming, image, TTS, music, steering, history, errors, quota warning
+- [x] `just test-e2e` passes
 
 ### Step 7: Coverage and Mutation Testing
 **Status:** ⬜ Not Started

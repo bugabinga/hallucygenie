@@ -42,8 +42,12 @@ test-frontend-coverage:
     node --experimental-strip-types --no-warnings --experimental-test-coverage --import ./tests/loader.mjs --test public/app.test.ts
 
 # Run E2E tests with Playwright
+# Starts a static server, runs tests, then stops the server
 test-e2e:
-    PLAYWRIGHT_ALLOW_ANDROID=1 npx playwright test --config playwright.config.ts
+    npx esbuild public/app.ts --outfile=public/app.js --format=esm --target=esnext && \
+    PLAYWRIGHT_ALLOW_ANDROID=1 node --experimental-strip-types --no-warnings e2e/static-server.ts public & sleep 1 && \
+    BASE_URL=http://localhost:3001 PLAYWRIGHT_ALLOW_ANDROID=1 node --experimental-strip-types --no-warnings e2e/run-e2e.ts; \
+    kill %1 2>/dev/null; true
 
 # Show all recipes
 list:

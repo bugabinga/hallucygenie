@@ -552,6 +552,7 @@ body {
   max-width: 95vw;
   max-height: 95vh;
   z-index: 1;
+  pointer-events: none;
 }
 
 .lightbox-content img {
@@ -559,6 +560,7 @@ body {
   max-height: 90vh;
   border-radius: var(--radius-sm);
   object-fit: contain;
+  pointer-events: auto;
 }
 
 .lightbox-close {
@@ -577,6 +579,7 @@ body {
   align-items: center;
   justify-content: center;
   transition: background var(--transition-fast);
+  pointer-events: auto;
 }
 
 .lightbox-close:hover {
