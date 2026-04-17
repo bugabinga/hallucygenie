@@ -74,3 +74,6 @@
 | 2026-04-17 11:35 | Bun not available on Termux/Android | Adapted to use Node.js test runner; server code targets Bun but handlers tested via Node |
 | 2026-04-17 11:40 | HG-002 scaffold missing | Created all scaffold files (package.json, tsconfig, public/, container configs) as prerequisite |
 | 2026-04-17 11:45 | Coverage at 95.28% | Remaining gaps are Bun.serve/startServer/signal handlers (untestable in Node.js) |
+| 2026-04-17 11:51 | Agent reply | HG-003 task complete. All 5 steps done. 76 tests passing, 95.28% coverage. Server implements static file serving, SSE chat proxy to MiniMax with thinking token stripping, tool call accumulator, CORS,  |
+| 2026-04-17 11:51 | Worker iter 1 | done in 1299s, tools: 98 |
+| 2026-04-17 11:51 | Task complete | .DONE created |
