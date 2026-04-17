@@ -111,13 +111,33 @@ For SQLite tests, use in-memory databases (`:memory:`) so tests are isolated and
 - [ ] Wire into server routes
 - [ ] **Tests:** Test steer mid-loop, steer when idle, multiple steers queued, steer ignored after done
 
-### Step 4: SQLite Persistence
+### Step 4: SQLite Persistence + Migration System
 
-- [ ] Implement `db.ts` using `bun:sqlite`
-- [ ] Message CRUD, preference CRUD
-- [ ] **Tests:** All CRUD operations, test with `:memory:` databases
-- [ ] **Tests:** Edge cases — empty DB, large messages, special characters in content
-- [ ] **Snapshot tests:** Snapshot message history JSON output
+**Migration system design:**
+- Migrations are numbered SQL files in `migrations/`: `001-create-messages.sql`, `002-create-preferences.sql`, etc.
+- A `schema_migrations` table tracks applied migration versions
+- `runMigrations(db, migrationsDir)` reads pending migrations, executes them in order within a transaction
+- If a migration fails, the transaction rolls back and the app fails to start (fail fast)
+- `initDb(path)` calls `runMigrations` automatically on startup
+- To create a new migration: add a numbered `.sql` file, it runs on next startup
+
+- [ ] Create migration files:
+  - `migrations/001-create-schema-migrations.sql` — schema_migrations table (version INTEGER PRIMARY KEY, applied_at TEXT)
+  - `migrations/002-create-messages.sql` — messages table (id INTEGER PRIMARY KEY, session_id TEXT, role TEXT, content TEXT, tool_calls_json TEXT, tool_call_id TEXT, created_at TEXT)
+  - `migrations/003-create-preferences.sql` — preferences table (key TEXT PRIMARY KEY, value TEXT, updated_at TEXT)
+- [ ] Implement migration runner in `db.ts`:
+  - `runMigrations(db)` — reads `migrations/` dir sorted, checks `schema_migrations`, runs pending in a transaction
+  - Migration files are plain SQL, no templating, no DSL
+- [ ] Implement data access functions:
+  - `saveMessage(sessionId, role, content, toolCalls?, toolCallId?)`
+  - `getMessages(sessionId)` — get conversation history
+  - `savePreference(key, value)` — store user preference
+  - `getPreferences()` — get all preferences as object
+- [ ] DB file stored in `data/hallucygenie.db` (container volume mount)
+- [ ] **Tests:** Test migration runner with `:memory:` databases — fresh DB gets all migrations, partially migrated DB gets only pending, failed migration rolls back cleanly
+- [ ] **Tests:** Test all CRUD operations with `:memory:` databases
+- [ ] **Tests:** Edge cases — empty DB, large messages, special characters, concurrent access
+- [ ] **Snapshot tests:** Snapshot message history JSON output, schema state after each migration
 
 ### Step 5: Wire Into Server
 

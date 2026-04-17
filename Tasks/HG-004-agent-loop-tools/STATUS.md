@@ -37,13 +37,16 @@
 - [ ] Wire into server
 - [ ] Tests: mid-loop, idle, multiple, after-done
 
-### Step 4: SQLite Persistence
+### Step 4: SQLite Persistence + Migration System
 **Status:** ⬜ Not Started
 
-- [ ] db.ts with bun:sqlite
-- [ ] CRUD tests with :memory:
-- [ ] Edge case tests
-- [ ] Snapshot tests for history
+- [ ] Create migration SQL files in `migrations/`
+- [ ] Implement migration runner (runMigrations)
+- [ ] Implement data access functions (CRUD)
+- [ ] Tests: migration runner (fresh, partial, rollback)
+- [ ] Tests: CRUD operations with :memory:
+- [ ] Tests: edge cases
+- [ ] Snapshot tests for history and schema
 
 ### Step 5: Wire Into Server
 **Status:** ⬜ Not Started

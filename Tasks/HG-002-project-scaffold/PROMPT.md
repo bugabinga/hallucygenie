@@ -56,6 +56,7 @@ optimized for LLM invocation (clear names, doc comments, no ambiguity).
 - `public/style.css` (empty placeholder)
 - `Dockerfile`
 - `hallucygenie.container`
+- `migrations/` directory (empty, for HG-004)
 - `*.test.ts` files for each module
 
 ## Steps
@@ -157,6 +158,7 @@ container:
 - [ ] Create `agent.ts` with a comment `// agent loop — HG-003`
 - [ ] Create `tools.ts` with a comment `// tool definitions — HG-004`
 - [ ] Create `db.ts` with a comment `// SQLite persistence — HG-004`
+- [ ] Create `migrations/` directory (empty, with a `.gitkeep`)
 
 ### Step 6: Frontend Placeholders
 

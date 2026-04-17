@@ -51,6 +51,7 @@
 - [ ] Create `agent.ts`
 - [ ] Create `tools.ts`
 - [ ] Create `db.ts`
+- [ ] Create `migrations/` directory with `.gitkeep`
 
 ### Step 6: Frontend Placeholders
 **Status:** ⬜ Not Started
