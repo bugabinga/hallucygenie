@@ -100,16 +100,38 @@ event: done       → data: {}
 - [ ] User/assistant message bubbles
 - [ ] `<script type="module" src="app.ts">`
 
-### Step 2: CSS — Mobile-First Dark Theme
+### Step 2: CSS — Design System + Mobile-First Styling
 
+**Color palette (CSS custom properties):**
+- `--color-primary`: red — use for headers, send button, active states, accents
+- `--color-secondary`: green — use for success states, assistant message accents, online indicators
+- `--color-tertiary`: gold — use for highlights, badges, achievements, important callouts
+- `--color-bg`: very dark grey — main background, not pure black
+- `--color-surface`: slightly lighter dark grey — cards, message bubbles, input area
+- `--color-text`: off-white — readable text on dark backgrounds
+- `--color-text-muted`: medium grey — timestamps, secondary info
+
+**UX principles:**
+- Beautiful: cohesive palette, generous spacing, smooth micro-animations (no jank), subtle shadows
+- Simple: one thing per screen section, zero learning curve, obvious what to tap
+- Kid-friendly: big targets (min 48px), emoji in UI labels, no jargon, friendly copy
+- Fast: no layout shifts, instant input response, CSS animations only (no JS animation overhead)
+- Responsive: works 320px–1440px+, touch and mouse
+- Snappy: immediate feedback on every interaction (button press scale, ripple, color flash)
+- Fun: playful but not childish, satisfying interactions, feels like a game not a form
+
+- [ ] Define CSS custom properties for the full color palette
 - [ ] `100dvh` full-height, no horizontal scroll
-- [ ] Dark theme with good contrast, gaming aesthetic
-- [ ] Large touch targets (min 44px), readable font (min 16px)
-- [ ] Message bubble animations
-- [ ] Tool call cards: "🎨 Generating image..." → result
-- [ ] Inline image display, audio players
-- [ ] Typing/loading indicator
-- [ **Snapshot tests:** Snapshot rendered HTML of each UI state (empty chat, messages, tool card, image result, audio player, error)
+- [ ] Large touch targets (min 48px), readable font (min 16px)
+- [ ] User message bubbles: primary (red) accent, right-aligned
+- [ ] Assistant message bubbles: surface bg with secondary (green) accent, left-aligned
+- [ ] Tool call cards: tertiary (gold) accent border, loading spinner → result
+- [ ] Send button: primary (red), satisfying press animation
+- [ ] Typing indicator: animated dots in assistant color
+- [ ] Inline images: rounded corners, subtle shadow, tap to enlarge
+- [ ] Audio players: styled with primary/secondary colors, clear play button
+- [ ] Error states: soft red, friendly message, no scary technical text
+- [ ] **Snapshot tests:** Snapshot rendered HTML of each UI state (empty chat, messages, tool card, image result, audio player, error)
 
 ### Step 3: Chat Logic in app.ts
 
