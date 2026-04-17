@@ -1590,3 +1590,124 @@ describe("GET /api/usage", () => {
     assert.ok("limits" in body);
   });
 });
+
+// ── Step 6: Coverage gap tests ───────────────────────────────────────
+
+describe("Coverage: DB not initialized paths", () => {
+  it("handleChat returns 500 when DB is null", async () => {
+    resetStateForTesting();
+    // DB is null after reset
+    const req = makeRequest("POST", "/api/chat", {
+      messages: [{ role: "user", content: "hi" }],
+    });
+    const resp = await handleChat(req, "test-key");
+    assert.equal(resp.status, 500);
+    const body = (await readJson(resp)) as { error: string };
+    assert.ok(body.error.includes("Database not initialized"));
+
+    // Re-init for subsequent tests
+    initDatabase(join(import.meta.dirname ?? ".", "test-data", "test.db"));
+  });
+});
+
+describe("Coverage: API 404 within /api/* routes", () => {
+  it("returns 404 for unknown API route", async () => {
+    const resp = await handleRequest(
+      makeRequest("GET", "/api/nonexistent")
+    );
+    assert.equal(resp.status, 404);
+  });
+
+  it("returns 404 for POST to unknown API route", async () => {
+    const resp = await handleRequest(
+      makeRequest("POST", "/api/unknown", { data: "test" })
+    );
+    assert.equal(resp.status, 404);
+  });
+});
+
+describe("Coverage: History loading in handleChat", () => {
+  const histDbDir = join(import.meta.dirname ?? ".", "test-data-hist2");
+  const histDbPath = join(histDbDir, "test.db");
+
+  before(() => {
+    resetStateForTesting();
+    try { rmSync(histDbDir, { recursive: true, force: true }); } catch {}
+    initDatabase(histDbPath);
+  });
+
+  after(() => {
+    try { rmSync(histDbDir, { recursive: true, force: true }); } catch {}
+  });
+
+  it("loads existing history from DB and includes in agent loop", async () => {
+    const database = getDb()!;
+    saveMessage(database, "hist-session", "user", "previous message");
+    saveMessage(database, "hist-session", "assistant", "previous reply");
+
+    let capturedPayload: unknown = null;
+    const encoder = new TextEncoder();
+    const sseChunks = [
+      'data: {"choices":[{"delta":{"content":"new reply"},"finish_reason":null}]}\n\n',
+      'data: {"choices":[{"delta":{},"finish_reason":"stop"}]}\n\n',
+      "data: [DONE]\n\n",
+    ];
+
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = async (_url: string | URL | Request, init?: RequestInit) => {
+      capturedPayload = JSON.parse(init?.body as string);
+      return new Response(
+        new ReadableStream({
+          start(controller) {
+            for (const chunk of sseChunks) {
+              controller.enqueue(encoder.encode(chunk));
+            }
+            controller.close();
+          },
+        }),
+        { status: 200, headers: { "Content-Type": "text/event-stream" } }
+      );
+    };
+
+    try {
+      const req = makeRequest("POST", "/api/chat", {
+        messages: [{ role: "user", content: "new message" }],
+      });
+      const resp = await handleChat(req, "test-key", "hist-session");
+      assert.equal(resp.status, 200);
+
+      const payload = capturedPayload as { messages: Array<{ role: string; content: string }> };
+      // Should include system prompt + history + new message
+      assert.ok(payload.messages.length >= 4, "should have system + history + new");
+      assert.equal(payload.messages[0].role, "system");
+      assert.equal(payload.messages[1].role, "user");
+      assert.equal(payload.messages[1].content, "previous message");
+      assert.equal(payload.messages[2].role, "assistant");
+      assert.equal(payload.messages[2].content, "previous reply");
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+});
+
+describe("Coverage: GET /api/history and /api/usage without DB", () => {
+  it("history returns 500 when DB not initialized", async () => {
+    resetStateForTesting();
+    const resp = await handleRequest(
+      makeRequest("GET", "/api/history")
+    );
+    assert.equal(resp.status, 500);
+    // Re-init
+    initDatabase(join(import.meta.dirname ?? ".", "test-data", "test.db"));
+  });
+
+  it("usage returns 500 when DB not initialized", async () => {
+    resetStateForTesting();
+    const resp = await handleRequest(
+      makeRequest("GET", "/api/usage")
+    );
+    assert.equal(resp.status, 500);
+    // Re-init
+    initDatabase(join(import.meta.dirname ?? ".", "test-data", "test.db"));
+  });
+});

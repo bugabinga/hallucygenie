@@ -269,23 +269,8 @@ async function serveStaticFile(path: string): Promise<Response | null> {
 }
 
 // ── MiniMax API proxy ────────────────────────────────────────────────
-
-function buildMiniMaxPayload(body: ChatRequestBody) {
-  const messages: ChatMessage[] = [];
-
-  if (body.system_prompt) {
-    messages.push({ role: "system", content: body.system_prompt });
-  }
-
-  messages.push(...body.messages);
-
-  return {
-    model: MINIMAX_MODEL,
-    messages,
-    stream: true,
-    tools: getToolDefinitions(),
-  };
-}
+// Note: buildMiniMaxPayload is no longer used; handleChat delegates to runAgentLoop
+// which builds its own payload internally.
 
 export async function handleChat(
   req: Request,
