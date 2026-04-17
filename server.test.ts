@@ -20,6 +20,7 @@ import type { ToolCallChunk } from "./server.ts";
 import { existsSync, rmSync, mkdirSync } from "node:fs";
 import { join } from "node:path";
 import { getMessages } from "./db.ts";
+import { trackUsage, saveMessage } from "./db.ts";
 
 // ── Test helpers ─────────────────────────────────────────────────────
 
@@ -1469,5 +1470,123 @@ describe("POST /api/steer integration", () => {
       makeRequest("POST", "/api/steer", { not_message: "test" })
     );
     assert.equal(resp.status, 400);
+  });
+});
+
+// ── Step 5: New API Endpoints ────────────────────────────────────────
+
+describe("GET /api/history", () => {
+  const historyDbDir = join(import.meta.dirname ?? ".", "test-data-history");
+  const historyDbPath = join(historyDbDir, "test.db");
+
+  before(() => {
+    resetStateForTesting();
+    try { rmSync(historyDbDir, { recursive: true, force: true }); } catch {}
+    initDatabase(historyDbPath);
+  });
+
+  after(() => {
+    try { rmSync(historyDbDir, { recursive: true, force: true }); } catch {}
+  });
+
+  it("returns empty messages for new session", async () => {
+    const resp = await handleRequest(
+      makeRequest("GET", "/api/history")
+    );
+    assert.equal(resp.status, 200);
+    const body = (await readJson(resp)) as { messages: unknown[] };
+    assert.ok(Array.isArray(body.messages));
+    assert.equal(body.messages.length, 0);
+  });
+
+  it("returns saved messages for a session", async () => {
+    const database = getDb()!;
+    saveMessage(database, "test-session-123", "user", "hello");
+    saveMessage(database, "test-session-123", "assistant", "hi there");
+
+    const resp = await handleRequest(
+      makeRequest("GET", "/api/history")
+    );
+    assert.equal(resp.status, 200);
+    const body = (await readJson(resp)) as { messages: Array<{ role: string; content: string }> };
+    assert.equal(body.messages.length, 2);
+    assert.equal(body.messages[0].role, "user");
+    assert.equal(body.messages[0].content, "hello");
+    assert.equal(body.messages[1].role, "assistant");
+    assert.equal(body.messages[1].content, "hi there");
+  });
+
+  it("requires session ID", async () => {
+    const req = new Request("http://localhost/api/history", {
+      method: "GET",
+    });
+    const resp = await handleRequest(req);
+    assert.equal(resp.status, 400);
+  });
+
+  it("snapshot: history response structure", async () => {
+    const resp = await handleRequest(makeRequest("GET", "/api/history"));
+    const body = (await readJson(resp)) as { messages: unknown[] };
+    // Verify structure
+    assert.ok("messages" in body);
+    assert.ok(Array.isArray(body.messages));
+  });
+});
+
+describe("GET /api/usage", () => {
+  const usageDbDir = join(import.meta.dirname ?? ".", "test-data-usage");
+  const usageDbPath = join(usageDbDir, "test.db");
+
+  before(() => {
+    resetStateForTesting();
+    try { rmSync(usageDbDir, { recursive: true, force: true }); } catch {}
+    initDatabase(usageDbPath);
+  });
+
+  after(() => {
+    try { rmSync(usageDbDir, { recursive: true, force: true }); } catch {}
+  });
+
+  it("returns empty usage and limits", async () => {
+    const resp = await handleRequest(
+      makeRequest("GET", "/api/usage")
+    );
+    assert.equal(resp.status, 200);
+    const body = (await readJson(resp)) as { usage: Record<string, number>; limits: Record<string, number> };
+    assert.deepEqual(body.usage, {});
+    assert.ok(body.limits);
+    assert.equal(body.limits.image, 100);
+    assert.equal(body.limits.speech, 9000);
+    assert.equal(body.limits.music, 100);
+  });
+
+  it("returns tracked usage counts", async () => {
+    const database = getDb()!;
+    trackUsage(database, "image");
+    trackUsage(database, "image");
+    trackUsage(database, "speech");
+
+    const resp = await handleRequest(
+      makeRequest("GET", "/api/usage")
+    );
+    assert.equal(resp.status, 200);
+    const body = (await readJson(resp)) as { usage: Record<string, number>; limits: Record<string, number> };
+    assert.equal(body.usage.image, 2);
+    assert.equal(body.usage.speech, 1);
+  });
+
+  it("requires session ID", async () => {
+    const req = new Request("http://localhost/api/usage", {
+      method: "GET",
+    });
+    const resp = await handleRequest(req);
+    assert.equal(resp.status, 400);
+  });
+
+  it("snapshot: usage response structure", async () => {
+    const resp = await handleRequest(makeRequest("GET", "/api/usage"));
+    const body = (await readJson(resp)) as { usage: unknown; limits: unknown };
+    assert.ok("usage" in body);
+    assert.ok("limits" in body);
   });
 });

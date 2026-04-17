@@ -14,7 +14,7 @@ import {
   type SteerQueue,
   type AgentEvent,
 } from "./agent.ts";
-import { getMessages, saveMessage, getPreferences, trackUsage, checkQuota } from "./db.ts";
+import { getMessages, saveMessage, getPreferences, trackUsage, checkQuota, getUsageToday, QUOTAS } from "./db.ts";
 
 // ── Steer queues per session ────────────────────────────────────────
 
@@ -510,6 +510,24 @@ export async function handleRequest(req: Request): Promise<Response> {
       const queue = getOrCreateSteerQueue(sessionId!);
       queueSteer(queue, (parsed as { message: string }).message);
       return jsonResponse({ ok: true });
+    }
+
+    if (path === "/api/history" && method === "GET") {
+      const database = getDb();
+      if (!database) {
+        return jsonResponse({ error: "Database not initialized" }, 500);
+      }
+      const messages = getMessages(database, sessionId!);
+      return jsonResponse({ messages });
+    }
+
+    if (path === "/api/usage" && method === "GET") {
+      const database = getDb();
+      if (!database) {
+        return jsonResponse({ error: "Database not initialized" }, 500);
+      }
+      const usage = getUsageToday(database);
+      return jsonResponse({ usage, limits: QUOTAS });
     }
 
     return jsonResponse({ error: "Not found" }, 404);

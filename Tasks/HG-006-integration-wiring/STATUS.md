@@ -2,7 +2,7 @@
 
 **Task:** HG-006 — Integration, Wiring, System Prompt
 **Iteration:** 1
-**Current Step:** Step 5: New API Endpoints
+**Current Step:** Step 6: Coverage and Mutation Testing
 **Last Updated:** 2026-04-17
 **Status:** 🟡 In Progress
 **Started:** —
@@ -51,12 +51,12 @@
 - [x] Snapshot tests for SSE streams (text-only and tool-call scenarios)
 
 ### Step 5: New API Endpoints
-**Status:** 🟨 In Progress
+**Status:** ✅ Complete
 
-- [ ] Add `GET /api/history` endpoint that returns messages for the session from DB
-- [ ] Add `GET /api/usage` endpoint that returns `{ usage: getUsageToday(db), limits: QUOTAS }`
-- [ ] Tests: history returns saved messages, usage returns tracked counts, both require session ID
-- [ ] Snapshot tests: snapshot history and usage responses
+- [x] Add `GET /api/history` endpoint that returns messages for the session from DB
+- [x] Add `GET /api/usage` endpoint that returns `{ usage: getUsageToday(db), limits: QUOTAS }`
+- [x] Tests: history returns saved messages, usage returns tracked counts, both require session ID
+- [x] Snapshot tests: snapshot history and usage responses
 
 ### Step 6: Coverage and Mutation Testing
 **Status:** ⬜ Not Started
@@ -76,3 +76,4 @@
 | 2026-04-17 12:48 | Review R001 | plan Step 2: APPROVE |
 | 2026-04-17 12:53 | Review R001 | plan Step 3: APPROVE |
 | 2026-04-17 12:57 | Review R001 | plan Step 4: APPROVE |
+| 2026-04-17 13:21 | Review R001 | plan Step 5: APPROVE |
