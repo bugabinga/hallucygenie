@@ -1690,6 +1690,160 @@ describe("Coverage: History loading in handleChat", () => {
   });
 });
 
+// ── Node HTTP adapter + Server lifecycle tests ───────────────────────
+
+describe("Node HTTP adapter and server lifecycle", () => {
+  it("startServer creates a listening HTTP server", async () => {
+    resetStateForTesting();
+    initDatabase(join(import.meta.dirname ?? ".", "test-data", "test.db"));
+
+    const { startServer } = await import("./server.ts");
+    const srv = startServer(0);
+    await new Promise<void>((resolve) => srv.on("listening", resolve));
+    const port = (srv.address() as any).port;
+    assert.ok(port > 0, "server should be listening");
+
+    // Verify health endpoint through the real Node HTTP server
+    const resp = await fetch(`http://localhost:${port}/api/health`);
+    assert.equal(resp.status, 200);
+    const body = await resp.json();
+    assert.equal(body.status, "ok");
+
+    await new Promise<void>((resolve) => srv.close(() => resolve()));
+    resetStateForTesting();
+  });
+
+  it("proxies POST with body through Node HTTP", async () => {
+    resetStateForTesting();
+    initDatabase(join(import.meta.dirname ?? ".", "test-data", "test.db"));
+
+    const { startServer } = await import("./server.ts");
+    const srv = startServer(0);
+    await new Promise<void>((resolve) => srv.on("listening", resolve));
+    const port = (srv.address() as any).port;
+
+    const resp = await fetch(`http://localhost:${port}/api/chat`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "X-Session-Id": "adapter-test" },
+      body: JSON.stringify({ messages: [{ role: "user", content: "hi" }] }),
+    });
+    // No API key configured, so should get a 500 or 400
+    assert.ok(resp.status >= 400, `Expected error, got ${resp.status}`);
+
+    await new Promise<void>((resolve) => srv.close(() => resolve()));
+    resetStateForTesting();
+  });
+
+  it("returns 404 through Node HTTP adapter", async () => {
+    resetStateForTesting();
+    initDatabase(join(import.meta.dirname ?? ".", "test-data", "test.db"));
+
+    const { startServer } = await import("./server.ts");
+    const srv = startServer(0);
+    await new Promise<void>((resolve) => srv.on("listening", resolve));
+    const port = (srv.address() as any).port;
+
+    const resp = await fetch(`http://localhost:${port}/nonexistent`);
+    assert.equal(resp.status, 404);
+
+    await new Promise<void>((resolve) => srv.close(() => resolve()));
+    resetStateForTesting();
+  });
+
+  it("shutdown closes server and db", async () => {
+    resetStateForTesting();
+    initDatabase(join(import.meta.dirname ?? ".", "test-data", "test.db"));
+
+    const { startServer, shutdown, getDb } = await import("./server.ts");
+    const srv = startServer(0);
+    await new Promise<void>((resolve) => srv.on("listening", resolve));
+
+    assert.ok(getDb(), "db should be initialized");
+    await shutdown();
+    assert.equal(getDb(), null, "db should be null after shutdown");
+
+    resetStateForTesting();
+  });
+
+  it("shutdown is idempotent", async () => {
+    resetStateForTesting();
+    await shutdown();
+    await shutdown();
+    resetStateForTesting();
+  });
+
+  it("resetStateForTesting cleans up", async () => {
+    resetStateForTesting();
+    initDatabase(join(import.meta.dirname ?? ".", "test-data", "test.db"));
+    const { startServer, getDb } = await import("./server.ts");
+    const srv = startServer(0);
+    await new Promise<void>((resolve) => srv.on("listening", resolve));
+
+    assert.ok(getDb(), "db should exist");
+    resetStateForTesting();
+    assert.equal(getDb(), null, "db should be null after reset");
+
+    // clean up the orphaned server
+    await new Promise<void>((resolve) => srv.close(() => resolve()));
+  });
+
+  it("isShuttingDown tracks state", async () => {
+    resetStateForTesting();
+    const { shutdown, isShuttingDown } = await import("./server.ts");
+
+    assert.equal(isShuttingDown(), false);
+    await shutdown();
+    assert.equal(isShuttingDown(), true);
+
+    resetStateForTesting();
+  });
+});
+
+// ── Coverage: steer endpoint edge cases ───────────────────────────────
+
+describe("Coverage: steer edge cases", () => {
+  it("steer with invalid JSON returns 400", async () => {
+    const req = new Request("http://localhost/api/steer", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "X-Session-Id": "test-steer" },
+      body: "not json",
+    });
+    const resp = await handleRequest(req);
+    assert.equal(resp.status, 400);
+    const body = await resp.json();
+    assert.ok(body.error.includes("Invalid JSON"));
+  });
+
+  it("steer with missing message field returns 400", async () => {
+    const req = makeRequest("POST", "/api/steer", { text: "hello" });
+    req.headers.set("X-Session-Id", "test");
+    const resp = await handleRequest(req);
+    assert.equal(resp.status, 400);
+  });
+
+  it("steer with valid message returns 200", async () => {
+    const req = makeRequest("POST", "/api/steer", { message: "change topic" });
+    req.headers.set("X-Session-Id", "test");
+    const resp = await handleRequest(req);
+    assert.equal(resp.status, 200);
+  });
+});
+
+// ── Coverage: chat with session ID ────────────────────────────────────
+
+describe("Coverage: chat session path", () => {
+  it("POST /api/chat with session ID routes to handleChat", async () => {
+    const req = makeRequest("POST", "/api/chat", {
+      messages: [{ role: "user", content: "hi" }],
+    });
+    req.headers.set("X-Session-Id", "session-test-123");
+    // No API key, will fail internally
+    const resp = await handleRequest(req);
+    // Should get 500 (no key) not 400 (validation)
+    assert.ok(resp.status === 500 || resp.status === 200, `got ${resp.status}`);
+  });
+});
+
 describe("Coverage: GET /api/history and /api/usage without DB", () => {
   it("history returns 500 when DB not initialized", async () => {
     resetStateForTesting();

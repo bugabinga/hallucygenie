@@ -17,10 +17,9 @@ test:
 test-coverage:
     node --experimental-strip-types --no-warnings --experimental-test-coverage --test server.test.ts agent.test.ts tools.test.ts db.test.ts
 
-# Run mutation tests (fallback: full coverage check)
+# Run mutation tests (requires stryker)
 test-mutation:
-    echo "Mutation testing via stryker requires Bun — falling back to full coverage check" && \
-    node --experimental-strip-types --no-warnings --experimental-test-coverage --test server.test.ts agent.test.ts tools.test.ts db.test.ts
+    npx stryker run stryker.config.mjs
 
 # Run snapshot tests specifically
 test-snapshot:

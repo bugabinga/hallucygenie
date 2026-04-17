@@ -25,7 +25,57 @@
         }
       ],
       "trend": "stable"
+    },
+    "server.test.ts": {
+      "latest": {
+        "commit": "ecdf420",
+        "timestamp": "2026-04-17T15:16:40.633Z",
+        "mi": 2.3,
+        "cognitive": 136,
+        "nesting": 5,
+        "lines": 1436,
+        "maxCyclomatic": 26,
+        "entropy": 7.35
+      },
+      "history": [
+        {
+          "commit": "ecdf420",
+          "timestamp": "2026-04-17T15:16:40.633Z",
+          "mi": 2.3,
+          "cognitive": 136,
+          "nesting": 5,
+          "lines": 1436,
+          "maxCyclomatic": 26,
+          "entropy": 7.35
+        }
+      ],
+      "trend": "stable"
+    },
+    "stryker.config.ts": {
+      "latest": {
+        "commit": "ecdf420",
+        "timestamp": "2026-04-17T15:22:51.441Z",
+        "mi": 58,
+        "cognitive": 0,
+        "nesting": 0,
+        "lines": 16,
+        "maxCyclomatic": 1,
+        "entropy": 3.75
+      },
+      "history": [
+        {
+          "commit": "ecdf420",
+          "timestamp": "2026-04-17T15:22:51.441Z",
+          "mi": 58,
+          "cognitive": 0,
+          "nesting": 0,
+          "lines": 16,
+          "maxCyclomatic": 1,
+          "entropy": 3.75
+        }
+      ],
+      "trend": "stable"
     }
   },
-  "capturedAt": "2026-04-17T15:06:56.727Z"
+  "capturedAt": "2026-04-17T15:22:57.004Z"
 }
