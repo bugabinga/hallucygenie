@@ -2,7 +2,7 @@
 
 **Task:** HG-007 — Frontend MVP with UI Tests
 **Iteration:** 1
-**Current Step:** Step 1: HTML Structure
+**Current Step:** Step 2: CSS — Design System + Mobile-First Styling
 **Last Updated:** 2026-04-17
 **Status:** 🟡 In Progress
 **Started:** —
@@ -27,12 +27,12 @@
 - [x] Message bubble structure
 
 ### Step 2: CSS — Design System + Mobile-First Styling
-**Status:** ⬜ Not Started
+**Status:** ✅ Complete
 
-- [ ] Color palette CSS custom properties
-- [ ] Dark theme, touch targets, animations
-- [ ] Message bubbles, tool cards, send button
-- [ ] Snapshot tests for UI states
+- [x] Color palette CSS custom properties
+- [x] Dark theme, touch targets, animations
+- [x] Message bubbles, tool cards, send button
+- [x] Snapshot tests for UI states
 
 ### Step 3: Chat Logic in app.ts
 **Status:** ⬜ Not Started
