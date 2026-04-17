@@ -18,14 +18,17 @@
 - [x] `just test` passes
 
 ### Step 1: Tool Definitions and Execution
-**Status:** ⬜ Not Started
+**Status:** 🟨 In Progress
 
-- [ ] Tool schemas and executeTool function
-- [ ] Image gen, TTS, music gen implementations
-- [ ] Audio hex → base64 data URL conversion
-- [ ] Unit tests with mocked MiniMax
-- [ ] Error case tests
-- [ ] Snapshot tests for tool results
+- [ ] Define tool schemas (getToolDefinitions) in tools.ts for generate_image, text_to_speech, generate_music
+- [ ] Implement executeTool(name, args) dispatcher in tools.ts
+- [ ] Implement generateImage: POST /v1/image_generation, model image-01, returns image URL
+- [ ] Implement textToSpeech: POST /v1/t2a_v2, model speech-2.8-hd, default voice English_expressive_narrator, hex→base64 data URL
+- [ ] Implement generateMusic: POST /v1/music_generation, model music-2.6, hex→base64 data URL
+- [ ] Add tools.test.ts with unit tests: correct API calls, args, result parsing, audio MIME type
+- [ ] Add error case tests: API error, network failure, malformed response, empty audio
+- [ ] Add snapshot tests for tool results
+- [ ] Update justfile to include tools.test.ts in test commands
 
 ### Step 2: Agent Loop
 **Status:** ⬜ Not Started
