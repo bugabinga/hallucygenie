@@ -18,12 +18,12 @@
 - [x] `just test` passes
 
 ### Step 1: Migration Files
-**Status:** ⬜ Not Started
+**Status:** ✅ Complete
 
-- [ ] 001-create-schema-migrations.sql
-- [ ] 002-create-messages.sql
-- [ ] 003-create-preferences.sql
-- [ ] 004-create-usage-tracking.sql
+- [x] 001-create-schema-migrations.sql
+- [x] 002-create-messages.sql
+- [x] 003-create-preferences.sql
+- [x] 004-create-usage-tracking.sql
 
 ### Step 2: Migration Runner
 **Status:** ⬜ Not Started
