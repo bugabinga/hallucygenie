@@ -18,11 +18,12 @@
 - [x] `just test` passes — 174 tests pass
 
 ### Step 1: Database Initialization at Startup
-**Status:** ⬜ Not Started
+**Status:** 🟨 In Progress
 
-- [ ] initDb on startup, data/ dir creation
-- [ ] Graceful shutdown closes DB
-- [ ] Tests
+- [ ] Modify server.ts to import `initDb` from db.ts, call it at startup with "data/hallucygenie.db", ensure `data/` dir created
+- [ ] Store db instance in module-level variable, close it in `shutdown()`
+- [ ] Graceful shutdown: close DB on SIGTERM/SIGINT via existing signal handlers
+- [ ] Tests: DB init, data/ dir creation, shutdown closes DB, re-init works
 
 ### Step 2: Session Validation Middleware
 **Status:** ⬜ Not Started
