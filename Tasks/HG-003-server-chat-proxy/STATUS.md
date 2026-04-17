@@ -1,18 +1,21 @@
 # STATUS — HG-003
 
 **Task:** HG-003 — Server + Chat Proxy
-**Status:** ⬜ Not Started
+**Iteration:** 1
+**Current Step:** Step 1: Static File Server + Route Skeleton
+**Last Updated:** 2026-04-17
+**Status:** 🟡 In Progress
 **Started:** —
 **Updated:** —
 
 ## Step Progress
 
 ### Step 0: Preflight
-**Status:** ⬜ Not Started
+**Status:** ✅ Complete
 
-- [ ] Verify server.ts skeleton exists
-- [ ] Verify justfile with test recipes
-- [ ] Run `just test` — placeholders pass
+- [x] Verify server.ts skeleton exists
+- [x] Verify justfile with test recipes
+- [x] Run `just test` — placeholders pass
 
 ### Step 1: Static File Server + Route Skeleton
 **Status:** ⬜ Not Started
@@ -65,3 +68,6 @@
 | Step | Finding | Action Taken |
 |------|---------|-------------|
 | — | — | — |
+
+| 2026-04-17 11:29 | Task started | Runtime V2 lane-runner execution |
+| 2026-04-17 11:29 | Step 0 started | Preflight |

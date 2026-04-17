@@ -1,0 +1,12 @@
+{
+  "name": "hallucygenie",
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "bun run server.ts",
+    "test": "bun test",
+    "test:coverage": "bun test --coverage",
+    "test:mutation": "stryker run"
+  },
+  "devDependencies": {}
+}

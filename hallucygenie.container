@@ -1,0 +1,12 @@
+[Unit]
+Description=HallucyGenie AI Chat
+After=network.target
+
+[Container]
+Image=localhost/hallucygenie:latest
+PublishPort=3000:3000
+EnvironmentFile=.env
+Volume=./data:/app/data
+
+[Install]
+WantedBy=default.target

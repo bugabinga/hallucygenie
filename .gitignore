@@ -13,3 +13,24 @@
 
 # Pi project-local packages (if using pi install -l)
 .pi/npm/
+
+# Dependencies
+node_modules/
+
+# Environment
+.env
+
+# Database
+*.db
+data/
+
+# Build
+coverage/
+dist/
+
+# Mutation testing
+.stryker-tmp/
+reports/
+
+# OS
+.DS_Store
