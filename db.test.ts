@@ -155,6 +155,19 @@ describe("initDb", () => {
     db.close();
     rmSync(dir, { recursive: true });
   });
+
+  it("uses default migrations dir when not specified", () => {
+    // initDb without migrationsDir should use the project migrations/ directory
+    const db = initDb(":memory:");
+    const tables = db
+      .prepare("SELECT name FROM sqlite_master WHERE type='table' ORDER BY name")
+      .all()
+      .map((r: any) => r.name);
+    assert.ok(tables.includes("messages"));
+    assert.ok(tables.includes("preferences"));
+    assert.ok(tables.includes("daily_usage"));
+    db.close();
+  });
 });
 
 // ── Step 3: Message CRUD Tests ──────────────────────────────────────
