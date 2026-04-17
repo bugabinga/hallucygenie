@@ -2,7 +2,7 @@
 
 **Task:** HG-007 — Frontend MVP with UI Tests
 **Iteration:** 1
-**Current Step:** Step 4: Steering UI
+**Current Step:** Step 5: Tool Result Rendering
 **Last Updated:** 2026-04-17
 **Status:** 🟡 In Progress
 **Started:** —
@@ -48,10 +48,10 @@
 - [x] Steer during stream with visual distinction
 
 ### Step 5: Tool Result Rendering
-**Status:** ⬜ Not Started
+**Status:** ✅ Complete
 
-- [ ] Image, audio, error cards
-- [ ] E2E tests for each tool type
+- [x] Image, audio, error cards
+- [x] E2E tests for each tool type
 
 ### Step 6: Playwright E2E Tests
 **Status:** ⬜ Not Started
