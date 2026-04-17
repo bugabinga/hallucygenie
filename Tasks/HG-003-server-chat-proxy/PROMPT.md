@@ -87,6 +87,14 @@ file. Assert responses match snapshots. Update snapshots with `just test -- --up
 - `agent.test.ts`
 - `__snapshots__/` (snapshot files)
 
+## Session Contract
+
+Sessions are identified by a UUID stored in the browser's `localStorage`.
+- Client generates a UUID v4 on first visit, stores as `hallucygenie_session_id`
+- Every API request includes `X-Session-Id` header with this UUID
+- Server uses this to partition messages in SQLite
+- No cookies, no auth, no server-side session creation — the client owns the ID
+
 ## Steps
 
 ### Step 0: Preflight
@@ -98,10 +106,13 @@ file. Assert responses match snapshots. Update snapshots with `just test -- --up
 ### Step 1: Static File Server + Route Skeleton
 
 - [ ] Implement static file serving from `public/` directory
-- [ ] Add route handling: `GET /` → `public/index.html`, `POST /api/chat` → chat handler, `POST /api/steer` → steer handler (placeholder)
+- [ ] Add route handling: `GET /` → `public/index.html`, `POST /api/chat` → chat handler, `POST /api/steer` → steer handler (placeholder), `GET /api/health` → health check
+- [ ] `GET /api/health` returns `{ status: "ok", uptime: <seconds> }`
+- [ ] Add CORS headers on all API routes: `Access-Control-Allow-Origin: *`, `Access-Control-Allow-Headers: Content-Type, X-Session-Id`, `Access-Control-Allow-Methods: GET, POST, OPTIONS`
+- [ ] Handle OPTIONS preflight requests
 - [ ] All other routes return 404
-- [ ] **Tests:** Unit test every route (GET /, POST /api/chat with no body, unknown route → 404, static file serving)
-- [ ] **Snapshot tests:** snapshot the response for GET /, 404 responses
+- [ ] **Tests:** Unit test every route (GET /, GET /api/health, POST /api/chat with no body, OPTIONS preflight, unknown route → 404, static file serving, CORS headers present)
+- [ ] **Snapshot tests:** snapshot the response for GET /, GET /api/health, 404 responses
 
 ### Step 2: Chat Proxy with SSE Streaming
 
@@ -109,7 +120,7 @@ file. Assert responses match snapshots. Update snapshots with `just test -- --up
   - Accept JSON body: `{ messages: [{role, content}], system_prompt?: string }`
   - Forward to MiniMax `POST /v1/chat/completions` with `stream: true`
   - Stream SSE events back to browser
-  - Strip thinking tokens from streamed content before forwarding
+  - Strip thinking tokens from streamed content before forwarding (thinking content appears between `<think_intended>` and `</think_intended>` tags — these are literal strings in the SSE content delta)
 - [ ] Include tool definitions in the MiniMax request (image gen, TTS, music gen)
 - [ ] **Tests:** Mock MiniMax SSE responses, verify correct forwarding, verify thinking tokens stripped, verify error handling (MiniMax returns 500, network error)
 - [ ] **Snapshot tests:** Record SSE event streams for text-only response, response with thinking tokens, error response
@@ -124,13 +135,16 @@ file. Assert responses match snapshots. Update snapshots with `just test -- --up
 - [ ] **Tests:** Test chunk accumulation (1 call, multiple calls, partial chunks, edge cases), test SSE event format, test malformed arguments handling
 - [ ] **Snapshot tests:** Snapshot the tool_start/tool_end events for various tool call patterns
 
-### Step 4: Error Handling
+### Step 4: Error Handling + Graceful Shutdown
 
 - [ ] MiniMax API errors (non-200) → proper HTTP errors
 - [ ] `finish_reason: "length"` → emit truncated event
 - [ ] Connection errors → 502
 - [ ] No crashes on malformed requests (missing body, invalid JSON, etc.)
+- [ ] Graceful shutdown: on SIGTERM/SIGINT, stop accepting new connections, finish in-flight SSE streams (with a timeout), close DB connection, then exit
+- [ ] Export a `shutdown()` function from server for test cleanup
 - [ ] **Tests:** Test every error path: 500 from MiniMax, connection refused, timeout, malformed JSON body, missing fields
+- [ ] **Tests:** Test graceful shutdown: verify server stops cleanly, verify active connections get closed
 
 ### Step 5: Coverage and Mutation Testing
 

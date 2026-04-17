@@ -36,9 +36,16 @@ event: done       → data: {}
 ```
 
 **API endpoints:**
-- `POST /api/chat` → `{ messages: [{role, content}] }` → SSE stream
-- `POST /api/steer` → `{ message: "..." }` → 200 OK
-- `GET /api/history` → `{ messages: [...] }`
+- `POST /api/chat` → `{ messages: [{role, content}] }` → SSE stream (requires `X-Session-Id` header)
+- `POST /api/steer` → `{ message: "..." }` → 200 OK (requires `X-Session-Id` header)
+- `GET /api/history` → `{ messages: [...] }` (requires `X-Session-Id` header)
+- `GET /api/usage` → `{ usage: {...}, limits: {...} }` (requires `X-Session-Id` header)
+- `GET /api/health` → `{ status: "ok", uptime: <seconds> }`
+
+**Session management:**
+- On first load, generate UUID v4, store in `localStorage` as `hallucygenie_session_id`
+- Send `X-Session-Id` header with every API request
+- If server returns 400 for missing session, show error prompting page reload
 
 ## Testing Requirements
 
@@ -57,8 +64,7 @@ event: done       → data: {}
 
 ## Dependencies
 
-- **Task:** HG-003 (server must serve static files and SSE)
-- **Task:** HG-004 (agent loop with tool execution for full experience)
+- **Task:** HG-004 (agent loop with tool execution must exist for full E2E tests)
 
 ## Context to Read First
 

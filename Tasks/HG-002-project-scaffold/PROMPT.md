@@ -86,8 +86,16 @@ install:
     bun install
 
 # Run the dev server
-dev:
+ dev:
     bun run --watch server.ts
+
+# Run dev server in background (for E2E tests)
+dev-bg:
+    bun run server.ts &
+
+# Stop background dev server
+dev-bg-stop:
+    pkill -f "bun run server.ts" || true
 
 # Build the production binary
 build:

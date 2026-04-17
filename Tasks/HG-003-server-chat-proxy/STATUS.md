@@ -18,16 +18,18 @@
 **Status:** ⬜ Not Started
 
 - [ ] Static file serving from `public/`
-- [ ] Route handling: GET /, POST /api/chat, POST /api/steer
+- [ ] Route handling: GET /, POST /api/chat, POST /api/steer, GET /api/health
+- [ ] CORS headers on API routes
+- [ ] OPTIONS preflight handling
 - [ ] 404 for unknown routes
 - [ ] Unit tests for every route
-- [ ] Snapshot tests for GET / and 404
+- [ ] Snapshot tests for GET /, GET /api/health, 404
 
 ### Step 2: Chat Proxy with SSE Streaming
 **Status:** ⬜ Not Started
 
 - [ ] POST /api/chat handler with SSE forwarding
-- [ ] Thinking token stripping
+- [ ] Thinking token stripping (`<think_intended>...</think_intended>`)
 - [ ] Tool definitions included in requests
 - [ ] Unit tests with mocked MiniMax
 - [ ] Snapshot tests for SSE streams
@@ -40,13 +42,15 @@
 - [ ] Unit tests for accumulation edge cases
 - [ ] Snapshot tests for tool call patterns
 
-### Step 4: Error Handling
+### Step 4: Error Handling + Graceful Shutdown
 **Status:** ⬜ Not Started
 
 - [ ] MiniMax error handling
 - [ ] Connection error → 502
 - [ ] Malformed request handling
+- [ ] Graceful shutdown (SIGTERM)
 - [ ] Tests for every error path
+- [ ] Tests for graceful shutdown
 
 ### Step 5: Coverage and Mutation Testing
 **Status:** ⬜ Not Started
