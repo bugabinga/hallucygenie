@@ -1,0 +1,22 @@
+{
+  "exitCode": 0,
+  "exitSignal": null,
+  "tokens": {
+    "input": 85801,
+    "output": 49046,
+    "cacheRead": 7575168,
+    "cacheWrite": 0
+  },
+  "cost": null,
+  "toolCalls": 162,
+  "retries": 0,
+  "compactions": 0,
+  "durationSec": 2161,
+  "lastToolCall": "notify_supervisor: HG-007 Frontend MVP complete. All 7 steps done:\n\n**Deliverables:**\n- `public/index.html` — Mobile-first chat layout with header, messages, input, lightbox, error toast\n- `public/style.css` — Dark theme design system (red/green/gold palette), 48px touch targets, CSS animations\n- `public/app.ts` — Ful",
+  "error": null,
+  "contextUsage": {
+    "tokens": 84751,
+    "contextWindow": 200000,
+    "percent": 42.3755
+  }
+}

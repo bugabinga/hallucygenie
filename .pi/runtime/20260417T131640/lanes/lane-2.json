@@ -1,0 +1,31 @@
+{
+  "batchId": "20260417T131640",
+  "laneNumber": 2,
+  "laneId": "lane-2",
+  "repoId": "default",
+  "taskId": "HG-005",
+  "segmentId": "HG-005::default",
+  "status": "complete",
+  "worker": {
+    "agentId": "orch-u0-a165-lane-2-worker",
+    "status": "exited",
+    "elapsedMs": 668910,
+    "toolCalls": 66,
+    "contextPct": 21.584999999999997,
+    "costUsd": 0,
+    "lastTool": "notify_supervisor: HG-005 complete. All 5 steps done. 109 tests pass (33 new db tests). 100% line coverage on db.ts. Implementation: migration runner with rollback, message/preference CRUD, usage tracking + quota enforcement (80% warn, 100% block). Uses node:sqlite (zero external deps). Mutation testing skipped (bun+s",
+    "inputTokens": 38275,
+    "outputTokens": 20780,
+    "cacheReadTokens": 1530560,
+    "cacheWriteTokens": 0
+  },
+  "reviewer": null,
+  "progress": {
+    "currentStep": "Step 5: Coverage and Mutation Testing",
+    "checked": 22,
+    "total": 22,
+    "iteration": 1,
+    "reviews": 0
+  },
+  "updatedAt": 1776427439928
+}

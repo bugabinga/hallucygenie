@@ -1,0 +1,22 @@
+{
+  "exitCode": 143,
+  "exitSignal": null,
+  "tokens": {
+    "input": 23724,
+    "output": 1602,
+    "cacheRead": 16360,
+    "cacheWrite": 2144
+  },
+  "cost": 0.0198648,
+  "toolCalls": 11,
+  "retries": 0,
+  "compactions": 0,
+  "durationSec": 49,
+  "lastToolCall": "write: /data/data/com.termux/files/home/Workspace/hallucygenie/.pi/merge-result-w5-lane1-u0-a165-20260417T131640.json",
+  "error": null,
+  "contextUsage": {
+    "tokens": 5840,
+    "contextWindow": 204800,
+    "percent": 2.8515625
+  }
+}

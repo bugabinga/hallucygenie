@@ -1,0 +1,14 @@
+{
+  "batchId": "20260417T131640",
+  "agentId": "orch-u0-a165-merge-2",
+  "role": "merger",
+  "laneNumber": null,
+  "taskId": null,
+  "repoId": "default",
+  "pid": 12628,
+  "parentPid": 7958,
+  "startedAt": 1776429371842,
+  "status": "killed",
+  "cwd": "/data/data/com.termux/files/home/Workspace/hallucygenie/.worktrees/u0-a165-20260417T131640/merge",
+  "packet": null
+}

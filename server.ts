@@ -1,10 +1,11 @@
 // HallucyGenie — HTTP server with SSE chat proxy
-// Target: Bun runtime (Bun.serve)
+// Target: Node.js runtime
 
 import { getToolDefinitions } from "./tools.ts";
 import { initDb } from "./db.ts";
 import { mkdirSync } from "node:fs";
 import { dirname } from "node:path";
+import { createServer, type IncomingMessage, type ServerResponse, type Server } from "node:http";
 import type { DatabaseSync } from "node:sqlite";
 import {
   runAgentLoop,
@@ -14,9 +15,8 @@ import {
   type SteerQueue,
   type AgentEvent,
 } from "./agent.ts";
-import { getMessages, saveMessage, getPreferences, trackUsage, checkQuota, getUsageToday, QUOTAS } from "./db.ts";
 
-// ── Steer queues per session ────────────────────────────────────────
+import { getMessages, saveMessage, getPreferences, trackUsage, checkQuota, getUsageToday, QUOTAS } from "./db.ts";
 
 const steerQueues = new Map<string, SteerQueue>();
 
@@ -533,9 +533,57 @@ export async function handleRequest(req: Request): Promise<Response> {
   return jsonResponse({ error: "Not found" }, 404);
 }
 
+// ── Node.js HTTP adapter ──────────────────────────────────────────
+// Bridges Node's (IncomingMessage, ServerResponse) to the
+// web-standard (Request, Response) used by handleRequest.
+
+async function handleNodeRequest(req: IncomingMessage, res: ServerResponse): Promise<void> {
+  try {
+    // Build a web-standard Request from Node's IncomingMessage
+    const url = `http://localhost:${PORT}${req.url}`;
+    const method = req.method || "GET";
+    const headers = new Headers();
+    for (const [key, value] of Object.entries(req.headers)) {
+      if (value) headers.set(key, Array.isArray(value) ? value.join(", ") : value);
+    }
+
+    let body: BodyInit | null = null;
+    if (method !== "GET" && method !== "HEAD") {
+      const chunks: Buffer[] = [];
+      for await (const chunk of req) chunks.push(chunk);
+      body = Buffer.concat(chunks);
+    }
+
+    const webReq = new Request(url, { method, headers, body });
+    const webRes = await handleRequest(webReq);
+
+    // Stream the Response back to Node's ServerResponse
+    res.statusCode = webRes.status;
+    webRes.headers.forEach((value, key) => {
+      res.setHeader(key, value);
+    });
+
+    if (webRes.body) {
+      const reader = webRes.body.getReader();
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        res.write(value);
+      }
+    }
+    res.end();
+  } catch (err) {
+    console.error("Request handler error:", err);
+    if (!res.headersSent) {
+      res.statusCode = 500;
+      res.end(JSON.stringify({ error: "Internal server error" }));
+    }
+  }
+}
+
 // ── Server lifecycle ─────────────────────────────────────────────────
 
-let server: ReturnType<typeof Bun.serve> | null = null;
+let server: Server | null = null;
 let db: DatabaseSync | null = null;
 
 /**
@@ -555,14 +603,11 @@ export function initDatabase(dbPath = "data/hallucygenie.db"): DatabaseSync {
   return db;
 }
 
-export function startServer(port = PORT): ReturnType<typeof Bun.serve> {
-  server = Bun.serve({
-    port,
-    fetch: handleRequest,
+export function startServer(port = PORT): Server {
+  server = createServer((req, res) => handleNodeRequest(req, res));
+  server.listen(port, () => {
+    console.log(`HallucyGenie server running on http://localhost:${port}`);
   });
-
-  console.log(`HallucyGenie server running on http://localhost:${port}`);
-
   return server;
 }
 
@@ -572,7 +617,7 @@ export async function shutdown(): Promise<void> {
   if (shuttingDown) return;
   shuttingDown = true;
   if (server) {
-    server.stop(true);
+    server.close();
     server = null;
   }
   if (db) {
@@ -595,7 +640,7 @@ export function resetStateForTesting(): void {
     db = null;
   }
   if (server) {
-    try { server.stop(true); } catch { /* ignore */ }
+    try { server.close(); } catch { /* ignore */ }
     server = null;
   }
 }

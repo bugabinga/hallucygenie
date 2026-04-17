@@ -1,0 +1,21 @@
+{
+  "batchId": "20260417T131640",
+  "mergeNumber": 1,
+  "sessionName": "orch-u0-a165-merge-1",
+  "waveIndex": 5,
+  "status": "failed",
+  "agent": {
+    "agentId": "orch-u0-a165-merge-1",
+    "status": "crashed",
+    "elapsedMs": 48529,
+    "toolCalls": 11,
+    "contextPct": 2.8515625,
+    "costUsd": 0.0198648,
+    "lastTool": "write: /data/data/com.termux/files/home/Workspace/hallucygenie/.pi/merge-result-w5-lane1-u0-a165-20260417T131640.json",
+    "inputTokens": 23724,
+    "outputTokens": 1602,
+    "cacheReadTokens": 16360,
+    "cacheWriteTokens": 2144
+  },
+  "updatedAt": 1776435029518
+}

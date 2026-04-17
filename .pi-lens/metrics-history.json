@@ -1,0 +1,31 @@
+{
+  "version": 1,
+  "files": {
+    "server.ts": {
+      "latest": {
+        "commit": "c1078c4",
+        "timestamp": "2026-04-17T15:06:51.726Z",
+        "mi": 19.5,
+        "cognitive": 257,
+        "nesting": 9,
+        "lines": 493,
+        "maxCyclomatic": 49,
+        "entropy": 7.23
+      },
+      "history": [
+        {
+          "commit": "c1078c4",
+          "timestamp": "2026-04-17T15:06:51.726Z",
+          "mi": 19.5,
+          "cognitive": 257,
+          "nesting": 9,
+          "lines": 493,
+          "maxCyclomatic": 49,
+          "entropy": 7.23
+        }
+      ],
+      "trend": "stable"
+    }
+  },
+  "capturedAt": "2026-04-17T15:06:56.727Z"
+}
