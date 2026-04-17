@@ -1,18 +1,21 @@
 # STATUS — HG-006
 
 **Task:** HG-006 — Integration, Wiring, System Prompt
-**Status:** ⬜ Not Started
+**Iteration:** 1
+**Current Step:** Step 1: Database Initialization at Startup
+**Last Updated:** 2026-04-17
+**Status:** 🟡 In Progress
 **Started:** —
 **Updated:** —
 
 ## Step Progress
 
 ### Step 0: Preflight
-**Status:** ⬜ Not Started
+**Status:** ✅ Complete
 
-- [ ] Verify HG-004 agent loop works
-- [ ] Verify HG-005 persistence works
-- [ ] `just test` passes
+- [x] Verify HG-004 agent loop works
+- [x] Verify HG-005 persistence works
+- [x] `just test` passes — 174 tests pass
 
 ### Step 1: Database Initialization at Startup
 **Status:** ⬜ Not Started
@@ -62,3 +65,6 @@
 | Step | Finding | Action Taken |
 |------|---------|-------------|
 | — | — | — |
+
+| 2026-04-17 12:36 | Task started | Runtime V2 lane-runner execution |
+| 2026-04-17 12:36 | Step 0 started | Preflight |
