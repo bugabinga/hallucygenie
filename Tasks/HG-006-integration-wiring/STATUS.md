@@ -2,11 +2,11 @@
 
 **Task:** HG-006 — Integration, Wiring, System Prompt
 **Iteration:** 1
-**Current Step:** Step 6: Coverage and Mutation Testing
+**Current Step:** Step 6: Coverage and Mutation Testing (Complete)
 **Last Updated:** 2026-04-17
-**Status:** 🟡 In Progress
-**Started:** —
-**Updated:** —
+**Status:** ✅ Complete
+**Started:** 2026-04-17
+**Updated:** 2026-04-17
 
 ## Step Progress
 
@@ -70,7 +70,10 @@
 
 | Step | Finding | Action Taken |
 |------|---------|-------------|
-| — | — | — |
+| 1 | `shutdown()` sets `shuttingDown=true` permanently, blocking re-init in tests | Added `resetStateForTesting()` export for test cleanup |
+| 4 | Old `handleChat` was a direct MiniMax SSE proxy; new version delegates to `runAgentLoop` | Rewrote `handleChat` to use agent loop, updated 13+ tests to match new SSE event format |
+| 4 | `buildMiniMaxPayload` became dead code after switch to `runAgentLoop` | Removed dead code |
+| 6 | Mutation testing (`just test-mutation`) not available on this platform | Skipped, noted in STATUS |
 
 | 2026-04-17 12:36 | Task started | Runtime V2 lane-runner execution |
 | 2026-04-17 12:36 | Step 0 started | Preflight |
