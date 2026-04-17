@@ -73,6 +73,7 @@ optimized for LLM invocation (clear names, doc comments, no ambiguity).
 - [ ] Add devDependencies: `@happy-dom/global-registrator` (for DOM testing)
 - [ ] Create `tsconfig.json` targeting ESNext, strict mode, Bun types
 - [ ] Create `.gitignore` ignoring `node_modules/`, `.env`, `*.db`, `data/`, `.stryker-tmp/`, `reports/`
+- [ ] Create `.env.example` with `MINIMAX_API_KEY=your-key-here` (committed as documentation)
 
 ### Step 2: Justfile — Build System
 
@@ -147,7 +148,7 @@ container:
 ### Step 4: Server Skeleton
 
 - [ ] Create `server.ts` with a `Bun.serve()` that returns 404 on all routes
-- [ ] Server must read `PORT` from env, default 3000
+- [ ] Server must read `PORT` from env (default 3000) and `MINIMAX_API_KEY` from env (required, fail fast if missing)
 - [ ] Console.log the port on startup
 - [ ] Export the server creation function (not auto-start) so tests can control lifecycle
 

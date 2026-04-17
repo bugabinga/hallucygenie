@@ -69,7 +69,15 @@ file. Assert responses match snapshots. Update snapshots with `just test -- --up
 
 - **Workspace:** Project root
 - **Services required:** None (mock MiniMax in tests)
-- **API key:** Use env `MINIMAX_API_KEY` at runtime only, not in tests
+
+### API Key Handling (non-negotiable)
+
+- The MiniMax API key MUST be read exclusively from the `MINIMAX_API_KEY` environment variable
+- Use `Bun.env.MINIMAX_API_KEY` — never hardcode, never put in a config file, never log it
+- If the key is missing at startup, fail immediately with a clear error: `"MINIMAX_API_KEY environment variable is required"`
+- For local development, use a `.env` file (already gitignored) — Bun loads `.env` automatically
+- For container deployment, the quadlet's `EnvironmentFile=.env` passes it through
+- Tests must NEVER use the real key — always mock MiniMax API calls
 
 ## File Scope
 

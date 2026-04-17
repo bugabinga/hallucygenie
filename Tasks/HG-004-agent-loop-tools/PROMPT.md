@@ -63,6 +63,13 @@ For SQLite tests, use in-memory databases (`:memory:`) so tests are isolated and
 - **Workspace:** Project root
 - **Services required:** None (mock everything in tests)
 
+### API Key Handling
+
+- Read exclusively from `Bun.env.MINIMAX_API_KEY`
+- Fail fast if missing: `"MINIMAX_API_KEY environment variable is required"`
+- Never log or expose the key
+- Tests mock all API calls — never use real key
+
 ## File Scope
 
 - `agent.ts`
