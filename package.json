@@ -9,6 +9,7 @@
     "test:mutation": "stryker run"
   },
   "devDependencies": {
+    "@types/node": "^25.6.0",
     "happy-dom": "^20.9.0",
     "playwright-core": "^1.59.1"
   }

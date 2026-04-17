@@ -2,7 +2,7 @@
 
 **Task:** HG-007 — Frontend MVP with UI Tests
 **Iteration:** 1
-**Current Step:** Step 2: CSS — Design System + Mobile-First Styling
+**Current Step:** Step 3: Chat Logic in app.ts
 **Last Updated:** 2026-04-17
 **Status:** 🟡 In Progress
 **Started:** —
@@ -35,12 +35,12 @@
 - [x] Snapshot tests for UI states
 
 ### Step 3: Chat Logic in app.ts
-**Status:** ⬜ Not Started
+**Status:** ✅ Complete
 
-- [ ] Session UUID in localStorage
-- [ ] History loading, SSE parsing, message rendering
-- [ ] Unit tests with mocked fetch
-- [ ] Snapshot tests for bubbles
+- [x] Session UUID in localStorage
+- [x] History loading, SSE parsing, message rendering
+- [x] Unit tests with mocked fetch
+- [x] Snapshot tests for bubbles
 
 ### Step 4: Steering UI
 **Status:** ⬜ Not Started
