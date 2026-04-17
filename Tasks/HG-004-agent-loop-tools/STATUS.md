@@ -18,17 +18,17 @@
 - [x] `just test` passes
 
 ### Step 1: Tool Definitions and Execution
-**Status:** 🟨 In Progress
+**Status:** ✅ Complete
 
-- [ ] Define tool schemas (getToolDefinitions) in tools.ts for generate_image, text_to_speech, generate_music
-- [ ] Implement executeTool(name, args) dispatcher in tools.ts
-- [ ] Implement generateImage: POST /v1/image_generation, model image-01, returns image URL
-- [ ] Implement textToSpeech: POST /v1/t2a_v2, model speech-2.8-hd, default voice English_expressive_narrator, hex→base64 data URL
-- [ ] Implement generateMusic: POST /v1/music_generation, model music-2.6, hex→base64 data URL
-- [ ] Add tools.test.ts with unit tests: correct API calls, args, result parsing, audio MIME type
-- [ ] Add error case tests: API error, network failure, malformed response, empty audio
-- [ ] Add snapshot tests for tool results
-- [ ] Update justfile to include tools.test.ts in test commands
+- [x] Define tool schemas (getToolDefinitions) in tools.ts for generate_image, text_to_speech, generate_music
+- [x] Implement executeTool(name, args) dispatcher in tools.ts
+- [x] Implement generateImage: POST /v1/image_generation, model image-01, returns image URL
+- [x] Implement textToSpeech: POST /v1/t2a_v2, model speech-2.8-hd, default voice English_expressive_narrator, hex→base64 data URL
+- [x] Implement generateMusic: POST /v1/music_generation, model music-2.6, hex→base64 data URL
+- [x] Add tools.test.ts with unit tests: correct API calls, args, result parsing, audio MIME type
+- [x] Add error case tests: API error, network failure, malformed response, empty audio
+- [x] Add snapshot tests for tool results
+- [x] Update justfile to include tools.test.ts in test commands
 
 ### Step 2: Agent Loop
 **Status:** ⬜ Not Started
@@ -62,3 +62,4 @@
 
 | 2026-04-17 11:52 | Task started | Runtime V2 lane-runner execution |
 | 2026-04-17 11:52 | Step 0 started | Preflight |
+| 2026-04-17 11:55 | Review R001 | plan Step 1: APPROVE |
