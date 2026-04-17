@@ -40,3 +40,7 @@ parallel batch execution or `/orch <path/to/PROMPT.md>` for a single task.
 ## Technical Debt / Future Work
 
 _Items discovered during task execution are logged here by agents._
+
+- [ ] **Playwright platform patches** — `playwright-core` registry files patched for Android. Should upstream or use `PLAYWRIGHT_ALLOW_ANDROID` env when merged (discovered during HG-007)
+- [ ] **app.js build step** — Frontend uses `app.ts` (Bun serves .ts directly), but E2E tests need transpiled `app.js`. Consider adding a pre-build hook (discovered during HG-007)
+- [ ] **Stryker mutation testing** — Currently falls back to coverage check. Needs Bun runtime for full mutation testing setup (discovered during HG-007)

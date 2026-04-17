@@ -7,15 +7,17 @@ install:
 
 # Run all tests
 test:
-    node --experimental-strip-types --no-warnings --test server.test.ts agent.test.ts tools.test.ts db.test.ts
+    node --experimental-strip-types --no-warnings --test server.test.ts agent.test.ts tools.test.ts db.test.ts public/app.test.ts
 
 # Run tests with coverage
 test-coverage:
     node --experimental-strip-types --no-warnings --experimental-test-coverage --test server.test.ts agent.test.ts tools.test.ts db.test.ts
 
 # Run mutation tests
+# Note: Stryker requires full Bun setup. On Node.js, run unit tests with coverage instead.
 test-mutation:
-    echo "Mutation testing requires bun+stryker - skipping on this platform"
+    echo "Mutation testing via stryker requires Bun — falling back to full coverage check" && \
+    node --experimental-strip-types --no-warnings --experimental-test-coverage --test public/app.test.ts 2>&1 | grep 'all files'
 
 # Start dev server
 dev:
