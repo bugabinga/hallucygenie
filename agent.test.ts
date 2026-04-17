@@ -14,6 +14,8 @@ import {
   createSteerQueue,
   queueSteer,
   drainSteer,
+  SYSTEM_PROMPT,
+  buildSystemPrompt,
 } from "./agent.ts";
 import type { AgentEvent } from "./agent.ts";
 
@@ -1110,5 +1112,42 @@ describe("Steering in agent loop", () => {
 
     assert.equal(messages.length, 2);
     assert.equal(events[events.length - 1].type, "done");
+  });
+});
+
+// ── Step 3: System Prompt ────────────────────────────────────────────
+
+describe("System Prompt", () => {
+  it("SYSTEM_PROMPT is a non-empty string", () => {
+    assert.equal(typeof SYSTEM_PROMPT, "string");
+    assert.ok(SYSTEM_PROMPT.length > 0, "system prompt should not be empty");
+  });
+
+  it("SYSTEM_PROMPT mentions key context", () => {
+    const lower = SYSTEM_PROMPT.toLowerCase();
+    assert.ok(lower.includes("gaming"), "should mention gaming");
+    assert.ok(lower.includes("concise"), "should mention conciseness");
+    assert.ok(lower.includes("youtube"), "should mention YouTube");
+  });
+
+  it("buildSystemPrompt returns base prompt without preferences", () => {
+    assert.equal(buildSystemPrompt(), SYSTEM_PROMPT);
+    assert.equal(buildSystemPrompt({}), SYSTEM_PROMPT);
+    assert.equal(buildSystemPrompt(undefined), SYSTEM_PROMPT);
+  });
+
+  it("buildSystemPrompt appends preferences", () => {
+    const prefs = { favorite_game: "Roblox", channel_name: "GamerKid" };
+    const result = buildSystemPrompt(prefs);
+    assert.ok(result.startsWith(SYSTEM_PROMPT), "should start with base prompt");
+    assert.ok(result.includes("What you know about the user:"), "should have preferences header");
+    assert.ok(result.includes("favorite_game: Roblox"), "should include game pref");
+    assert.ok(result.includes("channel_name: GamerKid"), "should include channel pref");
+  });
+
+  it("buildSystemPrompt with single preference", () => {
+    const result = buildSystemPrompt({ name: "Alex" });
+    assert.ok(result.includes("name: Alex"));
+    assert.ok(result.includes("What you know about the user:"));
   });
 });

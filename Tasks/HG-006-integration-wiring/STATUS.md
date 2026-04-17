@@ -2,7 +2,7 @@
 
 **Task:** HG-006 — Integration, Wiring, System Prompt
 **Iteration:** 1
-**Current Step:** Step 3: System Prompt
+**Current Step:** Step 4: Wire Chat Endpoint to Agent Loop
 **Last Updated:** 2026-04-17
 **Status:** 🟡 In Progress
 **Started:** —
@@ -35,11 +35,11 @@
 - [x] Tests: valid session passes, missing → 400, empty → 400, health exempt, steer endpoint validates
 
 ### Step 3: System Prompt
-**Status:** 🟨 In Progress
+**Status:** ✅ Complete
 
-- [ ] Write `SYSTEM_PROMPT` constant in `agent.ts` — concise, kid-friendly, gaming/YouTube context
-- [ ] Add `buildSystemPrompt(preferences?)` function that appends user preferences if present
-- [ ] Tests: SYSTEM_PROMPT is non-empty string, buildSystemPrompt appends preferences, without preferences returns base prompt
+- [x] Write `SYSTEM_PROMPT` constant in `agent.ts` — concise, kid-friendly, gaming/YouTube context
+- [x] Add `buildSystemPrompt(preferences?)` function that appends user preferences if present
+- [x] Tests: SYSTEM_PROMPT is non-empty string, buildSystemPrompt appends preferences, without preferences returns base prompt
 
 ### Step 4: Wire Chat Endpoint to Agent Loop
 **Status:** ⬜ Not Started
@@ -72,3 +72,4 @@
 | 2026-04-17 12:36 | Step 0 started | Preflight |
 | 2026-04-17 12:40 | Review R001 | plan Step 1: APPROVE |
 | 2026-04-17 12:48 | Review R001 | plan Step 2: APPROVE |
+| 2026-04-17 12:53 | Review R001 | plan Step 3: APPROVE |

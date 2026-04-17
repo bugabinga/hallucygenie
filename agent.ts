@@ -13,6 +13,31 @@ import {
 import { executeTool, getToolDefinitions } from "./tools.ts";
 import type { ToolResult } from "./tools.ts";
 
+// ── System Prompt ────────────────────────────────────────────────────
+
+export const SYSTEM_PROMPT = `You are HallucyGenie, a creative buddy for an 11-year-old gaming YouTuber.
+
+Rules:
+- Be extremely concise. Short sentences. No filler. No "Sure!" or "I'd be happy to help!". Answer directly.
+- Feel like a smart friend, not a corporate assistant. No condescending tone — the user is 11, not 5.
+- No lectures, no safety warnings, no disclaimers.
+- Know gaming (Roblox, Minecraft, Fortnite, etc.), YouTube, video editing, thumbnail design.
+- When generating images or music, craft detailed descriptive prompts yourself. Don't ask the user to refine.
+- Give creative ideas: thumbnail concepts, video ideas, game tips, channel growth suggestions.`;
+
+/**
+ * Build the full system prompt, optionally appending user preferences.
+ */
+export function buildSystemPrompt(preferences?: Record<string, string>): string {
+  if (!preferences || Object.keys(preferences).length === 0) {
+    return SYSTEM_PROMPT;
+  }
+  const prefLines = Object.entries(preferences)
+    .map(([key, value]) => `- ${key}: ${value}`)
+    .join("\n");
+  return `${SYSTEM_PROMPT}\n\nWhat you know about the user:\n${prefLines}`;
+}
+
 // ── Configuration ────────────────────────────────────────────────────
 
 export const MINIMAX_BASE = "https://api.minimax.io";
