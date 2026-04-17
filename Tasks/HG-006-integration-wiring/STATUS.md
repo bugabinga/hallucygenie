@@ -26,11 +26,13 @@
 - [x] Tests: DB init, data/ dir creation, shutdown closes DB, re-init works
 
 ### Step 2: Session Validation Middleware
-**Status:** ⬜ Not Started
+**Status:** 🟨 In Progress
 
-- [ ] X-Session-Id validation on /api/* routes
-- [ ] Health endpoint exempt
-- [ ] Tests: valid, missing, empty
+- [ ] Add `validateSessionId(req)` function that reads `X-Session-Id` header, returns sessionId or null
+- [ ] Apply session validation in `handleRequest` for all `/api/*` routes except `GET /api/health`
+- [ ] Return 400 `{ error: "X-Session-Id header required" }` when missing or empty
+- [ ] Pass validated session ID to handlers (modify handleChat and handleRequest signatures as needed)
+- [ ] Tests: valid session passes, missing → 400, empty → 400, health exempt, steer endpoint validates
 
 ### Step 3: System Prompt
 **Status:** ⬜ Not Started
