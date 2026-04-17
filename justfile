@@ -33,6 +33,18 @@ lint:
 test-update-snapshots:
     node --experimental-strip-types --no-warnings --test-update-snapshots --test server.test.ts agent.test.ts tools.test.ts db.test.ts
 
+# Run frontend unit tests
+test-frontend:
+    node --experimental-strip-types --no-warnings --import ./tests/loader.mjs --test public/app.test.ts
+
+# Run frontend tests with coverage
+test-frontend-coverage:
+    node --experimental-strip-types --no-warnings --experimental-test-coverage --import ./tests/loader.mjs --test public/app.test.ts
+
+# Run E2E tests with Playwright
+test-e2e:
+    PLAYWRIGHT_ALLOW_ANDROID=1 npx playwright test --config playwright.config.ts
+
 # Show all recipes
 list:
     just --list

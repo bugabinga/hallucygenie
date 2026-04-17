@@ -1,21 +1,24 @@
 # STATUS — HG-007
 
 **Task:** HG-007 — Frontend MVP with UI Tests
-**Status:** ⬜ Not Started
+**Iteration:** 1
+**Current Step:** Step 0: Preflight
+**Last Updated:** 2026-04-17
+**Status:** 🟡 In Progress
 **Started:** —
 **Updated:** —
 
 ## Step Progress
 
 ### Step 0: Preflight
-**Status:** ⬜ Not Started
+**Status:** ✅ Complete
 
-- [ ] Verify public/ exists
-- [ ] Verify full server works (chat + tools)
-- [ ] Install playwright-core
-- [ ] Install Chromium
-- [ ] Verify Playwright on Termux
-- [ ] Create e2e/ directory
+- [x] Verify public/ exists
+- [x] Verify full server works (chat + tools)
+- [x] Install playwright-core
+- [x] Install Chromium
+- [x] Verify Playwright on Termux
+- [x] Create e2e/ directory
 
 ### Step 1: HTML Structure
 **Status:** ⬜ Not Started
@@ -68,3 +71,6 @@
 | Step | Finding | Action Taken |
 |------|---------|-------------|
 | — | — | — |
+
+| 2026-04-17 13:33 | Task started | Runtime V2 lane-runner execution |
+| 2026-04-17 13:33 | Step 0 started | Preflight |
