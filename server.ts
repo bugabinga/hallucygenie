@@ -533,10 +533,30 @@ export function startServer(port = PORT): ReturnType<typeof Bun.serve> {
   return server;
 }
 
+let shuttingDown = false;
+
 export async function shutdown(): Promise<void> {
+  if (shuttingDown) return;
+  shuttingDown = true;
   if (server) {
     server.stop(true);
     server = null;
+  }
+}
+
+export function isShuttingDown(): boolean {
+  return shuttingDown;
+}
+
+// Graceful shutdown signal handlers
+function setupSignalHandlers(): void {
+  const signals: NodeJS.Signals[] = ["SIGTERM", "SIGINT"];
+  for (const sig of signals) {
+    process.on(sig, async () => {
+      console.log(`\nReceived ${sig}, shutting down gracefully...`);
+      await shutdown();
+      process.exit(0);
+    });
   }
 }
 
@@ -546,4 +566,5 @@ if (
   process.argv[1]?.endsWith("server.ts")
 ) {
   startServer();
+  setupSignalHandlers();
 }
