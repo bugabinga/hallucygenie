@@ -35,12 +35,11 @@
 - [x] Tests: valid session passes, missing → 400, empty → 400, health exempt, steer endpoint validates
 
 ### Step 3: System Prompt
-**Status:** ⬜ Not Started
+**Status:** 🟨 In Progress
 
-- [ ] Write system prompt per goals
-- [ ] Inject into runAgentLoop
-- [ ] Append preferences from DB
-- [ ] Tests
+- [ ] Write `SYSTEM_PROMPT` constant in `agent.ts` — concise, kid-friendly, gaming/YouTube context
+- [ ] Add `buildSystemPrompt(preferences?)` function that appends user preferences if present
+- [ ] Tests: SYSTEM_PROMPT is non-empty string, buildSystemPrompt appends preferences, without preferences returns base prompt
 
 ### Step 4: Wire Chat Endpoint to Agent Loop
 **Status:** ⬜ Not Started
