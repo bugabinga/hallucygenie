@@ -51,11 +51,12 @@
 - [x] Snapshot tests for SSE streams (text-only and tool-call scenarios)
 
 ### Step 5: New API Endpoints
-**Status:** ⬜ Not Started
+**Status:** 🟨 In Progress
 
-- [ ] GET /api/history
-- [ ] GET /api/usage
-- [ ] Tests and snapshot tests
+- [ ] Add `GET /api/history` endpoint that returns messages for the session from DB
+- [ ] Add `GET /api/usage` endpoint that returns `{ usage: getUsageToday(db), limits: QUOTAS }`
+- [ ] Tests: history returns saved messages, usage returns tracked counts, both require session ID
+- [ ] Snapshot tests: snapshot history and usage responses
 
 ### Step 6: Coverage and Mutation Testing
 **Status:** ⬜ Not Started
