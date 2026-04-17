@@ -118,11 +118,12 @@ Sessions are identified by a UUID stored in the browser's `localStorage`.
 
 - [ ] Implement `POST /api/chat` handler:
   - Accept JSON body: `{ messages: [{role, content}], system_prompt?: string }`
+  - Validate request schema: body must be valid JSON, must have `messages` array, each message must have `role` (string) and `content` (string). Return 400 with `{ error: "description" }` on invalid input. No fuzzy error messages — tell the caller exactly what's wrong.
   - Forward to MiniMax `POST /v1/chat/completions` with `stream: true`
   - Stream SSE events back to browser
   - Strip thinking tokens from streamed content before forwarding (thinking content appears between `<think_intended>` and `</think_intended>` tags — these are literal strings in the SSE content delta)
 - [ ] Include tool definitions in the MiniMax request (image gen, TTS, music gen)
-- [ ] **Tests:** Mock MiniMax SSE responses, verify correct forwarding, verify thinking tokens stripped, verify error handling (MiniMax returns 500, network error)
+- [ ] **Tests:** Mock MiniMax SSE responses, verify correct forwarding, verify thinking tokens stripped, verify error handling (MiniMax returns 500, network error), verify schema validation rejects bad input (missing messages, wrong types, malformed JSON)
 - [ ] **Snapshot tests:** Record SSE event streams for text-only response, response with thinking tokens, error response
 
 ### Step 3: Tool Call Accumulator

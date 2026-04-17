@@ -1,6 +1,6 @@
 # STATUS — HG-004
 
-**Task:** HG-004 — Agent Loop + Tools + Memory
+**Task:** HG-004 — Agent Loop + Tools + Steering
 **Status:** ⬜ Not Started
 **Started:** —
 **Updated:** —
@@ -10,7 +10,7 @@
 ### Step 0: Preflight
 **Status:** ⬜ Not Started
 
-- [ ] Verify agent.ts, tools.ts, db.ts exist
+- [ ] Verify agent.ts and tools.ts exist
 - [ ] Verify HG-003 works
 - [ ] `just test` passes
 
@@ -18,6 +18,8 @@
 **Status:** ⬜ Not Started
 
 - [ ] Tool schemas and executeTool function
+- [ ] Image gen, TTS, music gen implementations
+- [ ] Audio hex → base64 data URL conversion
 - [ ] Unit tests with mocked MiniMax
 - [ ] Error case tests
 - [ ] Snapshot tests for tool results
@@ -26,37 +28,21 @@
 **Status:** ⬜ Not Started
 
 - [ ] runAgentLoop implementation
-- [ ] Tests for all loop scenarios
-- [ ] Thinking token stripping tests
+- [ ] Thinking token stripping (`<think_intended>...</think_intended>`)
+- [ ] Tool call accumulation from chunks
+- [ ] Event emission (text, tool_start, tool_result, done)
+- [ ] Multi-iteration loop
+- [ ] Unit tests for all scenarios
 - [ ] Snapshot tests for event sequences
 
 ### Step 3: Steering Queue
 **Status:** ⬜ Not Started
 
-- [ ] Steering queue implementation
-- [ ] Wire into server
+- [ ] queueSteer / drainSteer
+- [ ] Integration into agent loop turn boundary
 - [ ] Tests: mid-loop, idle, multiple, after-done
 
-### Step 4: SQLite Persistence + Migration System
-**Status:** ⬜ Not Started
-
-- [ ] Create migration SQL files in `migrations/`
-- [ ] Implement migration runner (runMigrations)
-- [ ] Implement data access functions (CRUD)
-- [ ] Tests: migration runner (fresh, partial, rollback)
-- [ ] Tests: CRUD operations with :memory:
-- [ ] Tests: edge cases
-- [ ] Snapshot tests for history and schema
-
-### Step 5: Wire Into Server
-**Status:** ⬜ Not Started
-
-- [ ] server.ts uses agent loop + steering + persistence
-- [ ] GET /api/history endpoint
-- [ ] Integration tests
-- [ ] Snapshot tests for full SSE streams
-
-### Step 6: Coverage and Mutation Testing
+### Step 4: Coverage and Mutation Testing
 **Status:** ⬜ Not Started
 
 - [ ] `just test-coverage` → 100%

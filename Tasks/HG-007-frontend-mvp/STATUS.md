@@ -1,6 +1,6 @@
-# STATUS — HG-005
+# STATUS — HG-007
 
-**Task:** HG-005 — Frontend MVP with UI Tests
+**Task:** HG-007 — Frontend MVP with UI Tests
 **Status:** ⬜ Not Started
 **Started:** —
 **Updated:** —
@@ -11,37 +11,38 @@
 **Status:** ⬜ Not Started
 
 - [ ] Verify public/ exists
-- [ ] Verify server SSE works
+- [ ] Verify full server works (chat + tools)
 - [ ] Install playwright-core
-- [ ] Install Chromium if needed
-- [ ] Verify Playwright launches on Termux
+- [ ] Install Chromium
+- [ ] Verify Playwright on Termux
 - [ ] Create e2e/ directory
 
 ### Step 1: HTML Structure
 **Status:** ⬜ Not Started
 
-- [ ] Mobile-first layout
-- [ ] Header, message list, input area
+- [ ] Mobile-first layout with header, messages, input
+- [ ] Message bubble structure
 
-### Step 2: CSS — Mobile-First Dark Theme
+### Step 2: CSS — Design System + Mobile-First Styling
 **Status:** ⬜ Not Started
 
-- [ ] Dark theme, touch targets
-- [ ] Message bubbles, tool cards
+- [ ] Color palette CSS custom properties
+- [ ] Dark theme, touch targets, animations
+- [ ] Message bubbles, tool cards, send button
 - [ ] Snapshot tests for UI states
 
 ### Step 3: Chat Logic in app.ts
 **Status:** ⬜ Not Started
 
+- [ ] Session UUID in localStorage
 - [ ] History loading, SSE parsing, message rendering
 - [ ] Unit tests with mocked fetch
-- [ ] Snapshot tests for message bubbles
+- [ ] Snapshot tests for bubbles
 
 ### Step 4: Steering UI
 **Status:** ⬜ Not Started
 
-- [ ] Steer during stream
-- [ ] Visual distinction
+- [ ] Steer during stream with visual distinction
 
 ### Step 5: Tool Result Rendering
 **Status:** ⬜ Not Started
@@ -53,13 +54,7 @@
 **Status:** ⬜ Not Started
 
 - [ ] playwright.config.ts for Termux
-- [ ] E2E: streaming response
-- [ ] E2E: image gen display
-- [ ] E2E: TTS audio player
-- [ ] E2E: music audio player
-- [ ] E2E: steering
-- [ ] E2E: history on reload
-- [ ] E2E: error states
+- [ ] E2E: streaming, image, TTS, music, steering, history, errors, quota warning
 - [ ] `just test-e2e` passes
 
 ### Step 7: Coverage and Mutation Testing
