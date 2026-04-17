@@ -1,18 +1,21 @@
 # STATUS — HG-004
 
 **Task:** HG-004 — Agent Loop + Tools + Steering
-**Status:** ⬜ Not Started
+**Iteration:** 1
+**Current Step:** Step 0: Preflight
+**Last Updated:** 2026-04-17
+**Status:** 🟡 In Progress
 **Started:** —
 **Updated:** —
 
 ## Step Progress
 
 ### Step 0: Preflight
-**Status:** ⬜ Not Started
+**Status:** ✅ Complete
 
-- [ ] Verify agent.ts and tools.ts exist
-- [ ] Verify HG-003 works
-- [ ] `just test` passes
+- [x] Verify agent.ts and tools.ts exist
+- [x] Verify HG-003 works
+- [x] `just test` passes
 
 ### Step 1: Tool Definitions and Execution
 **Status:** ⬜ Not Started
@@ -53,3 +56,6 @@
 | Step | Finding | Action Taken |
 |------|---------|-------------|
 | — | — | — |
+
+| 2026-04-17 11:52 | Task started | Runtime V2 lane-runner execution |
+| 2026-04-17 11:52 | Step 0 started | Preflight |
