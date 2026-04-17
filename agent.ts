@@ -28,6 +28,24 @@ export interface AgentEvent {
   result?: ToolResult;
 }
 
+export interface SteerQueue {
+  queue: string[];
+}
+
+export function createSteerQueue(): SteerQueue {
+  return { queue: [] };
+}
+
+export function queueSteer(steerQueue: SteerQueue, message: string): void {
+  steerQueue.queue.push(message);
+}
+
+export function drainSteer(steerQueue: SteerQueue): string[] {
+  const messages = steerQueue.queue;
+  steerQueue.queue = [];
+  return messages;
+}
+
 export interface AgentState {
   messages: ChatMessage[];
   pendingToolCalls: ToolCallAccumulated[];
@@ -106,7 +124,8 @@ export function parseToolArguments(args: string): Record<string, unknown> {
 export async function runAgentLoop(
   messages: ChatMessage[],
   apiKey: string,
-  onEvent: (event: AgentEvent) => void
+  onEvent: (event: AgentEvent) => void,
+  steerQueue?: SteerQueue
 ): Promise<ChatMessage[]> {
   const localMessages = [...messages];
   const tools = getToolDefinitions();
@@ -278,11 +297,38 @@ export async function runAgentLoop(
         });
       }
 
-      // Continue loop — model sees tool results
+      // Check for steer messages at turn boundary
+      if (steerQueue) {
+        const steerMessages = drainSteer(steerQueue);
+        if (steerMessages.length > 0) {
+          for (const msg of steerMessages) {
+            localMessages.push({ role: "user", content: msg });
+          }
+        }
+      }
+
+      // Continue loop — model sees tool results (and any steer messages)
       continue;
     }
 
-    // finish_reason is "stop" or no more tool calls — we're done
+    // finish_reason is "stop" or no more tool calls
+    // Check for steer messages at text turn boundary
+    if (steerQueue) {
+      const steerMessages = drainSteer(steerQueue);
+      if (steerMessages.length > 0) {
+        if (textContent) {
+          localMessages.push({
+            role: "assistant",
+            content: textContent,
+          });
+        }
+        for (const msg of steerMessages) {
+          localMessages.push({ role: "user", content: msg });
+        }
+        continue;
+      }
+    }
+
     if (textContent) {
       localMessages.push({
         role: "assistant",

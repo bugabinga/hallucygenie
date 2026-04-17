@@ -11,6 +11,9 @@ import {
   needsToolExecution,
   parseToolArguments,
   runAgentLoop,
+  createSteerQueue,
+  queueSteer,
+  drainSteer,
 } from "./agent.ts";
 import type { AgentEvent } from "./agent.ts";
 
@@ -783,5 +786,296 @@ describe("Agent event sequence snapshots", () => {
     assert.equal(messages[2].tool_call_id, "call_1");
     assert.equal(messages[3].role, "assistant");
     assert.equal(messages[3].content, "Done!");
+  });
+});
+
+// ── Steering queue tests ──────────────────────────────────────────────
+
+describe("createSteerQueue", () => {
+  it("creates empty queue", () => {
+    const sq = createSteerQueue();
+    assert.deepEqual(sq.queue, []);
+  });
+});
+
+describe("queueSteer / drainSteer", () => {
+  it("queues and drains messages", () => {
+    const sq = createSteerQueue();
+    queueSteer(sq, "change topic to dogs");
+    queueSteer(sq, "use a happy tone");
+    assert.equal(sq.queue.length, 2);
+
+    const drained = drainSteer(sq);
+    assert.deepEqual(drained, ["change topic to dogs", "use a happy tone"]);
+    assert.equal(sq.queue.length, 0);
+  });
+
+  it("draining empty queue returns empty array", () => {
+    const sq = createSteerQueue();
+    const drained = drainSteer(sq);
+    assert.deepEqual(drained, []);
+  });
+
+  it("draining twice returns messages only once", () => {
+    const sq = createSteerQueue();
+    queueSteer(sq, "hello");
+    const first = drainSteer(sq);
+    const second = drainSteer(sq);
+    assert.deepEqual(first, ["hello"]);
+    assert.deepEqual(second, []);
+  });
+});
+
+describe("Steering in agent loop", () => {
+  let _origFetch: typeof globalThis.fetch;
+
+  beforeEach(() => {
+    _origFetch = globalThis.fetch;
+  });
+
+  afterEach(() => {
+    globalThis.fetch = _origFetch;
+  });
+
+  it("steer mid-loop (during tool execution)", async () => {
+    // Iteration 1: model calls generate_image
+    const response1 = minimaxResponse([
+      toolCallDelta(0, "call_1", "generate_image", '{"prompt":"cat"}'),
+      finishDelta("tool_calls"),
+      sseDone(),
+    ]);
+
+    // Iteration 2: model sees tool result + steer message, responds with text
+    const response2 = minimaxResponse([
+      contentDelta("Steered response!"),
+      finishDelta("stop"),
+      sseDone(),
+    ]);
+
+    let fetchCallCount = 0;
+    globalThis.fetch = async (
+      url: string | URL | Request,
+      init?: RequestInit
+    ) => {
+      fetchCallCount++;
+      const urlStr = url.toString();
+      if (urlStr.includes("/v1/chat/completions")) {
+        return fetchCallCount === 1 ? response1 : response2;
+      }
+      // Image gen tool
+      return new Response(
+        JSON.stringify({
+          data: { image_urls: ["https://example.com/cat.png"] },
+        }),
+        { status: 200, headers: { "Content-Type": "application/json" } }
+      );
+    };
+
+    const sq = createSteerQueue();
+    queueSteer(sq, "now make it a dog");
+
+    const { events, onEvent } = collectEvents();
+    const messages = await runAgentLoop(
+      [{ role: "user", content: "draw a cat" }],
+      "test-key",
+      onEvent,
+      sq
+    );
+
+    // The steer message should be injected after the tool result
+    const userMessages = messages.filter((m) => m.role === "user");
+    assert.equal(userMessages.length, 2);
+    assert.equal(userMessages[1].content, "now make it a dog");
+
+    // Should end with done
+    assert.equal(events[events.length - 1].type, "done");
+  });
+
+  it("steer when idle (after text-only response)", async () => {
+    // Iteration 1: text-only response
+    const response1 = minimaxResponse([
+      contentDelta("Hello!"),
+      finishDelta("stop"),
+      sseDone(),
+    ]);
+
+    // Iteration 2: model sees steer and responds
+    const response2 = minimaxResponse([
+      contentDelta("Sure, I'll change topic!"),
+      finishDelta("stop"),
+      sseDone(),
+    ]);
+
+    let fetchCallCount = 0;
+    globalThis.fetch = async () => {
+      fetchCallCount++;
+      return fetchCallCount === 1 ? response1 : response2;
+    };
+
+    const sq = createSteerQueue();
+    queueSteer(sq, "talk about space");
+
+    const { events, onEvent } = collectEvents();
+    const messages = await runAgentLoop(
+      [{ role: "user", content: "hi" }],
+      "test-key",
+      onEvent,
+      sq
+    );
+
+    // Should have: user, assistant, user(steer), assistant
+    const userMsgs = messages.filter((m) => m.role === "user");
+    assert.equal(userMsgs.length, 2);
+    assert.equal(userMsgs[1].content, "talk about space");
+
+    const assistantMsgs = messages.filter((m) => m.role === "assistant");
+    assert.equal(assistantMsgs.length, 2);
+  });
+
+  it("multiple steers queued at once", async () => {
+    const response1 = minimaxResponse([
+      contentDelta("OK"),
+      finishDelta("stop"),
+      sseDone(),
+    ]);
+
+    const response2 = minimaxResponse([
+      contentDelta("Done with all steers!"),
+      finishDelta("stop"),
+      sseDone(),
+    ]);
+
+    let fetchCallCount = 0;
+    globalThis.fetch = async () => {
+      fetchCallCount++;
+      return fetchCallCount === 1 ? response1 : response2;
+    };
+
+    const sq = createSteerQueue();
+    queueSteer(sq, "steer 1");
+    queueSteer(sq, "steer 2");
+    queueSteer(sq, "steer 3");
+
+    const { events, onEvent } = collectEvents();
+    const messages = await runAgentLoop(
+      [{ role: "user", content: "hi" }],
+      "test-key",
+      onEvent,
+      sq
+    );
+
+    // All three steer messages should be injected as user messages
+    const userMsgs = messages.filter((m) => m.role === "user");
+    assert.equal(userMsgs.length, 4); // original + 3 steers
+    assert.equal(userMsgs[1].content, "steer 1");
+    assert.equal(userMsgs[2].content, "steer 2");
+    assert.equal(userMsgs[3].content, "steer 3");
+  });
+
+  it("steer after done (no effect)", async () => {
+    const response1 = minimaxResponse([
+      contentDelta("Hello!"),
+      finishDelta("stop"),
+      sseDone(),
+    ]);
+
+    let fetchCallCount = 0;
+    globalThis.fetch = async () => {
+      fetchCallCount++;
+      return response1;
+    };
+
+    const sq = createSteerQueue();
+    // No steer queued before loop runs
+
+    const { events, onEvent } = collectEvents();
+    const messages = await runAgentLoop(
+      [{ role: "user", content: "hi" }],
+      "test-key",
+      onEvent,
+      sq
+    );
+
+    // Loop completes with no steer
+    assert.equal(messages.length, 2); // user + assistant
+
+    // Now queue a steer (but loop already done)
+    queueSteer(sq, "too late");
+    assert.equal(sq.queue.length, 1); // Still in queue, never drained
+  });
+
+  it("steer during tool execution gets injected after tool results", async () => {
+    // Iteration 1: model calls generate_image
+    const response1 = minimaxResponse([
+      toolCallDelta(0, "call_1", "generate_image", '{"prompt":"cat"}'),
+      finishDelta("tool_calls"),
+      sseDone(),
+    ]);
+
+    // Iteration 2: model sees tool result + steer, responds
+    const response2 = minimaxResponse([
+      contentDelta("Responding to steer!"),
+      finishDelta("stop"),
+      sseDone(),
+    ]);
+
+    let fetchCallCount = 0;
+    globalThis.fetch = async (
+      url: string | URL | Request,
+      init?: RequestInit
+    ) => {
+      fetchCallCount++;
+      const urlStr = url.toString();
+      if (urlStr.includes("/v1/chat/completions")) {
+        return fetchCallCount === 1 ? response1 : response2;
+      }
+      return new Response(
+        JSON.stringify({
+          data: { image_urls: ["https://example.com/cat.png"] },
+        }),
+        { status: 200, headers: { "Content-Type": "application/json" } }
+      );
+    };
+
+    const sq = createSteerQueue();
+    queueSteer(sq, "steer during tool");
+
+    const { events, onEvent } = collectEvents();
+    const messages = await runAgentLoop(
+      [{ role: "user", content: "draw" }],
+      "test-key",
+      onEvent,
+      sq
+    );
+
+    // Verify the message order: user, assistant, tool_result, user(steer), assistant
+    assert.equal(messages[0].role, "user");
+    assert.equal(messages[1].role, "assistant");
+    assert.equal(messages[2].role, "tool");
+    assert.equal(messages[3].role, "user");
+    assert.equal(messages[3].content, "steer during tool");
+    assert.equal(messages[4].role, "assistant");
+    assert.equal(messages[4].content, "Responding to steer!");
+  });
+
+  it("works without steerQueue (backward compatible)", async () => {
+    mockMiniMax([
+      minimaxResponse([
+        contentDelta("Hello"),
+        finishDelta("stop"),
+        sseDone(),
+      ]),
+    ]);
+
+    const { events, onEvent } = collectEvents();
+    const messages = await runAgentLoop(
+      [{ role: "user", content: "hi" }],
+      "test-key",
+      onEvent
+      // No steerQueue
+    );
+
+    assert.equal(messages.length, 2);
+    assert.equal(events[events.length - 1].type, "done");
   });
 });
