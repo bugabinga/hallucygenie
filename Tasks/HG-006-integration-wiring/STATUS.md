@@ -2,7 +2,7 @@
 
 **Task:** HG-006 — Integration, Wiring, System Prompt
 **Iteration:** 1
-**Current Step:** Step 1: Database Initialization at Startup
+**Current Step:** Step 2: Session Validation Middleware
 **Last Updated:** 2026-04-17
 **Status:** 🟡 In Progress
 **Started:** —
@@ -18,12 +18,12 @@
 - [x] `just test` passes — 174 tests pass
 
 ### Step 1: Database Initialization at Startup
-**Status:** 🟨 In Progress
+**Status:** ✅ Complete
 
-- [ ] Modify server.ts to import `initDb` from db.ts, call it at startup with "data/hallucygenie.db", ensure `data/` dir created
-- [ ] Store db instance in module-level variable, close it in `shutdown()`
-- [ ] Graceful shutdown: close DB on SIGTERM/SIGINT via existing signal handlers
-- [ ] Tests: DB init, data/ dir creation, shutdown closes DB, re-init works
+- [x] Modify server.ts to import `initDb` from db.ts, call it at startup with "data/hallucygenie.db", ensure `data/` dir created
+- [x] Store db instance in module-level variable, close it in `shutdown()`
+- [x] Graceful shutdown: close DB on SIGTERM/SIGINT via existing signal handlers
+- [x] Tests: DB init, data/ dir creation, shutdown closes DB, re-init works
 
 ### Step 2: Session Validation Middleware
 **Status:** ⬜ Not Started
@@ -69,3 +69,4 @@
 
 | 2026-04-17 12:36 | Task started | Runtime V2 lane-runner execution |
 | 2026-04-17 12:36 | Step 0 started | Preflight |
+| 2026-04-17 12:40 | Review R001 | plan Step 1: APPROVE |

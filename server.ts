@@ -2,6 +2,10 @@
 // Target: Bun runtime (Bun.serve)
 
 import { getToolDefinitions } from "./tools.ts";
+import { initDb } from "./db.ts";
+import { mkdirSync } from "node:fs";
+import { dirname } from "node:path";
+import type { DatabaseSync } from "node:sqlite";
 
 // ── Types ────────────────────────────────────────────────────────────
 
@@ -521,6 +525,24 @@ export async function handleRequest(req: Request): Promise<Response> {
 // ── Server lifecycle ─────────────────────────────────────────────────
 
 let server: ReturnType<typeof Bun.serve> | null = null;
+let db: DatabaseSync | null = null;
+
+/**
+ * Get the database instance (null if not initialized).
+ */
+export function getDb(): DatabaseSync | null {
+  return db;
+}
+
+/**
+ * Initialize the database: create data directory and run migrations.
+ */
+export function initDatabase(dbPath = "data/hallucygenie.db"): DatabaseSync {
+  const dir = dirname(dbPath);
+  mkdirSync(dir, { recursive: true });
+  db = initDb(dbPath);
+  return db;
+}
 
 export function startServer(port = PORT): ReturnType<typeof Bun.serve> {
   server = Bun.serve({
@@ -542,10 +564,29 @@ export async function shutdown(): Promise<void> {
     server.stop(true);
     server = null;
   }
+  if (db) {
+    db.close();
+    db = null;
+  }
 }
 
 export function isShuttingDown(): boolean {
   return shuttingDown;
+}
+
+/**
+ * Reset server state for testing. Not for production use.
+ */
+export function resetStateForTesting(): void {
+  shuttingDown = false;
+  if (db) {
+    try { db.close(); } catch { /* ignore */ }
+    db = null;
+  }
+  if (server) {
+    try { server.stop(true); } catch { /* ignore */ }
+    server = null;
+  }
 }
 
 // Graceful shutdown signal handlers
@@ -565,6 +606,7 @@ if (
   typeof process !== "undefined" &&
   process.argv[1]?.endsWith("server.ts")
 ) {
+  initDatabase();
   startServer();
   setupSignalHandlers();
 }

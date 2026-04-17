@@ -1,7 +1,7 @@
 // HallucyGenie — Server tests
 // Uses Node.js test runner with Web API Request/Response
 
-import { describe, it } from "node:test";
+import { describe, it, after } from "node:test";
 import assert from "node:assert/strict";
 import {
   handleRequest,
@@ -10,8 +10,14 @@ import {
   accumulateToolCalls,
   shutdown,
   MINIMAX_MODEL,
+  initDatabase,
+  getDb,
+  isShuttingDown,
+  resetStateForTesting,
 } from "./server.ts";
 import type { ToolCallChunk } from "./server.ts";
+import { existsSync, rmSync, mkdirSync } from "node:fs";
+import { join } from "node:path";
 
 // ── Test helpers ─────────────────────────────────────────────────────
 
@@ -1045,5 +1051,82 @@ describe("Error handling", () => {
     } finally {
       globalThis.fetch = originalFetch;
     }
+  });
+});
+
+// ── Step 1: Database Initialization at Startup ──────────────────────
+
+describe("Database Initialization", () => {
+  const testDbDir = join(import.meta.dirname ?? ".", "test-data-step1");
+  const testDbPath = join(testDbDir, "test.db");
+
+  after(() => {
+    resetStateForTesting();
+    // Clean up test data dir
+    try {
+      rmSync(testDbDir, { recursive: true, force: true });
+    } catch {
+      // ignore
+    }
+  });
+
+  it("creates data directory if missing", () => {
+    resetStateForTesting();
+    // Ensure dir doesn't exist
+    try { rmSync(testDbDir, { recursive: true, force: true }); } catch {}
+
+    assert.ok(!existsSync(testDbDir), "dir should not exist yet");
+
+    const database = initDatabase(testDbPath);
+
+    assert.ok(existsSync(testDbDir), "data dir should be created");
+    assert.ok(database, "db should be returned");
+    database.close();
+  });
+
+  it("initializes database with migrations", () => {
+    resetStateForTesting();
+    const database = initDatabase(testDbPath);
+
+    // Verify the database has tables from migrations
+    const tables = database
+      .prepare("SELECT name FROM sqlite_master WHERE type='table' ORDER BY name")
+      .all() as Array<{ name: string }>;
+    const tableNames = tables.map(t => t.name);
+
+    assert.ok(tableNames.includes("messages"), "messages table should exist");
+    assert.ok(tableNames.includes("preferences"), "preferences table should exist");
+    assert.ok(tableNames.includes("daily_usage"), "daily_usage table should exist");
+    assert.ok(tableNames.includes("schema_migrations"), "schema_migrations table should exist");
+
+    database.close();
+  });
+
+  it("getDb returns the initialized database instance", () => {
+    resetStateForTesting();
+    const database = initDatabase(testDbPath);
+
+    assert.equal(getDb(), database, "getDb should return the same instance");
+
+    database.close();
+  });
+
+  it("getDb returns null before initDatabase is called", () => {
+    resetStateForTesting();
+    assert.equal(getDb(), null, "db should be null before init");
+  });
+
+  it("shutdown closes the database and sets getDb to null", async () => {
+    resetStateForTesting();
+    const database = initDatabase(testDbPath);
+
+    // Verify db is usable
+    database.prepare("SELECT 1").get();
+
+    await shutdown();
+
+    // After shutdown, getDb should return null
+    assert.equal(getDb(), null, "db should be null after shutdown");
+    assert.ok(isShuttingDown(), "shuttingDown flag should be set");
   });
 });
