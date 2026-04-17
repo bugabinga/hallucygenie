@@ -657,6 +657,39 @@ describe("runAgentLoop", () => {
     const toolResultEvents = events.filter((e) => e.type === "tool_result");
     assert.equal(toolResultEvents.length, 1);
   });
+
+  it("handles invalid JSON in SSE stream gracefully", async () => {
+    const enc = new TextEncoder();
+    const stream = new ReadableStream({
+      start(controller) {
+        controller.enqueue(enc.encode('data: {invalid json}\n\n'));
+        controller.enqueue(enc.encode('data: {"choices":[{"delta":{"content":"OK"},"finish_reason":null}]}\n\n'));
+        controller.enqueue(enc.encode('data: {"choices":[{"delta":{},"finish_reason":"stop"}]}\n\n'));
+        controller.enqueue(enc.encode('data: [DONE]\n\n'));
+        controller.close();
+      },
+    });
+
+    mockMiniMax([
+      new Response(stream, {
+        status: 200,
+        headers: { "Content-Type": "text/event-stream" },
+      }),
+    ]);
+
+    const { events, onEvent } = collectEvents();
+    const messages = await runAgentLoop(
+      [{ role: "user", content: "test" }],
+      "test-key",
+      onEvent
+    );
+
+    // Should skip invalid JSON and still process valid events
+    assert.equal(events[events.length - 1].type, "done");
+    const textEvents = events.filter((e) => e.type === "text");
+    assert.equal(textEvents.length, 1);
+    assert.equal(textEvents[0].content, "OK");
+  });
 });
 
 // ── Snapshot tests for event sequences ───────────────────────────────

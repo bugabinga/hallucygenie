@@ -11,7 +11,7 @@ test:
 
 # Run tests with coverage
 test-coverage:
-    node --experimental-strip-types --no-warnings --test server.test.ts agent.test.ts tools.test.ts
+    node --experimental-strip-types --no-warnings --experimental-test-coverage --test server.test.ts agent.test.ts tools.test.ts
 
 # Run mutation tests
 test-mutation:
