@@ -11,58 +11,53 @@
 **Status:** ⬜ Not Started
 
 - [ ] Verify agent.ts, tools.ts, db.ts exist
-- [ ] Verify HG-003 chat proxy works
+- [ ] Verify HG-003 works
+- [ ] `just test` passes
 
 ### Step 1: Tool Definitions and Execution
 **Status:** ⬜ Not Started
 
-- [ ] Define tool schemas (generate_image, text_to_speech, generate_music)
-- [ ] Implement executeTool function
-- [ ] Image gen tool calls MiniMax API
-- [ ] TTS tool calls MiniMax API
-- [ ] Music gen tool calls MiniMax API
+- [ ] Tool schemas and executeTool function
+- [ ] Unit tests with mocked MiniMax
+- [ ] Error case tests
+- [ ] Snapshot tests for tool results
 
 ### Step 2: Agent Loop
 **Status:** ⬜ Not Started
 
-- [ ] Implement runAgentLoop function
-- [ ] Accumulate text deltas and tool calls from stream
-- [ ] Execute tools and feed results back
-- [ ] Loop until finish_reason=stop
-- [ ] Strip thinking tokens
+- [ ] runAgentLoop implementation
+- [ ] Tests for all loop scenarios
+- [ ] Thinking token stripping tests
+- [ ] Snapshot tests for event sequences
 
 ### Step 3: Steering Queue
 **Status:** ⬜ Not Started
 
-- [ ] Implement steering queue
-- [ ] Wire POST /api/steer
-- [ ] Agent loop checks queue at turn boundaries
+- [ ] Steering queue implementation
+- [ ] Wire into server
+- [ ] Tests: mid-loop, idle, multiple, after-done
 
 ### Step 4: SQLite Persistence
 **Status:** ⬜ Not Started
 
-- [ ] Implement db.ts with bun:sqlite
-- [ ] Messages table and CRUD
-- [ ] Preferences table and CRUD
-- [ ] DB file in data/ directory
+- [ ] db.ts with bun:sqlite
+- [ ] CRUD tests with :memory:
+- [ ] Edge case tests
+- [ ] Snapshot tests for history
 
 ### Step 5: Wire Into Server
 **Status:** ⬜ Not Started
 
-- [ ] POST /api/chat uses agent loop
-- [ ] POST /api/steer queues message
-- [ ] GET /api/history returns messages
-- [ ] Preferences injected into system prompt
+- [ ] server.ts uses agent loop + steering + persistence
+- [ ] GET /api/history endpoint
+- [ ] Integration tests
+- [ ] Snapshot tests for full SSE streams
 
-### Step 6: Verification
+### Step 6: Coverage and Mutation Testing
 **Status:** ⬜ Not Started
 
-- [ ] Text-only chat works
-- [ ] Image gen end-to-end
-- [ ] TTS end-to-end
-- [ ] Music gen end-to-end
-- [ ] Steering works
-- [ ] Persistence works
+- [ ] `just test-coverage` → 100%
+- [ ] `just test-mutation` → >= 80%
 
 ## Discoveries
 

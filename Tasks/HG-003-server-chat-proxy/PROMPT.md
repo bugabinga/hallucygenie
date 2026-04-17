@@ -1,12 +1,12 @@
 # Task: HG-003 — Server + Chat Proxy
 
 **Created:** 2026-04-16
-**Size:** M
+**Size:** L
 
-## Review Level: 1 (Plan Only)
+## Review Level: 2 (Plan + Code)
 
-**Assessment:** New HTTP routing and SSE streaming pattern. Single service, no auth yet.
-**Score:** 2/8 — Blast radius: 1 (single service), Pattern novelty: 1 (new patterns), Security: 0, Reversibility: 0
+**Assessment:** Core HTTP server with SSE streaming and MiniMax proxy. New patterns, needs thorough testing.
+**Score:** 3/8 — Blast radius: 1 (single service), Pattern novelty: 1 (new patterns), Security: 0, Reversibility: 1 (server rewrite)
 
 ## Canonical Task Folder
 
@@ -19,8 +19,9 @@ Tasks/HG-003-server-chat-proxy/
 
 ## Mission
 
-Implement the core server: HTTP routing, static file serving, and the MiniMax chat
-proxy with SSE streaming. This is the backbone that all other features plug into.
+Implement the core server: HTTP routing, static file serving, MiniMax chat proxy
+with SSE streaming, and tool call parsing. Include comprehensive unit tests with
+100% coverage, mutation tests, and snapshot tests for all endpoints.
 
 The server proxies chat requests to MiniMax M2.7-highspeed, streaming tokens back
 to the browser via SSE. It handles the OpenAI-compatible tool calling format where
@@ -38,37 +39,61 @@ MiniMax returns `tool_calls` in streaming chunks with chunked arguments.
 - `finish_reason: "tool_calls"` when model wants to execute tools
 - Tool results sent back as `{"role": "tool", "content": "...", "tool_call_id": "..."}`
 
+## Testing Requirements
+
+- **100% unit test coverage** on `server.ts` and `agent.ts` — every function, every branch, every error path
+- **Mutation tests** via `just test-mutation` — stryker must report >= 80% mutation score
+- **Snapshot tests** for all endpoints: store SSE event streams as snapshots, assert they match on rerun
+- **Use the justfile** for ALL build/test commands — never run `bun test` directly
+
+### Testing Strategy
+
+**Mock the MiniMax API.** Do not call the real API in tests. Create a mock server
+(using `Bun.serve` on a random port) that returns canned SSE streams. This gives
+deterministic, fast tests that don't need network access or API keys.
+
+**Snapshot tests:** For each endpoint (`/api/chat`, `GET /`, static files), record
+the full response (headers + body for HTTP, event stream for SSE) as a snapshot
+file. Assert responses match snapshots. Update snapshots with `just test -- --update-snapshots`.
+
 ## Dependencies
 
-- **Task:** HG-002 (project scaffold must exist)
+- **Task:** HG-002 (project scaffold, justfile, test infra must exist)
 
 ## Context to Read First
 
 - `Tasks/CONTEXT.md` — project overview
+- `justfile` — available build/test recipes
 
 ## Environment
 
 - **Workspace:** Project root
-- **Services required:** None (API key from env)
+- **Services required:** None (mock MiniMax in tests)
+- **API key:** Use env `MINIMAX_API_KEY` at runtime only, not in tests
 
 ## File Scope
 
 - `server.ts`
 - `agent.ts`
+- `server.test.ts`
+- `agent.test.ts`
+- `__snapshots__/` (snapshot files)
 
 ## Steps
 
 ### Step 0: Preflight
 
-- [ ] Verify `server.ts` exists with the skeleton from HG-002
-- [ ] Verify `package.json` exists
-- [ ] Verify `MINIMAX_API_KEY` is available (env or `.env` file)
+- [ ] Verify `server.ts` exists with skeleton from HG-002
+- [ ] Verify `justfile` exists with test recipes
+- [ ] Run `just test` — existing placeholders pass
 
 ### Step 1: Static File Server + Route Skeleton
 
 - [ ] Implement static file serving from `public/` directory
-- [ ] Add route handling: `GET /` → `public/index.html`, `POST /api/chat` → chat handler, `POST /api/steer` → steer handler (placeholder for now)
+- [ ] Add route handling: `GET /` → `public/index.html`, `POST /api/chat` → chat handler, `POST /api/steer` → steer handler (placeholder)
 - [ ] All other routes return 404
+- [ ] **Tests:** Unit test every route (GET /, POST /api/chat with no body, unknown route → 404, static file serving)
+- [ ] **Snapshot tests:** snapshot the response for GET /, 404 responses
 
 ### Step 2: Chat Proxy with SSE Streaming
 
@@ -77,46 +102,34 @@ MiniMax returns `tool_calls` in streaming chunks with chunked arguments.
   - Forward to MiniMax `POST /v1/chat/completions` with `stream: true`
   - Stream SSE events back to browser
   - Strip thinking tokens from streamed content before forwarding
-- [ ] Implement SSE event format for browser:
-  ```
-  event: text
-  data: {"delta": "chunk"}
-
-  event: done
-  data: {}
-  ```
-- [ ] Include tool definitions in the MiniMax request (tools for image gen, TTS, music gen — even though execution is HG-004, the definitions must be present so the model knows it can call them)
+- [ ] Include tool definitions in the MiniMax request (image gen, TTS, music gen)
+- [ ] **Tests:** Mock MiniMax SSE responses, verify correct forwarding, verify thinking tokens stripped, verify error handling (MiniMax returns 500, network error)
+- [ ] **Snapshot tests:** Record SSE event streams for text-only response, response with thinking tokens, error response
 
 ### Step 3: Tool Call Accumulator
 
 - [ ] Implement streaming tool call parser:
-  - MiniMax streams tool calls as chunks: first chunk has `id`, `function.name`, and partial `function.arguments`
-  - Subsequent chunks append more `function.arguments`
-  - `finish_reason: "tool_calls"` signals all tool calls are complete
-- [ ] When tool calls are complete, emit SSE events to browser:
-  ```
-  event: tool_start
-  data: {"id": "...", "name": "generate_image", "arguments": {...}}
-
-  event: tool_end
-  data: {"id": "...", "name": "generate_image", "result": "pending"}
-  ```
-- [ ] For MVP, when tool calls are detected, just emit them to the browser and close the stream (agent loop execution comes in HG-004)
+  - Accumulate chunked `function.arguments` across SSE events
+  - Parse complete tool calls when `finish_reason: "tool_calls"` arrives
+  - Emit SSE events: `tool_start` and `tool_end`
+- [ ] For MVP, emit tool calls to browser and close stream (execution in HG-004)
+- [ ] **Tests:** Test chunk accumulation (1 call, multiple calls, partial chunks, edge cases), test SSE event format, test malformed arguments handling
+- [ ] **Snapshot tests:** Snapshot the tool_start/tool_end events for various tool call patterns
 
 ### Step 4: Error Handling
 
-- [ ] Handle MiniMax API errors (non-200 responses) → return proper HTTP errors
-- [ ] Handle `finish_reason: "length"` → emit a truncated event
-- [ ] Handle connection errors → return 502
-- [ ] No crashes on malformed requests
+- [ ] MiniMax API errors (non-200) → proper HTTP errors
+- [ ] `finish_reason: "length"` → emit truncated event
+- [ ] Connection errors → 502
+- [ ] No crashes on malformed requests (missing body, invalid JSON, etc.)
+- [ ] **Tests:** Test every error path: 500 from MiniMax, connection refused, timeout, malformed JSON body, missing fields
 
-### Step 5: Verification
+### Step 5: Coverage and Mutation Testing
 
-- [ ] Start server with `bun run server.ts`
-- [ ] `curl localhost:3000` → serves `public/index.html`
-- [ ] `curl -X POST localhost:3000/api/chat -H "Content-Type: application/json" -d '{"messages":[{"role":"user","content":"say hi"}]}'` → streams SSE events with text
-- [ ] Verify thinking tokens are NOT present in SSE output
-- [ ] Verify tool calls are parsed and emitted when model calls them (test with "generate an image of a cat")
+- [ ] Run `just test-coverage` — verify 100% line/function/branch coverage on `server.ts` and `agent.ts`
+- [ ] Run `just test-mutation` — verify mutation score >= 80%
+- [ ] If coverage gaps: write additional tests until 100%
+- [ ] If mutation score low: strengthen assertions to kill surviving mutants
 
 ## Documentation Requirements
 
@@ -126,10 +139,14 @@ MiniMax returns `tool_calls` in streaming chunks with chunked arguments.
 ## Completion Criteria
 
 - [ ] Server serves static files from `public/`
-- [ ] `POST /api/chat` proxies to MiniMax and streams SSE to browser
-- [ ] Thinking tokens are stripped from output
-- [ ] Tool calls are parsed from streaming chunks and emitted as SSE events
-- [ ] Error handling doesn't crash the server
+- [ ] `POST /api/chat` proxies to MiniMax and streams SSE
+- [ ] Thinking tokens stripped from output
+- [ ] Tool calls parsed from chunks and emitted as SSE events
+- [ ] Error handling doesn't crash server
+- [ ] `just test` passes all tests
+- [ ] `just test-coverage` shows 100% on server.ts and agent.ts
+- [ ] `just test-mutation` scores >= 80%
+- [ ] Snapshot tests exist for all endpoints
 
 ## Git Commit Convention
 
@@ -138,12 +155,13 @@ MiniMax returns `tool_calls` in streaming chunks with chunked arguments.
 
 ## Do NOT
 
-- Implement tool execution (that's HG-004)
-- Implement the agent loop (that's HG-004)
-- Implement the frontend (that's HG-005)
+- Implement tool execution (HG-004)
+- Implement the full agent loop (HG-004)
+- Implement the frontend (HG-005)
 - Use any framework or router library
-- Create classes — use plain functions and objects
-- Add authentication (not in scope)
+- Create classes
+- Call the real MiniMax API in tests — always mock
+- Run `bun test` directly — always use `just test`
 
 ---
 
