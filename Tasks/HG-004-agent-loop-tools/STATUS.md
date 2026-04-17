@@ -44,11 +44,12 @@
 - [x] Snapshot tests for event sequences
 
 ### Step 3: Steering Queue
-**Status:** ⬜ Not Started
+**Status:** 🟨 In Progress
 
-- [ ] queueSteer / drainSteer
-- [ ] Integration into agent loop turn boundary
-- [ ] Tests: mid-loop, idle, multiple, after-done
+- [ ] Add steering queue (array + flag) to agent loop: queueSteer/drainSteer functions
+- [ ] Agent loop checks queue after each turn boundary (tool results appended or text turn complete)
+- [ ] If steer messages present, inject as user message and continue loop
+- [ ] Tests: steer mid-loop, steer when idle, multiple steers queued, steer after done (ignored), steer during tool execution
 
 ### Step 4: Coverage and Mutation Testing
 **Status:** ⬜ Not Started
