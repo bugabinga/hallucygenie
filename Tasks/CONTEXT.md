@@ -1,15 +1,21 @@
 # General — Context
 
-**Last Updated:** 2026-04-15
+**Last Updated:** 2026-04-16
 **Status:** Active
-**Next Task ID:** HG-002
+**Next Task ID:** HG-006
 
 ---
 
 ## Current State
 
-This is the default task area for hallucygenie. Tasks that don't belong
-to a specific domain area are created here.
+HallucyGenie is a kid-friendly AI chat app for an 11-year-old gaming YouTuber.
+It proxies MiniMax APIs (chat, TTS, image gen, music gen) through a Bun backend
+with a mobile-first web frontend.
+
+**Tech stack:** Bun (TypeScript), vanilla HTML/CSS/TS frontend, SQLite,
+Podman quadlet deployment.
+
+**No frameworks. No OOP. No overengineering.** Plain functions, plain objects.
 
 Taskplane is configured and ready for task execution. Use `/orch all` for
 parallel batch execution or `/orch <path/to/PROMPT.md>` for a single task.
@@ -22,6 +28,12 @@ parallel batch execution or `/orch <path/to/PROMPT.md>` for a single task.
 |----------|------|
 | Tasks | `Tasks/` |
 | Config | `.pi/taskplane-config.json` |
+| Server | `server.ts` |
+| Agent loop | `agent.ts` |
+| Tools | `tools.ts` |
+| Database | `db.ts` |
+| Frontend | `public/` |
+| Container | `Dockerfile`, `hallucygenie.container` |
 
 ---
 

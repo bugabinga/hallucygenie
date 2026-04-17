@@ -1,0 +1,16 @@
+{
+  "opId": "u0-a165",
+  "batchId": "20260415T183643",
+  "waveIndex": 1,
+  "laneNumber": 2,
+  "repoId": null,
+  "baseHEAD": "fae4d375fb44cb28cade1558b912cae8f5b79bcf",
+  "laneHEAD": "132128510c55a85b50bf5540d7450b630e9f5aa0",
+  "mergedHEAD": "fe52954cbc011083049428f08505f8d16b4fd534",
+  "status": "committed",
+  "rollbackAttempted": false,
+  "rollbackResult": null,
+  "recoveryCommands": [],
+  "startedAt": "2026-04-15T16:39:30.717Z",
+  "completedAt": "2026-04-15T16:39:50.948Z"
+}

@@ -1,0 +1,31 @@
+{
+  "batchId": "20260415T183643",
+  "laneNumber": 2,
+  "laneId": "lane-2",
+  "repoId": "default",
+  "taskId": "EXAMPLE-002",
+  "segmentId": "EXAMPLE-002::default",
+  "status": "complete",
+  "worker": {
+    "agentId": "orch-u0-a165-lane-2-worker",
+    "status": "exited",
+    "elapsedMs": 131163,
+    "toolCalls": 15,
+    "contextPct": 5.3260000000000005,
+    "costUsd": 0,
+    "lastTool": "bash: if test -f \"/data/data/com.termux/files/home/Workspace/hallucygenie/.worktrees/u0-a165-20260415T183643/lane-2/Tasks/EXAMPLE-002-parallel-smoke/.task-wrap-up\"; then echo \"WRAP_UP_SIGNAL\"; else echo \"NO_WRAP_UP\"; fi",
+    "inputTokens": 10799,
+    "outputTokens": 1679,
+    "cacheReadTokens": 129920,
+    "cacheWriteTokens": 0
+  },
+  "reviewer": null,
+  "progress": {
+    "currentStep": "Step 3: Delivery",
+    "checked": 5,
+    "total": 5,
+    "iteration": 1,
+    "reviews": 0
+  },
+  "updatedAt": 1776271138731
+}

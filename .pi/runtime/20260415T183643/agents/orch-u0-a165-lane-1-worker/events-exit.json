@@ -1,0 +1,22 @@
+{
+  "exitCode": 0,
+  "exitSignal": null,
+  "tokens": {
+    "input": 3582,
+    "output": 1390,
+    "cacheRead": 86272,
+    "cacheWrite": 0
+  },
+  "cost": null,
+  "toolCalls": 10,
+  "retries": 0,
+  "compactions": 0,
+  "durationSec": 92,
+  "lastToolCall": "edit",
+  "error": null,
+  "contextUsage": {
+    "tokens": 10079,
+    "contextWindow": 200000,
+    "percent": 5.0395
+  }
+}

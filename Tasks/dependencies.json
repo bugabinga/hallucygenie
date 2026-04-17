@@ -1,9 +1,13 @@
 {
   "version": 1,
-  "generatedAt": "2026-04-15T16:35:59.294Z",
+  "generatedAt": "2026-04-16T19:00:00.000Z",
   "source": "prompt",
   "tasks": {
     "EXAMPLE-001": [],
-    "EXAMPLE-002": []
+    "EXAMPLE-002": [],
+    "HG-002": [],
+    "HG-003": ["HG-002"],
+    "HG-004": ["HG-003"],
+    "HG-005": ["HG-003"]
   }
 }
