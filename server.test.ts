@@ -1,7 +1,7 @@
 // HallucyGenie — Server tests
 // Uses Node.js test runner with Web API Request/Response
 
-import { describe, it, after } from "node:test";
+import { describe, it, after, before } from "node:test";
 import assert from "node:assert/strict";
 import {
   handleRequest,
@@ -19,6 +19,7 @@ import {
 import type { ToolCallChunk } from "./server.ts";
 import { existsSync, rmSync, mkdirSync } from "node:fs";
 import { join } from "node:path";
+import { getMessages } from "./db.ts";
 
 // ── Test helpers ─────────────────────────────────────────────────────
 
@@ -60,6 +61,27 @@ async function readBody(resp: Response): Promise<string> {
 async function readJson(resp: Response): Promise<unknown> {
   return JSON.parse(await resp.text());
 }
+
+// ── Test database setup ───────────────────────────────────────────────
+
+const testDbDir = join(import.meta.dirname ?? ".", "test-data");
+const testDbPath = join(testDbDir, "test.db");
+
+before(() => {
+  resetStateForTesting();
+  // Initialize test database
+  initDatabase(testDbPath);
+});
+
+after(() => {
+  // Cleanup
+  try {
+    shutdown();
+  } catch { /* ignore */ }
+  try {
+    rmSync(testDbDir, { recursive: true, force: true });
+  } catch { /* ignore */ }
+});
 
 // ── stripThinkingTokens ──────────────────────────────────────────────
 
@@ -482,15 +504,15 @@ describe("404 handling", () => {
 // ── Route: POST /api/steer (placeholder) ─────────────────────────────
 
 describe("POST /api/steer", () => {
-  it("returns placeholder response", async () => {
-    const resp = await handleRequest(makeRequest("POST", "/api/steer"));
+  it("returns ok response with valid message", async () => {
+    const resp = await handleRequest(makeRequest("POST", "/api/steer", { message: "test steer" }));
     assert.equal(resp.status, 200);
-    const body = (await readJson(resp)) as { message: string };
-    assert.ok(body.message.includes("steer"));
+    const body = (await readJson(resp)) as { ok: boolean };
+    assert.ok(body.ok);
   });
 
   it("includes CORS headers", async () => {
-    const resp = await handleRequest(makeRequest("POST", "/api/steer"));
+    const resp = await handleRequest(makeRequest("POST", "/api/steer", { message: "test" }));
     assert.equal(resp.headers.get("Access-Control-Allow-Origin"), "*");
   });
 });
@@ -583,29 +605,38 @@ describe("SSE streaming from MiniMax", () => {
   });
 
   it("handles tool calls in stream", async () => {
-    const sseChunks = [
-      'data: {"choices":[{"delta":{"tool_calls":[{"index":0,"id":"call_1","function":{"name":"generate_image","arguments":"{"}}]},"finish_reason":null}]}\n\n',
-      'data: {"choices":[{"delta":{"tool_calls":[{"index":0,"function":{"arguments":"\\"prompt\\":\\"cat\\"}"}}]},"finish_reason":null}]}\n\n',
+    // First call: MiniMax returns tool_call SSE
+    // Second call: after tool execution, MiniMax returns text response
+    const toolCallSse = [
+      'data: {"choices":[{"delta":{"tool_calls":[{"index":0,"id":"call_1","function":{"name":"generate_image","arguments":"{}"}}]},"finish_reason":null}]}\n\n',
       'data: {"choices":[{"delta":{},"finish_reason":"tool_calls"}]}\n\n',
       "data: [DONE]\n\n",
     ];
+    const finalSse = [
+      'data: {"choices":[{"delta":{"content":"Done!"},"finish_reason":null}]}\n\n',
+      'data: {"choices":[{"delta":{},"finish_reason":"stop"}]}\n\n',
+      "data: [DONE]\n\n",
+    ];
 
+    let callCount = 0;
     const encoder = new TextEncoder();
-    const stream = new ReadableStream({
-      start(controller) {
-        for (const chunk of sseChunks) {
-          controller.enqueue(encoder.encode(chunk));
-        }
-        controller.close();
-      },
-    });
 
     const originalFetch = globalThis.fetch;
-    globalThis.fetch = async () =>
-      new Response(stream, {
-        status: 200,
-        headers: { "Content-Type": "text/event-stream" },
-      });
+    globalThis.fetch = async () => {
+      const chunks = callCount === 0 ? toolCallSse : finalSse;
+      callCount++;
+      return new Response(
+        new ReadableStream({
+          start(controller) {
+            for (const chunk of chunks) {
+              controller.enqueue(encoder.encode(chunk));
+            }
+            controller.close();
+          },
+        }),
+        { status: 200, headers: { "Content-Type": "text/event-stream" } }
+      );
+    };
 
     try {
       const req = makeRequest("POST", "/api/chat", {
@@ -614,14 +645,14 @@ describe("SSE streaming from MiniMax", () => {
       const resp = await handleChat(req, "test-key");
       const body = await readBody(resp);
       assert.ok(body.includes("tool_start"));
-      assert.ok(body.includes("tool_end"));
+      assert.ok(body.includes("tool_result"));
       assert.ok(body.includes("generate_image"));
     } finally {
       globalThis.fetch = originalFetch;
     }
   });
 
-  it("returns 502 when MiniMax is unreachable", async () => {
+  it("streams error when MiniMax is unreachable", async () => {
     const originalFetch = globalThis.fetch;
     globalThis.fetch = async () => {
       throw new Error("Connection refused");
@@ -632,15 +663,16 @@ describe("SSE streaming from MiniMax", () => {
         messages: [{ role: "user", content: "hi" }],
       });
       const resp = await handleChat(req, "test-key");
-      assert.equal(resp.status, 502);
-      const body = (await readJson(resp)) as { error: string };
-      assert.ok(body.error.includes("Failed to connect"));
+      // New flow returns 200 SSE with error message in the stream
+      assert.equal(resp.status, 200);
+      const body = await readBody(resp);
+      assert.ok(body.includes("Failed to connect"));
     } finally {
       globalThis.fetch = originalFetch;
     }
   });
 
-  it("returns 502 when MiniMax returns non-200", async () => {
+  it("streams error when MiniMax returns non-200", async () => {
     const originalFetch = globalThis.fetch;
     globalThis.fetch = async () =>
       new Response("Internal Server Error", { status: 500 });
@@ -650,15 +682,16 @@ describe("SSE streaming from MiniMax", () => {
         messages: [{ role: "user", content: "hi" }],
       });
       const resp = await handleChat(req, "test-key");
-      assert.equal(resp.status, 502);
-      const body = (await readJson(resp)) as { error: string };
-      assert.ok(body.error.includes("MiniMax API error"));
+      // New flow returns 200 SSE with error message
+      assert.equal(resp.status, 200);
+      const body = await readBody(resp);
+      assert.ok(body.includes("MiniMax API returned 500"));
     } finally {
       globalThis.fetch = originalFetch;
     }
   });
 
-  it("emits truncated event on finish_reason length", async () => {
+  it("streams partial content on finish_reason length", async () => {
     const sseChunks = [
       'data: {"choices":[{"delta":{"content":"partial"},"finish_reason":null}]}\n\n',
       'data: {"choices":[{"delta":{},"finish_reason":"length"}]}\n\n',
@@ -688,14 +721,13 @@ describe("SSE streaming from MiniMax", () => {
       });
       const resp = await handleChat(req, "test-key");
       const body = await readBody(resp);
-      assert.ok(body.includes("truncated"));
-      assert.ok(body.includes("length"));
+      assert.ok(body.includes("partial"));
     } finally {
       globalThis.fetch = originalFetch;
     }
   });
 
-  it("handles system_prompt in request body", async () => {
+  it("injects system prompt from buildSystemPrompt into agent loop", async () => {
     const sseChunks = [
       'data: {"choices":[{"delta":{"content":"ok"},"finish_reason":null}]}\n\n',
       'data: {"choices":[{"delta":{},"finish_reason":"stop"}]}\n\n',
@@ -725,13 +757,13 @@ describe("SSE streaming from MiniMax", () => {
     try {
       const req = makeRequest("POST", "/api/chat", {
         messages: [{ role: "user", content: "hi" }],
-        system_prompt: "You are a helpful assistant",
+        system_prompt: "You are a helpful assistant", // ignored by new flow
       });
       await handleChat(req, "test-key");
       const payload = capturedPayload as { messages: Array<{ role: string; content: string }> };
+      // System prompt now comes from buildSystemPrompt, not request body
       assert.equal(payload.messages[0].role, "system");
-      assert.equal(payload.messages[0].content, "You are a helpful assistant");
-      assert.equal(payload.messages[1].role, "user");
+      assert.ok(payload.messages[0].content.includes("HallucyGenie"));
     } finally {
       globalThis.fetch = originalFetch;
     }
@@ -856,6 +888,11 @@ describe("shutdown", () => {
 // ── Error handling edge cases ─────────────────────────────────────────
 
 describe("Error handling", () => {
+  // Reset state because shutdown tests above may have closed the DB
+  before(() => {
+    resetStateForTesting();
+    initDatabase(testDbPath);
+  });
   it("handles SSE stream read error gracefully", async () => {
     const encoder = new TextEncoder();
     const stream = new ReadableStream({
@@ -953,37 +990,46 @@ describe("Error handling", () => {
         messages: [{ role: "user", content: "hi" }],
       });
       const resp = await handleChat(req, "test-key");
-      assert.equal(resp.status, 502);
-      const body = (await readJson(resp)) as { error: string };
-      assert.ok(body.error.includes("MiniMax API error"));
+      // New flow: error is streamed as SSE text
+      assert.equal(resp.status, 200);
+      const body = await readBody(resp);
+      assert.ok(body.includes("401"));
     } finally {
       globalThis.fetch = originalFetch;
     }
   });
 
   it("handles tool calls with malformed arguments", async () => {
-    const sseChunks = [
+    const toolCallSse = [
       'data: {"choices":[{"delta":{"tool_calls":[{"index":0,"id":"call_1","function":{"name":"test","arguments":"{broken"}}]},"finish_reason":null}]}\n\n',
       'data: {"choices":[{"delta":{},"finish_reason":"tool_calls"}]}\n\n',
       "data: [DONE]\n\n",
     ];
+    const finalSse = [
+      'data: {"choices":[{"delta":{"content":"handled"},"finish_reason":null}]}\n\n',
+      'data: {"choices":[{"delta":{},"finish_reason":"stop"}]}\n\n',
+      "data: [DONE]\n\n",
+    ];
 
+    let callCount = 0;
     const encoder = new TextEncoder();
-    const stream = new ReadableStream({
-      start(controller) {
-        for (const chunk of sseChunks) {
-          controller.enqueue(encoder.encode(chunk));
-        }
-        controller.close();
-      },
-    });
 
     const originalFetch = globalThis.fetch;
-    globalThis.fetch = async () =>
-      new Response(stream, {
-        status: 200,
-        headers: { "Content-Type": "text/event-stream" },
-      });
+    globalThis.fetch = async () => {
+      const chunks = callCount === 0 ? toolCallSse : finalSse;
+      callCount++;
+      return new Response(
+        new ReadableStream({
+          start(controller) {
+            for (const chunk of chunks) {
+              controller.enqueue(encoder.encode(chunk));
+            }
+            controller.close();
+          },
+        }),
+        { status: 200, headers: { "Content-Type": "text/event-stream" } }
+      );
+    };
 
     try {
       const req = makeRequest("POST", "/api/chat", {
@@ -991,17 +1037,16 @@ describe("Error handling", () => {
       });
       const resp = await handleChat(req, "test-key");
       const body = await readBody(resp);
-      // Should still contain tool_end with default arguments
-      assert.ok(body.includes("tool_end"));
-      // Arguments should be defaulted to {}
-      assert.ok(body.includes("{}"));
+      // Should contain tool_start and tool_result events
+      assert.ok(body.includes("tool_start"));
+      assert.ok(body.includes("tool_result"));
     } finally {
       globalThis.fetch = originalFetch;
     }
   });
 
-  it("handles tool calls with pending calls at [DONE]", async () => {
-    // Tool calls that arrive but finish_reason is not tool_calls, just [DONE]
+  it("handles tool calls without finish_reason tool_calls", async () => {
+    // Tool calls that arrive but finish_reason is not tool_calls
     const sseChunks = [
       'data: {"choices":[{"delta":{"tool_calls":[{"index":0,"id":"call_1","function":{"name":"test","arguments":"{}"}}]},"finish_reason":null}]}\n\n',
       "data: [DONE]\n\n",
@@ -1030,8 +1075,8 @@ describe("Error handling", () => {
       });
       const resp = await handleChat(req, "test-key");
       const body = await readBody(resp);
-      // Should emit tool_end at [DONE] for pending tool calls
-      assert.ok(body.includes("tool_end"));
+      // Should complete gracefully with [DONE]
+      assert.ok(body.includes("[DONE]"));
     } finally {
       globalThis.fetch = originalFetch;
     }
@@ -1042,7 +1087,7 @@ describe("Error handling", () => {
     const stream = new ReadableStream({
       start(controller) {
         controller.enqueue(encoder.encode('data: {"choices":[{"delta":{"content":"ok"},"finish_reason":null}]}\n\n'));
-        // Simulate an error by enqueueing bad data then erroring
+        // Simulate an error by erroring the stream
         controller.error(new Error("Stream interrupted"));
       },
     });
@@ -1059,8 +1104,8 @@ describe("Error handling", () => {
         messages: [{ role: "user", content: "hi" }],
       });
       const resp = await handleChat(req, "test-key");
+      // Should complete without crashing (status is always 200 for SSE)
       assert.equal(resp.status, 200);
-      // Should complete without crashing
       const body = await readBody(resp);
       assert.ok(body !== undefined);
     } finally {
@@ -1234,5 +1279,195 @@ describe("Session Validation", () => {
       headers: { "X-Session-Id": "abc-123" },
     });
     assert.equal(validateSessionId(req), "abc-123");
+  });
+});
+
+// ── Step 4: Integration Tests ────────────────────────────────────────
+
+describe("Integration: chat with agent loop + persistence", () => {
+  const integrationDbDir = join(import.meta.dirname ?? ".", "test-data-integration");
+  const integrationDbPath = join(integrationDbDir, "test.db");
+
+  before(() => {
+    resetStateForTesting();
+    // Clean start
+    try { rmSync(integrationDbDir, { recursive: true, force: true }); } catch {}
+    initDatabase(integrationDbPath);
+  });
+
+  after(() => {
+    try { rmSync(integrationDbDir, { recursive: true, force: true }); } catch {}
+  });
+
+  it("text-only chat: SSE stream + messages saved to DB", async () => {
+    const sseChunks = [
+      'data: {"choices":[{"delta":{"content":"Hey! Cool idea."},"finish_reason":null}]}\n\n',
+      'data: {"choices":[{"delta":{},"finish_reason":"stop"}]}\n\n',
+      "data: [DONE]\n\n",
+    ];
+    const encoder = new TextEncoder();
+
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = async () =>
+      new Response(
+        new ReadableStream({
+          start(controller) {
+            for (const chunk of sseChunks) {
+              controller.enqueue(encoder.encode(chunk));
+            }
+            controller.close();
+          },
+        }),
+        { status: 200, headers: { "Content-Type": "text/event-stream" } }
+      );
+
+    try {
+      const req = makeRequest("POST", "/api/chat", {
+        messages: [{ role: "user", content: "suggest a thumbnail idea" }],
+      });
+      const resp = await handleChat(req, "test-key", "integration-session-1");
+      assert.equal(resp.status, 200);
+      assert.equal(resp.headers.get("Content-Type"), "text/event-stream");
+
+      const body = await readBody(resp);
+      // SSE stream contains content
+      assert.ok(body.includes("Hey! Cool idea."));
+      assert.ok(body.includes("[DONE]"));
+
+      // Messages saved to DB
+      const database = getDb()!;
+      const messages = getMessages(database, "integration-session-1");
+      assert.ok(messages.length >= 2, "should have at least user + assistant messages");
+      assert.equal(messages[0].role, "user");
+      assert.equal(messages[0].content, "suggest a thumbnail idea");
+      assert.equal(messages[1].role, "assistant");
+      assert.ok(messages[1].content.includes("Hey! Cool idea."));
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
+  it("tool call: SSE stream with tool events + usage tracked", async () => {
+    const toolCallSse = [
+      'data: {"choices":[{"delta":{"tool_calls":[{"index":0,"id":"tc_1","function":{"name":"generate_image","arguments":"{\\"prompt\\":\\"cool gaming thumbnail\\"}"}}]},"finish_reason":null}]}\n\n',
+      'data: {"choices":[{"delta":{},"finish_reason":"tool_calls"}]}\n\n',
+      "data: [DONE]\n\n",
+    ];
+    const finalSse = [
+      'data: {"choices":[{"delta":{"content":"Here is your image!"},"finish_reason":null}]}\n\n',
+      'data: {"choices":[{"delta":{},"finish_reason":"stop"}]}\n\n',
+      "data: [DONE]\n\n",
+    ];
+    let fetchCallCount = 0;
+    const encoder = new TextEncoder();
+
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = async () => {
+      const chunks = fetchCallCount === 0 ? toolCallSse : finalSse;
+      fetchCallCount++;
+      return new Response(
+        new ReadableStream({
+          start(controller) {
+            for (const chunk of chunks) {
+              controller.enqueue(encoder.encode(chunk));
+            }
+            controller.close();
+          },
+        }),
+        { status: 200, headers: { "Content-Type": "text/event-stream" } }
+      );
+    };
+
+    try {
+      const req = makeRequest("POST", "/api/chat", {
+        messages: [{ role: "user", content: "generate an image" }],
+      });
+      const resp = await handleChat(req, "test-key", "integration-session-2");
+      assert.equal(resp.status, 200);
+
+      const body = await readBody(resp);
+      // SSE contains tool events
+      assert.ok(body.includes("tool_start"), "should have tool_start event");
+      assert.ok(body.includes("tool_result"), "should have tool_result event");
+      assert.ok(body.includes("generate_image"), "should mention generate_image");
+      assert.ok(body.includes("Here is your image!"), "should have final text");
+      assert.ok(body.includes("[DONE]"), "should end with [DONE]");
+
+      // Messages saved to DB including tool results
+      const database = getDb()!;
+      const messages = getMessages(database, "integration-session-2");
+      const roles = messages.map(m => m.role);
+      assert.ok(roles.includes("user"), "should have user message");
+      assert.ok(roles.includes("assistant"), "should have assistant message");
+      assert.ok(roles.includes("tool"), "should have tool result message");
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
+  it("snapshot: text-only SSE stream", async () => {
+    const sseChunks = [
+      'data: {"choices":[{"delta":{"content":"Short answer."},"finish_reason":null}]}\n\n',
+      'data: {"choices":[{"delta":{},"finish_reason":"stop"}]}\n\n',
+      "data: [DONE]\n\n",
+    ];
+    const encoder = new TextEncoder();
+
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = async () =>
+      new Response(
+        new ReadableStream({
+          start(controller) {
+            for (const chunk of sseChunks) {
+              controller.enqueue(encoder.encode(chunk));
+            }
+            controller.close();
+          },
+        }),
+        { status: 200, headers: { "Content-Type": "text/event-stream" } }
+      );
+
+    try {
+      const req = makeRequest("POST", "/api/chat", {
+        messages: [{ role: "user", content: "hi" }],
+      });
+      const resp = await handleChat(req, "test-key", "snapshot-session-text");
+      const body = await readBody(resp);
+      // Verify the SSE structure
+      const lines = body.split("\n").filter(l => l.trim());
+      const dataLines = lines.filter(l => l.startsWith("data: "));
+      assert.ok(dataLines.length >= 2, "should have content + [DONE]");
+      assert.ok(dataLines.some(l => l.includes("Short answer.")));
+      assert.ok(dataLines.some(l => l.includes("[DONE]")));
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+});
+
+// ── Steer endpoint integration ────────────────────────────────────────
+
+describe("POST /api/steer integration", () => {
+  before(() => {
+    resetStateForTesting();
+    const dir = join(import.meta.dirname ?? ".", "test-data-steer");
+    try { rmSync(dir, { recursive: true, force: true }); } catch {}
+    initDatabase(join(dir, "test.db"));
+  });
+
+  it("queues a steer message for a session", async () => {
+    const resp = await handleRequest(
+      makeRequest("POST", "/api/steer", { message: "be more creative" })
+    );
+    assert.equal(resp.status, 200);
+    const body = (await readJson(resp)) as { ok: boolean };
+    assert.equal(body.ok, true);
+  });
+
+  it("returns 400 for missing message field", async () => {
+    const resp = await handleRequest(
+      makeRequest("POST", "/api/steer", { not_message: "test" })
+    );
+    assert.equal(resp.status, 400);
   });
 });

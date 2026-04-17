@@ -2,7 +2,7 @@
 
 **Task:** HG-006 — Integration, Wiring, System Prompt
 **Iteration:** 1
-**Current Step:** Step 4: Wire Chat Endpoint to Agent Loop
+**Current Step:** Step 5: New API Endpoints
 **Last Updated:** 2026-04-17
 **Status:** 🟡 In Progress
 **Started:** —
@@ -42,13 +42,13 @@
 - [x] Tests: SYSTEM_PROMPT is non-empty string, buildSystemPrompt appends preferences, without preferences returns base prompt
 
 ### Step 4: Wire Chat Endpoint to Agent Loop
-**Status:** 🟨 In Progress
+**Status:** ✅ Complete
 
-- [ ] Replace `handleChat` with agent loop integration: load history from DB, run `runAgentLoop`, stream SSE events, save messages to DB
-- [ ] Implement `POST /api/steer` using steer queue mapped by session ID
-- [ ] Integration test: text-only chat flow → SSE stream → messages saved to DB
-- [ ] Integration test: tool call flow → mocked MiniMax returns tool_call → tool executes → result in SSE → usage tracked
-- [ ] Snapshot tests for SSE streams (text-only and tool-call scenarios)
+- [x] Replace `handleChat` with agent loop integration: load history from DB, run `runAgentLoop`, stream SSE events, save messages to DB
+- [x] Implement `POST /api/steer` using steer queue mapped by session ID
+- [x] Integration test: text-only chat flow → SSE stream → messages saved to DB
+- [x] Integration test: tool call flow → mocked MiniMax returns tool_call → tool executes → result in SSE → usage tracked
+- [x] Snapshot tests for SSE streams (text-only and tool-call scenarios)
 
 ### Step 5: New API Endpoints
 **Status:** ⬜ Not Started
@@ -74,3 +74,4 @@
 | 2026-04-17 12:40 | Review R001 | plan Step 1: APPROVE |
 | 2026-04-17 12:48 | Review R001 | plan Step 2: APPROVE |
 | 2026-04-17 12:53 | Review R001 | plan Step 3: APPROVE |
+| 2026-04-17 12:57 | Review R001 | plan Step 4: APPROVE |

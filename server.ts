@@ -6,6 +6,28 @@ import { initDb } from "./db.ts";
 import { mkdirSync } from "node:fs";
 import { dirname } from "node:path";
 import type { DatabaseSync } from "node:sqlite";
+import {
+  runAgentLoop,
+  buildSystemPrompt,
+  createSteerQueue,
+  queueSteer,
+  type SteerQueue,
+  type AgentEvent,
+} from "./agent.ts";
+import { getMessages, saveMessage, getPreferences, trackUsage, checkQuota } from "./db.ts";
+
+// ── Steer queues per session ────────────────────────────────────────
+
+const steerQueues = new Map<string, SteerQueue>();
+
+function getOrCreateSteerQueue(sessionId: string): SteerQueue {
+  let queue = steerQueues.get(sessionId);
+  if (!queue) {
+    queue = createSteerQueue();
+    steerQueues.set(sessionId, queue);
+  }
+  return queue;
+}
 
 // ── Types ────────────────────────────────────────────────────────────
 
@@ -268,7 +290,7 @@ function buildMiniMaxPayload(body: ChatRequestBody) {
 export async function handleChat(
   req: Request,
   apiKey: string,
-  _sessionId?: string
+  sessionId?: string
 ): Promise<Response> {
   // Parse body
   let parsed: unknown;
@@ -283,174 +305,129 @@ export async function handleChat(
     return jsonResponse({ error: validation.error }, 400);
   }
 
-  const payload = buildMiniMaxPayload(validation.body);
-
-  // Forward to MiniMax with streaming
-  let minimaxResp: Response;
-  try {
-    minimaxResp = await fetch(`${MINIMAX_BASE}/v1/chat/completions`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${apiKey}`,
-      },
-      body: JSON.stringify(payload),
-    });
-  } catch (err) {
-    return jsonResponse(
-      { error: "Failed to connect to MiniMax API", detail: String(err) },
-      502
-    );
+  // Get the database instance
+  const database = getDb();
+  if (!database) {
+    return jsonResponse({ error: "Database not initialized" }, 500);
   }
 
-  if (!minimaxResp.ok) {
-    const errorText = await minimaxResp.text();
-    return jsonResponse(
-      {
-        error: `MiniMax API error: ${minimaxResp.status}`,
-        detail: errorText,
-      },
-      minimaxResp.status >= 400 && minimaxResp.status < 500 ? 502 : 502
-    );
+  // Build message history: load from DB, append new user message
+  const systemPrompt = buildSystemPrompt(
+    sessionId ? getPreferences(database) : undefined
+  );
+
+  const messages: Array<{ role: string; content: string; tool_call_id?: string }> = [];
+  messages.push({ role: "system", content: systemPrompt });
+
+  // Load existing history from DB for this session
+  if (sessionId) {
+    const history = getMessages(database, sessionId);
+    for (const row of history) {
+      messages.push({
+        role: row.role,
+        content: row.content,
+        ...(row.tool_call_id ? { tool_call_id: row.tool_call_id } : {}),
+      });
+    }
   }
 
-  // Stream SSE events from MiniMax back to the browser
+  // Append new user messages
+  for (const msg of validation.body.messages) {
+    messages.push({ role: msg.role, content: msg.content });
+  }
+
+  // Save user message to DB
+  if (sessionId) {
+    const lastUserMsg = validation.body.messages[validation.body.messages.length - 1];
+    saveMessage(database, sessionId, "user", lastUserMsg.content);
+  }
+
+  // Get or create steer queue for this session
+  const steerQueue = sessionId ? getOrCreateSteerQueue(sessionId) : undefined;
+
+  // Set up SSE stream
   const { readable, writable } = new TransformStream<Uint8Array, Uint8Array>();
   const writer = writable.getWriter();
   const encoder = new TextEncoder();
 
-  // Process the SSE stream from MiniMax in background
+  // Run agent loop in background, streaming events to SSE
   (async () => {
-    const thinkState = { inThink: false };
-    const toolCallAccumulator = new Map<number, ToolCallAccumulated>();
-    const reader = minimaxResp.body!.getReader();
-    const decoder = new TextDecoder();
-    let buffer = "";
-
     try {
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
+      const finalMessages = await runAgentLoop(
+        messages as ChatMessage[],
+        apiKey,
+        (event: AgentEvent) => {
+          // Convert agent events to SSE
+          switch (event.type) {
+            case "text": {
+              const sseData = `data: ${JSON.stringify({
+                choices: [{ delta: { content: event.content }, finish_reason: null }],
+              })}\n\n`;
+              writer.write(encoder.encode(sseData));
+              break;
+            }
+            case "tool_start": {
+              const sseData = `event: tool_start\ndata: ${JSON.stringify({
+                id: event.id,
+                name: event.name,
+              })}\n\n`;
+              writer.write(encoder.encode(sseData));
+              break;
+            }
+            case "tool_result": {
+              const sseData = `event: tool_result\ndata: ${JSON.stringify({
+                id: event.id,
+                name: event.name,
+                result: event.result,
+              })}\n\n`;
+              writer.write(encoder.encode(sseData));
+              break;
+            }
+            case "done": {
+              writer.write(encoder.encode("data: [DONE]\n\n"));
+              break;
+            }
+          }
+        },
+        steerQueue
+      );
 
-        buffer += decoder.decode(value, { stream: true });
-        const lines = buffer.split("\n");
-        buffer = lines.pop()!;
+      // Save assistant messages and tool results to DB
+      if (sessionId) {
+        // Find new messages (those beyond what we sent)
+        const existingCount = messages.length;
+        for (let i = existingCount; i < finalMessages.length; i++) {
+          const msg = finalMessages[i];
+          saveMessage(
+            database,
+            sessionId,
+            msg.role,
+            msg.content,
+            null, // tool_calls_json
+            msg.tool_call_id ?? null
+          );
+        }
 
-        for (const line of lines) {
-          const trimmed = line.trim();
-          if (!trimmed || trimmed.startsWith(":")) continue;
-          if (!trimmed.startsWith("data: ")) continue;
-
-          const data = trimmed.slice(6);
-          if (data === "[DONE]") {
-            // Send any pending tool calls
-            if (toolCallAccumulator.size > 0) {
-              const toolCalls = [...toolCallAccumulator.values()];
-              for (const tc of toolCalls) {
-                try {
-                  JSON.parse(tc.arguments);
-                } catch {
-                  tc.arguments = "{}";
+        // Track tool usage
+        for (let i = existingCount; i < finalMessages.length; i++) {
+          const msg = finalMessages[i];
+          if (msg.role === "tool") {
+            // Determine which feature was used
+            // We need to figure out what tool was called
+            // The assistant message before the tool result has the tool name info
+            const prevAssistant = finalMessages
+              .slice(0, i)
+              .reverse()
+              .find(m => m.role === "assistant");
+            // Track usage for known features
+            for (const feature of ["image", "speech", "music"]) {
+              if (msg.content.includes(feature) || msg.content.includes("url") || msg.content.includes("data:")) {
+                const quotaStatus = checkQuota(database, feature);
+                if (!quotaStatus.blocked) {
+                  trackUsage(database, feature);
                 }
               }
-              const toolEndEvent = `event: tool_end\ndata: ${JSON.stringify(toolCalls)}\n\n`;
-              await writer.write(encoder.encode(toolEndEvent));
             }
-            await writer.write(encoder.encode("data: [DONE]\n\n"));
-            continue;
-          }
-
-          let parsed: Record<string, unknown>;
-          try {
-            parsed = JSON.parse(data);
-          } catch {
-            continue;
-          }
-
-          const choices = parsed.choices as
-            | Array<{
-              delta?: {
-                content?: string;
-                tool_calls?: ToolCallChunk[];
-              };
-              finish_reason?: string | null;
-            }>
-            | undefined;
-          if (!choices?.length) continue;
-
-          const choice = choices[0];
-
-          // Handle tool calls
-          if (choice.delta?.tool_calls) {
-            const accumulated = accumulateToolCalls(
-              choice.delta.tool_calls,
-              toolCallAccumulator
-            );
-
-            // Emit tool_start if this is the first chunk for a tool call
-            for (const tc of choice.delta.tool_calls) {
-              if (tc.id) {
-                const toolStartEvent = `event: tool_start\ndata: ${JSON.stringify({
-                  id: tc.id,
-                  name: tc.function?.name ?? accumulated[tc.index]?.name ?? "",
-                })}\n\n`;
-                await writer.write(encoder.encode(toolStartEvent));
-              }
-            }
-          }
-
-          // Handle finish_reason: tool_calls
-          if (choice.finish_reason === "tool_calls") {
-            const toolCalls = [...toolCallAccumulator.values()];
-            for (const tc of toolCalls) {
-              try {
-                JSON.parse(tc.arguments);
-              } catch {
-                tc.arguments = "{}";
-              }
-            }
-            const toolEndEvent = `event: tool_end\ndata: ${JSON.stringify(toolCalls)}\n\n`;
-            await writer.write(encoder.encode(toolEndEvent));
-          }
-
-          // Handle finish_reason: length
-          if (choice.finish_reason === "length") {
-            const truncatedEvent = `event: truncated\ndata: ${JSON.stringify({ reason: "length" })}\n\n`;
-            await writer.write(encoder.encode(truncatedEvent));
-          }
-
-          // Handle content streaming (strip thinking tokens)
-          if (choice.delta?.content) {
-            const cleaned = stripThinkingTokens(
-              choice.delta.content,
-              thinkState
-            );
-            if (cleaned) {
-              const contentEvent = `data: ${JSON.stringify({
-                choices: [
-                  {
-                    delta: { content: cleaned },
-                    finish_reason: choice.finish_reason ?? null,
-                  },
-                ],
-              })}\n\n`;
-              await writer.write(encoder.encode(contentEvent));
-            }
-          } else if (
-            !choice.delta?.tool_calls &&
-            choice.finish_reason &&
-            choice.finish_reason !== "tool_calls"
-          ) {
-            // Send finish event without content
-            const finishEvent = `data: ${JSON.stringify({
-              choices: [
-                {
-                  delta: {},
-                  finish_reason: choice.finish_reason,
-                },
-              ],
-            })}\n\n`;
-            await writer.write(encoder.encode(finishEvent));
           }
         }
       }
@@ -521,7 +498,18 @@ export async function handleRequest(req: Request): Promise<Response> {
     }
 
     if (path === "/api/steer" && method === "POST") {
-      return jsonResponse({ message: "steer endpoint - not yet implemented" });
+      let parsed: unknown;
+      try {
+        parsed = await req.json();
+      } catch {
+        return jsonResponse({ error: "Invalid JSON in request body" }, 400);
+      }
+      if (!parsed || typeof parsed !== "object" || !("message" in parsed) || typeof (parsed as { message: unknown }).message !== "string") {
+        return jsonResponse({ error: "Missing required field: message" }, 400);
+      }
+      const queue = getOrCreateSteerQueue(sessionId!);
+      queueSteer(queue, (parsed as { message: string }).message);
+      return jsonResponse({ ok: true });
     }
 
     return jsonResponse({ error: "Not found" }, 404);
