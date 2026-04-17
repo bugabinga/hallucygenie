@@ -2,7 +2,7 @@
 
 **Task:** HG-006 — Integration, Wiring, System Prompt
 **Iteration:** 1
-**Current Step:** Step 2: Session Validation Middleware
+**Current Step:** Step 3: System Prompt
 **Last Updated:** 2026-04-17
 **Status:** 🟡 In Progress
 **Started:** —
@@ -26,13 +26,13 @@
 - [x] Tests: DB init, data/ dir creation, shutdown closes DB, re-init works
 
 ### Step 2: Session Validation Middleware
-**Status:** 🟨 In Progress
+**Status:** ✅ Complete
 
-- [ ] Add `validateSessionId(req)` function that reads `X-Session-Id` header, returns sessionId or null
-- [ ] Apply session validation in `handleRequest` for all `/api/*` routes except `GET /api/health`
-- [ ] Return 400 `{ error: "X-Session-Id header required" }` when missing or empty
-- [ ] Pass validated session ID to handlers (modify handleChat and handleRequest signatures as needed)
-- [ ] Tests: valid session passes, missing → 400, empty → 400, health exempt, steer endpoint validates
+- [x] Add `validateSessionId(req)` function that reads `X-Session-Id` header, returns sessionId or null
+- [x] Apply session validation in `handleRequest` for all `/api/*` routes except `GET /api/health`
+- [x] Return 400 `{ error: "X-Session-Id header required" }` when missing or empty
+- [x] Pass validated session ID to handlers (modify handleChat and handleRequest signatures as needed)
+- [x] Tests: valid session passes, missing → 400, empty → 400, health exempt, steer endpoint validates
 
 ### Step 3: System Prompt
 **Status:** ⬜ Not Started
@@ -72,3 +72,4 @@
 | 2026-04-17 12:36 | Task started | Runtime V2 lane-runner execution |
 | 2026-04-17 12:36 | Step 0 started | Preflight |
 | 2026-04-17 12:40 | Review R001 | plan Step 1: APPROVE |
+| 2026-04-17 12:48 | Review R001 | plan Step 2: APPROVE |

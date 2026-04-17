@@ -267,7 +267,8 @@ function buildMiniMaxPayload(body: ChatRequestBody) {
 
 export async function handleChat(
   req: Request,
-  apiKey: string
+  apiKey: string,
+  _sessionId?: string
 ): Promise<Response> {
   // Parse body
   let parsed: unknown;
@@ -464,6 +465,14 @@ export async function handleChat(
   return sseResponse(readable);
 }
 
+// ── Session validation ──────────────────────────────────────────────
+
+export function validateSessionId(req: Request): string | null {
+  const sessionId = req.headers.get("X-Session-Id");
+  if (!sessionId || sessionId.trim() === "") return null;
+  return sessionId;
+}
+
 // ── Health check ─────────────────────────────────────────────────────
 
 const startTime = Date.now();
@@ -492,19 +501,30 @@ export async function handleRequest(req: Request): Promise<Response> {
     return handleHealth();
   }
 
-  if (path === "/api/chat" && method === "POST") {
-    const apiKey = process.env.MINIMAX_API_KEY;
-    if (!apiKey) {
-      return jsonResponse(
-        { error: "MINIMAX_API_KEY environment variable is required" },
-        500
-      );
+  // Session validation for all /api/* routes except health
+  if (path.startsWith("/api/")) {
+    const sessionId = validateSessionId(req);
+    if (!sessionId) {
+      return jsonResponse({ error: "X-Session-Id header required" }, 400);
     }
-    return handleChat(req, apiKey);
-  }
 
-  if (path === "/api/steer" && method === "POST") {
-    return jsonResponse({ message: "steer endpoint - not yet implemented" });
+    // Route to handler with validated session ID
+    if (path === "/api/chat" && method === "POST") {
+      const apiKey = process.env.MINIMAX_API_KEY;
+      if (!apiKey) {
+        return jsonResponse(
+          { error: "MINIMAX_API_KEY environment variable is required" },
+          500
+        );
+      }
+      return handleChat(req, apiKey, sessionId);
+    }
+
+    if (path === "/api/steer" && method === "POST") {
+      return jsonResponse({ message: "steer endpoint - not yet implemented" });
+    }
+
+    return jsonResponse({ error: "Not found" }, 404);
   }
 
   // Static files

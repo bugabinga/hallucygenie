@@ -14,6 +14,7 @@ import {
   getDb,
   isShuttingDown,
   resetStateForTesting,
+  validateSessionId,
 } from "./server.ts";
 import type { ToolCallChunk } from "./server.ts";
 import { existsSync, rmSync, mkdirSync } from "node:fs";
@@ -24,16 +25,30 @@ import { join } from "node:path";
 function makeRequest(
   method: string,
   path: string,
-  body?: unknown
+  body?: unknown,
+  extraHeaders?: Record<string, string>
 ): Request {
   const init: RequestInit = {
     method,
-    headers: {},
+    headers: {} as Record<string, string>,
   };
   if (body !== undefined) {
     init.body = JSON.stringify(body);
     (init.headers as Record<string, string>)["Content-Type"] =
       "application/json";
+  }
+  // Add X-Session-Id for /api/* routes (except health)
+  if (path.startsWith("/api/") && path !== "/api/health") {
+    (init.headers as Record<string, string>)["X-Session-Id"] =
+      extraHeaders?.["X-Session-Id"] ?? "test-session-123";
+  }
+  // Add any extra headers
+  if (extraHeaders) {
+    for (const [key, value] of Object.entries(extraHeaders)) {
+      if (key !== "X-Session-Id" || !path.startsWith("/api/") || path === "/api/health") {
+        (init.headers as Record<string, string>)[key] = value;
+      }
+    }
   }
   return new Request(`http://localhost${path}`, init);
 }
@@ -1128,5 +1143,96 @@ describe("Database Initialization", () => {
     // After shutdown, getDb should return null
     assert.equal(getDb(), null, "db should be null after shutdown");
     assert.ok(isShuttingDown(), "shuttingDown flag should be set");
+  });
+});
+
+// ── Step 2: Session Validation Middleware ────────────────────────────
+
+describe("Session Validation", () => {
+  it("allows valid session ID on /api/chat", async () => {
+    const req = makeRequest("POST", "/api/chat", {
+      messages: [{ role: "user", content: "hi" }],
+    });
+    // Should NOT return 400 — it will fail at MiniMax API call but that's fine
+    const resp = await handleRequest(req);
+    assert.notEqual(resp.status, 400, "should not return 400 with valid session");
+  });
+
+  it("rejects missing X-Session-Id on /api/chat", async () => {
+    const init: RequestInit = {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ messages: [{ role: "user", content: "hi" }] }),
+    };
+    const req = new Request("http://localhost/api/chat", init);
+    const resp = await handleRequest(req);
+    assert.equal(resp.status, 400);
+    const body = JSON.parse(await resp.text());
+    assert.equal(body.error, "X-Session-Id header required");
+  });
+
+  it("rejects empty X-Session-Id on /api/chat", async () => {
+    const init: RequestInit = {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-Session-Id": "",
+      },
+      body: JSON.stringify({ messages: [{ role: "user", content: "hi" }] }),
+    };
+    const req = new Request("http://localhost/api/chat", init);
+    const resp = await handleRequest(req);
+    assert.equal(resp.status, 400);
+    const body = JSON.parse(await resp.text());
+    assert.equal(body.error, "X-Session-Id header required");
+  });
+
+  it("rejects whitespace-only X-Session-Id on /api/chat", async () => {
+    const init: RequestInit = {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-Session-Id": "   ",
+      },
+      body: JSON.stringify({ messages: [{ role: "user", content: "hi" }] }),
+    };
+    const req = new Request("http://localhost/api/chat", init);
+    const resp = await handleRequest(req);
+    assert.equal(resp.status, 400);
+    const body = JSON.parse(await resp.text());
+    assert.equal(body.error, "X-Session-Id header required");
+  });
+
+  it("health endpoint does not require session ID", async () => {
+    const req = makeRequest("GET", "/api/health");
+    const resp = await handleRequest(req);
+    assert.equal(resp.status, 200);
+    const body = JSON.parse(await resp.text());
+    assert.equal(body.status, "ok");
+  });
+
+  it("steer endpoint requires session ID", async () => {
+    const init: RequestInit = {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ message: "test" }),
+    };
+    const req = new Request("http://localhost/api/steer", init);
+    const resp = await handleRequest(req);
+    assert.equal(resp.status, 400);
+    const body = JSON.parse(await resp.text());
+    assert.equal(body.error, "X-Session-Id header required");
+  });
+
+  it("validateSessionId returns null for missing header", () => {
+    const req = new Request("http://localhost/test");
+    assert.equal(validateSessionId(req), null);
+  });
+
+  it("validateSessionId returns session ID for valid header", () => {
+    const req = new Request("http://localhost/test", {
+      headers: { "X-Session-Id": "abc-123" },
+    });
+    assert.equal(validateSessionId(req), "abc-123");
   });
 });
