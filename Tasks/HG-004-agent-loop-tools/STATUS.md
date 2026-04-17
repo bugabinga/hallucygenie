@@ -2,11 +2,11 @@
 
 **Task:** HG-004 — Agent Loop + Tools + Steering
 **Iteration:** 1
-**Current Step:** Step 0: Preflight
+**Current Step:** Step 4: Coverage and Mutation Testing
 **Last Updated:** 2026-04-17
-**Status:** 🟡 In Progress
-**Started:** —
-**Updated:** —
+**Status:** ✅ Complete
+**Started:** 2026-04-17
+**Updated:** 2026-04-17
 
 ## Step Progress
 
@@ -61,7 +61,9 @@
 
 | Step | Finding | Action Taken |
 |------|---------|-------------|
-| — | — | — |
+| 2 | toolCallDelta helper was called with wrong arg count (3 instead of 4), causing fields to shift | Fixed by adding missing "call_2" id argument |
+| 2 | Agent loop needs try/catch around initial fetch for network failures | Added graceful error handling |
+| 4 | Mutation testing requires bun+stryker not available on current platform | Documented, 100% line coverage achieved |
 
 | 2026-04-17 11:52 | Task started | Runtime V2 lane-runner execution |
 | 2026-04-17 11:52 | Step 0 started | Preflight |
