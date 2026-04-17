@@ -31,14 +31,16 @@
 - [x] Update justfile to include tools.test.ts in test commands
 
 ### Step 2: Agent Loop
-**Status:** ⬜ Not Started
+**Status:** 🟨 In Progress
 
-- [ ] runAgentLoop implementation
-- [ ] Thinking token stripping (`<think_intended>...</think_intended>`)
-- [ ] Tool call accumulation from chunks
-- [ ] Event emission (text, tool_start, tool_result, done)
-- [ ] Multi-iteration loop
-- [ ] Unit tests for all scenarios
+- [ ] Implement runAgentLoop(messages, tools, onEvent, apiKey) in agent.ts
+- [ ] Streaming chat with MiniMax: call /v1/chat/completions with messages + tool definitions
+- [ ] Thinking token stripping in agent loop (reuse stripThinkingTokens)
+- [ ] Tool call accumulation from SSE chunks
+- [ ] Execute tools via executeTool when tool_calls complete
+- [ ] Emit events: text, tool_start, tool_result, done
+- [ ] Append tool results to messages and loop until finish_reason: "stop"
+- [ ] Tests: text-only response, text + one tool call, multiple tool calls, multi-iteration loop, thinking tokens, empty responses
 - [ ] Snapshot tests for event sequences
 
 ### Step 3: Steering Queue
@@ -63,3 +65,4 @@
 | 2026-04-17 11:52 | Task started | Runtime V2 lane-runner execution |
 | 2026-04-17 11:52 | Step 0 started | Preflight |
 | 2026-04-17 11:55 | Review R001 | plan Step 1: APPROVE |
+| 2026-04-17 12:00 | Review R001 | code Step 1: APPROVE |
