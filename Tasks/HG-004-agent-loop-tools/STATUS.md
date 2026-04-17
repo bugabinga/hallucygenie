@@ -31,17 +31,17 @@
 - [x] Update justfile to include tools.test.ts in test commands
 
 ### Step 2: Agent Loop
-**Status:** 🟨 In Progress
+**Status:** ✅ Complete
 
-- [ ] Implement runAgentLoop(messages, tools, onEvent, apiKey) in agent.ts
-- [ ] Streaming chat with MiniMax: call /v1/chat/completions with messages + tool definitions
-- [ ] Thinking token stripping in agent loop (reuse stripThinkingTokens)
-- [ ] Tool call accumulation from SSE chunks
-- [ ] Execute tools via executeTool when tool_calls complete
-- [ ] Emit events: text, tool_start, tool_result, done
-- [ ] Append tool results to messages and loop until finish_reason: "stop"
-- [ ] Tests: text-only response, text + one tool call, multiple tool calls, multi-iteration loop, thinking tokens, empty responses
-- [ ] Snapshot tests for event sequences
+- [x] Implement runAgentLoop(messages, tools, onEvent, apiKey) in agent.ts
+- [x] Streaming chat with MiniMax: call /v1/chat/completions with messages + tool definitions
+- [x] Thinking token stripping in agent loop (reuse stripThinkingTokens)
+- [x] Tool call accumulation from SSE chunks
+- [x] Execute tools via executeTool when tool_calls complete
+- [x] Emit events: text, tool_start, tool_result, done
+- [x] Append tool results to messages and loop until finish_reason: "stop"
+- [x] Tests: text-only response, text + one tool call, multiple tool calls, multi-iteration loop, thinking tokens, empty responses
+- [x] Snapshot tests for event sequences
 
 ### Step 3: Steering Queue
 **Status:** ⬜ Not Started
@@ -66,3 +66,4 @@
 | 2026-04-17 11:52 | Step 0 started | Preflight |
 | 2026-04-17 11:55 | Review R001 | plan Step 1: APPROVE |
 | 2026-04-17 12:00 | Review R001 | code Step 1: APPROVE |
+| 2026-04-17 12:02 | Review R001 | plan Step 2: APPROVE |
