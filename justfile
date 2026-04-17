@@ -7,11 +7,11 @@ install:
 
 # Run all tests
 test:
-    node --experimental-strip-types --no-warnings --test server.test.ts agent.test.ts
+    node --experimental-strip-types --no-warnings --test server.test.ts agent.test.ts db.test.ts
 
 # Run tests with coverage
 test-coverage:
-    node --experimental-strip-types --no-warnings --test server.test.ts agent.test.ts
+    node --experimental-strip-types --no-warnings --test server.test.ts agent.test.ts db.test.ts
 
 # Run mutation tests
 test-mutation:
@@ -31,7 +31,7 @@ lint:
 
 # Update snapshots
 test-update-snapshots:
-    node --experimental-strip-types --no-warnings --test-update-snapshots --test server.test.ts agent.test.ts
+    node --experimental-strip-types --no-warnings --test-update-snapshots --test server.test.ts agent.test.ts db.test.ts
 
 # Show all recipes
 list:

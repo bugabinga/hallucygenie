@@ -2,7 +2,7 @@
 
 **Task:** HG-005 — Persistence, Migrations, and Quota Tracking
 **Iteration:** 1
-**Current Step:** Step 1: Migration Files
+**Current Step:** Step 5: Coverage and Mutation Testing
 **Last Updated:** 2026-04-17
 **Status:** 🟡 In Progress
 **Started:** —
@@ -26,29 +26,29 @@
 - [x] 004-create-usage-tracking.sql
 
 ### Step 2: Migration Runner
-**Status:** ⬜ Not Started
+**Status:** ✅ Complete
 
-- [ ] runMigrations(db) implementation
-- [ ] initDb(dbPath) implementation
-- [ ] Tests: fresh, partial, failed rollback
+- [x] runMigrations(db) implementation
+- [x] initDb(dbPath) implementation
+- [x] Tests: fresh, partial, failed rollback
 
 ### Step 3: Data Access Functions
-**Status:** ⬜ Not Started
+**Status:** ✅ Complete
 
-- [ ] Message CRUD
-- [ ] Preference CRUD
-- [ ] Tests with :memory: databases
-- [ ] Edge case tests
-- [ ] Snapshot tests for history
+- [x] Message CRUD
+- [x] Preference CRUD
+- [x] Tests with :memory: databases
+- [x] Edge case tests
+- [x] Snapshot tests for history
 
 ### Step 4: Usage Tracking and Quota Enforcement
-**Status:** ⬜ Not Started
+**Status:** ✅ Complete
 
-- [ ] trackUsage(feature)
-- [ ] getUsageToday()
-- [ ] checkQuota(feature)
-- [ ] Tests: under, warning, blocked, daily reset
-- [ ] Snapshot tests for quota status
+- [x] trackUsage(feature)
+- [x] getUsageToday()
+- [x] checkQuota(feature)
+- [x] Tests: under, warning, blocked, daily reset
+- [x] Snapshot tests for quota status
 
 ### Step 5: Coverage and Mutation Testing
 **Status:** ⬜ Not Started
