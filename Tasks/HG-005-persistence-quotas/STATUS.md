@@ -64,3 +64,6 @@
 
 | 2026-04-17 11:52 | Task started | Runtime V2 lane-runner execution |
 | 2026-04-17 11:52 | Step 0 started | Preflight |
+| 2026-04-17 12:03 | Agent reply | HG-005 complete. All 5 steps done. 109 tests pass (33 new db tests). 100% line coverage on db.ts. Implementation: migration runner with rollback, message/preference CRUD, usage tracking + quota enforc |
+| 2026-04-17 12:03 | Worker iter 1 | done in 669s, tools: 66 |
+| 2026-04-17 12:03 | Task complete | .DONE created |
