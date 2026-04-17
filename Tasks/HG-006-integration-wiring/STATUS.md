@@ -42,12 +42,13 @@
 - [x] Tests: SYSTEM_PROMPT is non-empty string, buildSystemPrompt appends preferences, without preferences returns base prompt
 
 ### Step 4: Wire Chat Endpoint to Agent Loop
-**Status:** ⬜ Not Started
+**Status:** 🟨 In Progress
 
-- [ ] POST /api/chat → agent loop + persistence + quotas
-- [ ] POST /api/steer → queue for active session
-- [ ] Integration tests: text-only and tool-call flows
-- [ ] Snapshot tests for SSE streams
+- [ ] Replace `handleChat` with agent loop integration: load history from DB, run `runAgentLoop`, stream SSE events, save messages to DB
+- [ ] Implement `POST /api/steer` using steer queue mapped by session ID
+- [ ] Integration test: text-only chat flow → SSE stream → messages saved to DB
+- [ ] Integration test: tool call flow → mocked MiniMax returns tool_call → tool executes → result in SSE → usage tracked
+- [ ] Snapshot tests for SSE streams (text-only and tool-call scenarios)
 
 ### Step 5: New API Endpoints
 **Status:** ⬜ Not Started
