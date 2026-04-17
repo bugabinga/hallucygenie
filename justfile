@@ -32,11 +32,11 @@ test-update-snapshots:
 
 # Run frontend unit tests
 test-frontend:
-    node --experimental-strip-types --no-warnings --import ./tests/loader.mjs --test public/app.test.ts
+    node --experimental-strip-types --no-warnings --test public/app.test.ts
 
 # Run frontend tests with coverage
 test-frontend-coverage:
-    node --experimental-strip-types --no-warnings --experimental-test-coverage --import ./tests/loader.mjs --test public/app.test.ts
+    node --experimental-strip-types --no-warnings --experimental-test-coverage --test public/app.test.ts
 
 # Run E2E tests with Playwright
 test-e2e:
