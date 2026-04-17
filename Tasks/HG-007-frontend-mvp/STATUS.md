@@ -2,7 +2,7 @@
 
 **Task:** HG-007 — Frontend MVP with UI Tests
 **Iteration:** 1
-**Current Step:** Step 0: Preflight
+**Current Step:** Step 1: HTML Structure
 **Last Updated:** 2026-04-17
 **Status:** 🟡 In Progress
 **Started:** —
@@ -21,10 +21,10 @@
 - [x] Create e2e/ directory
 
 ### Step 1: HTML Structure
-**Status:** ⬜ Not Started
+**Status:** ✅ Complete
 
-- [ ] Mobile-first layout with header, messages, input
-- [ ] Message bubble structure
+- [x] Mobile-first layout with header, messages, input
+- [x] Message bubble structure
 
 ### Step 2: CSS — Design System + Mobile-First Styling
 **Status:** ⬜ Not Started

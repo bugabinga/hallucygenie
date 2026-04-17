@@ -2,15 +2,96 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <meta name="theme-color" content="#1a1a1a">
+  <meta name="description" content="HallucyGenie — your creative AI buddy">
   <title>HallucyGenie</title>
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
   <div id="app">
-    <h1>HallucyGenie</h1>
-    <p>Loading...</p>
+    <!-- Header -->
+    <header id="header">
+      <div class="header-left">
+        <span class="header-emoji">🧞</span>
+        <h1 class="header-title">HallucyGenie</h1>
+      </div>
+      <div class="header-right">
+        <span id="connection-status" class="status-dot" title="Connected"></span>
+      </div>
+    </header>
+
+    <!-- Message List -->
+    <main id="message-list" role="log" aria-live="polite" aria-label="Chat messages">
+      <!-- Welcome message -->
+      <div class="message message--assistant message--welcome">
+        <div class="message-avatar">🧞</div>
+        <div class="message-bubble">
+          <div class="message-content">Hey! 👋 I'm HallucyGenie. Ask me anything — I can chat, make images 🔥, do voices 🎙️, and create music 🎵</div>
+        </div>
+      </div>
+    </main>
+
+    <!-- Typing indicator (hidden by default) -->
+    <div id="typing-indicator" class="typing-indicator" hidden>
+      <div class="message message--assistant">
+        <div class="message-avatar">🧞</div>
+        <div class="message-bubble">
+          <div class="typing-dots">
+            <span class="dot"></span>
+            <span class="dot"></span>
+            <span class="dot"></span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Input Area -->
+    <footer id="input-area">
+      <form id="chat-form" autocomplete="off">
+        <div class="input-wrapper">
+          <textarea
+            id="chat-input"
+            placeholder="Type a message..."
+            rows="1"
+            maxlength="2000"
+            aria-label="Type your message"
+          ></textarea>
+          <button
+            id="send-button"
+            type="submit"
+            aria-label="Send message"
+            disabled
+          >
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <line x1="22" y1="2" x2="11" y2="13"></line>
+              <polygon points="22 2 15 22 11 13 2 9 22 2"></polygon>
+            </svg>
+          </button>
+        </div>
+      </form>
+      <div id="steer-hint" class="steer-hint" hidden>
+        <span class="steer-hint-text">💡 Type to steer the response</span>
+        <button id="steer-close" class="steer-close" aria-label="Dismiss steer hint">✕</button>
+      </div>
+    </footer>
+
+    <!-- Image Lightbox (hidden) -->
+    <div id="lightbox" class="lightbox" hidden>
+      <div class="lightbox-backdrop"></div>
+      <div class="lightbox-content">
+        <img id="lightbox-img" src="" alt="Full size image">
+        <button class="lightbox-close" aria-label="Close image">✕</button>
+      </div>
+    </div>
+
+    <!-- Error Toast (hidden) -->
+    <div id="error-toast" class="error-toast" hidden>
+      <span id="error-toast-icon">😕</span>
+      <span id="error-toast-message"></span>
+    </div>
   </div>
+
   <script type="module" src="app.ts"></script>
 </body>
 </html>
