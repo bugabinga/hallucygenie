@@ -2,7 +2,7 @@
 
 **Task:** HG-007 — Frontend MVP with UI Tests
 **Iteration:** 1
-**Current Step:** Step 3: Chat Logic in app.ts
+**Current Step:** Step 4: Steering UI
 **Last Updated:** 2026-04-17
 **Status:** 🟡 In Progress
 **Started:** —
@@ -43,9 +43,9 @@
 - [x] Snapshot tests for bubbles
 
 ### Step 4: Steering UI
-**Status:** ⬜ Not Started
+**Status:** ✅ Complete
 
-- [ ] Steer during stream with visual distinction
+- [x] Steer during stream with visual distinction
 
 ### Step 5: Tool Result Rendering
 **Status:** ⬜ Not Started

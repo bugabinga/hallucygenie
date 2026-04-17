@@ -445,17 +445,20 @@ function setStreamingUI(streaming: boolean): void {
   const input = $("#chat-input") as HTMLTextAreaElement;
   const sendBtn = $("#send-button") as HTMLButtonElement;
   const typingIndicator = $("#typing-indicator");
+  const steerHint = $("#steer-hint");
 
   if (streaming) {
-    input.disabled = true;
-    input.placeholder = "Wait for the response...";
+    input.disabled = false; // Allow typing during streaming for steering
+    input.placeholder = "💡 Type to steer the response...";
     sendBtn.disabled = true;
     typingIndicator.hidden = false;
+    steerHint.hidden = false;
   } else {
     input.disabled = false;
     input.placeholder = "Type a message...";
     sendBtn.disabled = true; // Will be enabled by input handler
     typingIndicator.hidden = true;
+    steerHint.hidden = true;
     input.focus();
   }
 }
@@ -463,7 +466,13 @@ function setStreamingUI(streaming: boolean): void {
 // ── Send Message ─────────────────────────────────────────────────────
 
 export async function sendMessage(content: string): Promise<void> {
-  if (!content.trim() || isStreaming) return;
+  if (!content.trim()) return;
+
+  // If streaming, treat as steer message
+  if (isStreaming) {
+    await sendSteerMessage(content);
+    return;
+  }
 
   const sessionId = getOrCreateSessionId();
   const messageList = $("#message-list");
@@ -493,6 +502,32 @@ export async function sendMessage(content: string): Promise<void> {
   } catch (err) {
     showError("Connection lost. Check your internet? 📡");
     finishStreaming();
+  }
+}
+
+// ── Steer Message ────────────────────────────────────────────────────
+
+export async function sendSteerMessage(content: string): Promise<void> {
+  if (!content.trim() || !isStreaming) return;
+
+  const sessionId = getOrCreateSessionId();
+  const messageList = $("#message-list");
+
+  // Render steer message (visually distinct)
+  const steerMsg = renderSteerMessage(content);
+  messageList.appendChild(steerMsg);
+  scrollToBottom();
+
+  // Clear input
+  const input = $("#chat-input") as HTMLTextAreaElement;
+  input.value = "";
+  autoResizeInput();
+
+  // Send steer to server
+  try {
+    await sendSteer(sessionId, content);
+  } catch {
+    showError("Couldn't steer — try again 💫");
   }
 }
 
@@ -540,7 +575,7 @@ export function autoResizeInput(): void {
 export function handleInputChange(): void {
   const input = $("#chat-input") as HTMLTextAreaElement;
   const sendBtn = $("#send-button") as HTMLButtonElement;
-  sendBtn.disabled = !input.value.trim() || isStreaming;
+  sendBtn.disabled = !input.value.trim();
   autoResizeInput();
 }
 
@@ -555,10 +590,12 @@ export function init(): void {
   const lightboxBackdrop = lightbox.querySelector(".lightbox-backdrop") as HTMLElement;
   const steerClose = $("#steer-close") as HTMLElement;
 
-  // Form submit
+  // Form submit (handles both send and steer)
   form.addEventListener("submit", (e) => {
     e.preventDefault();
-    sendMessage(input.value);
+    if (input.value.trim()) {
+      sendMessage(input.value);
+    }
   });
 
   // Input changes
@@ -568,7 +605,7 @@ export function init(): void {
   input.addEventListener("keydown", (e) => {
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
-      if (input.value.trim() && !isStreaming) {
+      if (input.value.trim()) {
         sendMessage(input.value);
       }
     }
