@@ -59,10 +59,12 @@
 - [x] Snapshot tests: snapshot history and usage responses
 
 ### Step 6: Coverage and Mutation Testing
-**Status:** ⬜ Not Started
+**Status:** 🟨 In Progress
 
-- [ ] `just test-coverage` → 100%
-- [ ] `just test-mutation` → >= 80%
+- [ ] Run `just test-coverage` and review coverage on changed/new code in server.ts and agent.ts
+- [ ] Fill coverage gaps to reach 100% on changed/new code
+- [ ] Run `just test-mutation` (note: currently echoes skip message)
+- [ ] Kill surviving mutants if any
 
 ## Discoveries
 
