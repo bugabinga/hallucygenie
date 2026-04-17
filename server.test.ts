@@ -813,7 +813,7 @@ describe("SSE streaming from MiniMax", () => {
 // ── API key check ────────────────────────────────────────────────────
 
 describe("API key check", () => {
-  it("returns 500 when MINIMAX_API_KEY is missing via handleRequest", async () => {
+  it("returns 503 when MINIMAX_API_KEY is missing via handleRequest", async () => {
     const originalKey = process.env.MINIMAX_API_KEY;
     delete process.env.MINIMAX_API_KEY;
     try {
@@ -822,9 +822,9 @@ describe("API key check", () => {
           messages: [{ role: "user", content: "hi" }],
         })
       );
-      assert.equal(resp.status, 500);
+      assert.equal(resp.status, 503);
       const body = (await readJson(resp)) as { error: string };
-      assert.ok(body.error.includes("MINIMAX_API_KEY"));
+      assert.ok(body.error.includes("API key"));
     } finally {
       if (originalKey) process.env.MINIMAX_API_KEY = originalKey;
     }
@@ -1840,7 +1840,7 @@ describe("Coverage: chat session path", () => {
     // No API key, will fail internally
     const resp = await handleRequest(req);
     // Should get 500 (no key) not 400 (validation)
-    assert.ok(resp.status === 500 || resp.status === 200, `got ${resp.status}`);
+    assert.ok(resp.status === 503 || resp.status === 200, `got ${resp.status}`);
   });
 });
 

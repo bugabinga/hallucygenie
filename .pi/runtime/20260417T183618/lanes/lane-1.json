@@ -1,0 +1,31 @@
+{
+  "batchId": "20260417T183618",
+  "laneNumber": 1,
+  "laneId": "lane-1",
+  "repoId": "default",
+  "taskId": "HG-002",
+  "segmentId": "HG-002::default",
+  "status": "idle",
+  "worker": {
+    "agentId": "orch-u0-a165-lane-1-worker",
+    "status": "wrapping_up",
+    "elapsedMs": 0,
+    "toolCalls": 0,
+    "contextPct": 0,
+    "costUsd": 0,
+    "lastTool": "",
+    "inputTokens": 0,
+    "outputTokens": 0,
+    "cacheReadTokens": 0,
+    "cacheWriteTokens": 0
+  },
+  "reviewer": null,
+  "progress": {
+    "currentStep": "Step 0: Preflight",
+    "checked": 0,
+    "total": 33,
+    "iteration": 1,
+    "reviews": 0
+  },
+  "updatedAt": 1776443866167
+}

@@ -1,0 +1,22 @@
+{
+  "exitCode": 143,
+  "exitSignal": null,
+  "tokens": {
+    "input": 12309,
+    "output": 3565,
+    "cacheRead": 28736,
+    "cacheWrite": 0
+  },
+  "cost": null,
+  "toolCalls": 10,
+  "retries": 0,
+  "compactions": 0,
+  "durationSec": 84,
+  "lastToolCall": "bash: cd /data/data/com.termux/files/home/Workspace/hallucygenie/.worktrees/u0-a165-20260417T183618/lane-1 && cat .gitignore",
+  "error": null,
+  "contextUsage": {
+    "tokens": 7449,
+    "contextWindow": 200000,
+    "percent": 3.7245
+  }
+}

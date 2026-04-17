@@ -475,8 +475,8 @@ export async function handleRequest(req: Request): Promise<Response> {
       const apiKey = process.env.MINIMAX_API_KEY;
       if (!apiKey) {
         return jsonResponse(
-          { error: "MINIMAX_API_KEY environment variable is required" },
-          500
+          { error: "Server is missing the API key. Ask whoever set this up to add MINIMAX_API_KEY to the environment." },
+          503
         );
       }
       return handleChat(req, apiKey, sessionId);

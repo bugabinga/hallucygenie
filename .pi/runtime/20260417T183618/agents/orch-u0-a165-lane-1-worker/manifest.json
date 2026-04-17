@@ -1,0 +1,20 @@
+{
+  "batchId": "20260417T183618",
+  "agentId": "orch-u0-a165-lane-1-worker",
+  "role": "worker",
+  "laneNumber": 1,
+  "taskId": "HG-002",
+  "repoId": "default",
+  "pid": 5094,
+  "parentPid": 5050,
+  "startedAt": 1776443781541,
+  "status": "crashed",
+  "cwd": "/data/data/com.termux/files/home/Workspace/hallucygenie/.worktrees/u0-a165-20260417T183618/lane-1",
+  "packet": {
+    "promptPath": "/data/data/com.termux/files/home/Workspace/hallucygenie/.worktrees/u0-a165-20260417T183618/lane-1/Tasks/HG-002-project-scaffold/PROMPT.md",
+    "statusPath": "/data/data/com.termux/files/home/Workspace/hallucygenie/.worktrees/u0-a165-20260417T183618/lane-1/Tasks/HG-002-project-scaffold/STATUS.md",
+    "donePath": "/data/data/com.termux/files/home/Workspace/hallucygenie/.worktrees/u0-a165-20260417T183618/lane-1/Tasks/HG-002-project-scaffold/.DONE",
+    "reviewsDir": "/data/data/com.termux/files/home/Workspace/hallucygenie/.worktrees/u0-a165-20260417T183618/lane-1/Tasks/HG-002-project-scaffold/.reviews",
+    "taskFolder": "/data/data/com.termux/files/home/Workspace/hallucygenie/.worktrees/u0-a165-20260417T183618/lane-1/Tasks/HG-002-project-scaffold"
+  }
+}

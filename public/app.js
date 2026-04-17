@@ -208,11 +208,14 @@ async function streamChat(sessionId, messages, onEvent) {
     body: JSON.stringify({ messages })
   });
   if (resp.status === 400) {
-    showError("Session expired \u2014 please reload the page \u{1F504}");
+    const parsed = await resp.json().catch(() => null);
+    showError(parsed?.error ?? "Session expired \u2014 please reload the page \u{1F504}");
     return;
   }
   if (!resp.ok) {
-    showError(`Something went wrong (${resp.status}). Try again! \u{1F937}`);
+    const parsed = await resp.json().catch(() => null);
+    const msg = parsed?.error ?? `Something went wrong (${resp.status}). Try again! \u{1F937}`;
+    showError(msg);
     return;
   }
   if (!resp.body) {

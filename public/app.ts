@@ -297,12 +297,15 @@ export async function streamChat(
   });
 
   if (resp.status === 400) {
-    showError("Session expired — please reload the page 🔄");
+    const parsed = await resp.json().catch(() => null);
+    showError(parsed?.error ?? "Session expired — please reload the page 🔄");
     return;
   }
 
   if (!resp.ok) {
-    showError(`Something went wrong (${resp.status}). Try again! 🤷`);
+    const parsed = await resp.json().catch(() => null);
+    const msg = parsed?.error ?? `Something went wrong (${resp.status}). Try again! 🤷`;
+    showError(msg);
     return;
   }
 
