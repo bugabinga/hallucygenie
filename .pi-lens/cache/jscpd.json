@@ -21,12 +21,12 @@
       "fileA": "agent.ts",
       "startA": 201,
       "fileB": "public/app.ts",
-      "startB": 366,
+      "startB": 525,
       "lines": 10,
       "tokens": 0
     }
   ],
   "duplicatedLines": 31,
-  "totalLines": 4274,
-  "percentage": 0.73
+  "totalLines": 4433,
+  "percentage": 0.7
 }

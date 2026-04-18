@@ -755,6 +755,26 @@ body {
 
 /* ── Markdown Content ───────────────────────────────────────────────── */
 
+.message-content h1,
+.message-content h2,
+.message-content h3,
+.message-content h4,
+.message-content h5,
+.message-content h6 {
+  color: var(--color-text);
+  margin: var(--space-md) 0 var(--space-sm);
+  line-height: 1.3;
+}
+
+.message-content h1 { font-size: 1.4em; font-weight: 800; }
+.message-content h2 { font-size: 1.25em; font-weight: 700; }
+.message-content h3 { font-size: 1.1em; font-weight: 700; }
+.message-content h4 { font-size: 1em; font-weight: 700; }
+
+.message-content p {
+  margin: var(--space-xs) 0;
+}
+
 .message-content strong {
   color: var(--color-text);
   font-weight: 700;
@@ -763,6 +783,11 @@ body {
 .message-content em {
   color: var(--color-secondary);
   font-style: italic;
+}
+
+.message-content del {
+  opacity: 0.5;
+  text-decoration: line-through;
 }
 
 .message-content code {
@@ -798,6 +823,102 @@ body {
 
 .message-content a:hover {
   color: var(--color-secondary-light);
+}
+
+.message-content blockquote {
+  border-left: 3px solid var(--color-text-dim);
+  padding: var(--space-sm) var(--space-md);
+  margin: var(--space-sm) 0;
+  color: var(--color-text-dim);
+  background: rgba(255, 255, 255, 0.02);
+  border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+}
+
+.message-content blockquote p {
+  margin: var(--space-xs) 0;
+}
+
+.message-content ul,
+.message-content ol {
+  padding-left: var(--space-xl);
+  margin: var(--space-sm) 0;
+}
+
+.message-content li {
+  margin: var(--space-xs) 0;
+  line-height: 1.6;
+}
+
+.message-content ul li::marker {
+  color: var(--color-secondary);
+}
+
+.message-content ol li::marker {
+  color: var(--color-secondary);
+  font-weight: 600;
+}
+
+.message-content hr {
+  border: none;
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+  margin: var(--space-md) 0;
+}
+
+/* Tables */
+.message-content table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: var(--space-sm) 0;
+  font-size: 14px;
+}
+
+.message-content th {
+  background: var(--color-surface-raised);
+  font-weight: 700;
+  text-align: left;
+  padding: var(--space-sm) var(--space-md);
+  border-bottom: 2px solid rgba(255, 255, 255, 0.1);
+  color: var(--color-tertiary-light);
+}
+
+.message-content td {
+  padding: var(--space-sm) var(--space-md);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+}
+
+.message-content tr:hover {
+  background: rgba(255, 255, 255, 0.02);
+}
+
+/* Task list checkboxes */
+.message-content .task-checkbox {
+  appearance: none;
+  -webkit-appearance: none;
+  width: 16px;
+  height: 16px;
+  border: 2px solid var(--color-text-dim);
+  border-radius: 3px;
+  display: inline-block;
+  vertical-align: middle;
+  margin-right: 6px;
+  position: relative;
+  top: -1px;
+  cursor: default;
+}
+
+.message-content .task-checked {
+  background: var(--color-secondary);
+  border-color: var(--color-secondary);
+}
+
+.message-content .task-checked::after {
+  content: "✓";
+  color: var(--color-text-inverse);
+  font-size: 11px;
+  font-weight: 800;
+  position: absolute;
+  top: -1px;
+  left: 2px;
 }
 
 /* ── Responsive ─────────────────────────────────────────────────────── */

@@ -1,17 +1,173 @@
 function renderMarkdown(text) {
-  let html = text;
-  html = html.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
-  html = html.replace(/```(\w*)\n([\s\S]*?)```/g, (_m, lang, code) => {
-    return `<pre><code class="${lang ? "lang-" + lang : ""}">${code}</code></pre>`;
+  const codeStore = [];
+  let html = text.replace(/```([\s\S]*?)```/g, (_m, content) => {
+    const lines2 = content.split("\n");
+    const lang = lines2[0]?.trim() || "";
+    const code = lang ? lines2.slice(1).join("\n") : content;
+    const idx = codeStore.length;
+    codeStore.push(`<pre><code${lang ? ` class="lang-${lang}"` : ""}>${escapeHtml(code.trimEnd())}</code></pre>`);
+    return `\0CODE${idx}\0`;
   });
-  html = html.replace(/`([^`]+)`/g, "<code>$1</code>");
+  html = html.replace(/`([^`]+)`/g, (_m, code) => {
+    const idx = codeStore.length;
+    codeStore.push(`<code>${escapeHtml(code)}</code>`);
+    return `\0CODE${idx}\0`;
+  });
+  html = escapeHtml(html);
+  const lines = html.split("\n");
+  const result = [];
+  let inList = false;
+  let listType = "";
+  let inBlockquote = false;
+  let inTable = false;
+  for (let i = 0; i < lines.length; i++) {
+    let line = lines[i];
+    if (line.includes("\0CODE")) {
+      if (inList) {
+        result.push(listType === "ul" ? "</ul>" : "</ol>");
+        inList = false;
+      }
+      if (inBlockquote) {
+        result.push("</blockquote>");
+        inBlockquote = false;
+      }
+      if (inTable) {
+        result.push("</tbody></table>");
+        inTable = false;
+      }
+      result.push(line);
+      continue;
+    }
+    if (/^(\*{3,}|-{3,}|_{3,})\s*$/.test(line.trim())) {
+      if (inList) {
+        result.push(listType === "ul" ? "</ul>" : "</ol>");
+        inList = false;
+      }
+      result.push("<hr>");
+      continue;
+    }
+    const headingMatch = line.match(/^(#{1,6})\s+(.+)$/);
+    if (headingMatch) {
+      if (inList) {
+        result.push(listType === "ul" ? "</ul>" : "</ol>");
+        inList = false;
+      }
+      const level = headingMatch[1].length;
+      result.push(`<h${level}>${inlineMarkdown(headingMatch[2])}</h${level}>`);
+      continue;
+    }
+    if (line.trim().startsWith("|") && line.trim().endsWith("|")) {
+      const nextLine = lines[i + 1]?.trim() ?? "";
+      const isSep = /^\|[\s\-:]+\|/.test(nextLine);
+      if (!inTable) {
+        if (inList) {
+          result.push(listType === "ul" ? "</ul>" : "</ol>");
+          inList = false;
+        }
+        result.push("<table><thead>");
+        inTable = true;
+        const cells = parseTableRow(line);
+        result.push("<tr>" + cells.map((c) => `<th>${inlineMarkdown(c)}</th>`).join("") + "</tr>");
+        if (isSep) {
+          result.push("</thead><tbody>");
+          i++;
+        } else {
+          result.push("</thead><tbody>");
+        }
+        continue;
+      } else {
+        if (/^\|[\s\-:]+\|/.test(line.trim())) continue;
+        const cells = parseTableRow(line);
+        result.push("<tr>" + cells.map((c) => `<td>${inlineMarkdown(c)}</td>`).join("") + "</tr>");
+        continue;
+      }
+    } else if (inTable) {
+      result.push("</tbody></table>");
+      inTable = false;
+    }
+    const bqMatch = line.match(/^&gt;\s?(.*)$/);
+    if (bqMatch) {
+      if (inList) {
+        result.push(listType === "ul" ? "</ul>" : "</ol>");
+        inList = false;
+      }
+      if (!inBlockquote) {
+        result.push("<blockquote>");
+        inBlockquote = true;
+      }
+      result.push(`<p>${inlineMarkdown(bqMatch[1])}</p>`);
+      continue;
+    } else if (inBlockquote) {
+      result.push("</blockquote>");
+      inBlockquote = false;
+    }
+    const ulMatch = line.match(/^\s*[-*+]\s+(.*)$/);
+    if (ulMatch) {
+      if (inList && listType !== "ul") {
+        result.push("</ol>");
+        inList = false;
+      }
+      if (!inList) {
+        result.push("<ul>");
+        inList = true;
+        listType = "ul";
+      }
+      result.push(`<li>${inlineMarkdown(ulMatch[1])}</li>`);
+      continue;
+    }
+    const olMatch = line.match(/^\s*\d+\.\s+(.*)$/);
+    if (olMatch) {
+      if (inList && listType !== "ol") {
+        result.push("</ul>");
+        inList = false;
+      }
+      if (!inList) {
+        result.push("<ol>");
+        inList = true;
+        listType = "ol";
+      }
+      result.push(`<li>${inlineMarkdown(olMatch[1])}</li>`);
+      continue;
+    }
+    if (inList) {
+      result.push(listType === "ul" ? "</ul>" : "</ol>");
+      inList = false;
+    }
+    if (line.trim() === "") {
+      result.push("");
+      continue;
+    }
+    result.push(`<p>${inlineMarkdown(line)}</p>`);
+  }
+  if (inList) result.push(listType === "ul" ? "</ul>" : "</ol>");
+  if (inBlockquote) result.push("</blockquote>");
+  if (inTable) result.push("</tbody></table>");
+  html = result.join("\n");
+  html = html.replace(/\x00CODE(\d+)\x00/g, (_m, idx) => codeStore[parseInt(idx)]);
+  html = html.replace(/<p>\s*<\/p>/g, "");
+  return html;
+}
+function inlineMarkdown(text) {
+  let html = text;
+  html = html.replace(/~~(.+?)~~/g, "<del>$1</del>");
   html = html.replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>");
   html = html.replace(/__(.+?)__/g, "<strong>$1</strong>");
   html = html.replace(/\*(.+?)\*/g, "<em>$1</em>");
   html = html.replace(/(?<!\w)_(.+?)_(?!\w)/g, "<em>$1</em>");
+  html = html.replace(/\[ \]/g, '<input type="checkbox" disabled class="task-checkbox">');
+  html = html.replace(/\[x\]/gi, '<input type="checkbox" checked disabled class="task-checkbox task-checked">');
   html = html.replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" target="_blank" rel="noopener">$1</a>');
-  html = html.replace(/\n/g, "<br>");
+  html = html.replace(
+    /(?<!["'\(=\/>])(https?:\/\/[\w\-._~:/?#@!$&'()*+,;=%]+)/g,
+    '<a href="$1" target="_blank" rel="noopener">$1</a>'
+  );
   return html;
+}
+function escapeHtml(text) {
+  return text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+}
+function parseTableRow(row) {
+  return row.trim().split("|").slice(1, -1).map((c) => c.trim());
 }
 function renderThinkingBlock(text) {
   const lines = text.trim().split("\n").length;

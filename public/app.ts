@@ -31,34 +31,193 @@ interface ToolResultEvent {
 // No deps. Handles edge cases for streaming (unclosed markers).
 
 export function renderMarkdown(text: string): string {
-  let html = text;
+  // ── Phase 1: Extract code blocks and inline code ────────────────────
+  // Store them so they don't get mangled by later transforms
+  const codeStore: string[] = [];
 
-  // Escape HTML entities (but preserve our own tags later)
-  html = html.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
-
-  // Code blocks: ```lang\n...\n```
-  html = html.replace(/```(\w*)\n([\s\S]*?)```/g, (_m, lang, code) => {
-    return `<pre><code class="${lang ? 'lang-' + lang : ''}">${code}</code></pre>`;
+  // Extract fenced code blocks: ```lang\n...\n```
+  let html = text.replace(/```([\s\S]*?)```/g, (_m, content) => {
+    const lines = content.split("\n");
+    const lang = lines[0]?.trim() || "";
+    const code = lang ? lines.slice(1).join("\n") : content;
+    const idx = codeStore.length;
+    codeStore.push(`<pre><code${lang ? ` class="lang-${lang}"` : ""}>${escapeHtml(code.trimEnd())}</code></pre>`);
+    return `\x00CODE${idx}\x00`;
   });
 
-  // Inline code: `...`
-  html = html.replace(/`([^`]+)`/g, "<code>$1</code>");
+  // Extract inline code: `...`
+  html = html.replace(/`([^`]+)`/g, (_m, code) => {
+    const idx = codeStore.length;
+    codeStore.push(`<code>${escapeHtml(code)}</code>`);
+    return `\x00CODE${idx}\x00`;
+  });
 
-  // Bold: **...** or __...__
+  // ── Phase 2: Escape HTML in remaining text ──────────────────────────
+  html = escapeHtml(html);
+
+  // ── Phase 3: Block-level transforms (line by line) ───────────────────
+  const lines = html.split("\n");
+  const result: string[] = [];
+  let inList = false;
+  let listType = ""; // "ul" or "ol"
+  let inBlockquote = false;
+  let inTable = false;
+
+  for (let i = 0; i < lines.length; i++) {
+    let line = lines[i];
+
+    // Skip lines inside code placeholders
+    if (line.includes("\x00CODE")) {
+      if (inList) { result.push(listType === "ul" ? "</ul>" : "</ol>"); inList = false; }
+      if (inBlockquote) { result.push("</blockquote>"); inBlockquote = false; }
+      if (inTable) { result.push("</tbody></table>"); inTable = false; }
+      result.push(line);
+      continue;
+    }
+
+    // ── Horizontal rule: ---, ***, ___ (3+ on a line alone) ──────────
+    if (/^(\*{3,}|-{3,}|_{3,})\s*$/.test(line.trim())) {
+      if (inList) { result.push(listType === "ul" ? "</ul>" : "</ol>"); inList = false; }
+      result.push("<hr>");
+      continue;
+    }
+
+    // ── Headings: # ... ─────────────────────────────────────────────
+    const headingMatch = line.match(/^(#{1,6})\s+(.+)$/);
+    if (headingMatch) {
+      if (inList) { result.push(listType === "ul" ? "</ul>" : "</ol>"); inList = false; }
+      const level = headingMatch[1].length;
+      result.push(`<h${level}>${inlineMarkdown(headingMatch[2])}</h${level}>`);
+      continue;
+    }
+
+    // ── Table rows ──────────────────────────────────────────────────
+    if (line.trim().startsWith("|") && line.trim().endsWith("|")) {
+      // Check if next line is separator (---|---)
+      const nextLine = lines[i + 1]?.trim() ?? "";
+      const isSep = /^\|[\s\-:]+\|/.test(nextLine);
+
+      if (!inTable) {
+        if (inList) { result.push(listType === "ul" ? "</ul>" : "</ol>"); inList = false; }
+        result.push("<table><thead>");
+        inTable = true;
+        // Header row
+        const cells = parseTableRow(line);
+        result.push("<tr>" + cells.map(c => `<th>${inlineMarkdown(c)}</th>`).join("") + "</tr>");
+        if (isSep) {
+          result.push("</thead><tbody>");
+          i++; // skip separator
+        } else {
+          result.push("</thead><tbody>");
+        }
+        continue;
+      } else {
+        // Skip separator lines inside table
+        if (/^\|[\s\-:]+\|/.test(line.trim())) continue;
+        const cells = parseTableRow(line);
+        result.push("<tr>" + cells.map(c => `<td>${inlineMarkdown(c)}</td>`).join("") + "</tr>");
+        continue;
+      }
+    } else if (inTable) {
+      result.push("</tbody></table>");
+      inTable = false;
+    }
+
+    // ── Blockquote: > ... ───────────────────────────────────────────
+    const bqMatch = line.match(/^&gt;\s?(.*)$/);
+    if (bqMatch) {
+      if (inList) { result.push(listType === "ul" ? "</ul>" : "</ol>"); inList = false; }
+      if (!inBlockquote) { result.push("<blockquote>"); inBlockquote = true; }
+      result.push(`<p>${inlineMarkdown(bqMatch[1])}</p>`);
+      continue;
+    } else if (inBlockquote) {
+      result.push("</blockquote>");
+      inBlockquote = false;
+    }
+
+    // ── Unordered list: -, *, + ─────────────────────────────────────
+    const ulMatch = line.match(/^\s*[-*+]\s+(.*)$/);
+    if (ulMatch) {
+      if (inList && listType !== "ul") { result.push("</ol>"); inList = false; }
+      if (!inList) { result.push("<ul>"); inList = true; listType = "ul"; }
+      result.push(`<li>${inlineMarkdown(ulMatch[1])}</li>`);
+      continue;
+    }
+
+    // ── Ordered list: 1. ... ────────────────────────────────────────
+    const olMatch = line.match(/^\s*\d+\.\s+(.*)$/);
+    if (olMatch) {
+      if (inList && listType !== "ol") { result.push("</ul>"); inList = false; }
+      if (!inList) { result.push("<ol>"); inList = true; listType = "ol"; }
+      result.push(`<li>${inlineMarkdown(olMatch[1])}</li>`);
+      continue;
+    }
+
+    // Close list if we hit a non-list line
+    if (inList) { result.push(listType === "ul" ? "</ul>" : "</ol>"); inList = false; }
+
+    // ── Empty line → paragraph break ────────────────────────────────
+    if (line.trim() === "") {
+      result.push("");
+      continue;
+    }
+
+    // ── Regular text → wrap in <p> if needed ────────────────────────
+    result.push(`<p>${inlineMarkdown(line)}</p>`);
+  }
+
+  // Close any open blocks
+  if (inList) result.push(listType === "ul" ? "</ul>" : "</ol>");
+  if (inBlockquote) result.push("</blockquote>");
+  if (inTable) result.push("</tbody></table>");
+
+  html = result.join("\n");
+
+  // ── Phase 4: Restore code blocks ─────────────────────────────────────
+  html = html.replace(/\x00CODE(\d+)\x00/g, (_m, idx) => codeStore[parseInt(idx)]);
+
+  // ── Phase 5: Clean up empty <p> tags ────────────────────────────────
+  html = html.replace(/<p>\s*<\/p>/g, "");
+
+  return html;
+}
+
+// ── Inline markdown (bold, italic, strikethrough, links, task lists, autolinks) ──
+
+function inlineMarkdown(text: string): string {
+  let html = text;
+
+  // Strikethrough: ~~text~~
+  html = html.replace(/~~(.+?)~~/g, "<del>$1</del>");
+
+  // Bold: **text** or __text__
   html = html.replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>");
   html = html.replace(/__(.+?)__/g, "<strong>$1</strong>");
 
-  // Italic: *...* or _..._
+  // Italic: *text* or _text_
   html = html.replace(/\*(.+?)\*/g, "<em>$1</em>");
   html = html.replace(/(?<!\w)_(.+?)_(?!\w)/g, "<em>$1</em>");
+
+  // Task list checkbox: [ ] or [x]
+  html = html.replace(/\[ \]/g, '<input type="checkbox" disabled class="task-checkbox">');
+  html = html.replace(/\[x\]/gi, '<input type="checkbox" checked disabled class="task-checkbox task-checked">');
 
   // Links: [text](url)
   html = html.replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" target="_blank" rel="noopener">$1</a>');
 
-  // Line breaks to <br> (but not inside <pre>)
-  html = html.replace(/\n/g, "<br>");
+  // Autolinks: bare URLs
+  html = html.replace(/(?<!["'\(=\/>])(https?:\/\/[\w\-._~:/?#@!$&'()*+,;=%]+)/g,
+    '<a href="$1" target="_blank" rel="noopener">$1</a>');
 
   return html;
+}
+
+function escapeHtml(text: string): string {
+  return text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+}
+
+function parseTableRow(row: string): string[] {
+  return row.trim().split("|").slice(1, -1).map(c => c.trim());
 }
 
 // ── Thinking Block Renderer ──────────────────────────────────────────
