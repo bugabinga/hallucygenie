@@ -1,51 +1,50 @@
 # AGENTS.md — HallucyGenie
 
-You work on HallucyGenie. An AI chat app for a kid. Read this first.
+AI chat app for an 11-year-old gaming YouTuber. Read this first.
 
-## What It Is
+## What
 
-Node.js proxy server + vanilla TS frontend. Talks to MiniMax APIs (chat, image, TTS, music). Mobile-first web UI. SQLite persistence. Podman deploy.
+Node.js proxy + vanilla TS frontend. MiniMax APIs (chat, image, TTS, music). SQLite. Mobile-first dark UI. Podman deploy.
 
 ## Rules
 
-- **No frameworks. No OOP. No enterprise patterns.** Plain functions. Plain objects.
-- **No `bun test`.** Use `just test`. Justfile is law.
-- **No `console.log`.** Use the logger: `import { createLogger } from "./log.ts"`
-- **No hardcoded API keys.** `process.env.MINIMAX_API_KEY`. Fail fast if missing.
-- **No classes.** Functions only. Return plain objects.
-- **No overengineering.** Simple. Fast. Done.
+- No frameworks. No OOP. No enterprise patterns. Plain functions. Plain objects.
+- `just test` to test. Justfile is law. Never `bun test`.
+- `import { createLogger } from "./log.ts"` for logging. Never `console.log`.
+- `process.env.MINIMAX_API_KEY` for API key. Never hardcode. Fail fast if missing.
+- No classes. Functions only. Plain return objects.
+- No overengineering. Simple. Fast. Done.
 
 ## Stack
 
-- **Runtime:** Node.js v25 (NOT Bun — doesn't work on Android/Termux)
-- **Language:** TypeScript, run with `--experimental-strip-types`
-- **Test runner:** Node built-in `--test`
+- **Runtime:** Node.js v25 (Bun broken on Android/Termux)
+- **Language:** TypeScript, `--experimental-strip-types`
+- **Test:** Node `--test`, 357 tests, 97%+ coverage
 - **DB:** `node:sqlite` (DatabaseSync)
-- **Frontend:** Vanilla TS/CSS/HTML, no build step, served by Node
-- **Container:** Podman quadlet, `oven/bun:1` base (ironic name, runs Node)
+- **Frontend:** Vanilla TS/CSS/HTML, no build step
+- **Container:** Podman quadlet
 
 ## Commands
 
 ```
 just dev              # start server (port 3000)
-just test             # run all unit tests (357 tests)
+just test             # run all unit tests
 just test-coverage    # coverage report
 just test-e2e         # Playwright E2E
-just test-mutation    # stryker mutation testing
 just install          # npm install
 ```
 
 ## Files
 
 ```
-server.ts    — HTTP server, SSE proxy, request routing, session validation
-agent.ts     — Agent loop, streaming, tool execution, steering, system prompt
-tools.ts     — MiniMax tool wrappers (image, TTS, music)
-db.ts        — SQLite migrations, CRUD, quota tracking
-log.ts        — Structured logger (JSON prod / pretty dev + file)
-public/app.ts — Frontend: SSE parsing, markdown, DOM rendering, streaming
-public/style.css — Dark theme, red/green/gold, mobile-first
-migrations/   — Numbered SQL files, auto-applied on startup
+server.ts    — HTTP server, SSE proxy, routing, sessions
+agent.ts     — agent loop, streaming, tools, steering, system prompt
+tools.ts     — MiniMax wrappers (image, TTS, music)
+db.ts        — SQLite migrations, CRUD, quotas
+log.ts       — structured logger (JSON prod / pretty dev + file)
+public/app.ts — frontend: SSE, markdown, DOM, streaming
+public/style.css — dark theme, red/green/gold
+migrations/   — numbered SQL, auto-applied on startup
 ```
 
 ## Architecture
@@ -57,51 +56,51 @@ Browser → server.ts → agent.ts → MiniMax API
                log.ts
 ```
 
-- Browser sends `POST /api/chat` with `X-Session-Id` header
-- Server validates session, loads history from SQLite, runs agent loop
-- Agent streams SSE back to browser (text, tool_start, tool_result, done)
-- Tools call MiniMax APIs, return results as agent events
-- Every request gets a `reqId` via `nextReqId()`, logged throughout
+- Browser: `POST /api/chat` + `X-Session-Id` header
+- Server: validate session, load history, run agent loop
+- Agent: stream SSE to browser (text, tool_start, tool_result, done)
+- Tools: call MiniMax, return results as events
+- Every request: `reqId` via `nextReqId()`, logged throughout
 
 ## MiniMax API
 
 - **Base:** `https://api.minimax.io`
-- **Chat:** `POST /v1/chat/completions`, model `MiniMax-M2.7-highspeed`
-- **TTS:** `POST /v1/t2a_v2`, model `speech-2.8-hd`, returns hex MP3
-- **Image:** `POST /v1/image_generation`, model `image-01`
-- **Music:** `POST /v1/music_generation`, model `music-2.6`, returns hex MP3
-- **Audio format:** hex-encoded MP3 → `Buffer.from(hex, "hex").toString("base64")` → data URL
-- **Thinking tokens:** Model outputs `<think_intended>` (7 chars, NOT `<think_intended>`). Strip them.
+- **Chat:** `POST /v1/chat/completions`, `MiniMax-M2.7-highspeed`
+- **TTS:** `POST /v1/t2a_v2`, `speech-2.8-hd`, hex MP3
+- **Image:** `POST /v1/image_generation`, `image-01`
+- **Music:** `POST /v1/music_generation`, `music-2.6`, hex MP3
+- **Audio:** `Buffer.from(hex, "hex").toString("base64")` → data URL
+- **Thinking:** model outputs `<think_intended>` (7 chars). Strip it.
 
 ## Session
 
-- UUID in `X-Session-Id` header, client-owned, stored in localStorage
+- UUID in `X-Session-Id` header, client-owned, localStorage
 - Server partitions all data by session_id
 - No server-side session creation
 
-## SSE Events (server → browser)
+## SSE (server → browser)
 
 ```
-event: text       → data: {"choices":[{"delta":{"content":"..."}}]}
-event: tool_start → data: {"id":"...","name":"generate_image"}
-event: tool_result→ data: {"id":"...","name":"...","result":{...}}
-event: done       → data: {}
+event: text       → {"choices":[{"delta":{"content":"..."}}]}
+event: tool_start → {"id":"...","name":"generate_image"}
+event: tool_result→ {"id":"...","name":"...","result":{...}}
+event: done       → {}
 ```
 
-## Quotas (MiniMax Plus-Highspeed)
+## Quotas (Plus-Highspeed)
 
 - Speech: 9,000 chars/day
 - Images: 100/day
 - Music: 100/day
-- Enforced in `db.ts` → `checkQuota()`. Warn at 80%, block at 100%.
+- `db.ts` → `checkQuota()`. Warn 80%, block 100%.
 
 ## Testing
 
-- **100% line coverage** on agent.ts, tools.ts, db.ts
-- **95%+ line coverage** on server.ts, app.ts
-- **Mutation testing** via stryker on db.ts, tools.ts (≥80% score)
-- **E2E** Playwright on Android/Termux (needs platform patches in playwright-core)
-- Tests mock all external calls. No real API calls in tests.
+- 100% coverage on agent.ts, tools.ts, db.ts
+- 95%+ on server.ts, app.ts
+- Mutation testing ≥80% on db.ts, tools.ts
+- E2E Playwright (Android/Termux, patched playwright-core)
+- All external calls mocked. No real API calls.
 
 ## Logger
 
@@ -112,14 +111,14 @@ const reqLog = log.child({ reqId: nextReqId(), sessionId });
 reqLog.info("chat request", { messages: 3 });
 ```
 
-- Dev: pretty to stderr + JSON to `logs/dev.log`
-- Prod: JSON to stdout
-- Non-blocking ring buffer, flushes every 500ms
+- Dev: pretty stderr + JSON `logs/dev.log`
+- Prod: JSON stdout
+- Ring buffer, flushes 500ms, non-blocking
 
 ## Don't
 
-- Run `bun test` or `bun run` — Bun doesn't work on this machine
+- Run `bun test` or `bun run` — broken on this machine
 - Use classes, frameworks, OOP
-- Hardcode API keys or log them
+- Hardcode or log API keys
 - Skip tests. `just test` must pass before commit.
-- Modify `.gitignore` to track `.pi/` or `.pi-lens/` or `logs/` or `data/`
+- Track `.pi/`, `.pi-lens/`, `logs/`, `data/` in git
