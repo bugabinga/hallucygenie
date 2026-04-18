@@ -2,7 +2,7 @@
 
 **Last Updated:** 2026-04-18
 **Status:** Active
-**Next Task ID:** HG-010
+**Next Task ID:** HG-020
 
 ---
 
@@ -49,9 +49,24 @@ parallel batch execution or `/orch <path/to/PROMPT.md>` for a single task.
 
 ---
 
-## Technical Debt / Future Work
+## Planned Tasks
 
-_Items discovered during task execution are logged here by agents._
+| ID | Task | Size | Depends On | Batch |
+|----|------|------|------------|-------|
+| HG-010 | Anthropic endpoint migration | L | — | 3 (solo) |
+| HG-011 | Prompt caching | S | HG-010 | 4 |
+| HG-012 | Token-based context window | S | HG-010 | 4 |
+| HG-013 | Quota API + usage badge | S | — | 4 |
+| HG-018 | Media tools + forms UI | L | HG-010 | 5 (solo) |
+| HG-019 | Asset persistence + gallery | M | HG-018 | 6 |
+| HG-017 | First-run onboarding | M | HG-018 | 6 |
+
+**Batch 3:** HG-010 (solo, foundational)
+**Batch 4:** HG-011 + HG-012 + HG-013 (parallel, all small)
+**Batch 5:** HG-018 (solo, wide but not deep)
+**Batch 6:** HG-019 + HG-017 (parallel, both depend on HG-018)
+
+## Technical Debt / Future Work
 
 - [ ] **Playwright platform patches** — `playwright-core` registry files patched for Android
 - [ ] **Stryker mutation testing** — agent.ts and server.ts too large for this device (OOM)
