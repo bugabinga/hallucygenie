@@ -150,7 +150,32 @@
         }
       ],
       "trend": "stable"
+    },
+    "public/app.test.ts": {
+      "latest": {
+        "commit": "ed0e3e3",
+        "timestamp": "2026-04-18T16:15:06.214Z",
+        "mi": 14.6,
+        "cognitive": 94,
+        "nesting": 5,
+        "lines": 551,
+        "maxCyclomatic": 17,
+        "entropy": 6.83
+      },
+      "history": [
+        {
+          "commit": "ed0e3e3",
+          "timestamp": "2026-04-18T16:15:06.214Z",
+          "mi": 14.6,
+          "cognitive": 94,
+          "nesting": 5,
+          "lines": 551,
+          "maxCyclomatic": 17,
+          "entropy": 6.83
+        }
+      ],
+      "trend": "stable"
     }
   },
-  "capturedAt": "2026-04-18T15:54:31.695Z"
+  "capturedAt": "2026-04-18T16:15:11.215Z"
 }

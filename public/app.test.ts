@@ -7,6 +7,7 @@ import assert from "node:assert/strict";
 import { writeFileSync, mkdirSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
+import { renderMarkdown } from "./app.ts";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const SNAPSHOTS_DIR = join(__dirname, "__snapshots__");
@@ -652,5 +653,248 @@ describe("Snapshot Tests - Message Bubbles", () => {
     assert.ok(html.includes('😕'));
     assert.ok(html.includes('Rate limited'));
     writeSnapshot("tool-error", html);
+  });
+});
+
+// ── Markdown Rendering Tests ──────────────────────────────────────────
+
+describe("renderMarkdown", () => {
+  // ── Inline formatting ────────────────────────────────────────────
+
+  it("renders bold text", () => {
+    const result = renderMarkdown("hello **world** end");
+    assert.ok(result.includes("<strong>world</strong>"));
+    assert.ok(!result.includes("**"));
+  });
+
+  it("renders bold with __", () => {
+    const result = renderMarkdown("hello __world__ end");
+    assert.ok(result.includes("<strong>world</strong>"));
+  });
+
+  it("renders italic text", () => {
+    const result = renderMarkdown("hello *world* end");
+    assert.ok(result.includes("<em>world</em>"));
+    assert.ok(!result.includes("*world*"));
+  });
+
+  it("renders strikethrough", () => {
+    const result = renderMarkdown("hello ~~world~~ end");
+    assert.ok(result.includes("<del>world</del>"));
+  });
+
+  it("renders inline code", () => {
+    const result = renderMarkdown("use `const x = 1` here");
+    assert.ok(result.includes("<code>const x = 1</code>"));
+  });
+
+  it("renders named links", () => {
+    const result = renderMarkdown("click [here](https://example.com)");
+    assert.ok(result.includes('<a href="https://example.com" target="_blank" rel="noopener">here</a>'));
+  });
+
+  it("renders autolinks for bare URLs", () => {
+    const result = renderMarkdown("see https://example.com for info");
+    assert.ok(result.includes('<a href="https://example.com"'));
+    assert.ok(result.includes('>https://example.com</a>'));
+  });
+
+  it("does not double-link already linked URLs", () => {
+    const result = renderMarkdown("[text](https://example.com)");
+    assert.equal((result.match(/<a /g) || []).length, 1);
+  });
+
+  // ── Headings ─────────────────────────────────────────────────────
+
+  it("renders h1 through h6", () => {
+    for (let i = 1; i <= 6; i++) {
+      const hashes = "#".repeat(i);
+      const result = renderMarkdown(`${hashes} Title`);
+      assert.ok(result.includes(`<h${i}>Title</h${i}>`), `h${i} not found`);
+    }
+  });
+
+  it("does not render heading without space after #", () => {
+    const result = renderMarkdown("#not_a_heading");
+    assert.ok(!result.includes("<h1>"));
+  });
+
+  // ── Lists ────────────────────────────────────────────────────────
+
+  it("renders unordered list with -", () => {
+    const result = renderMarkdown("- one\n- two\n- three");
+    assert.ok(result.includes("<ul>"));
+    assert.ok(result.includes("<li>one</li>"));
+    assert.ok(result.includes("<li>two</li>"));
+    assert.ok(result.includes("</ul>"));
+  });
+
+  it("renders unordered list with *", () => {
+    const result = renderMarkdown("* one\n* two");
+    assert.ok(result.includes("<ul>"));
+    assert.ok(result.includes("<li>one</li>"));
+  });
+
+  it("renders ordered list", () => {
+    const result = renderMarkdown("1. first\n2. second\n3. third");
+    assert.ok(result.includes("<ol>"));
+    assert.ok(result.includes("<li>first</li>"));
+    assert.ok(result.includes("<li>second</li>"));
+    assert.ok(result.includes("</ol>"));
+  });
+
+  it("closes list when non-list line follows", () => {
+    const result = renderMarkdown("- item\nparagraph");
+    assert.ok(result.includes("</ul>"));
+    assert.ok(result.includes("<p>paragraph</p>"));
+  });
+
+  // ── Code blocks ──────────────────────────────────────────────────
+
+  it("renders fenced code block with language", () => {
+    const input = "```js\nconst x = 1;\n```";
+    const result = renderMarkdown(input);
+    assert.ok(result.includes('<pre><code class="lang-js">'), `got: ${result}`);
+    assert.ok(result.includes("const x = 1;"));
+  });
+
+  it("renders fenced code block without language", () => {
+    const input = "```\nhello\n```";
+    const result = renderMarkdown(input);
+    assert.ok(result.includes("<pre><code>"));
+    assert.ok(result.includes("hello"));
+  });
+
+  it("does not apply inline markdown inside code blocks", () => {
+    const input = "```\n**not bold**\n```";
+    const result = renderMarkdown(input);
+    assert.ok(!result.includes("<strong>"), `should not have strong inside code: ${result}`);
+    assert.ok(result.includes("**not bold**"));
+  });
+
+  it("does not apply inline markdown inside inline code", () => {
+    const result = renderMarkdown("`**not bold**`");
+    assert.ok(!result.includes("<strong>"));
+  });
+
+  it("escapes HTML in code blocks", () => {
+    const input = "```\n<div>test</div>\n```";
+    const result = renderMarkdown(input);
+    assert.ok(result.includes("&lt;div&gt;"), `should escape HTML: ${result}`);
+  });
+
+  // ── Blockquotes ──────────────────────────────────────────────────
+
+  it("renders blockquote", () => {
+    const result = renderMarkdown("> this is a quote");
+    assert.ok(result.includes("<blockquote>"));
+    assert.ok(result.includes("this is a quote"));
+    assert.ok(result.includes("</blockquote>"));
+  });
+
+  it("closes blockquote when non-quote line follows", () => {
+    const result = renderMarkdown("> quote\nparagraph");
+    assert.ok(result.includes("</blockquote>"));
+    assert.ok(result.includes("<p>paragraph</p>"));
+  });
+
+  // ── Tables ───────────────────────────────────────────────────────
+
+  it("renders table with headers", () => {
+    const input = "| Name | Age |\n|------|-----|\n| Alice | 30 |";
+    const result = renderMarkdown(input);
+    assert.ok(result.includes("<table>"), `no table tag: ${result}`);
+    assert.ok(result.includes("<thead>"));
+    assert.ok(result.includes("<th>Name</th>"));
+    assert.ok(result.includes("<th>Age</th>"));
+    assert.ok(result.includes("<td>Alice</td>"));
+    assert.ok(result.includes("<td>30</td>"));
+    assert.ok(result.includes("</table>"));
+  });
+
+  it("closes table when non-table line follows", () => {
+    const input = "| A | B |\n|---|---|\n| 1 | 2 |\nparagraph";
+    const result = renderMarkdown(input);
+    assert.ok(result.includes("</table>"));
+    assert.ok(result.includes("<p>paragraph</p>"));
+  });
+
+  // ── Task lists ───────────────────────────────────────────────────
+
+  it("renders unchecked task", () => {
+    const result = renderMarkdown("- [ ] todo");
+    assert.ok(result.includes('class="task-checkbox"'));
+    assert.ok(!result.includes("checked"));
+  });
+
+  it("renders checked task", () => {
+    const result = renderMarkdown("- [x] done");
+    assert.ok(result.includes("checked"));
+    assert.ok(result.includes('class="task-checkbox task-checked"'));
+  });
+
+  // ── Horizontal rule ──────────────────────────────────────────────
+
+  it("renders horizontal rule with ---", () => {
+    const result = renderMarkdown("---");
+    assert.ok(result.includes("<hr>"));
+  });
+
+  it("renders horizontal rule with ***", () => {
+    const result = renderMarkdown("***");
+    assert.ok(result.includes("<hr>"));
+  });
+
+  // ── HTML escaping ────────────────────────────────────────────────
+
+  it("escapes HTML in regular text", () => {
+    const result = renderMarkdown("<script>alert('xss')</script>");
+    assert.ok(!result.includes("<script>"));
+    assert.ok(result.includes("&lt;script&gt;"));
+  });
+
+  // ── Plain text ───────────────────────────────────────────────────
+
+  it("wraps plain text in <p>", () => {
+    const result = renderMarkdown("hello world");
+    assert.ok(result.includes("<p>hello world</p>"));
+  });
+
+  it("handles empty input", () => {
+    const result = renderMarkdown("");
+    assert.equal(result.trim(), "");
+  });
+
+  // ── Snapshot tests ───────────────────────────────────────────────
+
+  it("snapshot: GFM sample document", () => {
+    const input = [
+      "# Chat Response",
+      "",
+      "Here's what I found:",      "",
+      "- **Bold item** with *italic*",
+      "- ~~old info~~ → new info",
+      "",
+      "> Important note",
+      "",
+      "| Feature | Status |",
+      "|---------|--------|",
+      "| Images  | ✅     |",
+      "| Music   | ✅     |",
+      "",
+      "```js",
+      "const x = 42;",
+      "```",
+      "",
+      "- [x] Done",
+      "- [ ] Todo",
+    ].join("\n");
+    const result = renderMarkdown(input);
+    writeSnapshot("gfm-sample", result);
+  });
+
+  it("snapshot: simple message", () => {
+    const result = renderMarkdown("Hey! Here's a **cool idea**: try `console.log` and see https://example.com for more.");
+    writeSnapshot("simple-message", result);
   });
 });
