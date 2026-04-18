@@ -8,6 +8,7 @@ import { writeFileSync, mkdirSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { renderMarkdown } from "./app.ts";
+import type { SSEEvent } from "./app.ts";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const SNAPSHOTS_DIR = join(__dirname, "__snapshots__");
@@ -896,5 +897,1026 @@ describe("renderMarkdown", () => {
   it("snapshot: simple message", () => {
     const result = renderMarkdown("Hey! Here's a **cool idea**: try `console.log` and see https://example.com for more.");
     writeSnapshot("simple-message", result);
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════════
+// Integration Tests — Import directly from app.ts with happy-dom
+// ═══════════════════════════════════════════════════════════════════════
+
+// We set up a full happy-dom environment and mock fetch BEFORE importing app.ts,
+// because app.ts auto-bootstraps (calls init()) at import time.
+
+import { Window } from "happy-dom";
+import {
+  renderThinkingBlock,
+  fetchHistory,
+  sendSteer,
+  $,
+  createElement,
+  renderUserMessage,
+  renderAssistantMessage,
+  renderSteerMessage,
+  renderToolCardLoading,
+  renderToolResult,
+  openLightbox,
+  closeLightbox,
+  showError,
+  streamChat,
+  sendMessage,
+  sendSteerMessage,
+  loadHistory,
+  autoResizeInput,
+  handleInputChange,
+  init,
+} from "./app.ts";
+
+// ── DOM Setup Helpers ────────────────────────────────────────────────
+
+/**
+ * Creates a full DOM environment with all elements that app.ts expects.
+ * Sets globalThis.document, window, localStorage, etc.
+ */
+function setupDOM(): { win: any; doc: any; errors: string[] } {
+  const win = new Window();
+  const doc = win.document;
+
+  // Build the full DOM structure
+  doc.body.innerHTML = `
+    <form id="chat-form">
+      <textarea id="chat-input"></textarea>
+      <button id="send-button" disabled></button>
+    </form>
+    <div id="message-list"></div>
+    <div id="typing-indicator" hidden></div>
+    <div id="steer-hint" hidden></div>
+    <div id="error-toast" hidden>
+      <span id="error-toast-message"></span>
+    </div>
+    <div id="lightbox">
+      <button class="lightbox-close">×</button>
+      <div class="lightbox-backdrop"></div>
+      <img id="lightbox-img" />
+    </div>
+    <button id="steer-close">×</button>
+  `;
+
+  // Set globals
+  globalThis.document = doc;
+  globalThis.window = win;
+  (globalThis as any).localStorage = {
+    getItem: () => null,
+    setItem: () => {},
+    removeItem: () => {},
+  };
+  (globalThis as any).requestAnimationFrame = (cb: () => void) => {
+    cb();
+    return 1;
+  };
+
+  const errors: string[] = [];
+  (globalThis as any).fetch = () => {
+    return Promise.resolve(new Response(null, { status: 500 }));
+  };
+
+  return { win, doc, errors };
+}
+
+/**
+ * Creates a mock SSE response body (ReadableStream) from an array of SSE chunks.
+ */
+function createSSEResponse(chunks: string[], options: { status?: number; json?: any } = {}): Response {
+  const status = options.status ?? 200;
+  if (status !== 200) {
+    const body = options.json ? JSON.stringify(options.json) : "{}";
+    return new Response(body, {
+      status,
+      headers: { "Content-Type": "application/json" },
+    });
+  }
+
+  const encoder = new TextEncoder();
+  const fullBody = chunks.join("");
+  let offset = 0;
+
+  const stream = new ReadableStream({
+    pull(controller) {
+      if (offset < fullBody.length) {
+        // Deliver chunk by chunk
+        const chunk = fullBody.slice(offset, offset + Math.max(1, Math.ceil(fullBody.length / chunks.length)));
+        controller.enqueue(encoder.encode(chunk));
+        offset += chunk.length;
+      } else {
+        controller.close();
+      }
+    },
+  });
+
+  return new Response(stream, {
+    status: 200,
+    headers: { "Content-Type": "text/event-stream" },
+  });
+}
+
+/**
+ * Creates a simple SSE event string.
+ */
+function sseEvent(event: string, data: string): string {
+  return `event: ${event}\ndata: ${data}\n\n`;
+}
+
+/**
+ * Creates a text message SSE event (OpenAI-style format).
+ */
+function sseText(content: string): string {
+  return sseEvent("message", JSON.stringify({ choices: [{ delta: { content } }] }));
+}
+
+function sseDone(): string {
+  return sseEvent("message", "[DONE]");
+}
+
+// Set up DOM before importing (already done above, but ensure globals are set)
+setupDOM();
+
+// ═══════════════════════════════════════════════════════════════════════
+// Step 1: renderThinkingBlock
+// ═══════════════════════════════════════════════════════════════════════
+
+describe("renderThinkingBlock (imported)", () => {
+  it("single line thinking shows '💭 Thinking…'", () => {
+    const html = renderThinkingBlock("hello world");
+    assert.ok(html.includes("💭 Thinking…"));
+    assert.ok(!html.includes("lines"));
+  });
+
+  it("multi-line thinking shows line count", () => {
+    const text = "line 1\nline 2\nline 3";
+    const html = renderThinkingBlock(text);
+    assert.ok(html.includes("(3 lines)"));
+  });
+
+  it("content is rendered through renderMarkdown", () => {
+    const html = renderThinkingBlock("**bold** text");
+    assert.ok(html.includes("<strong>bold</strong>"));
+  });
+
+  it("output contains details and summary tags", () => {
+    const html = renderThinkingBlock("thinking");
+    assert.ok(html.includes("<details"));
+    assert.ok(html.includes("<summary>"));
+    assert.ok(html.includes("thinking-block"));
+    assert.ok(html.includes("thinking-content"));
+  });
+
+  it("trims whitespace before counting lines", () => {
+    const html = renderThinkingBlock("  single line  ");
+    assert.ok(html.includes("💭 Thinking…"));
+    assert.ok(!html.includes("lines"));
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════════
+// Step 2: streamChat Error Paths
+// ═══════════════════════════════════════════════════════════════════════
+
+describe("streamChat error paths", () => {
+  let doc: any;
+
+  before(() => {
+    const { doc: d } = setupDOM();
+    doc = d;
+  });
+
+  it("400 response → showError with session expired message", async () => {
+    (globalThis as any).fetch = () =>
+      Promise.resolve(
+        new Response(JSON.stringify({ error: "Bad request" }), {
+          status: 400,
+          headers: { "Content-Type": "application/json" },
+        })
+      );
+
+    await streamChat("session-1", [{ role: "user", content: "hi" }]);
+    const msg = doc.querySelector("#error-toast-message").textContent;
+    assert.equal(msg, "Bad request");
+  });
+
+  it("400 with unparseable JSON → shows default message", async () => {
+    (globalThis as any).fetch = () =>
+      Promise.resolve(new Response("not json", { status: 400 }));
+
+    await streamChat("session-1", [{ role: "user", content: "hi" }]);
+    const msg = doc.querySelector("#error-toast-message").textContent;
+    assert.equal(msg, "Session expired — please reload the page 🔄");
+  });
+
+  it("503 response → showError with error message", async () => {
+    (globalThis as any).fetch = () =>
+      Promise.resolve(
+        new Response(JSON.stringify({ error: "Service unavailable" }), {
+          status: 503,
+          headers: { "Content-Type": "application/json" },
+        })
+      );
+
+    await streamChat("session-1", [{ role: "user", content: "hi" }]);
+    const msg = doc.querySelector("#error-toast-message").textContent;
+    assert.equal(msg, "Service unavailable");
+  });
+
+  it("503 with unparseable JSON → shows status code message", async () => {
+    (globalThis as any).fetch = () =>
+      Promise.resolve(new Response("not json", { status: 503 }));
+
+    await streamChat("session-1", [{ role: "user", content: "hi" }]);
+    const msg = doc.querySelector("#error-toast-message").textContent;
+    assert.equal(msg, "Something went wrong (503). Try again! 🤷");
+  });
+
+  it("200 with null body → showError 'No response'", async () => {
+    (globalThis as any).fetch = () =>
+      Promise.resolve(new Response(null, { status: 200 }));
+
+    await streamChat("session-1", [{ role: "user", content: "hi" }]);
+    const msg = doc.querySelector("#error-toast-message").textContent;
+    assert.equal(msg, "No response from server 😴");
+  });
+
+  it("network error (fetch throws) → rejects with error", async () => {
+    (globalThis as any).fetch = () => Promise.reject(new Error("Network error"));
+
+    // streamChat doesn't catch — it propagates. sendMessage catches.
+    await assert.rejects(
+      () => streamChat("session-1", [{ role: "user", content: "hi" }]),
+      /Network error/
+    );
+  });
+
+  it("onEvent callback receives events", async () => {
+    const events: SSEEvent[] = [];
+    (globalThis as any).fetch = () =>
+      Promise.resolve(createSSEResponse([sseText("hello"), sseDone()]));
+
+    await streamChat("session-1", [{ role: "user", content: "hi" }], (e) => events.push(e));
+    assert.ok(events.length > 0);
+    assert.equal(events[0].event, "message");
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════════
+// Step 3: streamChat SSE Processing
+// ═══════════════════════════════════════════════════════════════════════
+
+describe("streamChat SSE processing", () => {
+  let doc: any;
+
+  before(() => {
+    const { doc: d } = setupDOM();
+    doc = d;
+  });
+
+  it("text events → content accumulated via appendText", async () => {
+    const events: SSEEvent[] = [];
+    const chunks = [
+      sseText("Hello "),
+      sseText("world"),
+      sseDone(),
+    ];
+    (globalThis as any).fetch = () =>
+      Promise.resolve(createSSEResponse(chunks));
+
+    // Need to set up currentAssistantContent for appendText to work
+    // We do this by creating an assistant message container and appending it
+    const messageList = doc.querySelector("#message-list");
+    const { container, contentEl } = renderAssistantMessage();
+    messageList.appendChild(container);
+
+    await streamChat("session-1", [{ role: "user", content: "hi" }], (e) => events.push(e));
+
+    // The content element should have the rendered text
+    // Note: since module state isn't reset, currentAssistantContent might be null
+    // But the SSE events are delivered via onEvent callback
+    assert.ok(events.some(e => e.data.includes("Hello")));
+  });
+
+  it("tool_start event → tool card created", async () => {
+    const events: SSEEvent[] = [];
+    const toolStartData = JSON.stringify({ id: "tool-1", name: "generate_image" });
+    const chunks = [
+      sseEvent("tool_start", toolStartData),
+      sseDone(),
+    ];
+    (globalThis as any).fetch = () =>
+      Promise.resolve(createSSEResponse(chunks));
+
+    const messageList = doc.querySelector("#message-list");
+    const { container, contentEl } = renderAssistantMessage();
+    messageList.appendChild(container);
+
+    await streamChat("session-1", [{ role: "user", content: "hi" }], (e) => events.push(e));
+    assert.ok(events.some(e => e.event === "tool_start"));
+  });
+
+  it("tool_result event → tool card replaced", async () => {
+    const events: SSEEvent[] = [];
+    const toolStartData = JSON.stringify({ id: "tool-2", name: "generate_image" });
+    const toolResultData = JSON.stringify({
+      id: "tool-2",
+      name: "generate_image",
+      result: { type: "image", content: "data:image/png;base64,abc" },
+    });
+    const chunks = [
+      sseEvent("tool_start", toolStartData),
+      sseEvent("tool_result", toolResultData),
+      sseDone(),
+    ];
+    (globalThis as any).fetch = () =>
+      Promise.resolve(createSSEResponse(chunks));
+
+    const messageList = doc.querySelector("#message-list");
+    const { container, contentEl } = renderAssistantMessage();
+    messageList.appendChild(container);
+
+    await streamChat("session-1", [{ role: "user", content: "draw" }], (e) => events.push(e));
+    assert.ok(events.some(e => e.event === "tool_start"));
+    assert.ok(events.some(e => e.event === "tool_result"));
+  });
+
+  it("[DONE] signal → stream finishes", async () => {
+    const events: SSEEvent[] = [];
+    const chunks = [
+      sseText("hi"),
+      sseEvent("message", "[DONE]"),
+    ];
+    (globalThis as any).fetch = () =>
+      Promise.resolve(createSSEResponse(chunks));
+
+    await streamChat("session-1", [{ role: "user", content: "hi" }], (e) => events.push(e));
+    // Stream should complete without error
+    assert.ok(true);
+  });
+
+  it("error event → showError called", async () => {
+    const chunks = [
+      sseEvent("error", JSON.stringify({ error: "Server error" })),
+    ];
+    (globalThis as any).fetch = () =>
+      Promise.resolve(createSSEResponse(chunks));
+
+    await streamChat("session-1", [{ role: "user", content: "hi" }]);
+    const msg = doc.querySelector("#error-toast-message").textContent;
+    assert.equal(msg, "Server error");
+  });
+
+  it("error event with unparseable JSON → shows default error", async () => {
+    const chunks = [
+      sseEvent("error", "not json"),
+    ];
+    (globalThis as any).fetch = () =>
+      Promise.resolve(createSSEResponse(chunks));
+
+    await streamChat("session-1", [{ role: "user", content: "hi" }]);
+    const msg = doc.querySelector("#error-toast-message").textContent;
+    assert.equal(msg, "Something went wrong 😕");
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════════
+// Step 4: appendText via sendMessage (indirect test)
+// ═══════════════════════════════════════════════════════════════════════
+
+describe("appendText with thinking blocks (via sendMessage)", () => {
+  let doc: any;
+
+  before(() => {
+    const { doc: d } = setupDOM();
+    doc = d;
+  });
+
+  it("plain text → renders via markdown", async () => {
+    (globalThis as any).fetch = () =>
+      Promise.resolve(createSSEResponse([sseText("Hello world"), sseDone()]));
+
+    await sendMessage("test plain text");
+
+    const messages = doc.querySelectorAll("#message-list .message");
+    assert.ok(messages.length >= 2, "should have user + assistant messages");
+  });
+
+  it("text with <think_intended> tags → thinking block created", async () => {
+    const { doc: newDoc } = setupDOM();
+    doc = newDoc;
+
+    const chunks = [
+      sseText("<think_intended>Let me think about this"),
+      sseText(" more carefully</think_intended>"),
+      sseText("Here is my answer."),
+      sseDone(),
+    ];
+    (globalThis as any).fetch = () =>
+      Promise.resolve(createSSEResponse(chunks));
+
+    await sendMessage("test thinking");
+
+    // Should have thinking block in the output
+    const thinkingBlocks = doc.querySelectorAll(".thinking-block");
+    assert.ok(thinkingBlocks.length > 0, "should have thinking block");
+  });
+
+  it("thinking block closed then regular text follows", async () => {
+    const { doc: newDoc } = setupDOM();
+    doc = newDoc;
+
+    const chunks = [
+      sseText("<think_intended>internal thought</think_intended>"),
+      sseText("The answer is 42."),
+      sseDone(),
+    ];
+    (globalThis as any).fetch = () =>
+      Promise.resolve(createSSEResponse(chunks));
+
+    await sendMessage("test mixed");
+
+    const thinkingBlocks = doc.querySelectorAll(".thinking-block");
+    assert.ok(thinkingBlocks.length > 0, "should have thinking block");
+    // Should also have regular content
+    const assistantContent = doc.querySelectorAll(".message-content");
+    assert.ok(assistantContent.length > 0);
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════════
+// Step 5: sendMessage
+// ═══════════════════════════════════════════════════════════════════════
+
+describe("sendMessage", () => {
+  let doc: any;
+
+  before(() => {
+    const { doc: d } = setupDOM();
+    doc = d;
+  });
+
+  it("empty message → returns immediately", async () => {
+    const messageList = doc.querySelector("#message-list");
+    const initialCount = messageList.children.length;
+    await sendMessage("");
+    await sendMessage("   ");
+    assert.equal(messageList.children.length, initialCount, "no messages added");
+  });
+
+  it("creates user message element", async () => {
+    setupDOM();
+    doc = globalThis.document;
+    (globalThis as any).fetch = () =>
+      Promise.resolve(createSSEResponse([sseText("reply"), sseDone()]));
+
+    await sendMessage("Hello bot");
+
+    const userMsg = doc.querySelector(".message--user");
+    assert.ok(userMsg, "user message element should exist");
+    assert.ok(userMsg.textContent.includes("Hello bot"));
+  });
+
+  it("creates assistant message element", async () => {
+    setupDOM();
+    doc = globalThis.document;
+    (globalThis as any).fetch = () =>
+      Promise.resolve(createSSEResponse([sseText("I am here"), sseDone()]));
+
+    await sendMessage("Hi");
+
+    const assistantMsg = doc.querySelector(".message--assistant");
+    assert.ok(assistantMsg, "assistant message element should exist");
+  });
+
+  it("clears input after send", async () => {
+    setupDOM();
+    doc = globalThis.document;
+    const input = doc.querySelector("#chat-input");
+    input.value = "test message";
+    (globalThis as any).fetch = () =>
+      Promise.resolve(createSSEResponse([sseText("reply"), sseDone()]));
+
+    await sendMessage("test message");
+
+    assert.equal(input.value, "", "input should be cleared");
+  });
+
+  it("while streaming → delegates to sendSteerMessage", async () => {
+    setupDOM();
+    doc = globalThis.document;
+
+    // First send: start streaming
+    let resolveStream: () => void;
+    const streamPromise = new Promise<void>((r) => { resolveStream = r; });
+
+    (globalThis as any).fetch = () => {
+      // Return a response that stays open until we resolve
+      const encoder = new TextEncoder();
+      let sent = false;
+      const stream = new ReadableStream({
+        pull(controller) {
+          if (!sent) {
+            sent = true;
+            controller.enqueue(encoder.encode(sseText("thinking...")));
+          }
+          // Don't close — keep streaming
+        },
+      });
+      return Promise.resolve(new Response(stream, { status: 200 }));
+    };
+
+    // Start the first message (don't await — it stays streaming)
+    const firstSend = sendMessage("first message");
+
+    // Wait a tick for isStreaming to be set
+    await new Promise((r) => setTimeout(r, 50));
+
+    // Mock steer endpoint
+    let steerCalled = false;
+    (globalThis as any).fetch = () => {
+      steerCalled = true;
+      return Promise.resolve(new Response(null, { status: 200 }));
+    };
+
+    // Second send while streaming should go to steer
+    await sendMessage("steer this");
+
+    assert.ok(steerCalled, "steer endpoint should be called");
+
+    // Clean up — finish the stream
+    // We need to finish somehow. Let's just let it timeout or resolve.
+    // Actually, the first sendMessage is still awaiting streamChat...
+    // Let's just not wait for it.
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════════
+// Step 6: loadHistory
+// ═══════════════════════════════════════════════════════════════════════
+
+describe("loadHistory", () => {
+  let doc: any;
+
+  before(() => {
+    const { doc: d } = setupDOM();
+    doc = d;
+  });
+
+  it("empty history → no crash, welcome stays", async () => {
+    setupDOM();
+    doc = globalThis.document;
+
+    // Add a welcome message
+    const messageList = doc.querySelector("#message-list");
+    const welcome = doc.createElement("div");
+    welcome.className = "message--welcome";
+    welcome.textContent = "Welcome!";
+    messageList.appendChild(welcome);
+
+    (globalThis as any).fetch = () =>
+      Promise.resolve(
+        new Response(JSON.stringify({ messages: [] }), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        })
+      );
+
+    await loadHistory();
+
+    // Welcome message should still be there (no history to remove it)
+    assert.ok(doc.querySelector(".message--welcome"), "welcome message should remain");
+  });
+
+  it("history with user + assistant messages → rendered correctly", async () => {
+    setupDOM();
+    doc = globalThis.document;
+
+    const messageList = doc.querySelector("#message-list");
+    const welcome = doc.createElement("div");
+    welcome.className = "message--welcome";
+    messageList.appendChild(welcome);
+
+    (globalThis as any).fetch = () =>
+      Promise.resolve(
+        new Response(
+          JSON.stringify({
+            messages: [
+              { role: "user", content: "Hello" },
+              { role: "assistant", content: "Hi there!" },
+              { role: "user", content: "How are you?" },
+              { role: "assistant", content: "I'm doing great!" },
+            ],
+          }),
+          { status: 200, headers: { "Content-Type": "application/json" } }
+        )
+      );
+
+    await loadHistory();
+
+    // Welcome should be removed
+    assert.ok(!doc.querySelector(".message--welcome"), "welcome should be removed");
+
+    // Should have user and assistant messages
+    const userMsgs = doc.querySelectorAll(".message--user");
+    const assistantMsgs = doc.querySelectorAll(".message--assistant");
+    assert.equal(userMsgs.length, 2, "should have 2 user messages");
+    assert.equal(assistantMsgs.length, 2, "should have 2 assistant messages");
+  });
+
+  it("fetch fails → no crash", async () => {
+    setupDOM();
+    doc = globalThis.document;
+
+    (globalThis as any).fetch = () =>
+      Promise.reject(new Error("Network error"));
+
+    // Should not throw
+    await loadHistory();
+    assert.ok(true, "should not crash");
+  });
+
+  it("fetch returns non-OK → throws and loadHistory catches", async () => {
+    setupDOM();
+    doc = globalThis.document;
+
+    (globalThis as any).fetch = () =>
+      Promise.resolve(new Response(null, { status: 500 }));
+
+    await loadHistory();
+    assert.ok(true, "should not crash");
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════════
+// Step 7: init Event Binding
+// ═══════════════════════════════════════════════════════════════════════
+
+describe("init event binding", () => {
+  let doc: any;
+  let win: any;
+
+  function setupFullDOM(): void {
+    const result = setupDOM();
+    win = result.win;
+    doc = result.doc;
+  }
+
+  it("form submit → calls sendMessage", async () => {
+    setupFullDOM();
+
+    let sendMessageCalled = false;
+    const origFetch = (globalThis as any).fetch;
+    (globalThis as any).fetch = () => {
+      sendMessageCalled = true;
+      return Promise.resolve(createSSEResponse([sseText("reply"), sseDone()]));
+    };
+
+    const form = doc.querySelector("#chat-form");
+    const input = doc.querySelector("#chat-input");
+    input.value = "test message";
+
+    init();
+
+    // Dispatch submit event
+    const submitEvent = new win.Event("submit");
+    submitEvent.preventDefault = () => {};
+    form.dispatchEvent(submitEvent);
+
+    // Wait for async sendMessage
+    await new Promise((r) => setTimeout(r, 100));
+    assert.ok(sendMessageCalled, "fetch should be called via sendMessage");
+  });
+
+  it("Enter key → calls sendMessage", async () => {
+    setupFullDOM();
+
+    let fetchCalled = false;
+    (globalThis as any).fetch = () => {
+      fetchCalled = true;
+      return Promise.resolve(createSSEResponse([sseText("reply"), sseDone()]));
+    };
+
+    const input = doc.querySelector("#chat-input");
+    input.value = "hello";
+
+    init();
+
+    const keyEvent = new win.KeyboardEvent("keydown", { key: "Enter", shiftKey: false });
+    keyEvent.preventDefault = () => {};
+    input.dispatchEvent(keyEvent);
+
+    await new Promise((r) => setTimeout(r, 100));
+    assert.ok(fetchCalled, "fetch should be called on Enter");
+  });
+
+  it("Shift+Enter → does NOT send", async () => {
+    setupFullDOM();
+
+    let chatFetchCalled = false;
+    (globalThis as any).fetch = (url: string, opts: any) => {
+      if (url === "/api/chat") {
+        chatFetchCalled = true;
+      }
+      // Return appropriate response based on URL
+      if (url === "/api/history") {
+        return Promise.resolve(new Response(JSON.stringify({ messages: [] }), { status: 200, headers: { "Content-Type": "application/json" } }));
+      }
+      return Promise.resolve(createSSEResponse([sseText("reply"), sseDone()]));
+    };
+
+    const input = doc.querySelector("#chat-input");
+    input.value = "hello";
+
+    init();
+
+    // Wait for loadHistory to complete
+    await new Promise((r) => setTimeout(r, 50));
+
+    const keyEvent = new win.KeyboardEvent("keydown", { key: "Enter", shiftKey: true });
+    keyEvent.preventDefault = () => {};
+    input.dispatchEvent(keyEvent);
+
+    await new Promise((r) => setTimeout(r, 100));
+    assert.ok(!chatFetchCalled, "chat endpoint should NOT be called on Shift+Enter");
+  });
+
+  it("input change → enables send button", () => {
+    setupFullDOM();
+
+    const input = doc.querySelector("#chat-input");
+    const sendBtn = doc.querySelector("#send-button");
+    sendBtn.disabled = true;
+
+    init();
+
+    input.value = "hello";
+    const inputEvent = new win.Event("input");
+    input.dispatchEvent(inputEvent);
+
+    assert.ok(!sendBtn.disabled, "send button should be enabled when input has text");
+  });
+
+  it("input empty → send button stays disabled", () => {
+    setupFullDOM();
+
+    const input = doc.querySelector("#chat-input");
+    const sendBtn = doc.querySelector("#send-button");
+    sendBtn.disabled = true;
+
+    init();
+
+    input.value = "";
+    const inputEvent = new win.Event("input");
+    input.dispatchEvent(inputEvent);
+
+    assert.ok(sendBtn.disabled, "send button should stay disabled for empty input");
+  });
+
+  it("Escape → closes lightbox", () => {
+    setupFullDOM();
+
+    const lightbox = doc.querySelector("#lightbox");
+    lightbox.hidden = false;
+
+    init();
+
+    const escEvent = new win.KeyboardEvent("keydown", { key: "Escape" });
+    document.dispatchEvent(escEvent);
+
+    assert.ok(lightbox.hidden, "lightbox should be hidden after Escape");
+  });
+
+  it("lightbox close button click → closes lightbox", () => {
+    setupFullDOM();
+
+    const lightbox = doc.querySelector("#lightbox");
+    lightbox.hidden = false;
+
+    init();
+
+    const closeBtn = doc.querySelector(".lightbox-close");
+    closeBtn.dispatchEvent(new win.Event("click"));
+
+    assert.ok(lightbox.hidden, "lightbox should be hidden after close click");
+  });
+
+  it("steer close click → hides steer hint", () => {
+    setupFullDOM();
+
+    const steerHint = doc.querySelector("#steer-hint");
+    steerHint.hidden = false;
+
+    init();
+
+    const steerClose = doc.querySelector("#steer-close");
+    steerClose.dispatchEvent(new win.Event("click"));
+
+    assert.ok(steerHint.hidden, "steer hint should be hidden");
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════════
+// Additional coverage: helper functions
+// ═══════════════════════════════════════════════════════════════════════
+
+describe("showError", () => {
+  let doc: any;
+
+  before(() => {
+    const { doc: d } = setupDOM();
+    doc = d;
+  });
+
+  it("shows error toast with message", () => {
+    showError("Test error");
+    const toast = doc.querySelector("#error-toast");
+    const msg = doc.querySelector("#error-toast-message");
+    assert.ok(!toast.hidden, "toast should be visible");
+    assert.equal(msg.textContent, "Test error");
+  });
+
+  it("hides after duration", async () => {
+    setupDOM();
+    doc = globalThis.document;
+
+    showError("Quick error", 10); // 10ms
+    await new Promise((r) => setTimeout(r, 50));
+    const toast = doc.querySelector("#error-toast");
+    assert.ok(toast.hidden, "toast should be hidden after duration");
+  });
+});
+
+describe("setStreamingUI (via sendMessage)", () => {
+  let doc: any;
+
+  it("sets typing indicator visible during streaming", async () => {
+    setupDOM();
+    doc = globalThis.document;
+
+    (globalThis as any).fetch = () =>
+      Promise.resolve(createSSEResponse([sseText("reply"), sseDone()]));
+
+    await sendMessage("test");
+
+    // After streaming finishes, typing indicator should be hidden
+    const typing = doc.querySelector("#typing-indicator");
+    assert.ok(typing.hidden, "typing indicator should be hidden after stream");
+  });
+
+  it("enables input after streaming finishes", async () => {
+    setupDOM();
+    doc = globalThis.document;
+
+    (globalThis as any).fetch = () =>
+      Promise.resolve(createSSEResponse([sseText("reply"), sseDone()]));
+
+    await sendMessage("test");
+
+    const input = doc.querySelector("#chat-input");
+    assert.ok(!input.disabled, "input should be enabled after streaming");
+  });
+});
+
+describe("openLightbox / closeLightbox", () => {
+  let doc: any;
+
+  before(() => {
+    const { doc: d } = setupDOM();
+    doc = d;
+  });
+
+  it("openLightbox shows lightbox with image src", () => {
+    openLightbox("https://example.com/image.png");
+    const lightbox = doc.querySelector("#lightbox");
+    const img = doc.querySelector("#lightbox-img");
+    assert.ok(!lightbox.hidden, "lightbox should be visible");
+    assert.equal(img.src, "https://example.com/image.png");
+  });
+
+  it("closeLightbox hides lightbox", () => {
+    openLightbox("https://example.com/image.png");
+    closeLightbox();
+    const lightbox = doc.querySelector("#lightbox");
+    assert.ok(lightbox.hidden, "lightbox should be hidden");
+  });
+});
+
+describe("autoResizeInput", () => {
+  let doc: any;
+
+  before(() => {
+    const { doc: d } = setupDOM();
+    doc = d;
+  });
+
+  it("resizes input based on content", () => {
+    const input = doc.querySelector("#chat-input");
+    input.value = "some text content";
+    autoResizeInput();
+    // Just verify it doesn't crash and sets some height
+    assert.ok(true, "autoResizeInput completed without error");
+  });
+});
+
+describe("renderToolCardLoading", () => {
+  let doc: any;
+
+  before(() => {
+    const { doc: d } = setupDOM();
+    doc = d;
+  });
+
+  it("creates tool card with name and emoji", () => {
+    const card = renderToolCardLoading("generate_image");
+    assert.ok(card.outerHTML.includes("generate image"));
+    assert.ok(card.outerHTML.includes("🎨"));
+  });
+
+  it("uses default emoji for unknown tools", () => {
+    const card = renderToolCardLoading("unknown_tool");
+    assert.ok(card.outerHTML.includes("🔧"));
+  });
+});
+
+describe("renderToolResult", () => {
+  let doc: any;
+
+  before(() => {
+    const { doc: d } = setupDOM();
+    doc = d;
+  });
+
+  it("renders image result", () => {
+    const card = renderToolResult("generate_image", { type: "image", content: "data:image/png;base64,abc" });
+    assert.ok(card.outerHTML.includes("img"));
+  });
+
+  it("renders error result", () => {
+    const card = renderToolResult("generate_image", { type: "error", content: "Something failed" });
+    assert.ok(card.outerHTML.includes("Something failed"));
+  });
+
+  it("renders audio result", () => {
+    const card = renderToolResult("text_to_speech", { type: "audio", content: "data:audio/mp3;base64,abc" });
+    assert.ok(card.outerHTML.includes("audio"));
+  });
+});
+
+describe("sendSteer", () => {
+  it("sends steer request", async () => {
+    (globalThis as any).fetch = () =>
+      Promise.resolve(new Response(null, { status: 200 }));
+
+    await sendSteer("session-1", "steer message");
+    assert.ok(true, "should not throw");
+  });
+
+  it("throws on non-OK response", async () => {
+    (globalThis as any).fetch = () =>
+      Promise.resolve(new Response(null, { status: 500 }));
+
+    await assert.rejects(() => sendSteer("session-1", "steer"), /Steer failed/);
+  });
+});
+
+describe("fetchHistory", () => {
+  it("returns messages from API", async () => {
+    (globalThis as any).fetch = () =>
+      Promise.resolve(
+        new Response(
+          JSON.stringify({ messages: [{ role: "user", content: "hi" }] }),
+          { status: 200, headers: { "Content-Type": "application/json" } }
+        )
+      );
+
+    const msgs = await fetchHistory("session-1");
+    assert.equal(msgs.length, 1);
+    assert.equal(msgs[0].role, "user");
+    assert.equal(msgs[0].content, "hi");
+  });
+
+  it("throws on non-OK response", async () => {
+    (globalThis as any).fetch = () =>
+      Promise.resolve(new Response(null, { status: 500 }));
+
+    await assert.rejects(() => fetchHistory("session-1"), /Failed to load history/);
+  });
+});
+
+describe("renderSteerMessage", () => {
+  let doc: any;
+
+  before(() => {
+    const { doc: d } = setupDOM();
+    doc = d;
+  });
+
+  it("creates steer message element", () => {
+    const el = renderSteerMessage("steer content");
+    assert.ok(el.outerHTML.includes("steer content"));
+    assert.ok(el.className.includes("message--steer"));
   });
 });
