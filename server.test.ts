@@ -1,4 +1,4 @@
-// HallucyGenie — Server tests
+// HallucyGenie -- Server tests
 // Uses Node.js test runner with Web API Request/Response
 
 import { describe, it, after, before } from "node:test";
@@ -20,7 +20,7 @@ import http from "node:http";
 import { getMessages } from "./db.ts";
 import { trackUsage, saveMessage } from "./db.ts";
 
-// ── Test helpers ─────────────────────────────────────────────────────
+// -- Test helpers -----------------------------------------------------
 
 function makeRequest(
   method: string,
@@ -61,7 +61,7 @@ async function readJson(resp: Response): Promise<unknown> {
   return JSON.parse(await resp.text());
 }
 
-// ── Test database setup ───────────────────────────────────────────────
+// -- Test database setup -----------------------------------------------
 
 const testDbDir = join(import.meta.dirname ?? ".", "test-data");
 const testDbPath = join(testDbDir, "test.db");
@@ -82,16 +82,16 @@ after(() => {
   } catch { /* ignore */ }
 });
 
-// ── Anthropic SSE test helpers ──────────────────────────────────────────
+// -- Anthropic SSE test helpers ------------------------------------------
 
 function anthropicTextSse(textChunks: string[]): string[] {
   const events: string[] = [
     'event: message_start\ndata: {"type":"message_start","message":{}}\n\n',
   ];
   for (let i = 0; i < textChunks.length; i++) {
-    events.push(`event: content_block_start\ndata: {"type":"content_block_start","index":${i},"content_block":{"type":"text","text":""}}\n\n`);
-    events.push(`event: content_block_delta\ndata: {"type":"content_block_delta","index":${i},"delta":{"type":"text_delta","text":"${textChunks[i].replace(/"/g, "\\"")}"}}\n\n`);
-    events.push(`event: content_block_stop\ndata: {"type":"content_block_stop","index":${i}}\n\n`);
+    events.push('event: content_block_start\ndata: {"type":"content_block_start","index":' + String(i) + ',"content_block":{"type":"text","text":""}}\n\n');
+    events.push('event: content_block_delta\ndata: {"type":"content_block_delta","index":' + String(i) + ',"delta":{"type":"text_delta","text":' + JSON.stringify(textChunks[i]) + '}}\n\n');
+    events.push('event: content_block_stop\ndata: {"type":"content_block_stop","index":' + String(i) + '}\n\n');
   }
   events.push('event: message_delta\ndata: {"type":"message_delta","delta":{"stop_reason":"end_turn"},"usage":{}}\n\n');
   events.push('event: message_stop\ndata: {"type":"message_stop"}\n\n');
@@ -129,7 +129,7 @@ function anthropicResponse(events: string[]): Response {
 }
 
 
-// ── Route: static files ──────────────────────────────────────────────
+// -- Route: static files ----------------------------------------------
 
 describe("Static file serving", () => {
   it("serves style.css", async () => {
@@ -145,7 +145,7 @@ describe("Static file serving", () => {
   });
 });
 
-// ── Route: POST /api/chat (validation) ───────────────────────────────
+// -- Route: POST /api/chat (validation) -------------------------------
 
 describe("POST /api/chat validation", () => {
   it("rejects invalid JSON body", async () => {
@@ -275,7 +275,7 @@ describe("POST /api/chat validation", () => {
   });
 });
 
-// ── Route: 404 ───────────────────────────────────────────────────────
+// -- Route: 404 -------------------------------------------------------
 
 describe("404 handling", () => {
   it("returns 404 for unknown routes", async () => {
@@ -296,7 +296,7 @@ describe("404 handling", () => {
   });
 });
 
-// ── Route: POST /api/steer (placeholder) ─────────────────────────────
+// -- Route: POST /api/steer (placeholder) -----------------------------
 
 describe("POST /api/steer", () => {
   it("returns ok response with valid message", async () => {
@@ -312,7 +312,7 @@ describe("POST /api/steer", () => {
   });
 });
 
-// ── SSE streaming with mocked MiniMax ─────────────────────────────────
+// -- SSE streaming with mocked MiniMax ---------------------------------
 
 describe("SSE streaming from Anthropic endpoint", () => {
   it("streams text content", async () => {
@@ -637,7 +637,7 @@ describe("SSE streaming from Anthropic endpoint", () => {
   });
 });
 
-// ── API key check ────────────────────────────────────────────────────
+// -- API key check ----------------------------------------------------
 
 describe("API key check", () => {
   it("returns 503 when MINIMAX_API_KEY is missing via handleRequest", async () => {
@@ -658,7 +658,7 @@ describe("API key check", () => {
   });
 });
 
-// ── Snapshot tests ───────────────────────────────────────────────────
+// -- Snapshot tests ---------------------------------------------------
 
 describe("Snapshots", () => {
   it("snapshot: GET /api/health response", async () => {
@@ -699,7 +699,7 @@ describe("Snapshots", () => {
   });
 });
 
-// ── Graceful shutdown ────────────────────────────────────────────────
+// -- Graceful shutdown ------------------------------------------------
 
 describe("shutdown", () => {
   it("does not throw when no server is running", async () => {
@@ -713,7 +713,7 @@ describe("shutdown", () => {
   });
 });
 
-// ── Error handling edge cases ─────────────────────────────────────────
+// -- Error handling edge cases -----------------------------------------
 
 describe("Error handling", () => {
   // Reset state because shutdown tests above may have closed the DB
@@ -892,26 +892,6 @@ describe("Error handling", () => {
     }
   });
 
-    const originalFetch = globalThis.fetch;
-    globalThis.fetch = async () =>
-      new Response(stream, {
-        status: 200,
-        headers: { "Content-Type": "text/event-stream" },
-      });
-
-    try {
-      const req = makeRequest("POST", "/api/chat", {
-        messages: [{ role: "user", content: "hi" }],
-      });
-      const resp = await handleChat(req, "test-key");
-      const body = await readBody(resp);
-      // Should complete gracefully with [DONE]
-      assert.ok(body.includes("[DONE]"));
-    } finally {
-      globalThis.fetch = originalFetch;
-    }
-  });
-
   it("handles SSE stream error during read", async () => {
     const encoder = new TextEncoder();
     const stream = new ReadableStream({
@@ -949,7 +929,7 @@ describe("Error handling", () => {
   });
 });
 
-// ── Step 1: Database Initialization at Startup ──────────────────────
+// -- Step 1: Database Initialization at Startup ----------------------
 
 describe("Database Initialization", () => {
   const testDbDir = join(import.meta.dirname ?? ".", "test-data-step1");
@@ -1026,14 +1006,14 @@ describe("Database Initialization", () => {
   });
 });
 
-// ── Step 2: Session Validation Middleware ────────────────────────────
+// -- Step 2: Session Validation Middleware ----------------------------
 
 describe("Session Validation", () => {
   it("allows valid session ID on /api/chat", async () => {
     const req = makeRequest("POST", "/api/chat", {
       messages: [{ role: "user", content: "hi" }],
     });
-    // Should NOT return 400 — it will fail at MiniMax API call but that's fine
+    // Should NOT return 400 -- it will fail at MiniMax API call but that's fine
     const resp = await handleRequest(req);
     assert.notEqual(resp.status, 400, "should not return 400 with valid session");
   });
@@ -1117,7 +1097,7 @@ describe("Session Validation", () => {
   });
 });
 
-// ── Step 4: Integration Tests ────────────────────────────────────────
+// -- Step 4: Integration Tests ----------------------------------------
 
 describe("Integration: chat with agent loop + persistence", () => {
   const integrationDbDir = join(import.meta.dirname ?? ".", "test-data-integration");
@@ -1148,7 +1128,7 @@ describe("Integration: chat with agent loop + persistence", () => {
       const req = makeRequest("POST", "/api/chat", {
         messages: [{ role: "user", content: "give me an idea" }],
       });
-      const resp = await handleChat(req, "test-key");
+      const resp = await handleChat(req, "test-key", "test-session-123");
       const body = await readBody(resp);
 
       // Verify SSE contains text
@@ -1232,7 +1212,7 @@ describe("Integration: chat with agent loop + persistence", () => {
   })
 });
 
-// ── Steer endpoint integration ────────────────────────────────────────
+// -- Steer endpoint integration ----------------------------------------
 
 describe("POST /api/steer integration", () => {
   before(() => {
@@ -1259,7 +1239,7 @@ describe("POST /api/steer integration", () => {
   });
 });
 
-// ── Step 5: New API Endpoints ────────────────────────────────────────
+// -- Step 5: New API Endpoints ----------------------------------------
 
 describe("GET /api/history", () => {
   const historyDbDir = join(import.meta.dirname ?? ".", "test-data-history");
@@ -1377,7 +1357,7 @@ describe("GET /api/usage", () => {
   });
 });
 
-// ── Step 6: Coverage gap tests ───────────────────────────────────────
+// -- Step 6: Coverage gap tests ---------------------------------------
 
 describe("Coverage: DB not initialized paths", () => {
   it("handleChat returns 500 when DB is null", async () => {
@@ -1444,7 +1424,7 @@ describe("Coverage: History loading in handleChat", () => {
       const req = makeRequest("POST", "/api/chat", {
         messages: [{ role: "user", content: "new message" }],
       });
-      const resp = await handleChat(req, "test-key");
+      const resp = await handleChat(req, "test-key", "test-session-123");
       const body = await readBody(resp);
 
       assert.ok(body.includes("new reply"));
@@ -1464,7 +1444,7 @@ describe("Coverage: History loading in handleChat", () => {
   })
 });
 
-// ── Node HTTP adapter + Server lifecycle tests ───────────────────────
+// -- Node HTTP adapter + Server lifecycle tests -----------------------
 
 describe("Node HTTP adapter and server lifecycle", () => {
   it("startServer creates a listening HTTP server", async () => {
@@ -1576,7 +1556,7 @@ describe("Node HTTP adapter and server lifecycle", () => {
   });
 });
 
-// ── Coverage: steer endpoint edge cases ───────────────────────────────
+// -- Coverage: steer endpoint edge cases -------------------------------
 
 describe("Coverage: steer edge cases", () => {
   it("steer with invalid JSON returns 400", async () => {
@@ -1606,7 +1586,7 @@ describe("Coverage: steer edge cases", () => {
   });
 });
 
-// ── Coverage: chat with session ID ────────────────────────────────────
+// -- Coverage: chat with session ID ------------------------------------
 
 describe("Coverage: chat session path", () => {
   it("POST /api/chat with session ID routes to handleChat", async () => {

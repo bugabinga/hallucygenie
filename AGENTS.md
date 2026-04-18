@@ -65,12 +65,13 @@ Browser → server.ts → agent.ts → MiniMax API
 ## MiniMax API
 
 - **Base:** `https://api.minimax.io`
-- **Chat:** `POST /v1/chat/completions`, `MiniMax-M2.7-highspeed`
+- **Chat:** `POST /anthropic/v1/messages`, `MiniMax-M2.7-highspeed` (Anthropic-compatible)
+- **Auth:** `x-api-key: <key>` header (NOT `Authorization: Bearer`)
 - **TTS:** `POST /v1/t2a_v2`, `speech-2.8-hd`, hex MP3
 - **Image:** `POST /v1/image_generation`, `image-01`
 - **Music:** `POST /v1/music_generation`, `music-2.6`, hex MP3
 - **Audio:** `Buffer.from(hex, "hex").toString("base64")` → data URL
-- **Thinking:** model outputs `<think_intended>` (7 chars). Strip it.
+- **Thinking:** Anthropic `thinking` content block, no tag parsing needed
 
 ## Session
 
@@ -81,7 +82,8 @@ Browser → server.ts → agent.ts → MiniMax API
 ## SSE (server → browser)
 
 ```
-event: text       → {"choices":[{"delta":{"content":"..."}}]}
+event: thinking   → {"content":"..."}
+event: text       → {"content":"..."}
 event: tool_start → {"id":"...","name":"generate_image"}
 event: tool_result→ {"id":"...","name":"...","result":{...}}
 event: done       → {}
