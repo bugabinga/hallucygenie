@@ -627,6 +627,14 @@ export function initDatabase(dbPath = "data/hallucygenie.db"): DatabaseSync {
 
 export function startServer(port = PORT): Server {
   server = createServer((req, res) => handleNodeRequest(req, res));
+  server.on("error", (err: NodeJS.ErrnoException) => {
+    if (err.code === "EADDRINUSE") {
+      console.error(`Port ${port} is already in use. Kill the existing process or use a different port.`);
+      process.exit(1);
+    } else {
+      throw err;
+    }
+  });
   server.listen(port, () => {
     console.log(`HallucyGenie server running on http://localhost:${port}`);
   });
