@@ -4,12 +4,9 @@
 // ── Types ────────────────────────────────────────────────────────────
 
 export interface ToolDefinition {
-  type: "function";
-  function: {
-    name: string;
-    description: string;
-    parameters: Record<string, unknown>;
-  };
+  name: string;
+  description: string;
+  input_schema: Record<string, unknown>;
 }
 
 export interface ToolResult {
@@ -21,71 +18,62 @@ export interface ToolResult {
 
 export const MINIMAX_BASE = "https://api.minimax.io";
 
-// ── Tool schemas (OpenAI function calling format) ────────────────────
+// ── Tool schemas (Anthropic format) ───────────────────────────────────
 
 export function getToolDefinitions(): ToolDefinition[] {
   return [
     {
-      type: "function",
-      function: {
-        name: "generate_image",
-        description:
-          "Generate an image from a text prompt. Returns the URL of the generated image.",
-        parameters: {
-          type: "object",
-          properties: {
-            prompt: {
-              type: "string",
-              description: "Text description of the image to generate",
-            },
+      name: "generate_image",
+      description:
+        "Generate an image from a text prompt. Returns the URL of the generated image.",
+      input_schema: {
+        type: "object",
+        properties: {
+          prompt: {
+            type: "string",
+            description: "Text description of the image to generate",
           },
-          required: ["prompt"],
         },
+        required: ["prompt"],
       },
     },
     {
-      type: "function",
-      function: {
-        name: "text_to_speech",
-        description:
-          "Convert text to speech audio. Returns a base64-encoded MP3 audio data URL.",
-        parameters: {
-          type: "object",
-          properties: {
-            text: {
-              type: "string",
-              description: "The text to convert to speech",
-            },
-            voice_id: {
-              type: "string",
-              description:
-                'Voice ID to use. Defaults to "English_expressive_narrator".',
-            },
+      name: "text_to_speech",
+      description:
+        "Convert text to speech audio. Returns a base64-encoded MP3 audio data URL.",
+      input_schema: {
+        type: "object",
+        properties: {
+          text: {
+            type: "string",
+            description: "The text to convert to speech",
           },
-          required: ["text"],
+          voice_id: {
+            type: "string",
+            description:
+              'Voice ID to use. Defaults to "English_expressive_narrator".',
+          },
         },
+        required: ["text"],
       },
     },
     {
-      type: "function",
-      function: {
-        name: "generate_music",
-        description:
-          "Generate music from a prompt and optional lyrics. Returns a base64-encoded MP3 audio data URL.",
-        parameters: {
-          type: "object",
-          properties: {
-            prompt: {
-              type: "string",
-              description: "Description of the music to generate",
-            },
-            lyrics: {
-              type: "string",
-              description: "Optional lyrics for the generated music",
-            },
+      name: "generate_music",
+      description:
+        "Generate music from a prompt and optional lyrics. Returns a base64-encoded MP3 audio data URL.",
+      input_schema: {
+        type: "object",
+        properties: {
+          prompt: {
+            type: "string",
+            description: "Description of the music to generate",
           },
-          required: ["prompt"],
+          lyrics: {
+            type: "string",
+            description: "Optional lyrics for the generated music",
+          },
         },
+        required: ["prompt"],
       },
     },
   ];

@@ -1,7 +1,6 @@
 // HallucyGenie — HTTP server with SSE chat proxy
 // Target: Node.js runtime
 
-import { getToolDefinitions } from "./tools.ts";
 import { initDb } from "./db.ts";
 import { mkdirSync } from "node:fs";
 import { dirname } from "node:path";
@@ -38,6 +37,7 @@ export interface ChatMessage {
   role: "system" | "user" | "assistant" | "tool";
   content: string;
   tool_call_id?: string;
+  tool_calls?: Array<{ id: string; name: string; input: Record<string, unknown> }>;
 }
 
 export interface ChatRequestBody {
@@ -45,122 +45,11 @@ export interface ChatRequestBody {
   system_prompt?: string;
 }
 
-export interface ToolCallChunk {
-  index: number;
-  id?: string;
-  function?: {
-    name?: string;
-    arguments?: string;
-  };
-}
-
-export interface ToolCallAccumulated {
-  id: string;
-  name: string;
-  arguments: string;
-}
-
 // ── Configuration ────────────────────────────────────────────────────
 
 export const PORT = Number(process.env.PORT) || 3000;
 export const MINIMAX_BASE = "https://api.minimax.io";
 export const MINIMAX_MODEL = "MiniMax-M2.7-highspeed";
-
-// ── Thinking token stripping ─────────────────────────────────────────
-
-const THINK_OPEN = "<think_intended>";
-const THINK_CLOSE = "</think_intended>";
-const THINK_OPEN_ALT = "<think>";
-const THINK_CLOSE_ALT = "</think>";
-
-/**
- * Strip thinking tokens from streamed text content.
- * Handles both <think_intended>...</think_intended> and <think_intended>...</think_intended> formats.
- * Handles partial markers that arrive across chunk boundaries.
- */
-export function stripThinkingTokens(
-  text: string,
-  state: { inThink: boolean }
-): string {
-  let result = "";
-  let i = 0;
-  while (i < text.length) {
-    if (state.inThink) {
-      // Try both close tags
-      const close1 = text.indexOf(THINK_CLOSE, i);
-      const close2 = text.indexOf(THINK_CLOSE_ALT, i);
-      let closeIdx = -1;
-      let closeLen = 0;
-      if (close1 !== -1 && (close2 === -1 || close1 <= close2)) {
-        closeIdx = close1;
-        closeLen = THINK_CLOSE.length;
-      } else if (close2 !== -1) {
-        closeIdx = close2;
-        closeLen = THINK_CLOSE_ALT.length;
-      }
-      if (closeIdx !== -1) {
-        state.inThink = false;
-        i = closeIdx + closeLen;
-      } else {
-        // Still inside thinking — skip all
-        break;
-      }
-    } else {
-      // Try both open tags
-      const open1 = text.indexOf(THINK_OPEN, i);
-      const open2 = text.indexOf(THINK_OPEN_ALT, i);
-      let openIdx = -1;
-      let openLen = 0;
-      if (open1 !== -1 && (open2 === -1 || open1 <= open2)) {
-        openIdx = open1;
-        openLen = THINK_OPEN.length;
-      } else if (open2 !== -1) {
-        openIdx = open2;
-        openLen = THINK_OPEN_ALT.length;
-      }
-      if (openIdx !== -1) {
-        result += text.slice(i, openIdx);
-        state.inThink = true;
-        i = openIdx + openLen;
-      } else {
-        // Check for partial open tag at end
-        const partialStart = Math.max(i, text.length - Math.max(THINK_OPEN.length, THINK_OPEN_ALT.length));
-        const tail = text.slice(partialStart);
-        if ((THINK_OPEN.startsWith(tail) || THINK_OPEN_ALT.startsWith(tail)) && tail.length < Math.max(THINK_OPEN.length, THINK_OPEN_ALT.length)) {
-          result += text.slice(i, partialStart);
-          state.inThink = false;
-          break;
-        }
-        result += text.slice(i);
-        break;
-      }
-    }
-  }
-  return result;
-}
-
-// ── Tool call accumulator ────────────────────────────────────────────
-
-export function accumulateToolCalls(
-  chunks: ToolCallChunk[],
-  accumulated: Map<number, ToolCallAccumulated>
-): ToolCallAccumulated[] {
-  for (const chunk of chunks) {
-    const idx = chunk.index;
-    if (!accumulated.has(idx)) {
-      accumulated.set(idx, {
-        id: chunk.id ?? "",
-        name: chunk.function?.name ?? "",
-        arguments: "",
-      });
-    }
-    const entry = accumulated.get(idx)!;
-    if (chunk.id) entry.id = chunk.id;
-    if (chunk.function?.name) entry.name = chunk.function.name;
-    if (chunk.function?.arguments) entry.arguments += chunk.function.arguments;
-  }
-  return [...accumulated.values()];
-}
 
 // ── CORS helpers ─────────────────────────────────────────────────────
 
@@ -293,9 +182,9 @@ async function serveStaticFile(path: string): Promise<Response | null> {
   }
 }
 
-// ── MiniMax API proxy ────────────────────────────────────────────────
-// Note: buildMiniMaxPayload is no longer used; handleChat delegates to runAgentLoop
-// which builds its own payload internally.
+// ── Anthropic API proxy ──────────────────────────────────────────────
+// handleChat delegates to runAgentLoop which builds its own
+// Anthropic-format payload internally.
 
 export async function handleChat(
   req: Request,
@@ -326,18 +215,27 @@ export async function handleChat(
     sessionId ? getPreferences(database) : undefined
   );
 
-  const messages: Array<{ role: string; content: string; tool_call_id?: string }> = [];
+  const messages: ChatMessage[] = [];
   messages.push({ role: "system", content: systemPrompt });
 
   // Load existing history from DB for this session
   if (sessionId) {
     const history = getMessages(database, sessionId);
     for (const row of history) {
-      messages.push({
-        role: row.role,
+      const msg: ChatMessage = {
+        role: row.role as ChatMessage["role"],
         content: row.content,
         ...(row.tool_call_id ? { tool_call_id: row.tool_call_id } : {}),
-      });
+      };
+      // Restore tool_calls from tool_calls_json if available
+      if (row.tool_calls_json) {
+        try {
+          msg.tool_calls = JSON.parse(row.tool_calls_json);
+        } catch {
+          // Ignore malformed JSON
+        }
+      }
+      messages.push(msg);
     }
   }
 
@@ -364,11 +262,18 @@ export async function handleChat(
   (async () => {
     try {
       const finalMessages = await runAgentLoop(
-        messages as ChatMessage[],
+        messages,
         apiKey,
         (event: AgentEvent) => {
-          // Convert agent events to SSE
+          // Convert agent events to SSE for the browser
           switch (event.type) {
+            case "thinking": {
+              const sseData = `event: thinking\ndata: ${JSON.stringify({
+                content: event.content,
+              })}\n\n`;
+              writer.write(encoder.encode(sseData));
+              break;
+            }
             case "text": {
               const sseData = `data: ${JSON.stringify({
                 choices: [{ delta: { content: event.content }, finish_reason: null }],
@@ -408,12 +313,16 @@ export async function handleChat(
         const existingCount = messages.length;
         for (let i = existingCount; i < finalMessages.length; i++) {
           const msg = finalMessages[i];
+          // Store tool_calls as JSON for Anthropic message reconstruction
+          const toolCallsJson = msg.tool_calls
+            ? JSON.stringify(msg.tool_calls)
+            : null;
           saveMessage(
             database,
             sessionId,
             msg.role,
             msg.content,
-            null, // tool_calls_json
+            toolCallsJson,
             msg.tool_call_id ?? null
           );
         }
@@ -422,13 +331,6 @@ export async function handleChat(
         for (let i = existingCount; i < finalMessages.length; i++) {
           const msg = finalMessages[i];
           if (msg.role === "tool") {
-            // Determine which feature was used
-            // We need to figure out what tool was called
-            // The assistant message before the tool result has the tool name info
-            const prevAssistant = finalMessages
-              .slice(0, i)
-              .reverse()
-              .find(m => m.role === "assistant");
             // Track usage for known features
             for (const feature of ["image", "speech", "music"]) {
               if (msg.content.includes(feature) || msg.content.includes("url") || msg.content.includes("data:")) {

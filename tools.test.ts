@@ -46,58 +46,55 @@ describe("getToolDefinitions", () => {
 
   it("defines generate_image with correct schema", () => {
     const defs = getToolDefinitions();
-    const img = defs.find((d) => d.function.name === "generate_image");
+    const img = defs.find((d) => d.name === "generate_image");
     assert.ok(img);
-    assert.equal(img.type, "function");
-    assert.equal(img.function.name, "generate_image");
-    const params = img.function.parameters as {
+    assert.equal(img.name, "generate_image");
+    const schema = img.input_schema as {
       type: string;
       properties: Record<string, unknown>;
       required: string[];
     };
-    assert.equal(params.type, "object");
-    assert.ok(params.properties.prompt);
-    assert.deepEqual(params.required, ["prompt"]);
+    assert.equal(schema.type, "object");
+    assert.ok(schema.properties.prompt);
+    assert.deepEqual(schema.required, ["prompt"]);
   });
 
   it("defines text_to_speech with correct schema", () => {
     const defs = getToolDefinitions();
-    const tts = defs.find((d) => d.function.name === "text_to_speech");
+    const tts = defs.find((d) => d.name === "text_to_speech");
     assert.ok(tts);
-    assert.equal(tts.type, "function");
-    assert.equal(tts.function.name, "text_to_speech");
-    const params = tts.function.parameters as {
+    assert.equal(tts.name, "text_to_speech");
+    const schema = tts.input_schema as {
       type: string;
       properties: Record<string, unknown>;
       required: string[];
     };
-    assert.equal(params.type, "object");
-    assert.ok(params.properties.text);
-    assert.ok(params.properties.voice_id);
-    assert.deepEqual(params.required, ["text"]);
+    assert.equal(schema.type, "object");
+    assert.ok(schema.properties.text);
+    assert.ok(schema.properties.voice_id);
+    assert.deepEqual(schema.required, ["text"]);
   });
 
   it("defines generate_music with correct schema", () => {
     const defs = getToolDefinitions();
-    const music = defs.find((d) => d.function.name === "generate_music");
+    const music = defs.find((d) => d.name === "generate_music");
     assert.ok(music);
-    assert.equal(music.type, "function");
-    assert.equal(music.function.name, "generate_music");
-    const params = music.function.parameters as {
+    assert.equal(music.name, "generate_music");
+    const schema = music.input_schema as {
       type: string;
       properties: Record<string, unknown>;
       required: string[];
     };
-    assert.equal(params.type, "object");
-    assert.ok(params.properties.prompt);
-    assert.ok(params.properties.lyrics);
-    assert.deepEqual(params.required, ["prompt"]);
+    assert.equal(schema.type, "object");
+    assert.ok(schema.properties.prompt);
+    assert.ok(schema.properties.lyrics);
+    assert.deepEqual(schema.required, ["prompt"]);
   });
 
   it("all definitions have descriptions", () => {
     const defs = getToolDefinitions();
     for (const def of defs) {
-      assert.ok(def.function.description.length > 0);
+      assert.ok(def.description.length > 0);
     }
   });
 });

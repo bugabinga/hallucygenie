@@ -488,8 +488,7 @@ let currentAssistantEl: HTMLElement | null = null;
 let currentAssistantContent: HTMLElement | null = null;
 let activeToolCards = new Map<string, HTMLElement>();
 let rawTextBuffer = ""; // raw text for markdown re-rendering
-let thinkBuffer = ""; // accumulated thinking text
-let inThinkBlock = false; // frontend thinking state
+let thinkingBuffer = ""; // accumulated thinking text from thinking events
 
 // ── SSE Stream Processing ────────────────────────────────────────────
 
@@ -566,6 +565,19 @@ function handleSSEEvent(event: SSEEvent): void {
     return;
   }
 
+  // Thinking event
+  if (eventType === "thinking") {
+    try {
+      const parsed = JSON.parse(data);
+      if (parsed.content) {
+        appendThinking(parsed.content);
+      }
+    } catch {
+      // Ignore parse errors
+    }
+    return;
+  }
+
   // Error event
   if (eventType === "error") {
     try {
@@ -632,51 +644,29 @@ function handleSSEEvent(event: SSEEvent): void {
 function appendText(text: string): void {
   if (!currentAssistantContent) return;
 
-  // Handle thinking tags in frontend (safety net if server misses them)
-  let i = 0;
-  while (i < text.length) {
-    if (inThinkBlock) {
-      const closeTags = ["</think_intended>", "</think_intended>"];
-      let foundClose = false;
-      for (const close of closeTags) {
-        const idx = text.indexOf(close, i);
-        if (idx !== -1) {
-          thinkBuffer += text.slice(i, idx);
-          inThinkBlock = false;
-          i = idx + close.length;
-          foundClose = true;
-          break;
-        }
-      }
-      if (!foundClose) {
-        thinkBuffer += text.slice(i);
-        i = text.length;
-      }
-    } else {
-      const openTags = ["<think_intended>", "<think_intended>"];
-      let foundOpen = false;
-      for (const open of openTags) {
-        const idx = text.indexOf(open, i);
-        if (idx !== -1) {
-          rawTextBuffer += text.slice(i, idx);
-          thinkBuffer = "";
-          inThinkBlock = true;
-          i = idx + open.length;
-          foundOpen = true;
-          break;
-        }
-      }
-      if (!foundOpen) {
-        rawTextBuffer += text.slice(i);
-        i = text.length;
-      }
-    }
-  }
+  rawTextBuffer += text;
 
   // Re-render the content with markdown
   let html = "";
-  if (thinkBuffer) {
-    html += renderThinkingBlock(thinkBuffer);
+  if (thinkingBuffer) {
+    html += renderThinkingBlock(thinkingBuffer);
+  }
+  if (rawTextBuffer) {
+    html += renderMarkdown(rawTextBuffer);
+  }
+  currentAssistantContent.innerHTML = html;
+  scrollToBottom();
+}
+
+function appendThinking(text: string): void {
+  if (!currentAssistantContent) return;
+
+  thinkingBuffer += text;
+
+  // Re-render the content
+  let html = "";
+  if (thinkingBuffer) {
+    html += renderThinkingBlock(thinkingBuffer);
   }
   if (rawTextBuffer) {
     html += renderMarkdown(rawTextBuffer);
@@ -698,8 +688,7 @@ function finishStreaming(): void {
   currentAssistantContent = null;
   activeToolCards.clear();
   rawTextBuffer = "";
-  thinkBuffer = "";
-  inThinkBlock = false;
+  thinkingBuffer = "";
   setStreamingUI(false);
 }
 

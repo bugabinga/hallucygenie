@@ -1,15 +1,8 @@
 // HallucyGenie — Agent loop and tools
 // Full agent loop implementation: streaming, tool execution, event emission
+// Uses Anthropic-compatible API endpoint
 
-import type {
-  ChatMessage,
-  ToolCallAccumulated,
-  ToolCallChunk,
-} from "./server.ts";
-import {
-  stripThinkingTokens,
-  accumulateToolCalls,
-} from "./server.ts";
+import type { ChatMessage } from "./server.ts";
 import { executeTool, getToolDefinitions } from "./tools.ts";
 import type { ToolResult } from "./tools.ts";
 
@@ -46,7 +39,7 @@ export const MINIMAX_MODEL = "MiniMax-M2.7-highspeed";
 // ── Types ────────────────────────────────────────────────────────────
 
 export interface AgentEvent {
-  type: "text" | "tool_start" | "tool_result" | "done";
+  type: "text" | "thinking" | "tool_start" | "tool_result" | "done";
   content?: string;
   id?: string;
   name?: string;
@@ -69,6 +62,12 @@ export function drainSteer(steerQueue: SteerQueue): string[] {
   const messages = steerQueue.queue;
   steerQueue.queue = [];
   return messages;
+}
+
+export interface ToolCallAccumulated {
+  id: string;
+  name: string;
+  arguments: string;
 }
 
 export interface AgentState {
@@ -136,14 +135,105 @@ export function parseToolArguments(args: string): Record<string, unknown> {
   }
 }
 
+// ── Anthropic message format conversion ──────────────────────────────
+
+interface AnthropicTool {
+  name: string;
+  description: string;
+  input_schema: Record<string, unknown>;
+}
+
+interface AnthropicToolCall {
+  id: string;
+  name: string;
+  input: string; // accumulated JSON string
+}
+
+/**
+ * Convert internal ChatMessage[] to Anthropic API format.
+ * Extracts system messages, converts tool messages to tool_result blocks,
+ * and groups consecutive tool results into a single user message.
+ */
+function toAnthropicPayload(
+  messages: ChatMessage[],
+  tools: AnthropicTool[]
+): Record<string, unknown> {
+  const system: Array<{ type: string; text: string }> = [];
+  const anthropicMessages: Array<{
+    role: string;
+    content: string | Array<Record<string, unknown>>;
+  }> = [];
+
+  for (const msg of messages) {
+    if (msg.role === "system") {
+      system.push({ type: "text", text: msg.content });
+    } else if (msg.role === "user") {
+      anthropicMessages.push({ role: "user", content: msg.content });
+    } else if (msg.role === "assistant") {
+      const content: Array<Record<string, unknown>> = [];
+      if (msg.content) {
+        content.push({ type: "text", text: msg.content });
+      }
+      if (msg.tool_calls && msg.tool_calls.length > 0) {
+        for (const tc of msg.tool_calls) {
+          content.push({
+            type: "tool_use",
+            id: tc.id,
+            name: tc.name,
+            input: tc.input,
+          });
+        }
+      }
+      if (content.length === 0) {
+        content.push({ type: "text", text: "" });
+      }
+      anthropicMessages.push({ role: "assistant", content });
+    } else if (msg.role === "tool") {
+      const toolResult = {
+        type: "tool_result",
+        tool_use_id: msg.tool_call_id,
+        content: msg.content,
+      };
+      // Group consecutive tool results into one user message
+      const lastMsg = anthropicMessages[anthropicMessages.length - 1];
+      if (
+        lastMsg &&
+        lastMsg.role === "user" &&
+        Array.isArray(lastMsg.content) &&
+        lastMsg.content.some((c) => c.type === "tool_result")
+      ) {
+        (lastMsg.content as Array<Record<string, unknown>>).push(toolResult);
+      } else {
+        anthropicMessages.push({
+          role: "user",
+          content: [toolResult],
+        });
+      }
+    }
+  }
+
+  const payload: Record<string, unknown> = {
+    model: MINIMAX_MODEL,
+    max_tokens: 4096,
+    messages: anthropicMessages,
+    tools,
+    stream: true,
+  };
+  if (system.length > 0) {
+    payload.system = system;
+  }
+  return payload;
+}
+
 // ── Agent loop ───────────────────────────────────────────────────────
 
 /**
- * Run the agent loop: stream from MiniMax, execute tools, loop until done.
+ * Run the agent loop: stream from Anthropic-compatible endpoint,
+ * execute tools, loop until done.
  *
  * @param messages - Initial message history
  * @param apiKey - MiniMax API key
- * @param onEvent - Callback for agent events (text, tool_start, tool_result, done)
+ * @param onEvent - Callback for agent events (text, thinking, tool_start, tool_result, done)
  * @returns Final message history including all tool results
  */
 export async function runAgentLoop(
@@ -153,30 +243,25 @@ export async function runAgentLoop(
   steerQueue?: SteerQueue
 ): Promise<ChatMessage[]> {
   const localMessages = [...messages];
-  const tools = getToolDefinitions();
+  const tools = getToolDefinitions() as unknown as AnthropicTool[];
 
   while (true) {
-    const payload = {
-      model: MINIMAX_MODEL,
-      messages: localMessages,
-      stream: true,
-      tools,
-    };
+    const payload = toAnthropicPayload(localMessages, tools);
 
     let resp: Response;
     try {
-      resp = await fetch(`${MINIMAX_BASE}/v1/chat/completions`, {
+      resp = await fetch(`${MINIMAX_BASE}/anthropic/v1/messages`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          Authorization: `Bearer ${apiKey}`,
+          "x-api-key": apiKey,
         },
         body: JSON.stringify(payload),
       });
     } catch (err) {
       onEvent({
         type: "text",
-        content: `[Error: Failed to connect to MiniMax API: ${String(err)}]`,
+        content: `[Error: Failed to connect to API: ${String(err)}]`,
       });
       onEvent({ type: "done" });
       return localMessages;
@@ -186,21 +271,23 @@ export async function runAgentLoop(
       const errorText = await resp.text();
       onEvent({
         type: "text",
-        content: `[Error: MiniMax API returned ${resp.status}: ${errorText}]`,
+        content: `[Error: API returned ${resp.status}: ${errorText}]`,
       });
       onEvent({ type: "done" });
       return localMessages;
     }
 
-    // Process the SSE stream
-    const thinkState = { inThink: false };
-    const toolCallAccumulator = new Map<number, ToolCallAccumulated>();
+    // Process the Anthropic SSE stream
     let textContent = "";
-    let finishReason: string | null = null;
+    let stopReason: string | null = null;
+    const toolCalls = new Map<number, AnthropicToolCall>();
+    let currentBlockType: "thinking" | "text" | "tool_use" | null = null;
+    let currentBlockIndex = -1;
 
     const reader = resp.body!.getReader();
     const decoder = new TextDecoder();
     let buffer = "";
+    let currentEventType = "";
 
     while (true) {
       const { done, value } = await reader.read();
@@ -213,9 +300,17 @@ export async function runAgentLoop(
       for (const line of lines) {
         const trimmed = line.trim();
         if (!trimmed || trimmed.startsWith(":")) continue;
-        if (!trimmed.startsWith("data: ")) continue;
 
-        const data = trimmed.slice(6);
+        // Parse SSE event type
+        if (trimmed.startsWith("event:")) {
+          currentEventType = trimmed.slice(6).trim();
+          continue;
+        }
+
+        // Parse SSE data
+        if (!trimmed.startsWith("data:")) continue;
+
+        const data = trimmed.slice(5).trim();
         if (data === "[DONE]") continue;
 
         let parsed: Record<string, unknown>;
@@ -225,83 +320,108 @@ export async function runAgentLoop(
           continue;
         }
 
-        const choices = parsed.choices as
-          | Array<{
-              delta?: {
-                content?: string;
-                tool_calls?: ToolCallChunk[];
-              };
-              finish_reason?: string | null;
-            }>
-          | undefined;
-        if (!choices?.length) continue;
+        // Handle content_block_start
+        if (currentEventType === "content_block_start") {
+          const contentBlock = parsed.content_block as Record<string, unknown> | undefined;
+          if (contentBlock) {
+            currentBlockType = contentBlock.type as "thinking" | "text" | "tool_use";
+            currentBlockIndex = parsed.index as number;
 
-        const choice = choices[0];
-
-        // Handle tool calls — accumulate
-        if (choice.delta?.tool_calls) {
-          const accumulated = accumulateToolCalls(
-            choice.delta.tool_calls,
-            toolCallAccumulator
-          );
-
-          // Emit tool_start for new tool calls (those with an id)
-          for (const tc of choice.delta.tool_calls) {
-            if (tc.id) {
-              const matchedAcc = accumulated.find(
-                (a) => a.id === tc.id
-              );
-              onEvent({
-                type: "tool_start",
-                id: tc.id,
-                name: matchedAcc?.name ?? tc.function?.name ?? "",
-              });
+            if (currentBlockType === "tool_use") {
+              const id = (contentBlock.id as string) || "";
+              const name = (contentBlock.name as string) || "";
+              toolCalls.set(currentBlockIndex, { id, name, input: "" });
             }
           }
+          continue;
         }
 
-        // Handle content streaming — strip thinking tokens
-        if (choice.delta?.content) {
-          const cleaned = stripThinkingTokens(
-            choice.delta.content,
-            thinkState
-          );
-          if (cleaned) {
-            textContent += cleaned;
-            onEvent({ type: "text", content: cleaned });
+        // Handle content_block_delta
+        if (currentEventType === "content_block_delta") {
+          const delta = parsed.delta as Record<string, unknown> | undefined;
+          if (!delta) continue;
+
+          const deltaType = delta.type as string;
+
+          if (deltaType === "thinking_delta") {
+            const thinking = (delta.thinking as string) || "";
+            if (thinking) {
+              onEvent({ type: "thinking", content: thinking });
+            }
+          } else if (deltaType === "text_delta") {
+            const text = (delta.text as string) || "";
+            if (text) {
+              textContent += text;
+              onEvent({ type: "text", content: text });
+            }
+          } else if (deltaType === "input_json_delta") {
+            const partialJson = (delta.partial_json as string) || "";
+            const idx = parsed.index as number;
+            const tc = toolCalls.get(idx);
+            if (tc) {
+              tc.input += partialJson;
+            }
           }
+          continue;
         }
 
-        // Capture finish reason
-        if (choice.finish_reason) {
-          finishReason = choice.finish_reason;
+        // Handle content_block_stop
+        if (currentEventType === "content_block_stop") {
+          currentBlockType = null;
+          continue;
         }
+
+        // Handle message_delta (contains stop_reason)
+        if (currentEventType === "message_delta") {
+          const delta = parsed.delta as Record<string, unknown> | undefined;
+          if (delta?.stop_reason) {
+            stopReason = delta.stop_reason as string;
+          }
+          continue;
+        }
+
+        // message_start and message_stop — no special handling needed
       }
     }
 
-    // Handle finish: if tool_calls, execute them and loop
-    if (finishReason === "tool_calls" && toolCallAccumulator.size > 0) {
-      // Add assistant message with tool calls to history
-      const toolCalls = [...toolCallAccumulator.values()];
+    // Handle finish: if tool_use, execute tools and loop
+    if (stopReason === "tool_use" && toolCalls.size > 0) {
+      const calls = [...toolCalls.values()];
 
-      // Fix malformed arguments
-      for (const tc of toolCalls) {
-        try {
-          JSON.parse(tc.arguments);
-        } catch {
-          tc.arguments = "{}";
+      // Fix malformed JSON arguments
+      for (const tc of calls) {
+        if (!tc.input) {
+          tc.input = "{}";
+        } else {
+          try {
+            JSON.parse(tc.input);
+          } catch {
+            tc.input = "{}";
+          }
         }
       }
 
-      // Add assistant message referencing the tool calls
+      // Add assistant message with tool_use content blocks
       localMessages.push({
         role: "assistant",
         content: textContent || "",
+        tool_calls: calls.map((tc) => ({
+          id: tc.id,
+          name: tc.name,
+          input: parseToolArguments(tc.input),
+        })),
       });
 
       // Execute each tool
-      for (const tc of toolCalls) {
-        const args = parseToolArguments(tc.arguments);
+      for (const tc of calls) {
+        const args = parseToolArguments(tc.input);
+
+        onEvent({
+          type: "tool_start",
+          id: tc.id,
+          name: tc.name,
+        });
+
         const result = await executeTool(tc.name, args, apiKey);
 
         onEvent({
@@ -336,7 +456,7 @@ export async function runAgentLoop(
       continue;
     }
 
-    // finish_reason is "stop" or no more tool calls
+    // stop_reason is "end_turn" or no more tool calls
     // Check for steer messages at text turn boundary
     if (steerQueue) {
       const steerMessages = drainSteer(steerQueue);

@@ -35,63 +35,126 @@ function encoder(): TextEncoder {
   return new TextEncoder();
 }
 
-function sseLine(data: string): string {
-  return `data: ${data}\n\n`;
+// ── Anthropic SSE helpers ────────────────────────────────────────────
+
+function sseEvent(event: string, data: string): string {
+  return `event: ${event}\ndata: ${data}\n\n`;
 }
 
-function sseDone(): string {
-  return "data: [DONE]\n\n";
+function messageStart(): string {
+  return sseEvent("message_start", JSON.stringify({
+    type: "message_start",
+    message: { id: "msg_1", type: "message", role: "assistant", content: [], model: "MiniMax-M2.7-highspeed", stop_reason: null },
+  }));
 }
 
-function contentDelta(text: string, finishReason: string | null = null): string {
-  return sseLine(
-    JSON.stringify({
-      choices: [
-        {
-          delta: { content: text },
-          finish_reason: finishReason,
-        },
-      ],
-    })
-  );
-}
-
-function toolCallDelta(
-  index: number,
-  id: string | undefined,
-  name: string | undefined,
-  args: string | undefined,
-  finishReason: string | null = null
-): string {
-  const delta: Record<string, unknown> = {};
-  const tc: Record<string, unknown> = { index };
-  if (id) tc.id = id;
-  if (name || args) {
-    tc.function = {} as Record<string, string>;
-    if (name) (tc.function as Record<string, string>).name = name;
-    if (args) (tc.function as Record<string, string>).arguments = args;
+function contentBlockStart(index: number, blockType: "thinking" | "text" | "tool_use", extra?: Record<string, unknown>): string {
+  const contentBlock: Record<string, unknown> = { type: blockType };
+  if (blockType === "thinking") {
+    contentBlock.thinking = "";
+  } else if (blockType === "text") {
+    contentBlock.text = "";
+  } else if (blockType === "tool_use") {
+    contentBlock.id = extra?.id ?? "tu_1";
+    contentBlock.name = extra?.name ?? "";
+    contentBlock.input = {};
   }
-  delta.tool_calls = [tc];
-  return sseLine(
-    JSON.stringify({
-      choices: [{ delta, finish_reason: finishReason }],
-    })
-  );
+  return sseEvent("content_block_start", JSON.stringify({
+    type: "content_block_start",
+    index,
+    content_block: contentBlock,
+  }));
 }
 
-function finishDelta(reason: string): string {
-  return sseLine(
-    JSON.stringify({
-      choices: [{ delta: {}, finish_reason: reason }],
-    })
-  );
+function contentBlockDelta(index: number, deltaType: "thinking_delta" | "text_delta" | "input_json_delta", value: string): string {
+  const delta: Record<string, unknown> = { type: deltaType };
+  if (deltaType === "thinking_delta") {
+    delta.thinking = value;
+  } else if (deltaType === "text_delta") {
+    delta.text = value;
+  } else if (deltaType === "input_json_delta") {
+    delta.partial_json = value;
+  }
+  return sseEvent("content_block_delta", JSON.stringify({
+    type: "content_block_delta",
+    index,
+    delta,
+  }));
 }
 
-function makeSseStream(chunks: string[]): ReadableStream<Uint8Array> {
+function contentBlockStop(index: number): string {
+  return sseEvent("content_block_stop", JSON.stringify({
+    type: "content_block_stop",
+    index,
+  }));
+}
+
+function messageDelta(stopReason: string): string {
+  return sseEvent("message_delta", JSON.stringify({
+    type: "message_delta",
+    delta: { stop_reason: stopReason },
+    usage: { output_tokens: 10 },
+  }));
+}
+
+function messageStop(): string {
+  return sseEvent("message_stop", JSON.stringify({
+    type: "message_stop",
+  }));
+}
+
+// Helper: text-only response
+function textResponse(chunks: string[]): string[] {
+  const events: string[] = [messageStart()];
+  let idx = 0;
+  for (const chunk of chunks) {
+    if (idx === 0) events.push(contentBlockStart(idx, "text"));
+    events.push(contentBlockDelta(idx, "text_delta", chunk));
+    events.push(contentBlockStop(idx));
+    idx++;
+  }
+  events.push(messageDelta("end_turn"));
+  events.push(messageStop());
+  return events;
+}
+
+// Helper: tool call response
+function toolUseResponse(toolId: string, toolName: string, inputJson: string, textBefore?: string): string[] {
+  const events: string[] = [messageStart()];
+  let idx = 0;
+  if (textBefore) {
+    events.push(contentBlockStart(idx, "text"));
+    events.push(contentBlockDelta(idx, "text_delta", textBefore));
+    events.push(contentBlockStop(idx));
+    idx++;
+  }
+  events.push(contentBlockStart(idx, "tool_use", { id: toolId, name: toolName }));
+  events.push(contentBlockDelta(idx, "input_json_delta", inputJson));
+  events.push(contentBlockStop(idx));
+  events.push(messageDelta("tool_use"));
+  events.push(messageStop());
+  return events;
+}
+
+// Helper: thinking + text response
+function thinkingTextResponse(thinking: string, text: string): string[] {
+  const events: string[] = [messageStart()];
+  events.push(contentBlockStart(0, "thinking"));
+  events.push(contentBlockDelta(0, "thinking_delta", thinking));
+  events.push(contentBlockStop(0));
+  events.push(contentBlockStart(1, "text"));
+  events.push(contentBlockDelta(1, "text_delta", text));
+  events.push(contentBlockStop(1));
+  events.push(messageDelta("end_turn"));
+  events.push(messageStop());
+  return events;
+}
+
+function makeSseStream(eventChunks: string[]): ReadableStream<Uint8Array> {
   const enc = encoder();
   return new ReadableStream({
     start(controller) {
-      for (const chunk of chunks) {
+      for (const chunk of eventChunks) {
         controller.enqueue(enc.encode(chunk));
       }
       controller.close();
@@ -99,7 +162,7 @@ function makeSseStream(chunks: string[]): ReadableStream<Uint8Array> {
   });
 }
 
-function mockMiniMax(responses: Response[]): void {
+function mockAnthropic(responses: Response[]): void {
   let callIndex = 0;
   globalThis.fetch = async () => {
     const resp = responses[Math.min(callIndex, responses.length - 1)];
@@ -108,8 +171,8 @@ function mockMiniMax(responses: Response[]): void {
   };
 }
 
-function minimaxResponse(chunks: string[]): Response {
-  return new Response(makeSseStream(chunks), {
+function anthropicResponse(eventChunks: string[]): Response {
+  return new Response(makeSseStream(eventChunks), {
     status: 200,
     headers: { "Content-Type": "text/event-stream" },
   });
@@ -248,13 +311,8 @@ describe("runAgentLoop", () => {
   });
 
   it("handles text-only response (no tools)", async () => {
-    mockMiniMax([
-      minimaxResponse([
-        contentDelta("Hello "),
-        contentDelta("world!"),
-        finishDelta("stop"),
-        sseDone(),
-      ]),
+    mockAnthropic([
+      anthropicResponse(textResponse(["Hello ", "world!"])),
     ]);
 
     const { events, onEvent } = collectEvents();
@@ -281,27 +339,19 @@ describe("runAgentLoop", () => {
   });
 
   it("handles text + one tool call", async () => {
-    // First response: some text + tool call
-    const firstResponse = minimaxResponse([
-      contentDelta("I'll generate an image"),
-      toolCallDelta(0, "call_1", "generate_image", '{"prompt":"a cat"}'),
-      finishDelta("tool_calls"),
-      sseDone(),
-    ]);
+    const firstResponse = anthropicResponse(
+      toolUseResponse("call_1", "generate_image", '{"prompt":"a cat"}', "I'll generate an image")
+    );
 
-    // Second response: text after tool result
-    const secondResponse = minimaxResponse([
-      contentDelta("Here's your image!"),
-      finishDelta("stop"),
-      sseDone(),
-    ]);
+    const secondResponse = anthropicResponse(
+      textResponse(["Here's your image!"])
+    );
 
-    // Mock tool execution via the image API
     let fetchCallCount = 0;
     globalThis.fetch = async (url: string | URL | Request, init?: RequestInit) => {
       fetchCallCount++;
       const urlStr = url.toString();
-      if (urlStr.includes("/v1/chat/completions")) {
+      if (urlStr.includes("/anthropic/v1/messages")) {
         return fetchCallCount === 1 ? firstResponse : secondResponse;
       }
       // Tool API call (image generation)
@@ -348,24 +398,24 @@ describe("runAgentLoop", () => {
   });
 
   it("handles multiple tool calls in single turn", async () => {
-    const firstResponse = minimaxResponse([
-      toolCallDelta(0, "call_1", "generate_image", '{"prompt":"a cat"}'),
-      toolCallDelta(1, "call_2", "text_to_speech", '{"text":"meow"}'),
-      finishDelta("tool_calls"),
-      sseDone(),
-    ]);
+    const firstEvents: string[] = [messageStart()];
+    firstEvents.push(contentBlockStart(0, "tool_use", { id: "call_1", name: "generate_image" }));
+    firstEvents.push(contentBlockDelta(0, "input_json_delta", '{"prompt":"a cat"}'));
+    firstEvents.push(contentBlockStop(0));
+    firstEvents.push(contentBlockStart(1, "tool_use", { id: "call_2", name: "text_to_speech" }));
+    firstEvents.push(contentBlockDelta(1, "input_json_delta", '{"text":"meow"}'));
+    firstEvents.push(contentBlockStop(1));
+    firstEvents.push(messageDelta("tool_use"));
+    firstEvents.push(messageStop());
 
-    const secondResponse = minimaxResponse([
-      contentDelta("Done!"),
-      finishDelta("stop"),
-      sseDone(),
-    ]);
+    const firstResponse = anthropicResponse(firstEvents);
+    const secondResponse = anthropicResponse(textResponse(["Done!"]));
 
     let fetchCallCount = 0;
     globalThis.fetch = async (url: string | URL | Request, init?: RequestInit) => {
       fetchCallCount++;
       const urlStr = url.toString();
-      if (urlStr.includes("/v1/chat/completions")) {
+      if (urlStr.includes("/anthropic/v1/messages")) {
         return fetchCallCount === 1 ? firstResponse : secondResponse;
       }
       if (urlStr.includes("/v1/image_generation")) {
@@ -398,7 +448,6 @@ describe("runAgentLoop", () => {
     const toolResultEvents = events.filter((e) => e.type === "tool_result");
     assert.equal(toolResultEvents.length, 2);
 
-    // One is image, one is audio
     const imageResult = toolResultEvents.find(
       (e) => e.name === "generate_image"
     );
@@ -416,37 +465,30 @@ describe("runAgentLoop", () => {
 
   it("handles multi-iteration loop (tool calls trigger more tool calls)", async () => {
     // Iteration 1: model calls generate_image
-    const response1 = minimaxResponse([
-      toolCallDelta(0, "call_1", "generate_image", '{"prompt":"cat"}'),
-      finishDelta("tool_calls"),
-      sseDone(),
-    ]);
+    const response1 = anthropicResponse(
+      toolUseResponse("call_1", "generate_image", '{"prompt":"cat"}')
+    );
 
     // Iteration 2: model calls text_to_speech
-    const response2 = minimaxResponse([
-      toolCallDelta(0, "call_2", "text_to_speech", '{"text":"done"}'),
-      finishDelta("tool_calls"),
-      sseDone(),
-    ]);
+    const response2 = anthropicResponse(
+      toolUseResponse("call_2", "text_to_speech", '{"text":"done"}')
+    );
 
     // Iteration 3: model responds with text only
-    const response3 = minimaxResponse([
-      contentDelta("All done!"),
-      finishDelta("stop"),
-      sseDone(),
-    ]);
+    const response3 = anthropicResponse(
+      textResponse(["All done!"])
+    );
 
     let fetchCallCount = 0;
     globalThis.fetch = async (url: string | URL | Request, init?: RequestInit) => {
       fetchCallCount++;
       const urlStr = url.toString();
-      if (urlStr.includes("/v1/chat/completions")) {
+      if (urlStr.includes("/anthropic/v1/messages")) {
         const chatCount = Math.ceil(fetchCallCount / 2);
         if (chatCount === 1) return response1;
         if (chatCount === 2) return response2;
         return response3;
       }
-      // Tool calls
       if (urlStr.includes("/v1/image_generation")) {
         return new Response(
           JSON.stringify({
@@ -471,31 +513,21 @@ describe("runAgentLoop", () => {
       onEvent
     );
 
-    // Should have 2 tool_start events (one per iteration with tools)
     const toolStartEvents = events.filter((e) => e.type === "tool_start");
     assert.equal(toolStartEvents.length, 2);
 
-    // Should have 2 tool_result events
     const toolResultEvents = events.filter((e) => e.type === "tool_result");
     assert.equal(toolResultEvents.length, 2);
 
-    // Should end with done
     assert.equal(events[events.length - 1].type, "done");
 
-    // Should have 2 tool messages
     const toolMessages = messages.filter((m) => m.role === "tool");
     assert.equal(toolMessages.length, 2);
   });
 
-  it("strips thinking tokens from agent loop output", async () => {
-    mockMiniMax([
-      minimaxResponse([
-        contentDelta(
-          "Hello<think_intended>internal reasoning</think_intended> world"
-        ),
-        finishDelta("stop"),
-        sseDone(),
-      ]),
+  it("emits thinking events from Anthropic thinking blocks", async () => {
+    mockAnthropic([
+      anthropicResponse(thinkingTextResponse("Let me think about this...", "Hello world")),
     ]);
 
     const { events, onEvent } = collectEvents();
@@ -505,18 +537,22 @@ describe("runAgentLoop", () => {
       onEvent
     );
 
+    const thinkingEvents = events.filter((e) => e.type === "thinking");
+    assert.equal(thinkingEvents.length, 1);
+    assert.equal(thinkingEvents[0].content, "Let me think about this...");
+
     const textEvents = events.filter((e) => e.type === "text");
-    const fullText = textEvents.map((e) => e.content).join("");
-    assert.equal(fullText, "Hello world");
-    assert.ok(!fullText.includes("internal reasoning"));
+    assert.equal(textEvents.length, 1);
+    assert.equal(textEvents[0].content, "Hello world");
   });
 
   it("handles empty response (no content, no tools)", async () => {
-    mockMiniMax([
-      minimaxResponse([
-        finishDelta("stop"),
-        sseDone(),
-      ]),
+    const events_arr: string[] = [messageStart()];
+    events_arr.push(messageDelta("end_turn"));
+    events_arr.push(messageStop());
+
+    mockAnthropic([
+      anthropicResponse(events_arr),
     ]);
 
     const { events, onEvent } = collectEvents();
@@ -526,11 +562,9 @@ describe("runAgentLoop", () => {
       onEvent
     );
 
-    // No text events
     const textEvents = events.filter((e) => e.type === "text");
     assert.equal(textEvents.length, 0);
 
-    // Done event should be emitted
     const doneEvents = events.filter((e) => e.type === "done");
     assert.equal(doneEvents.length, 1);
 
@@ -538,8 +572,8 @@ describe("runAgentLoop", () => {
     assert.equal(messages.length, 1);
   });
 
-  it("handles MiniMax API error", async () => {
-    mockMiniMax([
+  it("handles API error", async () => {
+    mockAnthropic([
       new Response("Internal Server Error", { status: 500 }),
     ]);
 
@@ -550,12 +584,10 @@ describe("runAgentLoop", () => {
       onEvent
     );
 
-    // Should emit error as text
     const textEvents = events.filter((e) => e.type === "text");
     assert.equal(textEvents.length, 1);
     assert.ok(textEvents[0].content?.includes("Error"));
 
-    // Should emit done
     const doneEvents = events.filter((e) => e.type === "done");
     assert.equal(doneEvents.length, 1);
   });
@@ -572,30 +604,27 @@ describe("runAgentLoop", () => {
       onEvent
     );
 
-    // Should still complete (graceful error)
     const doneEvents = events.filter((e) => e.type === "done");
     assert.equal(doneEvents.length, 1);
   });
 
-  it("handles chunked tool arguments across SSE events", async () => {
-    const firstResponse = minimaxResponse([
-      toolCallDelta(0, "call_1", "generate_image", '{"pro'),
-      toolCallDelta(0, undefined, undefined, 'mpt":"a cat"}'),
-      finishDelta("tool_calls"),
-      sseDone(),
-    ]);
+  it("handles chunked tool input JSON across SSE events", async () => {
+    const firstEvents: string[] = [messageStart()];
+    firstEvents.push(contentBlockStart(0, "tool_use", { id: "call_1", name: "generate_image" }));
+    firstEvents.push(contentBlockDelta(0, "input_json_delta", '{"pro'));
+    firstEvents.push(contentBlockDelta(0, "input_json_delta", 'mpt":"a cat"}'));
+    firstEvents.push(contentBlockStop(0));
+    firstEvents.push(messageDelta("tool_use"));
+    firstEvents.push(messageStop());
 
-    const secondResponse = minimaxResponse([
-      contentDelta("Image created!"),
-      finishDelta("stop"),
-      sseDone(),
-    ]);
+    const firstResponse = anthropicResponse(firstEvents);
+    const secondResponse = anthropicResponse(textResponse(["Image created!"]));
 
     let fetchCallCount = 0;
     globalThis.fetch = async (url: string | URL | Request, init?: RequestInit) => {
       fetchCallCount++;
       const urlStr = url.toString();
-      if (urlStr.includes("/v1/chat/completions")) {
+      if (urlStr.includes("/anthropic/v1/messages")) {
         return fetchCallCount === 1 ? firstResponse : secondResponse;
       }
       return new Response(
@@ -618,27 +647,22 @@ describe("runAgentLoop", () => {
     assert.equal(toolResultEvents[0].result?.type, "image");
   });
 
-  it("handles tool call with malformed arguments (gracefully defaults to {})", async () => {
-    const firstResponse = minimaxResponse([
-      toolCallDelta(0, "call_1", "generate_image", "{broken"),
-      finishDelta("tool_calls"),
-      sseDone(),
-    ]);
+  it("handles tool call with malformed JSON (gracefully defaults to {})", async () => {
+    const firstResponse = anthropicResponse(
+      toolUseResponse("call_1", "generate_image", "{broken")
+    );
 
-    const secondResponse = minimaxResponse([
-      contentDelta("Done"),
-      finishDelta("stop"),
-      sseDone(),
-    ]);
+    const secondResponse = anthropicResponse(
+      textResponse(["Done"])
+    );
 
     let fetchCallCount = 0;
     globalThis.fetch = async (url: string | URL | Request, init?: RequestInit) => {
       fetchCallCount++;
       const urlStr = url.toString();
-      if (urlStr.includes("/v1/chat/completions")) {
+      if (urlStr.includes("/anthropic/v1/messages")) {
         return fetchCallCount === 1 ? firstResponse : secondResponse;
       }
-      // Tool call with malformed args → empty object → prompt will be undefined
       return new Response(
         JSON.stringify({
           data: { image_urls: ["https://example.com/fallback.png"] },
@@ -654,25 +678,26 @@ describe("runAgentLoop", () => {
       onEvent
     );
 
-    // Should complete without crashing
     assert.equal(events[events.length - 1].type, "done");
     const toolResultEvents = events.filter((e) => e.type === "tool_result");
     assert.equal(toolResultEvents.length, 1);
   });
 
-  it("handles invalid JSON in SSE stream gracefully", async () => {
+  it("handles invalid JSON in SSE data gracefully", async () => {
     const enc = new TextEncoder();
     const stream = new ReadableStream({
       start(controller) {
-        controller.enqueue(enc.encode('data: {invalid json}\n\n'));
-        controller.enqueue(enc.encode('data: {"choices":[{"delta":{"content":"OK"},"finish_reason":null}]}\n\n'));
-        controller.enqueue(enc.encode('data: {"choices":[{"delta":{},"finish_reason":"stop"}]}\n\n'));
-        controller.enqueue(enc.encode('data: [DONE]\n\n'));
+        controller.enqueue(enc.encode('event: content_block_start\ndata: {invalid json}\n\n'));
+        controller.enqueue(enc.encode('event: content_block_start\ndata: {"type":"content_block_start","index":0,"content_block":{"type":"text","text":""}}\n\n'));
+        controller.enqueue(enc.encode('event: content_block_delta\ndata: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"OK"}}\n\n'));
+        controller.enqueue(enc.encode('event: content_block_stop\ndata: {"type":"content_block_stop","index":0}\n\n'));
+        controller.enqueue(enc.encode('event: message_delta\ndata: {"type":"message_delta","delta":{"stop_reason":"end_turn"},"usage":{}}\n\n'));
+        controller.enqueue(enc.encode('event: message_stop\ndata: {"type":"message_stop"}\n\n'));
         controller.close();
       },
     });
 
-    mockMiniMax([
+    mockAnthropic([
       new Response(stream, {
         status: 200,
         headers: { "Content-Type": "text/event-stream" },
@@ -686,11 +711,105 @@ describe("runAgentLoop", () => {
       onEvent
     );
 
-    // Should skip invalid JSON and still process valid events
     assert.equal(events[events.length - 1].type, "done");
     const textEvents = events.filter((e) => e.type === "text");
     assert.equal(textEvents.length, 1);
     assert.equal(textEvents[0].content, "OK");
+  });
+
+  it("sends x-api-key header instead of Authorization Bearer", async () => {
+    let capturedInit: RequestInit | undefined;
+    globalThis.fetch = async (_url: string | URL | Request, init?: RequestInit) => {
+      capturedInit = init;
+      return anthropicResponse(textResponse(["Hi"]));
+    };
+
+    const { onEvent } = collectEvents();
+    await runAgentLoop(
+      [{ role: "user", content: "hi" }],
+      "my-secret-key",
+      onEvent
+    );
+
+    const headers = capturedInit!.headers as Record<string, string>;
+    assert.equal(headers["x-api-key"], "my-secret-key");
+    assert.equal(headers["Authorization"], undefined);
+  });
+
+  it("sends Anthropic-format request body", async () => {
+    let capturedBody = "";
+    globalThis.fetch = async (_url: string | URL | Request, init?: RequestInit) => {
+      capturedBody = init?.body as string;
+      return anthropicResponse(textResponse(["Hi"]));
+    };
+
+    const { onEvent } = collectEvents();
+    await runAgentLoop(
+      [
+        { role: "system", content: "You are helpful" },
+        { role: "user", content: "hello" },
+      ],
+      "test-key",
+      onEvent
+    );
+
+    const parsed = JSON.parse(capturedBody);
+    // System should be separate, not in messages
+    assert.ok(parsed.system);
+    assert.equal(parsed.system[0].type, "text");
+    assert.equal(parsed.system[0].text, "You are helpful");
+    // Messages should not contain system role
+    assert.ok(!parsed.messages.some((m: { role: string }) => m.role === "system"));
+    assert.equal(parsed.model, "MiniMax-M2.7-highspeed");
+    assert.equal(parsed.max_tokens, 4096);
+    assert.equal(parsed.stream, true);
+    assert.ok(parsed.tools);
+  });
+
+  it("converts tool results to Anthropic tool_result format", async () => {
+    let capturedBody = "";
+    const response1 = anthropicResponse(
+      toolUseResponse("tu_1", "generate_image", '{"prompt":"cat"}')
+    );
+    const response2 = anthropicResponse(textResponse(["Done"]));
+
+    let fetchCallCount = 0;
+    globalThis.fetch = async (url: string | URL | Request, init?: RequestInit) => {
+      fetchCallCount++;
+      const urlStr = url.toString();
+      if (urlStr.includes("/anthropic/v1/messages")) {
+        if (fetchCallCount === 1) {
+          return response1;
+        }
+        capturedBody = init?.body as string;
+        return response2;
+      }
+      return new Response(
+        JSON.stringify({ data: { image_urls: ["https://example.com/cat.png"] } }),
+        { status: 200, headers: { "Content-Type": "application/json" } }
+      );
+    };
+
+    const { onEvent } = collectEvents();
+    await runAgentLoop(
+      [{ role: "user", content: "draw" }],
+      "test-key",
+      onEvent
+    );
+
+    // Second request should have tool_result in Anthropic format
+    const parsed = JSON.parse(capturedBody);
+    // Find the user message with tool_result content
+    const toolResultMsg = parsed.messages.find(
+      (m: { role: string; content: Array<{ type: string }> }) =>
+        m.role === "user" && Array.isArray(m.content) &&
+        m.content.some((c: { type: string }) => c.type === "tool_result")
+    );
+    assert.ok(toolResultMsg, "Should have user message with tool_result");
+    const toolResultContent = toolResultMsg.content.find(
+      (c: { type: string }) => c.type === "tool_result"
+    );
+    assert.equal(toolResultContent.tool_use_id, "tu_1");
   });
 });
 
@@ -706,13 +825,8 @@ describe("Agent event sequence snapshots", () => {
   });
 
   it("snapshot: text-only event sequence", async () => {
-    mockMiniMax([
-      minimaxResponse([
-        contentDelta("Hi"),
-        contentDelta(" there"),
-        finishDelta("stop"),
-        sseDone(),
-      ]),
+    mockAnthropic([
+      anthropicResponse(textResponse(["Hi", " there"])),
     ]);
 
     const { events, onEvent } = collectEvents();
@@ -735,23 +849,19 @@ describe("Agent event sequence snapshots", () => {
   });
 
   it("snapshot: tool call event sequence", async () => {
-    const firstResponse = minimaxResponse([
-      toolCallDelta(0, "call_1", "generate_image", '{"prompt":"cat"}'),
-      finishDelta("tool_calls"),
-      sseDone(),
-    ]);
+    const firstResponse = anthropicResponse(
+      toolUseResponse("call_1", "generate_image", '{"prompt":"cat"}')
+    );
 
-    const secondResponse = minimaxResponse([
-      contentDelta("Here it is!"),
-      finishDelta("stop"),
-      sseDone(),
-    ]);
+    const secondResponse = anthropicResponse(
+      textResponse(["Here it is!"])
+    );
 
     let fetchCallCount = 0;
     globalThis.fetch = async (url: string | URL | Request, init?: RequestInit) => {
       fetchCallCount++;
       const urlStr = url.toString();
-      if (urlStr.includes("/v1/chat/completions")) {
+      if (urlStr.includes("/anthropic/v1/messages")) {
         return fetchCallCount === 1 ? firstResponse : secondResponse;
       }
       return new Response(
@@ -778,24 +888,40 @@ describe("Agent event sequence snapshots", () => {
     ]);
   });
 
-  it("snapshot: message history after tool call", async () => {
-    const firstResponse = minimaxResponse([
-      toolCallDelta(0, "call_1", "generate_image", '{"prompt":"cat"}'),
-      finishDelta("tool_calls"),
-      sseDone(),
+  it("snapshot: thinking + text event sequence", async () => {
+    mockAnthropic([
+      anthropicResponse(thinkingTextResponse("Hmm", "Answer")),
     ]);
 
-    const secondResponse = minimaxResponse([
-      contentDelta("Done!"),
-      finishDelta("stop"),
-      sseDone(),
+    const { events, onEvent } = collectEvents();
+    await runAgentLoop(
+      [{ role: "user", content: "hello" }],
+      "test-key",
+      onEvent
+    );
+
+    const eventTypes = events.map((e) => e.type);
+    assert.deepEqual(eventTypes, [
+      "thinking",
+      "text",
+      "done",
     ]);
+  });
+
+  it("snapshot: message history after tool call", async () => {
+    const firstResponse = anthropicResponse(
+      toolUseResponse("call_1", "generate_image", '{"prompt":"cat"}')
+    );
+
+    const secondResponse = anthropicResponse(
+      textResponse(["Done!"])
+    );
 
     let fetchCallCount = 0;
     globalThis.fetch = async (url: string | URL | Request, init?: RequestInit) => {
       fetchCallCount++;
       const urlStr = url.toString();
-      if (urlStr.includes("/v1/chat/completions")) {
+      if (urlStr.includes("/anthropic/v1/messages")) {
         return fetchCallCount === 1 ? firstResponse : secondResponse;
       }
       return new Response(
@@ -813,10 +939,13 @@ describe("Agent event sequence snapshots", () => {
       onEvent
     );
 
-    // Should have: user, assistant (empty text), tool result, assistant (final)
+    // Should have: user, assistant (with tool_calls), tool result, assistant (final)
     assert.equal(messages.length, 4);
     assert.equal(messages[0].role, "user");
     assert.equal(messages[1].role, "assistant");
+    assert.ok(messages[1].tool_calls, "assistant message should have tool_calls");
+    assert.equal(messages[1].tool_calls!.length, 1);
+    assert.equal(messages[1].tool_calls![0].id, "call_1");
     assert.equal(messages[2].role, "tool");
     assert.equal(messages[2].tool_call_id, "call_1");
     assert.equal(messages[3].role, "assistant");
@@ -873,19 +1002,13 @@ describe("Steering in agent loop", () => {
   });
 
   it("steer mid-loop (during tool execution)", async () => {
-    // Iteration 1: model calls generate_image
-    const response1 = minimaxResponse([
-      toolCallDelta(0, "call_1", "generate_image", '{"prompt":"cat"}'),
-      finishDelta("tool_calls"),
-      sseDone(),
-    ]);
+    const response1 = anthropicResponse(
+      toolUseResponse("call_1", "generate_image", '{"prompt":"cat"}')
+    );
 
-    // Iteration 2: model sees tool result + steer message, responds with text
-    const response2 = minimaxResponse([
-      contentDelta("Steered response!"),
-      finishDelta("stop"),
-      sseDone(),
-    ]);
+    const response2 = anthropicResponse(
+      textResponse(["Steered response!"])
+    );
 
     let fetchCallCount = 0;
     globalThis.fetch = async (
@@ -894,10 +1017,9 @@ describe("Steering in agent loop", () => {
     ) => {
       fetchCallCount++;
       const urlStr = url.toString();
-      if (urlStr.includes("/v1/chat/completions")) {
+      if (urlStr.includes("/anthropic/v1/messages")) {
         return fetchCallCount === 1 ? response1 : response2;
       }
-      // Image gen tool
       return new Response(
         JSON.stringify({
           data: { image_urls: ["https://example.com/cat.png"] },
@@ -917,29 +1039,16 @@ describe("Steering in agent loop", () => {
       sq
     );
 
-    // The steer message should be injected after the tool result
     const userMessages = messages.filter((m) => m.role === "user");
     assert.equal(userMessages.length, 2);
     assert.equal(userMessages[1].content, "now make it a dog");
 
-    // Should end with done
     assert.equal(events[events.length - 1].type, "done");
   });
 
   it("steer when idle (after text-only response)", async () => {
-    // Iteration 1: text-only response
-    const response1 = minimaxResponse([
-      contentDelta("Hello!"),
-      finishDelta("stop"),
-      sseDone(),
-    ]);
-
-    // Iteration 2: model sees steer and responds
-    const response2 = minimaxResponse([
-      contentDelta("Sure, I'll change topic!"),
-      finishDelta("stop"),
-      sseDone(),
-    ]);
+    const response1 = anthropicResponse(textResponse(["Hello!"]));
+    const response2 = anthropicResponse(textResponse(["Sure, I'll change topic!"]));
 
     let fetchCallCount = 0;
     globalThis.fetch = async () => {
@@ -958,7 +1067,6 @@ describe("Steering in agent loop", () => {
       sq
     );
 
-    // Should have: user, assistant, user(steer), assistant
     const userMsgs = messages.filter((m) => m.role === "user");
     assert.equal(userMsgs.length, 2);
     assert.equal(userMsgs[1].content, "talk about space");
@@ -968,17 +1076,8 @@ describe("Steering in agent loop", () => {
   });
 
   it("multiple steers queued at once", async () => {
-    const response1 = minimaxResponse([
-      contentDelta("OK"),
-      finishDelta("stop"),
-      sseDone(),
-    ]);
-
-    const response2 = minimaxResponse([
-      contentDelta("Done with all steers!"),
-      finishDelta("stop"),
-      sseDone(),
-    ]);
+    const response1 = anthropicResponse(textResponse(["OK"]));
+    const response2 = anthropicResponse(textResponse(["Done with all steers!"]));
 
     let fetchCallCount = 0;
     globalThis.fetch = async () => {
@@ -999,20 +1098,15 @@ describe("Steering in agent loop", () => {
       sq
     );
 
-    // All three steer messages should be injected as user messages
     const userMsgs = messages.filter((m) => m.role === "user");
-    assert.equal(userMsgs.length, 4); // original + 3 steers
+    assert.equal(userMsgs.length, 4);
     assert.equal(userMsgs[1].content, "steer 1");
     assert.equal(userMsgs[2].content, "steer 2");
     assert.equal(userMsgs[3].content, "steer 3");
   });
 
   it("steer after done (no effect)", async () => {
-    const response1 = minimaxResponse([
-      contentDelta("Hello!"),
-      finishDelta("stop"),
-      sseDone(),
-    ]);
+    const response1 = anthropicResponse(textResponse(["Hello!"]));
 
     let fetchCallCount = 0;
     globalThis.fetch = async () => {
@@ -1021,7 +1115,6 @@ describe("Steering in agent loop", () => {
     };
 
     const sq = createSteerQueue();
-    // No steer queued before loop runs
 
     const { events, onEvent } = collectEvents();
     const messages = await runAgentLoop(
@@ -1031,28 +1124,20 @@ describe("Steering in agent loop", () => {
       sq
     );
 
-    // Loop completes with no steer
-    assert.equal(messages.length, 2); // user + assistant
+    assert.equal(messages.length, 2);
 
-    // Now queue a steer (but loop already done)
     queueSteer(sq, "too late");
-    assert.equal(sq.queue.length, 1); // Still in queue, never drained
+    assert.equal(sq.queue.length, 1);
   });
 
   it("steer during tool execution gets injected after tool results", async () => {
-    // Iteration 1: model calls generate_image
-    const response1 = minimaxResponse([
-      toolCallDelta(0, "call_1", "generate_image", '{"prompt":"cat"}'),
-      finishDelta("tool_calls"),
-      sseDone(),
-    ]);
+    const response1 = anthropicResponse(
+      toolUseResponse("call_1", "generate_image", '{"prompt":"cat"}')
+    );
 
-    // Iteration 2: model sees tool result + steer, responds
-    const response2 = minimaxResponse([
-      contentDelta("Responding to steer!"),
-      finishDelta("stop"),
-      sseDone(),
-    ]);
+    const response2 = anthropicResponse(
+      textResponse(["Responding to steer!"])
+    );
 
     let fetchCallCount = 0;
     globalThis.fetch = async (
@@ -1061,7 +1146,7 @@ describe("Steering in agent loop", () => {
     ) => {
       fetchCallCount++;
       const urlStr = url.toString();
-      if (urlStr.includes("/v1/chat/completions")) {
+      if (urlStr.includes("/anthropic/v1/messages")) {
         return fetchCallCount === 1 ? response1 : response2;
       }
       return new Response(
@@ -1083,7 +1168,7 @@ describe("Steering in agent loop", () => {
       sq
     );
 
-    // Verify the message order: user, assistant, tool_result, user(steer), assistant
+    // user, assistant(with tool_calls), tool, user(steer), assistant
     assert.equal(messages[0].role, "user");
     assert.equal(messages[1].role, "assistant");
     assert.equal(messages[2].role, "tool");
@@ -1094,12 +1179,8 @@ describe("Steering in agent loop", () => {
   });
 
   it("works without steerQueue (backward compatible)", async () => {
-    mockMiniMax([
-      minimaxResponse([
-        contentDelta("Hello"),
-        finishDelta("stop"),
-        sseDone(),
-      ]),
+    mockAnthropic([
+      anthropicResponse(textResponse(["Hello"])),
     ]);
 
     const { events, onEvent } = collectEvents();
@@ -1107,7 +1188,6 @@ describe("Steering in agent loop", () => {
       [{ role: "user", content: "hi" }],
       "test-key",
       onEvent
-      // No steerQueue
     );
 
     assert.equal(messages.length, 2);
@@ -1115,7 +1195,7 @@ describe("Steering in agent loop", () => {
   });
 });
 
-// ── Step 3: System Prompt ────────────────────────────────────────────
+// ── System Prompt ────────────────────────────────────────────────────
 
 describe("System Prompt", () => {
   it("SYSTEM_PROMPT is a non-empty string", () => {

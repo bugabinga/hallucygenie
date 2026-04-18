@@ -1026,10 +1026,17 @@ function sseEvent(event: string, data: string): string {
 }
 
 /**
- * Creates a text message SSE event (OpenAI-style format).
+ * Creates a text message SSE event (OpenAI-style format, used by our browser protocol).
  */
 function sseText(content: string): string {
   return sseEvent("message", JSON.stringify({ choices: [{ delta: { content } }] }));
+}
+
+/**
+ * Creates a thinking SSE event (Anthropic streaming format via server).
+ */
+function sseThinking(content: string): string {
+  return sseEvent("thinking", JSON.stringify({ content }));
 }
 
 function sseDone(): string {
@@ -1304,13 +1311,13 @@ describe("appendText with thinking blocks (via sendMessage)", () => {
     assert.ok(messages.length >= 2, "should have user + assistant messages");
   });
 
-  it("text with <think_intended> tags → thinking block created", async () => {
+  it("thinking events create thinking block", async () => {
     const { doc: newDoc } = setupDOM();
     doc = newDoc;
 
     const chunks = [
-      sseText("<think_intended>Let me think about this"),
-      sseText(" more carefully</think_intended>"),
+      sseThinking("Let me think about this"),
+      sseThinking(" more carefully"),
       sseText("Here is my answer."),
       sseDone(),
     ];
@@ -1324,12 +1331,12 @@ describe("appendText with thinking blocks (via sendMessage)", () => {
     assert.ok(thinkingBlocks.length > 0, "should have thinking block");
   });
 
-  it("thinking block closed then regular text follows", async () => {
+  it("thinking event followed by regular text", async () => {
     const { doc: newDoc } = setupDOM();
     doc = newDoc;
 
     const chunks = [
-      sseText("<think_intended>internal thought</think_intended>"),
+      sseThinking("internal thought"),
       sseText("The answer is 42."),
       sseDone(),
     ];
