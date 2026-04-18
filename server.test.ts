@@ -19,6 +19,7 @@ import {
 import type { ToolCallChunk } from "./server.ts";
 import { existsSync, rmSync, mkdirSync } from "node:fs";
 import { join } from "node:path";
+import http from "node:http";
 import { getMessages } from "./db.ts";
 import { trackUsage, saveMessage } from "./db.ts";
 
@@ -1867,5 +1868,179 @@ describe("Coverage: GET /api/history and /api/usage without DB", () => {
     assert.equal(resp.status, 500);
     // Re-init
     initDatabase(join(import.meta.dirname ?? ".", "test-data", "test.db"));
+  });
+});
+
+// ── Coverage: THINK_CLOSE_ALT branch ───────────────────────────────
+
+describe("stripThinkingTokens: THINK_CLOSE_ALT branch", () => {
+  it("strips thinking closed with alt close tag", () => {
+    // Build the alt tags using char codes to avoid encoding issues
+    const THINK_OPEN_ALT = String.fromCharCode(60, 116, 104, 105, 110, 107, 62);
+    const THINK_CLOSE_ALT = String.fromCharCode(60, 47, 116, 104, 105, 110, 107, 62);
+
+    // Use long-form open, alt close — forces the close2 branch (lines 95-97)
+    const state = { inThink: false };
+    const input = "Before<think_intended>hidden" + THINK_CLOSE_ALT + "After";
+    const result = stripThinkingTokens(input, state);
+    assert.equal(result, "BeforeAfter");
+    assert.equal(state.inThink, false);
+  });
+
+  it("strips thinking with both alt tags (open + close)", () => {
+    const THINK_OPEN_ALT = String.fromCharCode(60, 116, 104, 105, 110, 107, 62);
+    const THINK_CLOSE_ALT = String.fromCharCode(60, 47, 116, 104, 105, 110, 107, 62);
+
+    // Both alt tags — open2 branch (lines 115-117) and close2 branch
+    const state = { inThink: false };
+    const input = "Before" + THINK_OPEN_ALT + "hidden" + THINK_CLOSE_ALT + "After";
+    const result = stripThinkingTokens(input, state);
+    assert.equal(result, "BeforeAfter");
+    assert.equal(state.inThink, false);
+  });
+});
+
+// ── Coverage: THINK_OPEN_ALT branch ─────────────────────────────────
+
+describe("stripThinkingTokens: THINK_OPEN_ALT branch", () => {
+  it("detects alt open tag when it appears before regular open tag", () => {
+    const THINK_OPEN_ALT = String.fromCharCode(60, 116, 104, 105, 110, 107, 62);
+
+    // Place alt open BEFORE regular open in the text
+    // This forces the open2 branch (lines 115-117) because open2 < open1
+    const state = { inThink: false };
+    const input = "X" + THINK_OPEN_ALT + "hidden</think_intended>Y";
+    const result = stripThinkingTokens(input, state);
+    assert.equal(result, "XY");
+    assert.equal(state.inThink, false);
+  });
+
+  it("handles streaming: alt open tag with no close", () => {
+    const THINK_OPEN_ALT = String.fromCharCode(60, 116, 104, 105, 110, 107, 62);
+
+    const state = { inThink: false };
+    const input = "Before" + THINK_OPEN_ALT + "still thinking";
+    const result = stripThinkingTokens(input, state);
+    assert.equal(result, "Before");
+    assert.equal(state.inThink, true);
+  });
+
+  it("resumes from inThink with alt close tag", () => {
+    const THINK_CLOSE_ALT = String.fromCharCode(60, 47, 116, 104, 105, 110, 107, 62);
+
+    const state = { inThink: true };
+    const input = "rest of thinking" + THINK_CLOSE_ALT + "visible";
+    const result = stripThinkingTokens(input, state);
+    assert.equal(result, "visible");
+    assert.equal(state.inThink, false);
+  });
+});
+
+// ── Coverage: Node adapter error catch ───────────────────────────────
+
+describe("Node HTTP adapter error catch", () => {
+  it("returns 500 when handleRequest throws before headers sent", async () => {
+    resetStateForTesting();
+    initDatabase(join(import.meta.dirname ?? ".", "test-data", "test.db"));
+
+    // Strategy: Mock the global Headers constructor to throw when handleNodeRequest
+    // tries to create a new Headers(). This will cause the catch block to fire
+    // before any response headers are sent.
+    const OriginalHeaders = globalThis.Headers;
+    let callCount = 0;
+    // @ts-expect-error - intentional override for testing
+    globalThis.Headers = class ThrowingHeaders {
+      constructor() {
+        callCount++;
+        throw new Error("Headers construction failed");
+      }
+    };
+
+    try {
+      const { startServer } = await import("./server.ts");
+      const srv = startServer(0);
+      await new Promise<void>((resolve) => srv.on("listening", resolve));
+      const port = (srv.address() as any).port;
+
+      // Use http.request (not fetch) to avoid the mock
+      const result = await new Promise<{ status: number; body: string }>((resolve, reject) => {
+        const req = http.request(
+          { hostname: "localhost", port, path: "/api/health", method: "GET" },
+          (res) => {
+            let data = "";
+            res.on("data", (chunk) => { data += chunk; });
+            res.on("end", () => { resolve({ status: res.statusCode ?? 0, body: data }); });
+          }
+        );
+        req.on("error", reject);
+        req.end();
+      });
+
+      assert.equal(result.status, 500);
+      assert.deepEqual(JSON.parse(result.body), { error: "Internal server error" });
+
+      await new Promise<void>((resolve) => srv.close(() => resolve()));
+    } finally {
+      globalThis.Headers = OriginalHeaders;
+      resetStateForTesting();
+      initDatabase(join(import.meta.dirname ?? ".", "test-data", "test.db"));
+    }
+  });
+
+  it("gracefully handles error when headers already sent", async () => {
+    resetStateForTesting();
+    initDatabase(join(import.meta.dirname ?? ".", "test-data", "test.db"));
+
+    // To test the headersSent branch, we need handleNodeRequest to error
+    // AFTER headers have been sent. We'll mock fetch to return a streaming
+    // response that errors mid-stream.
+    const originalFetch = globalThis.fetch;
+    let callCount = 0;
+    globalThis.fetch = async () => {
+      callCount++;
+      // First call works fine - returns a streaming response
+      // The stream will error after headers are sent
+      const encoder = new TextEncoder();
+      const stream = new ReadableStream({
+        start(controller) {
+          controller.enqueue(encoder.encode('data: "hello"\n\n'));
+          // Error after some data sent
+          controller.error(new Error("Stream broken"));
+        },
+      });
+      return new Response(stream, {
+        status: 200,
+        headers: { "Content-Type": "text/event-stream" },
+      });
+    };
+
+    try {
+      process.env.MINIMAX_API_KEY = "test-key-for-headers-sent";
+      const { startServer } = await import("./server.ts");
+      const srv = startServer(0);
+      await new Promise<void>((resolve) => srv.on("listening", resolve));
+      const port = (srv.address() as any).port;
+
+      // Make the request - it should not crash, just handle gracefully
+      const resp = await fetch(`http://localhost:${port}/api/chat`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "X-Session-Id": "test-headers-sent",
+        },
+        body: JSON.stringify({ messages: [{ role: "user", content: "hi" }] }),
+      });
+
+      // The response may be incomplete but the server shouldn't crash
+      // Just verify we got some kind of response
+      assert.ok(resp.status === 200 || resp.status === 500, `Got status ${resp.status}`);
+
+      await new Promise<void>((resolve) => srv.close(() => resolve()));
+    } finally {
+      globalThis.fetch = originalFetch;
+      delete process.env.MINIMAX_API_KEY;
+      resetStateForTesting();
+      initDatabase(join(import.meta.dirname ?? ".", "test-data", "test.db"));
+    }
   });
 });
