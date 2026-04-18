@@ -1,0 +1,3 @@
+{
+  "signature": "public/style.css::🔴 New duplicates in modified code:\n  public/style.css:71 ↔ .stryker-tmp/sandbox-s7hZhM/public/style.css:64 (23 lines)\n  public/style.css:483 ↔ .stryker-tmp/sandbox-s7hZhM/public/style.css:411 (18 lines)\n  public/style.css:508 ↔ .stryker-tmp/sandbox-s7hZhM/public/style.css:435 (20 lines)\n  public/style.css:627 ↔ .stryker-tmp/sandbox-s7hZhM/public/style.css:547 (18 lines)\n  public/style.css:706 ↔ .stryker-tmp/sandbox-s7hZhM/public/style.css:622 (73 lines)\n  First location: public/style.css\n"
+}

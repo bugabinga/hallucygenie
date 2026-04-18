@@ -1,3 +1,23 @@
+function renderMarkdown(text) {
+  let html = text;
+  html = html.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+  html = html.replace(/```(\w*)\n([\s\S]*?)```/g, (_m, lang, code) => {
+    return `<pre><code class="${lang ? "lang-" + lang : ""}">${code}</code></pre>`;
+  });
+  html = html.replace(/`([^`]+)`/g, "<code>$1</code>");
+  html = html.replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>");
+  html = html.replace(/__(.+?)__/g, "<strong>$1</strong>");
+  html = html.replace(/\*(.+?)\*/g, "<em>$1</em>");
+  html = html.replace(/(?<!\w)_(.+?)_(?!\w)/g, "<em>$1</em>");
+  html = html.replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" target="_blank" rel="noopener">$1</a>');
+  html = html.replace(/\n/g, "<br>");
+  return html;
+}
+function renderThinkingBlock(text) {
+  const lines = text.trim().split("\n").length;
+  const preview = text.trim().split("\n")[0]?.slice(0, 60) ?? "";
+  return `<details class="thinking-block"><summary>\u{1F4AD} Thinking${lines > 1 ? ` (${lines} lines)` : ""}\u2026</summary><div class="thinking-content">${renderMarkdown(text)}</div></details>`;
+}
 function getOrCreateSessionId() {
   const KEY = "hallucygenie_session_id";
   let id = localStorage.getItem(KEY);
@@ -93,7 +113,8 @@ function renderUserMessage(content) {
   const msg = createElement("div", { class: "message message--user" });
   const avatar = createElement("div", { class: "message-avatar" }, ["\u{1F464}"]);
   const bubble = createElement("div", { class: "message-bubble" });
-  const contentEl = createElement("div", { class: "message-content" }, [content]);
+  const contentEl = createElement("div", { class: "message-content" });
+  contentEl.innerHTML = renderMarkdown(content);
   bubble.appendChild(contentEl);
   msg.appendChild(avatar);
   msg.appendChild(bubble);
@@ -113,7 +134,8 @@ function renderSteerMessage(content) {
   const msg = createElement("div", { class: "message message--steer message--user" });
   const avatar = createElement("div", { class: "message-avatar" }, ["\u{1F4A1}"]);
   const bubble = createElement("div", { class: "message-bubble" });
-  const contentEl = createElement("div", { class: "message-content" }, [content]);
+  const contentEl = createElement("div", { class: "message-content" });
+  contentEl.innerHTML = renderMarkdown(content);
   bubble.appendChild(contentEl);
   msg.appendChild(avatar);
   msg.appendChild(bubble);
@@ -201,6 +223,9 @@ let isStreaming = false;
 let currentAssistantEl = null;
 let currentAssistantContent = null;
 let activeToolCards = /* @__PURE__ */ new Map();
+let rawTextBuffer = "";
+let thinkBuffer = "";
+let inThinkBlock = false;
 async function streamChat(sessionId, messages, onEvent) {
   const resp = await fetch("/api/chat", {
     method: "POST",
@@ -304,7 +329,53 @@ function handleSSEEvent(event) {
 }
 function appendText(text) {
   if (!currentAssistantContent) return;
-  currentAssistantContent.textContent += text;
+  let i = 0;
+  while (i < text.length) {
+    if (inThinkBlock) {
+      const closeTags = ["</think_intended>", "</think_intended>"];
+      let foundClose = false;
+      for (const close of closeTags) {
+        const idx = text.indexOf(close, i);
+        if (idx !== -1) {
+          thinkBuffer += text.slice(i, idx);
+          inThinkBlock = false;
+          i = idx + close.length;
+          foundClose = true;
+          break;
+        }
+      }
+      if (!foundClose) {
+        thinkBuffer += text.slice(i);
+        i = text.length;
+      }
+    } else {
+      const openTags = ["<think_intended>", "<think_intended>"];
+      let foundOpen = false;
+      for (const open of openTags) {
+        const idx = text.indexOf(open, i);
+        if (idx !== -1) {
+          rawTextBuffer += text.slice(i, idx);
+          thinkBuffer = "";
+          inThinkBlock = true;
+          i = idx + open.length;
+          foundOpen = true;
+          break;
+        }
+      }
+      if (!foundOpen) {
+        rawTextBuffer += text.slice(i);
+        i = text.length;
+      }
+    }
+  }
+  let html = "";
+  if (thinkBuffer) {
+    html += renderThinkingBlock(thinkBuffer);
+  }
+  if (rawTextBuffer) {
+    html += renderMarkdown(rawTextBuffer);
+  }
+  currentAssistantContent.innerHTML = html;
   scrollToBottom();
 }
 function scrollToBottom() {
@@ -318,6 +389,9 @@ function finishStreaming() {
   currentAssistantEl = null;
   currentAssistantContent = null;
   activeToolCards.clear();
+  rawTextBuffer = "";
+  thinkBuffer = "";
+  inThinkBlock = false;
   setStreamingUI(false);
 }
 function setStreamingUI(streaming) {
@@ -398,7 +472,7 @@ async function loadHistory() {
       } else if (msg.role === "assistant") {
         const { container } = renderAssistantMessage();
         const contentEl = container.querySelector(".message-content");
-        contentEl.textContent = msg.content;
+        contentEl.innerHTML = renderMarkdown(msg.content);
         messageList.appendChild(container);
       }
     }
@@ -472,7 +546,9 @@ export {
   parseSSEChunk,
   parseSSELine,
   renderAssistantMessage,
+  renderMarkdown,
   renderSteerMessage,
+  renderThinkingBlock,
   renderToolCardLoading,
   renderToolResult,
   renderUserMessage,

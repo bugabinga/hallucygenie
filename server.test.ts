@@ -1716,6 +1716,8 @@ describe("Node HTTP adapter and server lifecycle", () => {
   it("proxies POST with body through Node HTTP", async () => {
     resetStateForTesting();
     initDatabase(join(import.meta.dirname ?? ".", "test-data", "test.db"));
+    const origKey = process.env.MINIMAX_API_KEY;
+    delete process.env.MINIMAX_API_KEY;
 
     const { startServer } = await import("./server.ts");
     const srv = startServer(0);
@@ -1727,10 +1729,11 @@ describe("Node HTTP adapter and server lifecycle", () => {
       headers: { "Content-Type": "application/json", "X-Session-Id": "adapter-test" },
       body: JSON.stringify({ messages: [{ role: "user", content: "hi" }] }),
     });
-    // No API key configured, so should get a 500 or 400
-    assert.ok(resp.status >= 400, `Expected error, got ${resp.status}`);
+    // No API key configured, so should get 503
+    assert.equal(resp.status, 503, `Expected 503, got ${resp.status}`);
 
     await new Promise<void>((resolve) => srv.close(() => resolve()));
+    if (origKey) process.env.MINIMAX_API_KEY = origKey;
     resetStateForTesting();
   });
 
@@ -1833,14 +1836,15 @@ describe("Coverage: steer edge cases", () => {
 
 describe("Coverage: chat session path", () => {
   it("POST /api/chat with session ID routes to handleChat", async () => {
+    const origKey = process.env.MINIMAX_API_KEY;
+    delete process.env.MINIMAX_API_KEY;
     const req = makeRequest("POST", "/api/chat", {
       messages: [{ role: "user", content: "hi" }],
     });
     req.headers.set("X-Session-Id", "session-test-123");
-    // No API key, will fail internally
     const resp = await handleRequest(req);
-    // Should get 500 (no key) not 400 (validation)
-    assert.ok(resp.status === 503 || resp.status === 200, `got ${resp.status}`);
+    assert.equal(resp.status, 503);
+    if (origKey) process.env.MINIMAX_API_KEY = origKey;
   });
 });
 

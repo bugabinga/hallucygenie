@@ -26,6 +26,50 @@ interface ToolResultEvent {
   result: ToolResult;
 }
 
+// ── Markdown Renderer ────────────────────────────────────────────────
+// Minimal: bold, italic, inline code, code blocks, links, lists.
+// No deps. Handles edge cases for streaming (unclosed markers).
+
+export function renderMarkdown(text: string): string {
+  let html = text;
+
+  // Escape HTML entities (but preserve our own tags later)
+  html = html.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+
+  // Code blocks: ```lang\n...\n```
+  html = html.replace(/```(\w*)\n([\s\S]*?)```/g, (_m, lang, code) => {
+    return `<pre><code class="${lang ? 'lang-' + lang : ''}">${code}</code></pre>`;
+  });
+
+  // Inline code: `...`
+  html = html.replace(/`([^`]+)`/g, "<code>$1</code>");
+
+  // Bold: **...** or __...__
+  html = html.replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>");
+  html = html.replace(/__(.+?)__/g, "<strong>$1</strong>");
+
+  // Italic: *...* or _..._
+  html = html.replace(/\*(.+?)\*/g, "<em>$1</em>");
+  html = html.replace(/(?<!\w)_(.+?)_(?!\w)/g, "<em>$1</em>");
+
+  // Links: [text](url)
+  html = html.replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" target="_blank" rel="noopener">$1</a>');
+
+  // Line breaks to <br> (but not inside <pre>)
+  html = html.replace(/\n/g, "<br>");
+
+  return html;
+}
+
+// ── Thinking Block Renderer ──────────────────────────────────────────
+// Shows AI thinking in a collapsible, dimmed block.
+
+export function renderThinkingBlock(text: string): string {
+  const lines = text.trim().split("\n").length;
+  const preview = text.trim().split("\n")[0]?.slice(0, 60) ?? "";
+  return `<details class="thinking-block"><summary>💭 Thinking${lines > 1 ? ` (${lines} lines)` : ''}…</summary><div class="thinking-content">${renderMarkdown(text)}</div></details>`;
+}
+
 // ── Session UUID ─────────────────────────────────────────────────────
 
 export function getOrCreateSessionId(): string {
@@ -149,7 +193,8 @@ export function renderUserMessage(content: string): HTMLElement {
   const msg = createElement("div", { class: "message message--user" });
   const avatar = createElement("div", { class: "message-avatar" }, ["👤"]);
   const bubble = createElement("div", { class: "message-bubble" });
-  const contentEl = createElement("div", { class: "message-content" }, [content]);
+  const contentEl = createElement("div", { class: "message-content" });
+  contentEl.innerHTML = renderMarkdown(content);
   bubble.appendChild(contentEl);
   msg.appendChild(avatar);
   msg.appendChild(bubble);
@@ -171,7 +216,8 @@ export function renderSteerMessage(content: string): HTMLElement {
   const msg = createElement("div", { class: "message message--steer message--user" });
   const avatar = createElement("div", { class: "message-avatar" }, ["💡"]);
   const bubble = createElement("div", { class: "message-bubble" });
-  const contentEl = createElement("div", { class: "message-content" }, [content]);
+  const contentEl = createElement("div", { class: "message-content" });
+  contentEl.innerHTML = renderMarkdown(content);
   bubble.appendChild(contentEl);
   msg.appendChild(avatar);
   msg.appendChild(bubble);
@@ -282,6 +328,9 @@ let isStreaming = false;
 let currentAssistantEl: HTMLElement | null = null;
 let currentAssistantContent: HTMLElement | null = null;
 let activeToolCards = new Map<string, HTMLElement>();
+let rawTextBuffer = ""; // raw text for markdown re-rendering
+let thinkBuffer = ""; // accumulated thinking text
+let inThinkBlock = false; // frontend thinking state
 
 // ── SSE Stream Processing ────────────────────────────────────────────
 
@@ -423,7 +472,57 @@ function handleSSEEvent(event: SSEEvent): void {
 
 function appendText(text: string): void {
   if (!currentAssistantContent) return;
-  currentAssistantContent.textContent += text;
+
+  // Handle thinking tags in frontend (safety net if server misses them)
+  let i = 0;
+  while (i < text.length) {
+    if (inThinkBlock) {
+      const closeTags = ["</think_intended>", "</think_intended>"];
+      let foundClose = false;
+      for (const close of closeTags) {
+        const idx = text.indexOf(close, i);
+        if (idx !== -1) {
+          thinkBuffer += text.slice(i, idx);
+          inThinkBlock = false;
+          i = idx + close.length;
+          foundClose = true;
+          break;
+        }
+      }
+      if (!foundClose) {
+        thinkBuffer += text.slice(i);
+        i = text.length;
+      }
+    } else {
+      const openTags = ["<think_intended>", "<think_intended>"];
+      let foundOpen = false;
+      for (const open of openTags) {
+        const idx = text.indexOf(open, i);
+        if (idx !== -1) {
+          rawTextBuffer += text.slice(i, idx);
+          thinkBuffer = "";
+          inThinkBlock = true;
+          i = idx + open.length;
+          foundOpen = true;
+          break;
+        }
+      }
+      if (!foundOpen) {
+        rawTextBuffer += text.slice(i);
+        i = text.length;
+      }
+    }
+  }
+
+  // Re-render the content with markdown
+  let html = "";
+  if (thinkBuffer) {
+    html += renderThinkingBlock(thinkBuffer);
+  }
+  if (rawTextBuffer) {
+    html += renderMarkdown(rawTextBuffer);
+  }
+  currentAssistantContent.innerHTML = html;
   scrollToBottom();
 }
 
@@ -439,6 +538,9 @@ function finishStreaming(): void {
   currentAssistantEl = null;
   currentAssistantContent = null;
   activeToolCards.clear();
+  rawTextBuffer = "";
+  thinkBuffer = "";
+  inThinkBlock = false;
   setStreamingUI(false);
 }
 
@@ -555,7 +657,7 @@ export async function loadHistory(): Promise<void> {
       } else if (msg.role === "assistant") {
         const { container } = renderAssistantMessage();
         const contentEl = container.querySelector(".message-content") as HTMLElement;
-        contentEl.textContent = msg.content;
+        contentEl.innerHTML = renderMarkdown(msg.content);
         messageList.appendChild(container);
       }
       // Tool messages in history are simplified for now

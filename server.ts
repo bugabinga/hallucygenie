@@ -67,9 +67,12 @@ export const MINIMAX_MODEL = "MiniMax-M2.7-highspeed";
 
 const THINK_OPEN = "<think_intended>";
 const THINK_CLOSE = "</think_intended>";
+const THINK_OPEN_ALT = "<think>";
+const THINK_CLOSE_ALT = "</think>";
 
 /**
  * Strip thinking tokens from streamed text content.
+ * Handles both <think_intended>...</think_intended> and <think_intended>...</think_intended> formats.
  * Handles partial markers that arrive across chunk boundaries.
  */
 export function stripThinkingTokens(
@@ -80,29 +83,48 @@ export function stripThinkingTokens(
   let i = 0;
   while (i < text.length) {
     if (state.inThink) {
-      const closeIdx = text.indexOf(THINK_CLOSE, i);
+      // Try both close tags
+      const close1 = text.indexOf(THINK_CLOSE, i);
+      const close2 = text.indexOf(THINK_CLOSE_ALT, i);
+      let closeIdx = -1;
+      let closeLen = 0;
+      if (close1 !== -1 && (close2 === -1 || close1 <= close2)) {
+        closeIdx = close1;
+        closeLen = THINK_CLOSE.length;
+      } else if (close2 !== -1) {
+        closeIdx = close2;
+        closeLen = THINK_CLOSE_ALT.length;
+      }
       if (closeIdx !== -1) {
         state.inThink = false;
-        i = closeIdx + THINK_CLOSE.length;
+        i = closeIdx + closeLen;
       } else {
         // Still inside thinking — skip all
         break;
       }
     } else {
-      const openIdx = text.indexOf(THINK_OPEN, i);
+      // Try both open tags
+      const open1 = text.indexOf(THINK_OPEN, i);
+      const open2 = text.indexOf(THINK_OPEN_ALT, i);
+      let openIdx = -1;
+      let openLen = 0;
+      if (open1 !== -1 && (open2 === -1 || open1 <= open2)) {
+        openIdx = open1;
+        openLen = THINK_OPEN.length;
+      } else if (open2 !== -1) {
+        openIdx = open2;
+        openLen = THINK_OPEN_ALT.length;
+      }
       if (openIdx !== -1) {
         result += text.slice(i, openIdx);
         state.inThink = true;
-        i = openIdx + THINK_OPEN.length;
+        i = openIdx + openLen;
       } else {
         // Check for partial open tag at end
-        const partialStart = Math.max(i, text.length - THINK_OPEN.length);
+        const partialStart = Math.max(i, text.length - Math.max(THINK_OPEN.length, THINK_OPEN_ALT.length));
         const tail = text.slice(partialStart);
-        if (THINK_OPEN.startsWith(tail) && tail.length < THINK_OPEN.length) {
-          // Might be partial — keep safe part
+        if ((THINK_OPEN.startsWith(tail) || THINK_OPEN_ALT.startsWith(tail)) && tail.length < Math.max(THINK_OPEN.length, THINK_OPEN_ALT.length)) {
           result += text.slice(i, partialStart);
-          // The partial tail is ambiguous; keep it to be safe
-          // Actually, for streaming we should not emit the partial
           state.inThink = false;
           break;
         }
