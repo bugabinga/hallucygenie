@@ -137,6 +137,144 @@ export function parseToolArguments(args: string): Record<string, unknown> {
 
 // ── Anthropic message format conversion ──────────────────────────────
 
+// ── Token estimation & context window ──────────────────────────────
+
+/** Default max tokens for context input (reserve 4,096 for model output out of 204,800).
+ */
+export const DEFAULT_MAX_CONTEXT_TOKENS = 200_000;
+
+/** Estimate tokens for a single message using chars/4 heuristic.
+ * Images are estimated at ~1200 tokens each.
+ */
+export function estimateTokens(message: ChatMessage): number {
+  let chars = 0;
+
+  // Count content text
+  chars += (message.content ?? "").length;
+
+  // Count tool_call_id text
+  if (message.tool_call_id) {
+    chars += message.tool_call_id.length;
+  }
+
+  // Count tool calls: names + input JSON
+  if (message.tool_calls) {
+    for (const tc of message.tool_calls) {
+      chars += tc.name.length;
+      chars += JSON.stringify(tc.input).length;
+      chars += tc.id.length;
+    }
+  }
+
+  // Estimate images in content (~1200 tokens each)
+  // Tool results with image URLs contain data:image or URL patterns
+  const imageMatches = (message.content ?? "").match(/data:image|image_url/g);
+  const imageCount = imageMatches ? imageMatches.length : 0;
+
+  return Math.ceil(chars / 4) + imageCount * 1200;
+}
+
+/** Build a context window that fits within maxTokens.
+ * Walks backward from newest messages, keeps tool_use+tool_result pairs together,
+ * and always includes the first system message.
+ */
+export function buildContext(
+  messages: ChatMessage[],
+  maxTokens = DEFAULT_MAX_CONTEXT_TOKENS,
+): ChatMessage[] {
+  if (messages.length === 0) return [];
+
+  // First message is always the system prompt — include it unconditionally
+  const systemMsg = messages[0];
+  const systemTokens = estimateTokens(systemMsg);
+
+  // If system prompt alone exceeds the limit, return just it
+  if (systemTokens >= maxTokens) {
+    return [systemMsg];
+  }
+
+  const remainingBudget = maxTokens - systemTokens;
+  const result: ChatMessage[] = [];
+  let usedTokens = 0;
+
+  // Walk backward from newest messages (excluding system prompt at index 0)
+  let i = messages.length - 1;
+  while (i > 0) {
+    const msg = messages[i];
+    const msgTokens = estimateTokens(msg);
+
+    // Check if this is a tool result — need to include its paired tool_use
+    if (msg.role === "tool" && msg.tool_call_id) {
+      // Find the assistant message with the matching tool_use
+      let pairedIndex = -1;
+      for (let j = i - 1; j > 0; j--) {
+        const prev = messages[j];
+        if (prev.role === "assistant" && prev.tool_calls) {
+          if (prev.tool_calls.some((tc) => tc.id === msg.tool_call_id)) {
+            pairedIndex = j;
+            break;
+          }
+        }
+      }
+
+      if (pairedIndex !== -1) {
+        // Collect all messages from pairedIndex to i (the full tool turn)
+        const turnTokens = messages
+          .slice(pairedIndex, i + 1)
+          .reduce((sum, m) => sum + estimateTokens(m), 0);
+
+        if (usedTokens + turnTokens > remainingBudget) {
+          break; // Would exceed budget — stop here
+        }
+
+        // Add the whole turn (we'll reverse at the end)
+        for (let k = pairedIndex; k <= i; k++) {
+          result.unshift(messages[k]);
+        }
+        usedTokens += turnTokens;
+        i = pairedIndex - 1;
+      } else {
+        // Orphan tool result with no matching tool_use — treat as standalone
+        if (usedTokens + msgTokens > remainingBudget) break;
+        result.unshift(msg);
+        usedTokens += msgTokens;
+        i--;
+      }
+    } else if (msg.role === "assistant" && msg.tool_calls && msg.tool_calls.length > 0) {
+      // Assistant with tool_use — find all corresponding tool results
+      const toolCallIds = msg.tool_calls.map((tc) => tc.id);
+
+      // Find all tool result messages that follow this assistant message
+      const toolResultIndices: number[] = [];
+      for (let j = i + 1; j < messages.length; j++) {
+        if (messages[j].role === "tool" && toolCallIds.includes(messages[j].tool_call_id ?? "")) {
+          toolResultIndices.push(j);
+        }
+      }
+
+      // Calculate tokens for the full turn (assistant + tool results)
+      const turnMessages = [msg, ...toolResultIndices.map((idx) => messages[idx])];
+      const turnTokens = turnMessages.reduce((sum, m) => sum + estimateTokens(m), 0);
+
+      if (usedTokens + turnTokens > remainingBudget) break;
+
+      // Add assistant message + tool results in order
+      result.unshift(msg, ...toolResultIndices.map((idx) => messages[idx]));
+      usedTokens += turnTokens;
+      i--;
+    } else {
+      // Regular message (user, assistant text-only, etc.)
+      if (usedTokens + msgTokens > remainingBudget) break;
+      result.unshift(msg);
+      usedTokens += msgTokens;
+      i--;
+    }
+  }
+
+  // Always prepend the system message
+  return [systemMsg, ...result];
+}
+
 interface AnthropicTool {
   name: string;
   description: string;

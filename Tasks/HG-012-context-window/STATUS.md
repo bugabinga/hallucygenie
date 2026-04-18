@@ -11,9 +11,9 @@
 ### Step 1: Implement token estimation and context builder
 **Status:** 🟡 In Progress
 
-- [ ] Implement `estimateTokens(message: ChatMessage): number` in agent.ts — chars/4 for text, thinking, tool call names+args, tool result content; ~1200 per image
-- [ ] Implement `buildContext(messages: ChatMessage[], maxTokens = 200000): ChatMessage[]` in agent.ts — walk backward, keep tool_use+tool_result pairs together, always include first system message
-- [ ] Export both functions from agent.ts
+- [x] Implement `estimateTokens(message: ChatMessage): number` in agent.ts — chars/4 for text, thinking, tool call names+args, tool result content; ~1200 per image
+- [x] Implement `buildContext(messages: ChatMessage[], maxTokens = 200000): ChatMessage[]` in agent.ts — walk backward, keep tool_use+tool_result pairs together, always include first system message
+- [x] Export both functions from agent.ts
 
 ### Step 2: Wire into server.ts
 **Status:** ⬜ Not Started
@@ -33,3 +33,4 @@
 | # | What | Impact | Step |
 |---|------|--------|------|
 | 2026-04-18 23:23 | Task started | Runtime V2 lane-runner execution |
+| 2026-04-18 23:26 | Review R001 | plan Step 1: APPROVE |
