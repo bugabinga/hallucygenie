@@ -16,6 +16,9 @@ import {
   drainSteer,
   SYSTEM_PROMPT,
   buildSystemPrompt,
+  estimateTokens,
+  buildContext,
+  DEFAULT_MAX_CONTEXT_TOKENS,
 } from "./agent.ts";
 import type { AgentEvent } from "./agent.ts";
 
@@ -1229,5 +1232,214 @@ describe("System Prompt", () => {
     const result = buildSystemPrompt({ name: "Alex" });
     assert.ok(result.includes("name: Alex"));
     assert.ok(result.includes("What you know about the user:"));
+  });
+});
+
+// ── estimateTokens tests ──────────────────────────────────────────
+
+describe("estimateTokens", () => {
+  it("estimates tokens for a simple user message", () => {
+    const msg = { role: "user" as const, content: "Hello world" };
+    const tokens = estimateTokens(msg);
+    // "Hello world" = 11 chars → ceil(11/4) = 3
+    assert.equal(tokens, 3);
+  });
+
+  it("estimates tokens for empty content", () => {
+    const msg = { role: "user" as const, content: "" };
+    assert.equal(estimateTokens(msg), 0);
+  });
+
+  it("estimates tokens for a system message", () => {
+    const content = "a".repeat(400); // 400 chars → 100 tokens
+    const msg = { role: "system" as const, content };
+    assert.equal(estimateTokens(msg), 100);
+  });
+
+  it("estimates tokens for assistant message with tool_calls", () => {
+    const msg = {
+      role: "assistant" as const,
+      content: "Let me generate that.",
+      tool_calls: [
+        { id: "call_123", name: "generate_image", input: { prompt: "a cat" } },
+      ],
+    };
+    const tokens = estimateTokens(msg);
+    // content: "Let me generate that." = 21 chars
+    // tool call: "call_123" = 8, "generate_image" = 14, '{"prompt":"a cat"}' = 18
+    // total chars = 21 + 8 + 14 + 18 = 61 → ceil(61/4) = 16
+    assert.equal(tokens, 16);
+  });
+
+  it("estimates tokens for tool result with image", () => {
+    const msg = {
+      role: "tool" as const,
+      content: "Here is your image: data:image/png;base64,abc123",
+      tool_call_id: "call_456",
+    };
+    const tokens = estimateTokens(msg);
+    // content: 48 chars, tool_call_id: 8 chars → total 56 chars → ceil(56/4) = 14
+    // + 1 image match × 1200 = 1214
+    assert.equal(tokens, 1214);
+  });
+
+  it("estimates tokens for tool result without image", () => {
+    const msg = {
+      role: "tool" as const,
+      content: "Audio generated successfully",
+      tool_call_id: "call_789",
+    };
+    const tokens = estimateTokens(msg);
+    // content: 28 chars, tool_call_id: 8 chars → 36 chars → ceil(36/4) = 9
+    assert.equal(tokens, 9);
+  });
+
+  it("handles multiple tool_calls", () => {
+    const msg = {
+      role: "assistant" as const,
+      content: "",
+      tool_calls: [
+        { id: "call_1", name: "generate_image", input: { prompt: "cat" } },
+        { id: "call_2", name: "text_to_speech", input: { text: "hello" } },
+      ],
+    };
+    const tokens = estimateTokens(msg);
+    // tool_calls chars: "call_1"(6) + "generate_image"(14) + '{"prompt":"cat"}'(15) = 35
+    //                  "call_2"(6) + "text_to_speech"(14) + '{"text":"hello"}'(15) = 35
+    // total = 70 → ceil(70/4) = 18
+    assert.equal(tokens, 18);
+  });
+});
+
+// ── buildContext tests ────────────────────────────────────────────
+
+describe("buildContext", () => {
+  it("returns empty array for empty input", () => {
+    assert.deepEqual(buildContext([]), []);
+  });
+
+  it("returns all messages when under limit", () => {
+    const messages = [
+      { role: "system" as const, content: "You are helpful." },
+      { role: "user" as const, content: "Hello" },
+      { role: "assistant" as const, content: "Hi there!" },
+    ];
+    const result = buildContext(messages);
+    assert.equal(result.length, 3);
+    assert.equal(result[0].role, "system");
+    assert.equal(result[1].role, "user");
+    assert.equal(result[2].role, "assistant");
+  });
+
+  it("always includes system message", () => {
+    const messages = [
+      { role: "system" as const, content: "a".repeat(400) }, // 100 tokens
+    ];
+    const result = buildContext(messages, 50); // limit smaller than system
+    assert.equal(result.length, 1);
+    assert.equal(result[0].role, "system");
+  });
+
+  it("trims old messages when over limit", () => {
+    const messages = [
+      { role: "system" as const, content: "sys" }, // ~1 token
+    ];
+    // Add many user/assistant pairs
+    for (let i = 0; i < 100; i++) {
+      messages.push({ role: "user" as const, content: "a".repeat(40) }); // ~10 tokens each
+      messages.push({ role: "assistant" as const, content: "b".repeat(40) }); // ~10 tokens each
+    }
+    // Total: ~1 + 100*20 = ~2001 tokens
+    const result = buildContext(messages, 500); // trim to ~500 tokens
+    assert.ok(result.length < messages.length, "should have fewer messages than input");
+    assert.equal(result[0].role, "system", "first message should be system");
+    // Should keep the newest messages
+    const lastMsg = result[result.length - 1];
+    assert.equal(lastMsg.role, "assistant", "last message should be from the end");
+  });
+
+  it("keeps tool_use and tool_result pairs together", () => {
+    const messages = [
+      { role: "system" as const, content: "sys" }, // ~1 token
+      { role: "user" as const, content: "a".repeat(400) }, // 100 tokens
+      {
+        role: "assistant" as const,
+        content: "",
+        tool_calls: [{ id: "tc_1", name: "generate_image", input: { prompt: "cat" } }],
+      }, // ~15 tokens
+      {
+        role: "tool" as const,
+        content: "Image generated",
+        tool_call_id: "tc_1",
+      }, // ~5 tokens
+      { role: "user" as const, content: "b".repeat(400) }, // 100 tokens
+    ];
+    // Total: ~221 tokens, trim to 50 — should keep system + last user + tool pair
+    const result = buildContext(messages, 50);
+    assert.equal(result[0].role, "system", "first should be system");
+
+    // If the tool result is included, the tool_use must also be included
+    const hasToolResult = result.some(
+      (m) => m.role === "tool" && m.tool_call_id === "tc_1",
+    );
+    const hasToolUse = result.some(
+      (m) => m.role === "assistant" && m.tool_calls?.some((tc) => tc.id === "tc_1"),
+    );
+    // They must be both present or both absent
+    assert.equal(hasToolResult, hasToolUse, "tool_use and tool_result must stay together");
+  });
+
+  it("preserves message order", () => {
+    const messages = [
+      { role: "system" as const, content: "sys" },
+      { role: "user" as const, content: "first" },
+      { role: "assistant" as const, content: "reply" },
+      { role: "user" as const, content: "second" },
+      { role: "assistant" as const, content: "reply2" },
+    ];
+    const result = buildContext(messages);
+    // All should be included (way under limit)
+    assert.equal(result.length, 5);
+    assert.equal(result[1].content, "first");
+    assert.equal(result[2].content, "reply");
+    assert.equal(result[3].content, "second");
+    assert.equal(result[4].content, "reply2");
+  });
+
+  it("uses DEFAULT_MAX_CONTEXT_TOKENS as default limit", () => {
+    assert.equal(DEFAULT_MAX_CONTEXT_TOKENS, 200_000);
+  });
+
+  it("handles exact fit at limit", () => {
+    const messages = [
+      { role: "system" as const, content: "a".repeat(40) }, // 10 tokens
+      { role: "user" as const, content: "b".repeat(40) }, // 10 tokens
+    ];
+    // Total: 20 tokens, limit 20 — should include both
+    const result = buildContext(messages, 20);
+    assert.equal(result.length, 2);
+  });
+
+  it("keeps newest messages when trimming", () => {
+    const messages = [
+      { role: "system" as const, content: "sys" },
+      { role: "user" as const, content: "old question" },
+      { role: "assistant" as const, content: "old answer" },
+      { role: "user" as const, content: "new question" },
+      { role: "assistant" as const, content: "new answer" },
+    ];
+    // Limit that only fits system + newest pair
+    const result = buildContext(messages, 10);
+    assert.equal(result[0].role, "system");
+    // The last user message should be preserved
+    assert.ok(
+      result.some((m) => m.content === "new question"),
+      "should keep newest user message",
+    );
+    // Old messages should be dropped
+    assert.ok(
+      !result.some((m) => m.content === "old question"),
+      "should drop old messages",
+    );
   });
 });
