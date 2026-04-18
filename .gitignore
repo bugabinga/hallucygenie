@@ -32,3 +32,4 @@ test-data*/
 
 # Screenshots (local only)
 public/screenshot-*.png
+logs/

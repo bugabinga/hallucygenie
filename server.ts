@@ -6,6 +6,9 @@ import { initDb } from "./db.ts";
 import { mkdirSync } from "node:fs";
 import { dirname } from "node:path";
 import { createServer, type IncomingMessage, type ServerResponse, type Server } from "node:http";
+import { createLogger, nextReqId } from "./log.ts";
+
+const log = createLogger({ service: "hallucygenie" });
 import type { DatabaseSync } from "node:sqlite";
 import {
   runAgentLoop,
@@ -560,6 +563,9 @@ export async function handleRequest(req: Request): Promise<Response> {
 // web-standard (Request, Response) used by handleRequest.
 
 async function handleNodeRequest(req: IncomingMessage, res: ServerResponse): Promise<void> {
+  const reqId = nextReqId();
+  const reqLog = log.child({ reqId, method: req.method, path: req.url });
+  reqLog.debug("request received");
   try {
     // Build a web-standard Request from Node's IncomingMessage
     const url = `http://localhost:${PORT}${req.url}`;
@@ -594,8 +600,9 @@ async function handleNodeRequest(req: IncomingMessage, res: ServerResponse): Pro
       }
     }
     res.end();
+    reqLog.info("response sent", { status: res.statusCode });
   } catch (err) {
-    console.error("Request handler error:", err);
+    log.error("request handler error", { error: String(err) });
     if (!res.headersSent) {
       res.statusCode = 500;
       res.end(JSON.stringify({ error: "Internal server error" }));
@@ -629,14 +636,14 @@ export function startServer(port = PORT): Server {
   server = createServer((req, res) => handleNodeRequest(req, res));
   server.on("error", (err: NodeJS.ErrnoException) => {
     if (err.code === "EADDRINUSE") {
-      console.error(`Port ${port} is already in use. Kill the existing process or use a different port.`);
+      log.error("port in use", { port });
       process.exit(1);
     } else {
       throw err;
     }
   });
   server.listen(port, () => {
-    console.log(`HallucyGenie server running on http://localhost:${port}`);
+    log.info("server started", { port });
   });
   return server;
 }
@@ -680,7 +687,7 @@ function setupSignalHandlers(): void {
   const signals: NodeJS.Signals[] = ["SIGTERM", "SIGINT"];
   for (const sig of signals) {
     process.on(sig, async () => {
-      console.log(`\nReceived ${sig}, shutting down gracefully...`);
+      log.info("shutting down", { signal: sig });
       await shutdown();
       process.exit(0);
     });
