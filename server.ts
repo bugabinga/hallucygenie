@@ -12,6 +12,8 @@ import type { DatabaseSync } from "node:sqlite";
 import {
   runAgentLoop,
   buildSystemPrompt,
+  buildContext,
+  estimateTokens,
   createSteerQueue,
   queueSteer,
   type SteerQueue,
@@ -250,6 +252,17 @@ export async function handleChat(
     saveMessage(database, sessionId, "user", lastUserMsg.content);
   }
 
+  // Apply context window trimming to avoid blowing the token limit
+  const totalMessages = messages.length;
+  const contextMessages = buildContext(messages);
+  if (contextMessages.length < totalMessages) {
+    const keptMessages = contextMessages.length;
+    const estimatedTokens = contextMessages.reduce(
+      (sum, m) => sum + estimateTokens(m),
+      0,
+    );
+    log.info("context trimmed", { totalMessages, keptMessages, estimatedTokens });
+  }
   // Get or create steer queue for this session
   const steerQueue = sessionId ? getOrCreateSteerQueue(sessionId) : undefined;
 
@@ -262,7 +275,7 @@ export async function handleChat(
   (async () => {
     try {
       const finalMessages = await runAgentLoop(
-        messages,
+        contextMessages,
         apiKey,
         (event: AgentEvent) => {
           // Convert agent events to SSE for the browser

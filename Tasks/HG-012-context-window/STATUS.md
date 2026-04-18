@@ -16,10 +16,10 @@
 - [x] Export both functions from agent.ts
 
 ### Step 2: Wire into server.ts
-**Status:** ⬜ Not Started
+**Status:** ✅ Complete
 
-- [ ] In `handleChat()`, after loading messages from DB, call `buildContext(messages)` before sending to agent loop
-- [ ] Log when context is trimmed: `reqLog.info("context trimmed", { totalMessages, keptMessages, estimatedTokens })`
+- [x] In `handleChat()`, after loading messages from DB, call `buildContext(messages)` before sending to agent loop
+- [x] Log when context is trimmed: `reqLog.info("context trimmed", { totalMessages, keptMessages, estimatedTokens })`
 
 ### Step 3: Test
 **Status:** ⬜ Not Started
