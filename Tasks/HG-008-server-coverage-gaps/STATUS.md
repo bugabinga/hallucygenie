@@ -1,16 +1,19 @@
 # STATUS — HG-008
 
 **Task:** HG-008 — Server-Side Coverage Gap Fill
-**Status:** ⬜ Not Started
+**Iteration:** 1
+**Current Step:** Step 0: Preflight
+**Last Updated:** 2026-04-18
+**Status:** 🟡 In Progress
 **Started:** —
 **Updated:** —
 
 ## Step Progress
 
 ### Step 0: Preflight
-**Status:** ⬜ Not Started
+**Status:** ✅ Complete
 
-- [ ] `just test` — 295 pass
+- [x] `just test` — 295 pass
 
 ### Step 1: Test THINK_CLOSE_ALT Branch
 **Status:** ⬜ Not Started
@@ -39,3 +42,8 @@
 | Step | Finding | Action Taken |
 |------|---------|-------------|
 | — | — | — |
+
+| 2026-04-18 16:29 | Task started | Runtime V2 lane-runner execution |
+| 2026-04-18 16:29 | Step 0 started | Preflight |
+| 2026-04-18 16:31 | Worker iter 1 | error (code 143) in 86s, tools: 12 |
+| 2026-04-18 16:31 | Paused | User paused at iteration 1 |
