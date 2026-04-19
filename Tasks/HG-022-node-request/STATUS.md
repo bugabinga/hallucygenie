@@ -1,6 +1,7 @@
 # HG-022: Simplify handleNodeRequest
 
-**Status:** pending  
+**Status:** ✅ Complete
+**Last Updated:** 2026-04-19
 **Breaking:** none  
 **Risk:** minimal — 7 lines → 15 lines with error handlers
 
@@ -16,3 +17,6 @@
 - [x] `readable.on('error', ...)` — propagate stream errors to handler (pipe swallows pipeline errors)
 - [x] `res.on('close', ...)` — destroy readable on client disconnect
 - [x] Explicit `readable.on('end', ...)` not needed — `pipe()` calls `res.end()` automatically on clean close
+
+| 2026-04-19 18:17 | Task started | Runtime V2 lane-runner execution |
+| 2026-04-19 18:17 | Task complete | .DONE created |
