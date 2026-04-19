@@ -777,7 +777,6 @@
     $("#onboarding-done").addEventListener("click", dismissOnboarding);
     loadHistory();
     updateQuotaBadge();
-    setInterval(updateQuotaBadge, 6e4);
     const createBtn = $("#create-btn");
     const createModal = $("#create-modal");
     const createClose = $("#create-close");

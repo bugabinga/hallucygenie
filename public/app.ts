@@ -1030,9 +1030,8 @@ export function init(): void {
   // ── Load history ────────────────────────────────────────────────
   loadHistory();
 
-  // Fetch and display quota badge
+  // Fetch and display quota badge (once on init — no polling interval)
   updateQuotaBadge();
-  setInterval(updateQuotaBadge, 60_000);
 
   // Create modal
   const createBtn = $("#create-btn") as HTMLButtonElement;

@@ -9,7 +9,7 @@ install:
 dev:
     node --experimental-strip-types --no-warnings server.ts
 
-# Run all unit tests (all files in one process, concurrent)
+# Run all unit tests (backend only — ~2.5s)
 test:
     node --experimental-strip-types --no-warnings --test server.test.ts agent.test.ts tools.test.ts db.test.ts
 
@@ -37,13 +37,13 @@ test-snapshot:
 test-update-snapshots:
     node --experimental-strip-types --no-warnings --test-update-snapshots --test server.test.ts agent.test.ts tools.test.ts db.test.ts
 
-# Run frontend unit tests
+# Run frontend unit tests (use --test-name-pattern "." to avoid happy-dom discovery hang)
 test-frontend:
-    node --experimental-strip-types --no-warnings --test public/app.test.ts
+    node --experimental-strip-types --no-warnings --test --test-name-pattern "." public/app.test.ts
 
 # Run frontend tests with coverage
 test-frontend-coverage:
-    node --experimental-strip-types --no-warnings --experimental-test-coverage --test public/app.test.ts
+    node --experimental-strip-types --no-warnings --experimental-test-coverage --test --test-name-pattern "." public/app.test.ts
 
 # Run E2E tests with Playwright
 test-e2e:

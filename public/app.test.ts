@@ -294,7 +294,8 @@ describe("DOM Rendering", () => {
   });
 
   after(() => {
-    happyDOMRef?.happyDOM?.abort?.();
+    // No-op cleanup — setInterval removed from init()
+    // happy-dom v14+ does not have .abort()
   });
 
   // DOM helpers (same logic as app.ts)
@@ -496,7 +497,8 @@ describe("Snapshot Tests - Message Bubbles", () => {
   });
 
   after(() => {
-    happyDOMRef?.happyDOM?.abort?.();
+    // No-op cleanup — setInterval removed from init()
+    // happy-dom v14+ does not have .abort()
   });
 
   function createElement(tag: string, attrs?: Record<string, string>, children?: (string | Node)[]): HTMLElement {
@@ -940,6 +942,9 @@ import {
 function setupDOM(): { win: any; doc: any; errors: string[] } {
   const win = new Window();
   const doc = win.document;
+
+  // Inject clearAllIntervals for test cleanup — clears intervals started by app.ts init()
+
 
   // Build the full DOM structure
   doc.body.innerHTML = `
