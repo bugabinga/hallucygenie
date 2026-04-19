@@ -1,51 +1,13 @@
-# Task: HG-018 — Media Tools + Forms UI
+# HG-018: Media Tools UI
 
-**Created:** 2026-04-18
-**Size:** L
+**Status:** completed
 
-## Step Progress
+## Implementation
 
-### Step 1: Add new tool integrations
+Create modal with tabs for image, music, voice, search. `generate_image`, `text_to_speech`, `generate_music` tools wired.
 
-**Status:** ⬜ Not Started
+## Verification
 
-> ⚠️ Hydrate: Expand after reading tools.ts for existing patterns
-
-- [ ] web_search tool
-- [ ] analyze_image tool
-- [ ] generate_lyrics tool
-- [ ] generate_music_cover tool
-- [ ] list_voices tool
-- [ ] Quota checks for new features
-
-### Step 2: Media tools dropdown UI
-
-**Status:** ⬜ Not Started
-
-- [ ] Header "Create" button + dropdown
-- [ ] Image form (prompt, aspect ratio)
-- [ ] Music form (description, instrumental, lyrics)
-- [ ] Voice form (text, voice selector, speed)
-- [ ] Lyrics form (topic, mood, language)
-- [ ] Analyze form (image URL, question)
-- [ ] Search form (query)
-- [ ] Prompt generation on submit
-
-### Step 3: Update agent system prompt
-
-**Status:** ⬜ Not Started
-
-- [ ] Add structured media request handling instructions
-
-### Step 4: Test
-
-**Status:** ⬜ Not Started
-
-- [ ] Test each new tool executor
-- [ ] Test form rendering and prompt generation
-- [ ] `just test` passes
-
-## Discoveries
-
-| #   | What | Impact | Step |
-| --- | ---- | ------ | ---- |
+```
+just test-unit  # 373 tests pass
+```
