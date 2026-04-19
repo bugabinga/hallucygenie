@@ -17,9 +17,17 @@ test:
 test-coverage:
     node --experimental-strip-types --no-warnings --experimental-test-coverage --test server.test.ts agent.test.ts tools.test.ts db.test.ts
 
-# Run mutation tests (requires stryker)
+# Run mutation tests on agent.ts (full ~10min)
 test-mutation:
     npx stryker run stryker.config.mjs
+
+# Run mutation tests on tools.ts (~5min, concurrency=3)
+test-mutation-tools:
+    npx stryker run stryker-tools.mjs
+
+# Run mutation tests on db.ts
+test-mutation-db:
+    npx stryker run stryker-db.mjs
 
 # Run snapshot tests specifically
 test-snapshot:

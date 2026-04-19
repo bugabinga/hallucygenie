@@ -604,3 +604,101 @@ describe("Audio hex-to-base64 conversion", () => {
     assert.equal(decoded, longHex.toLowerCase());
   });
 });
+
+// ── web_search via executeTool ─────────────────────────────────────
+
+describe("executeTool web_search", () => {
+  const API_KEY = "test-key";
+
+  it("returns formatted text with search results", async () => {
+    globalThis.fetch = async () =>
+      jsonResponse({
+        organic: [
+          { title: "Gaming News", link: "https://example.com/1", snippet: "Latest games" },
+          { title: "Reviews", link: "https://example.com/2", snippet: "Top rated" },
+        ],
+      });
+
+    const { executeTool } = await import("./tools.ts");
+    const result = await executeTool("web_search", { query: "gaming news" }, API_KEY);
+    assert.equal(result.type, "text");
+    assert.ok(result.content.includes("Gaming News"));
+    assert.ok(result.content.includes("https://example.com/1"));
+  });
+
+  it("returns error on HTTP failure", async () => {
+    globalThis.fetch = async () => new Response(null, { status: 500 });
+    const { executeTool } = await import("./tools.ts");
+    const result = await executeTool("web_search", { query: "test" }, API_KEY);
+    assert.equal(result.type, "error");
+    assert.ok(result.content.includes("500"));
+  });
+
+  it("returns text on empty results", async () => {
+    globalThis.fetch = async () => jsonResponse({ organic: [] });
+    const { executeTool } = await import("./tools.ts");
+    const result = await executeTool("web_search", { query: "xyz" }, API_KEY);
+    assert.equal(result.type, "text");
+    assert.ok(result.content.includes("No search results"));
+  });
+});
+
+// ── analyze_image via executeTool ───────────────────────────────────
+
+describe("executeTool analyze_image", () => {
+  const API_KEY = "test-key";
+
+  it("returns text description on success", async () => {
+    globalThis.fetch = async () =>
+      jsonResponse({ content: "A colorful gaming logo with neon lights" });
+    const { executeTool } = await import("./tools.ts");
+    const result = await executeTool("analyze_image", { image_url: "https://example.com/img.png" }, API_KEY);
+    assert.equal(result.type, "text");
+    assert.ok(result.content.includes("gaming logo"));
+  });
+
+  it("returns error on HTTP failure", async () => {
+    globalThis.fetch = async () => new Response(null, { status: 400 });
+    const { executeTool } = await import("./tools.ts");
+    const result = await executeTool("analyze_image", { image_url: "https://example.com/img.png" }, API_KEY);
+    assert.equal(result.type, "error");
+    assert.ok(result.content.includes("400"));
+  });
+
+  it("returns error on API error response", async () => {
+    globalThis.fetch = async () =>
+      jsonResponse({ base_resp: { status_code: 1001, status_msg: "invalid image" } });
+    const { executeTool } = await import("./tools.ts");
+    const result = await executeTool("analyze_image", { image_url: "https://example.com/bad.png" }, API_KEY);
+    assert.equal(result.type, "error");
+    assert.ok(result.content.includes("invalid image"));
+  });
+});
+
+// ── Schema content validation ───────────────────────────────────────
+
+describe("getToolDefinitions schema content", () => {
+  it("generate_image schema has required prompt field", async () => {
+    const { getToolDefinitions } = await import("./tools.ts");
+    const tool = getToolDefinitions().find(t => t.name === "generate_image");
+    assert.ok(tool, "generate_image tool should exist");
+    assert.ok(tool.input_schema.properties?.prompt, "should have prompt property");
+    assert.deepEqual(tool.input_schema.required, ["prompt"]);
+  });
+
+  it("web_search schema has required query field", async () => {
+    const { getToolDefinitions } = await import("./tools.ts");
+    const tool = getToolDefinitions().find(t => t.name === "web_search");
+    assert.ok(tool, "web_search tool should exist");
+    assert.ok(tool.input_schema.properties?.query, "should have query property");
+    assert.equal(tool.input_schema.required?.[0], "query");
+  });
+
+  it("analyze_image schema has required image_url field", async () => {
+    const { getToolDefinitions } = await import("./tools.ts");
+    const tool = getToolDefinitions().find(t => t.name === "analyze_image");
+    assert.ok(tool, "analyze_image tool should exist");
+    assert.ok(tool.input_schema.properties?.image_url, "should have image_url property");
+    assert.equal(tool.input_schema.required?.[0], "image_url");
+  });
+});
