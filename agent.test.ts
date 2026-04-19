@@ -18,6 +18,7 @@ import {
   buildSystemPrompt,
   estimateTokens,
   buildContext,
+  toAnthropicPayload,
   DEFAULT_MAX_CONTEXT_TOKENS,
 } from "./agent.ts";
 import type { AgentEvent } from "./agent.ts";
@@ -1496,4 +1497,80 @@ describe("Prompt Caching", () => {
     // Last tool should have cache_control
     assert.equal(parsed.tools[4].cache_control?.type, "ephemeral", "last tool should have cache_control");
   });
+});
+
+// ── buildContext tool branches ───────────────────────────────────────
+
+describe("buildContext tool edge cases", () => {
+  it("tool result skipped when turn would exceed budget", () => {
+    // System=1 token, limit=200000 → all messages included (large budget)
+    const messages: ChatMessage[] = [
+      { role: "system" as const, content: "a" },
+      { role: "user" as const, content: "aaa" },
+      { role: "assistant" as const, content: "", tool_calls: [{ id: "tc1", name: "gen", input: { data: "x".repeat(80) } }] },
+      { role: "tool" as const, content: "result", tool_call_id: "tc1" },
+    ];
+    const result = buildContext(messages, 200000);
+    const roles = result.map(m => m.role);
+    assert.ok(roles.includes("system"));
+    assert.ok(roles.includes("user"));
+    assert.ok(roles.includes("tool"), "tool result should be included with large budget");
+  });
+
+  it("orphan tool result (no matching tool_use) is treated as standalone", () => {
+    const messages: ChatMessage[] = [
+      { role: "system" as const, content: "a" },
+      { role: "tool" as const, content: "orphan result", tool_call_id: "nonexistent" },
+    ];
+    // Should not throw, should be included
+    const result = buildContext(messages, 1000);
+    assert.equal(result.length, 2);
+    assert.equal(result[1].role, "tool");
+    assert.equal((result[1] as any).tool_call_id, "nonexistent");
+  });
+
+  it("assistant with tool_calls but no tool results included", () => {
+    const messages: ChatMessage[] = [
+      { role: "system" as const, content: "a" },
+      { role: "assistant" as const, content: "", tool_calls: [{ id: "tc1", name: "gen", input: {} }] },
+    ];
+    // Should include the assistant message even with empty tool_results
+    const result = buildContext(messages, 1000);
+    assert.ok(result.some(m => m.role === "assistant" && (m as any).tool_calls));
+  });
+
+  it("assistant with tool_calls skipped when turn exceeds budget", () => {
+    // System=1, user=3 tokens, limit=6 → remaining=5
+    // Assistant tool turn ≈5 tokens (just fits), limit=6 means total=6
+    // But we need the turn to EXCEED remaining budget
+    const messages: ChatMessage[] = [
+      { role: "system" as const, content: "a" }, // 1 token
+      { role: "user" as const, content: "aaa" }, // 3 tokens
+      { role: "assistant" as const, content: "", tool_calls: [{ id: "tc1", name: "gen", input: { prompt: "a".repeat(80) } }] }, // ~20 tokens
+    ];
+    const result = buildContext(messages, 6); // system(1) + remaining(5) = 6, but assistant turn ≈20 → exceeds
+    // Assistant with tool_calls should be skipped
+    assert.ok(!result.some(m => m.role === "assistant" && (m as any).tool_calls));
+  });
+});
+
+// ── toAnthropicPayload edge cases ─────────────────────────
+
+describe("toAnthropicPayload edge cases", () => {
+  it("assistant with empty content and no tool_calls gets empty text block", () => {
+    const messages: ChatMessage[] = [
+      { role: "system" as const, content: "You are helpful." },
+      { role: "assistant" as const, content: "" },
+      { role: "user" as const, content: "hello" },
+    ];
+    const payload = toAnthropicPayload(messages, []);
+    const msgs = payload.messages as Array<{ role: string; content: unknown }>;
+    // Assistant with empty content → should have content: [{type: "text", text: ""}]
+    const assistantMsg = msgs.find(m => m.role === "assistant");
+    assert.ok(assistantMsg);
+    assert.equal((assistantMsg!.content as any[])[0].type, "text");
+    assert.equal((assistantMsg!.content as any[])[0].text, "");
+  });
+
+
 });

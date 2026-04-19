@@ -126,7 +126,7 @@ export function getMessages(db: DatabaseSync, sessionId: string): MessageRow[] {
        WHERE session_id = ?
        ORDER BY created_at ASC, id ASC`,
     )
-    .all(sessionId) as MessageRow[];
+    .all(sessionId) as unknown as MessageRow[];
 }
 
 // ── Preference CRUD ─────────────────────────────────────────────────
@@ -229,7 +229,7 @@ export interface AssetRow {
   created_at: number;
 }
 
-export function saveAsset(db: DatabaseSync, asset: Omit<AssetRow, "created_at">): void {
+export function saveAsset(db: DatabaseSync, asset: Omit<AssetRow, "created_at"> & { created_at?: number }): void {
   db.prepare(
     "INSERT INTO assets (id, session_id, type, filename, mime_type, prompt, tool_name, size_bytes, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)"
   ).run(
@@ -241,18 +241,18 @@ export function saveAsset(db: DatabaseSync, asset: Omit<AssetRow, "created_at">)
     asset.prompt,
     asset.tool_name,
     asset.size_bytes,
-    Date.now()
+    asset.created_at ?? Date.now(),
   );
 }
 
 export function getAssets(db: DatabaseSync, sessionId: string): AssetRow[] {
   return db
     .prepare("SELECT * FROM assets WHERE session_id = ? ORDER BY created_at DESC")
-    .all(sessionId) as AssetRow[];
+    .all(sessionId) as unknown as AssetRow[];
 }
 
 export function getAsset(db: DatabaseSync, assetId: string): AssetRow | undefined {
   return db
     .prepare("SELECT * FROM assets WHERE id = ?")
-    .get(assetId) as AssetRow | undefined;
+    .get(assetId) as unknown as AssetRow | undefined;
 }

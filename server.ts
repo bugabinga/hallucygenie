@@ -501,14 +501,18 @@ export async function handleRequest(req: Request): Promise<Response> {
 
     // GET /assets — list assets for session
     if (path === "/assets" && method === "GET") {
+      const sessionId = validateSessionId(req);
+      if (!sessionId) return jsonResponse({ error: "X-Session-Id header required" }, 400);
       const database = getDb();
       if (!database) return jsonResponse({ error: "Database not initialized" }, 500);
-      const assets = getAssets(database, sessionId!);
+      const assets = getAssets(database, sessionId);
       return jsonResponse({ assets });
     }
 
     // GET /asset/:id — serve a specific asset file
     if (path.startsWith("/asset/") && method === "GET") {
+      const sessionId = validateSessionId(req);
+      if (!sessionId) return jsonResponse({ error: "X-Session-Id header required" }, 400);
       const assetId = path.slice("/asset/".length);
       const database = getDb();
       if (!database) return jsonResponse({ error: "Database not initialized" }, 500);
@@ -526,6 +530,38 @@ export async function handleRequest(req: Request): Promise<Response> {
     }
 
     return jsonResponse({ error: "Not found" }, 404);
+  }
+
+  // ── Non-API routes ───────────────────────────────────────────────
+
+  // GET /assets — list assets for session (requires session, outside /api/ block)
+  if (path === "/assets" && method === "GET") {
+    const sessionId = validateSessionId(req);
+    if (!sessionId) return jsonResponse({ error: "X-Session-Id header required" }, 400);
+    const database = getDb();
+    if (!database) return jsonResponse({ error: "Database not initialized" }, 500);
+    const assets = getAssets(database, sessionId);
+    return jsonResponse({ assets });
+  }
+
+  // GET /asset/:id — serve a specific asset file (requires session)
+  if (path.startsWith("/asset/") && method === "GET") {
+    const sessionId = validateSessionId(req);
+    if (!sessionId) return jsonResponse({ error: "X-Session-Id header required" }, 400);
+    const assetId = path.slice("/asset/".length);
+    const database = getDb();
+    if (!database) return jsonResponse({ error: "Database not initialized" }, 500);
+    const asset = getAsset(database, assetId);
+    if (!asset) return jsonResponse({ error: "Not found" }, 404);
+    const filePath = `data/assets/${asset.session_id}/${asset.filename}`;
+    try {
+      const file = await readFile(filePath);
+      return new Response(file, {
+        headers: { "Content-Type": asset.mime_type, "Cache-Control": "public, max-age=31536000" },
+      });
+    } catch {
+      return jsonResponse({ error: "File not found" }, 404);
+    }
   }
 
   // Static files
@@ -547,7 +583,7 @@ export async function handleRequest(req: Request): Promise<Response> {
 // Bridges Node's (IncomingMessage, ServerResponse) to the
 // web-standard (Request, Response) used by handleRequest.
 
-async function handleNodeRequest(req: IncomingMessage, res: ServerResponse): Promise<void> {
+export async function handleNodeRequest(req: IncomingMessage, res: ServerResponse): Promise<void> {
   const reqId = nextReqId();
   const reqLog = log.child({ reqId, method: req.method, path: req.url });
   reqLog.debug("request received");

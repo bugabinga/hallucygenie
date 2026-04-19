@@ -9,7 +9,7 @@ Node.js proxy + vanilla TS frontend. MiniMax APIs (chat, image, TTS, music). SQL
 ## Rules
 
 - No frameworks. No OOP. No enterprise patterns. Plain functions. Plain objects.
-- `just test` to test. Justfile is law. Never `bun test`.
+- `just --list` shows all commands. `justfile` is law. Never `bun test`.
 - `import { createLogger } from "./log.ts"` for logging. Never `console.log`.
 - `process.env.MINIMAX_API_KEY` for API key. Never hardcode. Fail fast if missing.
 - No classes. Functions only. Plain return objects.
@@ -19,17 +19,21 @@ Node.js proxy + vanilla TS frontend. MiniMax APIs (chat, image, TTS, music). SQL
 
 - **Runtime:** Node.js v25 (Bun broken on Android/Termux)
 - **Language:** TypeScript, `--experimental-strip-types`
-- **Test:** Node `--test`, 357 tests, 97%+ coverage
+- **Test:** Node `--test`, 372+ unit tests, 100% line coverage on db/tools, 98%+ on agent/server
 - **DB:** `node:sqlite` (DatabaseSync)
-- **Frontend:** Vanilla TS/CSS/HTML, no build step
+- **Frontend:** Vanilla TS/CSS/HTML, `esbuild` bundle
 - **Container:** Podman quadlet
 
 ## Commands
 
 ```
-just dev              # start server (port 3000)
-just test             # run all unit tests
-just test-coverage    # coverage report
+just dev              # start dev server (port 3000)
+just fmt              # format code (dprint)
+just lint             # type check (tsc --noEmit)
+just test-unit        # unit tests (~26s wall clock, all files)
+just test-integration # integration tests (real HTTP + real DB)
+just test-all         # fmt + lint + test-unit + test-integration
+just test-mutation    # stryker mutation tests (agent, tools, db)
 just test-e2e         # Playwright E2E
 just install          # npm install
 ```
@@ -37,14 +41,16 @@ just install          # npm install
 ## Files
 
 ```
-server.ts    — HTTP server, SSE proxy, routing, sessions
-agent.ts     — agent loop, streaming, tools, steering, system prompt
-tools.ts     — MiniMax wrappers (image, TTS, music)
-db.ts        — SQLite migrations, CRUD, quotas
-log.ts       — structured logger (JSON prod / pretty dev + file)
+server.ts     — HTTP server, SSE proxy, routing, sessions
+agent.ts      — agent loop, streaming, tools, steering, system prompt
+tools.ts      — MiniMax wrappers (image, TTS, music, web_search, vision)
+db.ts         — SQLite migrations, CRUD, quotas
+log.ts        — structured logger (JSON prod / pretty dev + file)
 public/app.ts — frontend: SSE, markdown, DOM, streaming
 public/style.css — dark theme, red/green/gold
 migrations/   — numbered SQL, auto-applied on startup
+integration.test.ts — integration tests (real HTTP server)
+e2e/           — Playwright E2E specs
 ```
 
 ## Architecture
@@ -70,6 +76,8 @@ Browser → server.ts → agent.ts → MiniMax API
 - **TTS:** `POST /v1/t2a_v2`, `speech-2.8-hd`, hex MP3
 - **Image:** `POST /v1/image_generation`, `image-01`
 - **Music:** `POST /v1/music_generation`, `music-2.6`, hex MP3
+- **Web Search:** `POST /v1/coding_plan/search`
+- **Vision:** `POST /v1/coding_plan/vlm`
 - **Audio:** `Buffer.from(hex, "hex").toString("base64")` → data URL
 - **Thinking:** Anthropic `thinking` content block, no tag parsing needed
 
@@ -98,11 +106,14 @@ event: done       → {}
 
 ## Testing
 
-- 100% coverage on agent.ts, tools.ts, db.ts
-- 95%+ on server.ts, app.ts
-- Mutation testing ≥80% on db.ts, tools.ts
-- E2E Playwright (Android/Termux, patched playwright-core)
+- 372 unit tests, <30s wall clock
+- 100% line coverage on db.ts, tools.ts
+- 98%+ line coverage on agent.ts, server.ts
+- Mutation testing ≥70% on tools.ts
+- Integration tests: real HTTP server + SQLite
+- E2E: Playwright (Android/Termux, patched playwright-core)
 - All external calls mocked. No real API calls.
+- `just test-unit` must pass before commit.
 
 ## Logger
 
@@ -122,5 +133,5 @@ reqLog.info("chat request", { messages: 3 });
 - Run `bun test` or `bun run` — broken on this machine
 - Use classes, frameworks, OOP
 - Hardcode or log API keys
-- Skip tests. `just test` must pass before commit.
+- Skip tests. `just test-unit` must pass before commit.
 - Track `.pi/`, `.pi-lens/`, `logs/`, `data/` in git

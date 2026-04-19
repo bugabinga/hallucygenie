@@ -293,7 +293,7 @@ interface AnthropicToolCall {
  * Extracts system messages, converts tool messages to tool_result blocks,
  * and groups consecutive tool results into a single user message.
  */
-function toAnthropicPayload(
+export function toAnthropicPayload(
   messages: ChatMessage[],
   tools: AnthropicTool[]
 ): Record<string, unknown> {

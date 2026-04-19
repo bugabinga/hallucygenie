@@ -18,6 +18,9 @@ import {
   trackUsage,
   getUsageToday,
   checkQuota,
+  saveAsset,
+  getAssets,
+  getAsset,
   QUOTAS,
 } from "./db.ts";
 
@@ -472,5 +475,89 @@ describe("QUOTAS constant", () => {
     assert.equal(QUOTAS.speech, 9000);
     assert.equal(QUOTAS.image, 100);
     assert.equal(QUOTAS.music, 100);
+  });
+});
+
+// ── Assets ─────────────────────────────────────────────────────────
+
+describe("saveAsset + getAssets + getAsset", () => {
+  let db: DatabaseSync;
+  beforeEach(() => { db = freshDb(); });
+
+  it("getAssets returns empty array for new session", () => {
+    const assets = getAssets(db, "new-session");
+    assert.deepEqual(assets, []);
+  });
+
+  it("getAsset returns undefined for unknown id", () => {
+    const asset = getAsset(db, "nonexistent");
+    assert.equal(asset, undefined);
+  });
+
+  it("saveAsset then getAssets returns the asset", () => {
+    
+    const id = crypto.randomUUID();
+    saveAsset(db, {
+      id,
+      session_id: "session-1",
+      type: "image",
+      filename: "img.png",
+      mime_type: "image/png",
+      prompt: "a cute cat",
+      tool_name: "generate_image",
+      size_bytes: 12345,
+    });
+    const assets = getAssets(db, "session-1");
+    assert.equal(assets.length, 1);
+    assert.equal(assets[0].id, id);
+    assert.equal(assets[0].filename, "img.png");
+    assert.equal(assets[0].tool_name, "generate_image");
+  });
+
+  it("saveAsset then getAsset returns the asset", () => {
+    
+    const id = crypto.randomUUID();
+    saveAsset(db, {
+      id,
+      session_id: "session-2",
+      type: "music",
+      filename: "song.mp3",
+      mime_type: "audio/mpeg",
+      prompt: "upbeat tune",
+      tool_name: "generate_music",
+      size_bytes: 98765,
+    });
+    const asset = getAsset(db, id);
+    assert.notEqual(asset, undefined);
+    assert.equal(asset!.filename, "song.mp3");
+    assert.equal(asset!.session_id, "session-2");
+  });
+
+  it("getAssets only returns assets for that session", () => {
+    
+    const id1 = crypto.randomUUID();
+    const id2 = crypto.randomUUID();
+    saveAsset(db, { id: id1, session_id: "A", type: "image", filename: "a.png", mime_type: "image/png", prompt: null, tool_name: "img", size_bytes: 100 });
+    saveAsset(db, { id: id2, session_id: "B", type: "image", filename: "b.png", mime_type: "image/png", prompt: null, tool_name: "img", size_bytes: 200 });
+    const assetsA = getAssets(db, "A");
+    const assetsB = getAssets(db, "B");
+    assert.equal(assetsA.length, 1);
+    assert.equal(assetsA[0].id, id1);
+    assert.equal(assetsB.length, 1);
+    assert.equal(assetsB[0].id, id2);
+  });
+
+  it("getAssets returns assets ordered by created_at DESC", () => {
+    const id1 = crypto.randomUUID();
+    const id2 = crypto.randomUUID();
+    const now = Date.now();
+    // Older asset first, newer second
+    saveAsset(db, { id: id1, session_id: "order-test", type: "audio", filename: "old.txt", mime_type: "text/plain", prompt: null, tool_name: "tts", size_bytes: 50, created_at: now - 10 });
+    saveAsset(db, { id: id2, session_id: "order-test", type: "audio", filename: "new.txt", mime_type: "text/plain", prompt: null, tool_name: "tts", size_bytes: 60, created_at: now });
+    const assets = getAssets(db, "order-test");
+    assert.equal(assets.length, 2);
+    // Newest first (by created_at DESC)
+    assert.equal(assets[0].id, id2);
+    assert.equal(assets[1].id, id1);
   });
 });

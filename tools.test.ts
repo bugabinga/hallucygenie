@@ -692,4 +692,18 @@ describe("getToolDefinitions schema content", () => {
     assert.ok(tool.input_schema.properties?.image_url, "should have image_url property");
     assert.equal(tool.input_schema.required?.[0], "image_url");
   });
+
+  it("web_search returns error on network failure", async () => {
+    globalThis.fetch = async () => { throw new Error("Network timeout"); };
+    const result = await executeTool("web_search", { query: "test" }, "fake-key") as ToolResult;
+    assert.equal(result.type, "error");
+    assert.ok((result.content as string).includes("Network timeout"));
+  });
+
+  it("analyze_image returns error on network failure", async () => {
+    globalThis.fetch = async () => { throw new Error("Connection reset"); };
+    const result = await executeTool("analyze_image", { image_url: "https://example.com/img.jpg" }, "fake-key") as ToolResult;
+    assert.equal(result.type, "error");
+    assert.ok((result.content as string).includes("Connection reset"));
+  });
 });
