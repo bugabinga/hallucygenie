@@ -7,13 +7,13 @@ import {
     handleRequest,
     handleChat,
     shutdown,
-    MINIMAX_MODEL,
     initDatabase,
     getDb,
     isShuttingDown,
     resetStateForTesting,
     validateSessionId,
 } from "./server.ts";
+import { MINIMAX_MODEL } from "./agent.ts";
 import { existsSync, rmSync, mkdirSync } from "node:fs";
 import { join } from "node:path";
 import http from "node:http";
