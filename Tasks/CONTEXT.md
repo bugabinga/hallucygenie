@@ -87,7 +87,15 @@ Podman quadlet deployment.
 
 ## Planned Features
 
-- Image History Browser (ideas.md RECOMMENDATION 1)
+| ID     | Feature                              | Priority |
+| ------ | ----------------------------------- | -------- |
+| HG-025 | Image History Browser                | ship now |
+| HG-026 | Chat Personality Selector            | next     |
+| HG-027 | Gaming Co-Creator Button            | deferred |
+
+- ~~Image History Browser~~ → HG-025
+- Chat Personality Selector (ideas.md RECOMMENDATION 2)
+- Gaming Co-Creator Button (ideas.md RECOMMENDATION 3, deferred)
 - Chat Personality Selector (ideas.md RECOMMENDATION 2)
 - Gaming Co-Creator Button (ideas.md RECOMMENDATION 3, deferred)
 
