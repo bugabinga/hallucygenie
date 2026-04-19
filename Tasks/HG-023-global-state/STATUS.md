@@ -1,7 +1,6 @@
-# HG-023: Refactor Module-Level Globals
+**Status:** pending
 
-**Status:** ✅ Complete
-**Last Updated:** 2026-04-19
+**Status:** pending
 **Breaking:** none (no function signatures change)  
 **Risk:** medium — touches `public/app.ts` internals, SSE callback closures
 

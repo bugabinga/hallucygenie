@@ -1,7 +1,11 @@
-# HG-021: Markdown Renderer Rewrite
+**Status:** pending
 
-**Status:** ✅ Complete
-**Last Updated:** 2026-04-19
+**Status:** pending
+<<<<<<< Updated upstream
+||||||| Stash base
+**Status:** pending
+=======
+>>>>>>> Stashed changes
 **Breaking:** output format (code block class names)  
 **Dependencies:** `marked@15.0.4` (exact pin, no `^`)
 

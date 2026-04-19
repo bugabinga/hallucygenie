@@ -97,6 +97,11 @@ desloppy:
 tiger:
     pi --skill /data/data/com.termux/files/home/.pi/skills/tiger -p "scan code. enforce tiger style. no mercy."
 
+# roast — adversarial critique. Usage: just roast "your prompt"
+[group('pi')]
+roast prompt:
+    pi --skill /data/data/com.termux/files/home/.pi/agent/skills/adversarial --tools read,bash,edit,write,grep,find,ls -p "{{ prompt }}"
+
 # brainstorm: generate ideas for HallucyGenie project
 [group('pi')]
 brainstorm:

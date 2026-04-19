@@ -1,7 +1,6 @@
-# HG-022: Simplify handleNodeRequest
+**Status:** pending
 
-**Status:** ✅ Complete
-**Last Updated:** 2026-04-19
+**Status:** pending
 **Breaking:** none  
 **Risk:** minimal — 7 lines → 15 lines with error handlers
 

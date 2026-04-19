@@ -19,7 +19,7 @@ Node.js proxy + vanilla TS frontend. MiniMax APIs (chat, image, TTS, music). SQL
 
 - **Runtime:** Node.js v25 (Bun broken on Android/Termux)
 - **Language:** TypeScript, `--experimental-strip-types`
-- **Test:** Node `--test`, 372+ unit tests, 100% line coverage on db/tools, 98%+ on agent/server
+- **Test:** Node `--test`, 380 unit tests, 100% line coverage on db/tools, 98%+ on agent/server
 - **DB:** `node:sqlite` (DatabaseSync)
 - **Frontend:** Vanilla TS/CSS/HTML, `esbuild` bundle
 - **Container:** Podman quadlet
@@ -37,6 +37,10 @@ just test-all         # check + test-unit + test-integration
 just test-mutation    # stryker mutation tests (agent, tools, db)
 just test-e2e         # Playwright E2E
 just install          # npm install
+just roast "prompt"   # adversarial code critique
+just brainstorm       # generate project ideas
+just tiger            # enforce tiger coding style
+just desloppy         # find and fix code ugliness
 ```
 
 ## Files
@@ -123,7 +127,7 @@ Speech quota is tracked **per function call** (increments by 1 per TTS invocatio
 
 ## Testing
 
-- 372 unit tests, <30s wall clock
+- 380 unit tests, <30s wall clock
 - 100% line coverage on db.ts, tools.ts
 - 98%+ line coverage on agent.ts, server.ts
 - Mutation testing ≥70% on tools.ts

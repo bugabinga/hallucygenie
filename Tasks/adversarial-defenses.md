@@ -42,6 +42,7 @@ return marked.parse(text) as string;
 This will return a Promise<string>, not string. The cast silences TypeScript but not runtime.
 
 **Fix:** Use synchronous mode explicitly:
+
 ```typescript
 marked.use({ async: false });
 return marked.parse(text) as string;
@@ -67,12 +68,12 @@ Add this to step 2. The plan's `^15` pin is fine — this is a one-line config c
 
 ```typescript
 const readable = Readable.fromWeb(webRes.body);
-readable.on('error', (err) => {
-    reqLog.error("stream error", { error: String(err) });
-    if (!res.headersSent) {
-        res.statusCode = 500;
-        res.end(JSON.stringify({ error: "Stream error" }));
-    }
+readable.on("error", (err) => {
+  reqLog.error("stream error", { error: String(err) });
+  if (!res.headersSent) {
+    res.statusCode = 500;
+    res.end(JSON.stringify({ error: "Stream error" }));
+  }
 });
 readable.pipe(res);
 ```
@@ -119,11 +120,17 @@ NOT a KILL — spec needs error + close handlers.
 
 ```typescript
 function createStreamHandlers(state: AppState) {
-    return {
-        handleText(data: string) { state.rawTextBuffer += data; },
-        handleThinking(data: string) { state.thinkingBuffer += data; },
-        handleDone() { state.isStreaming = false; },
-    };
+  return {
+    handleText(data: string) {
+      state.rawTextBuffer += data;
+    },
+    handleThinking(data: string) {
+      state.thinkingBuffer += data;
+    },
+    handleDone() {
+      state.isStreaming = false;
+    },
+  };
 }
 ```
 
@@ -149,14 +156,14 @@ NOT a KILL — the underlying need is real; the spec needs the closure factory p
 
 ## Summary
 
-| Challenge | Verdict |
-|-----------|---------|
-| marked XSS surface | Fixable — add `sanitize: true` to step 2 |
-| marked async API | Fixable — add `async: false` to step 2 |
-| pipe() error swallowing | Fixable — add `readable.on('error', ...)` handler |
-| pipe() chunked res.end() | Fixable — add `readable.on('end', ...)` explicit end |
-| HG-023 SSE closure threading | Fixable — add closure factory pattern to spec |
-| HG-023 no logic moved | Concede framing, defend isolation goal |
-| HG-023 jest config alternative | Concede for sync functions, defend for async SSE |
+| Challenge                      | Verdict                                              |
+| ------------------------------ | ---------------------------------------------------- |
+| marked XSS surface             | Fixable — add `sanitize: true` to step 2             |
+| marked async API               | Fixable — add `async: false` to step 2               |
+| pipe() error swallowing        | Fixable — add `readable.on('error', ...)` handler    |
+| pipe() chunked res.end()       | Fixable — add `readable.on('end', ...)` explicit end |
+| HG-023 SSE closure threading   | Fixable — add closure factory pattern to spec        |
+| HG-023 no logic moved          | Concede framing, defend isolation goal               |
+| HG-023 jest config alternative | Concede for sync functions, defend for async SSE     |
 
 **Net: HG-021 and HG-022 are KEEP after fixes. HG-023 is REWRITE — the spec needs the closure factory pattern to actually solve the SSE isolation problem.**

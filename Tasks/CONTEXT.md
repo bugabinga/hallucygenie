@@ -36,12 +36,12 @@ Podman quadlet deployment.
 
 ## Test Coverage (as of 2026-04-19)
 
-| File          | Line % | Branch % | Func % |
-| ------------- | ------ | -------- | ------ |
-| agent.ts      | 100%   | ~94%     | 100%   |
-| db.ts         | 100%   | ~97%     | 100%   |
-| tools.ts      | 100%   | 100%     | 100%   |
-| server.ts     | ~96%   | ~92%     | ~96%   |
+| File          | Line %                    | Branch %    | Func %      |
+| ------------- | ------------------------- | ----------- | ----------- |
+| agent.ts      | 100%                      | ~94%        | 100%        |
+| db.ts         | 100%                      | ~97%        | 100%        |
+| tools.ts      | 100%                      | 100%        | 100%        |
+| server.ts     | ~96%                      | ~92%        | ~96%        |
 | public/app.ts | ~37% → 55%+ (post HG-024) | ~78% → 80%+ | ~25% → 40%+ |
 
 **Total unit tests:** 223 → 168+ (post HG-024)
@@ -83,7 +83,7 @@ Podman quadlet deployment.
 | HG-021 | Markdown renderer rewrite (→ marked) | low     | output format          | adversarial: KEEP 4       |
 | HG-022 | handleNodeRequest simplification     | minimal | none                   | adversarial: KEEP 5       |
 | HG-023 | Module-level globals refactor        | medium  | none (closure factory) | adversarial: KILL→REWRITE |
-| HG-024 | Test enhancement — SSE streaming         | low     | none                   | depends on HG-023         |
+| HG-024 | Test enhancement — SSE streaming     | low     | none                   | depends on HG-023         |
 
 ## Planned Features
 
