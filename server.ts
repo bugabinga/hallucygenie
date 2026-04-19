@@ -5,6 +5,7 @@ import { mkdirSync, writeFileSync } from "node:fs";
 import { initDb, saveAsset, getAssets, getAsset } from "./db.ts";
 import { dirname } from "node:path";
 import { createServer, type IncomingMessage, type ServerResponse, type Server } from "node:http";
+import { Readable } from "node:stream";
 import { createLogger, nextReqId } from "./log.ts";
 
 const log = createLogger({ service: "hallucygenie" });
@@ -638,14 +639,26 @@ export async function handleNodeRequest(req: IncomingMessage, res: ServerRespons
         });
 
         if (webRes.body) {
-            const reader = webRes.body.getReader();
-            while (true) {
-                const { done, value } = await reader.read();
-                if (done) break;
-                res.write(value);
-            }
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            const readable = Readable.fromWeb(webRes.body as any);
+
+            // Propagate stream errors to the error handler below
+            readable.on("error", (err: Error) => {
+                reqLog.error("response stream error", { error: String(err) });
+                if (!res.headersSent) {
+                    res.statusCode = 500;
+                    res.end(JSON.stringify({ error: "Upstream error" }));
+                }
+            });
+
+            // Handle client disconnect — clean up resources
+            res.on("close", () => readable.destroy());
+
+            // pipe() calls res.end() automatically when readable closes cleanly
+            readable.pipe(res);
+        } else {
+            res.end();
         }
-        res.end();
         reqLog.info("response sent", { status: res.statusCode });
     } catch (err) {
         log.error("request handler error", { error: String(err) });
