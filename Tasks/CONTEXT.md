@@ -2,7 +2,7 @@
 
 **Last Updated:** 2026-04-19
 **Status:** Feature complete
-**Next Task ID:** HG-024
+**Next Task ID:** HG-025
 
 ---
 
@@ -42,9 +42,9 @@ Podman quadlet deployment.
 | db.ts         | 100%   | ~97%     | 100%   |
 | tools.ts      | 100%   | 100%     | 100%   |
 | server.ts     | ~96%   | ~92%     | ~96%   |
-| public/app.ts | ~37%   | ~78%     | ~25%   |
+| public/app.ts | ~37% → 55%+ (post HG-024) | ~78% → 80%+ | ~25% → 40%+ |
 
-**Total unit tests:** 223 (all passing)
+**Total unit tests:** 223 → 168+ (post HG-024)
 
 ---
 
@@ -67,7 +67,7 @@ Podman quadlet deployment.
 | HG-017 | First-run onboarding         | manual |
 | HG-018 | Media tools + forms UI       | manual |
 | HG-019 | Asset persistence + gallery  | manual |
-| HG-020 | Test suite overhaul           | manual |
+| HG-020 | Test suite overhaul          | manual |
 
 ---
 
@@ -75,13 +75,15 @@ Podman quadlet deployment.
 
 - [ ] **Playwright E2E testing** — requires monkey-patching playwright-core registry for Android
 - [ ] **Stryker mutation testing** — OOM on this device for agent.ts/server.ts
+
 ## Planned Refactors (breaking)
 
-| ID | Task | Risk | Breaking |
-|----|------|------|----------|
-| HG-021 | Markdown renderer rewrite (→ marked) | low | output format | adversarial: KEEP 4 |
-| HG-022 | handleNodeRequest simplification | minimal | none | adversarial: KEEP 5 |
-| HG-023 | Module-level globals refactor | medium | none (closure factory) | adversarial: KILL→REWRITE |
+| ID     | Task                                 | Risk    | Breaking               |
+| ------ | ------------------------------------ | ------- | ---------------------- | ------------------------- |
+| HG-021 | Markdown renderer rewrite (→ marked) | low     | output format          | adversarial: KEEP 4       |
+| HG-022 | handleNodeRequest simplification     | minimal | none                   | adversarial: KEEP 5       |
+| HG-023 | Module-level globals refactor        | medium  | none (closure factory) | adversarial: KILL→REWRITE |
+| HG-024 | Test enhancement — SSE streaming         | low     | none                   | depends on HG-023         |
 
 ## Planned Features
 
