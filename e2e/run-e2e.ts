@@ -69,10 +69,9 @@ async function waitForApp(page: Page, options?: { dismissOnboarding?: boolean })
     await page.goto(BASE_URL);
 
     // Wait for init() to run — it sets session UUID in localStorage synchronously
-    await page.waitForFunction(
-        () => localStorage.getItem("hallucygenie_session_id") !== null,
-        { timeout: 10000 },
-    );
+    await page.waitForFunction(() => localStorage.getItem("hallucygenie_session_id") !== null, {
+        timeout: 10000,
+    });
 
     // Wait for DOM elements to be ready
     await page.waitForSelector("#send-button");
@@ -526,12 +525,16 @@ async function runE2ETests(): Promise<void> {
             const page = await browser!.newPage();
             await waitForApp(page);
 
-            const sessionId = await page.evaluate(() => localStorage.getItem("hallucygenie_session_id"));
+            const sessionId = await page.evaluate(() =>
+                localStorage.getItem("hallucygenie_session_id"),
+            );
 
             await page.reload();
             await waitForApp(page);
 
-            const sessionId2 = await page.evaluate(() => localStorage.getItem("hallucygenie_session_id"));
+            const sessionId2 = await page.evaluate(() =>
+                localStorage.getItem("hallucygenie_session_id"),
+            );
             assertEqual(sessionId, sessionId2, "Session ID persistence");
 
             await page.close();

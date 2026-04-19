@@ -3,6 +3,7 @@
 ### Verdict: REVISE
 
 ### Summary
+
 The plan correctly identifies the major restructuring needed: replacing the static file server with the real server, integrating nock mocks, and fixing 4 broken tests. However, there are several infrastructure gaps that will cause the tests to fail at runtime if not addressed — most critically the missing `MINIMAX_API_KEY` env var, server startup synchronization, and mock persistence across tests.
 
 ### Issues Found
@@ -10,8 +11,9 @@ The plan correctly identifies the major restructuring needed: replacing the stat
 1. **[Severity: critical] `MINIMAX_API_KEY` environment variable must be set** — `server.ts:462-469` checks `process.env.MINIMAX_API_KEY` and returns HTTP 503 if missing. Even with nock intercepting outbound calls, the server never gets to the fetch — it bails early. The plan must set a dummy key (e.g., `process.env.MINIMAX_API_KEY = "test-key-for-e2e"`) before calling `initDatabase()` / `startServer()`. Without this, the "Enter key sends message" test (and any chat-related flow) will always fail.
 
 2. **[Severity: critical] Server startup must be awaited before tests run** — `startServer()` calls `server.listen(port, callback)` and returns the `Server` immediately — the listen callback fires asynchronously. If tests start running before the server is bound to the port, all `page.goto(BASE_URL)` calls will get ECONNREFUSED. The plan needs a mechanism to await the server's listen callback, e.g.:
+
    ```ts
-   await new Promise<void>(resolve => {
+   await new Promise<void>((resolve) => {
      startServer(testPort);
      // or wrap startServer to return a Promise
    });
@@ -27,17 +29,19 @@ The plan correctly identifies the major restructuring needed: replacing the stat
 
 6. **[Severity: important] `.message--welcome` is static HTML, not an init indicator** — The plan says to fix tests by waiting for `.message--welcome`, but this element is hardcoded in `index.html:124` — it exists in the DOM immediately after `page.goto()`, before any JavaScript runs. Waiting for it does NOT guarantee `init()` has completed. A reliable init indicator would be checking that the session UUID exists in localStorage (`getOrCreateSessionId()` is called synchronously from `loadHistory()` within `init()`):
    ```ts
-   await page.waitForFunction(() =>
-     localStorage.getItem("hallucygenie_session_id") !== null
+   await page.waitForFunction(
+     () => localStorage.getItem("hallucygenie_session_id") !== null,
    );
    ```
 
 ### Missing Items
+
 - Explicit port selection (e.g., 3001) to avoid conflicting with a running dev server on 3000. The worker should pass a non-default port to `startServer()`.
 - Cleanup of temp directory and temp database after tests complete.
 - The `before` / `after` hook pattern shown in PROMPT.md assumes a test framework API, but `run-e2e.ts` uses a custom test harness with `runTest()` — the worker needs to adapt the setup/teardown to the existing harness structure (try/finally wrapping `runE2ETests()`).
 
 ### Suggestions
+
 - Consider a `waitForApp()` helper that combines `page.goto()` + waiting for session UUID in localStorage + waiting for `#send-button` to be in DOM — this is the reliable "app is ready" signal for all tests
 - The onboarding overlay shows on every fresh page context (no localStorage). Tests that interact with elements behind the overlay (like the create button) may need to dismiss onboarding first, or set `localStorage.setItem("hg_onboarding_done", "1")` before `page.goto()`
 - After all tests complete, call `process.exit()` with the correct exit code — the server's keep-alive connections may prevent natural process exit

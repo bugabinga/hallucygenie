@@ -13,6 +13,7 @@ Fix 4 broken E2E tests and add coverage for all implemented UI features. Tests r
 ## Current State
 
 10 E2E tests, 4 failing:
+
 - "send button disabled when input is empty" — app not initialized before checking
 - "Enter key sends message" — requires server, but test doesn't mock MiniMax
 - "session UUID stored in localStorage" — app initialization incomplete
@@ -52,66 +53,76 @@ import nock from "nock";
 const MINIMAX_BASE = "https://api.minimax.io";
 
 export function setupMinimaxMocks(): void {
-    // Mock chat completion — Anthropic-compatible streaming format
-    nock(MINIMAX_BASE)
-        .post("/v1/text/chatcompletion_v2")
-        .reply(200, () => {
-            const chunks = [
-                "event: message\ndata: {\"choices\":[{\"delta\":{\"content\":\"Hello!\"}}]}\n\n",
-                "event: message\ndata: {\"choices\":[{\"delta\":{\"content\":\" How can I help?\"}}]}\n\n",
-                "event: done\ndata: [DONE]\n\n",
-            ];
-            return chunks.join("");
-        }, {
-            "Content-Type": "text/event-stream",
-            "Cache-Control": "no-cache",
-        });
+  // Mock chat completion — Anthropic-compatible streaming format
+  nock(MINIMAX_BASE)
+    .post("/v1/text/chatcompletion_v2")
+    .reply(
+      200,
+      () => {
+        const chunks = [
+          'event: message\ndata: {"choices":[{"delta":{"content":"Hello!"}}]}\n\n',
+          'event: message\ndata: {"choices":[{"delta":{"content":" How can I help?"}}]}\n\n',
+          "event: done\ndata: [DONE]\n\n",
+        ];
+        return chunks.join("");
+      },
+      {
+        "Content-Type": "text/event-stream",
+        "Cache-Control": "no-cache",
+      },
+    );
 
-    // Mock image generation
-    nock(MINIMAX_BASE)
-        .post("/v1/image_generation")
-        .reply(200, {
-            data: [{
-                image_url: "https://example.com/generated/test.png",
-                prompt: "test prompt",
-            }],
-        });
+  // Mock image generation
+  nock(MINIMAX_BASE)
+    .post("/v1/image_generation")
+    .reply(200, {
+      data: [
+        {
+          image_url: "https://example.com/generated/test.png",
+          prompt: "test prompt",
+        },
+      ],
+    });
 
-    // Mock TTS
-    nock(MINIMAX_BASE)
-        .post("/v1/t2a_v2")
-        .reply(200, {
-            data: {
-                audio_file: "",
-                audio_url: "https://example.com/test.mp3",
-            },
-        });
+  // Mock TTS
+  nock(MINIMAX_BASE)
+    .post("/v1/t2a_v2")
+    .reply(200, {
+      data: {
+        audio_file: "",
+        audio_url: "https://example.com/test.mp3",
+      },
+    });
 
-    // Mock music generation
-    nock(MINIMAX_BASE)
-        .post("/v1/music_generation")
-        .reply(200, {
-            data: [{
-                audio_url: "https://example.com/test.music.mp3",
-            }],
-        });
+  // Mock music generation
+  nock(MINIMAX_BASE)
+    .post("/v1/music_generation")
+    .reply(200, {
+      data: [
+        {
+          audio_url: "https://example.com/test.music.mp3",
+        },
+      ],
+    });
 
-    // Mock web search
-    nock(MINIMAX_BASE)
-        .post("/v1/search")
-        .reply(200, {
-            data: {
-                results: [{
-                    title: "Test Result",
-                    url: "https://example.com",
-                    snippet: "This is a test search result.",
-                }],
-            },
-        });
+  // Mock web search
+  nock(MINIMAX_BASE)
+    .post("/v1/search")
+    .reply(200, {
+      data: {
+        results: [
+          {
+            title: "Test Result",
+            url: "https://example.com",
+            snippet: "This is a test search result.",
+          },
+        ],
+      },
+    });
 }
 
 export function cleanupMinimaxMocks(): void {
-    nock.cleanAll();
+  nock.cleanAll();
 }
 ```
 
@@ -125,11 +136,11 @@ Add mock setup/teardown around test runs:
 import { setupMinimaxMocks, cleanupMinimaxMocks } from "./minimax-mock.ts";
 
 before(() => {
-    setupMinimaxMocks();
+  setupMinimaxMocks();
 });
 
 after(() => {
-    cleanupMinimaxMocks();
+  cleanupMinimaxMocks();
 });
 ```
 
@@ -139,14 +150,14 @@ after(() => {
 
 ```typescript
 async function waitForApp(page: Page): Promise<void> {
-    await page.goto(BASE_URL);
-    await page.waitForSelector(".message--welcome", { timeout: 10000 });
-    await page.waitForSelector("#chat-input");
-    // Wait for init() to complete
-    await page.waitForFunction(() => {
-        const btn = document.querySelector("#send-button") as HTMLButtonElement;
-        return btn !== null;
-    });
+  await page.goto(BASE_URL);
+  await page.waitForSelector(".message--welcome", { timeout: 10000 });
+  await page.waitForSelector("#chat-input");
+  // Wait for init() to complete
+  await page.waitForFunction(() => {
+    const btn = document.querySelector("#send-button") as HTMLButtonElement;
+    return btn !== null;
+  });
 }
 ```
 
@@ -154,18 +165,18 @@ async function waitForApp(page: Page): Promise<void> {
 
 ```typescript
 await runTest("send button disabled when input is empty", async () => {
-    const page = await browser.newPage();
-    await page.goto(BASE_URL);
-    await page.waitForSelector(".message--welcome");
-    
-    const sendBtn = page.locator("#send-button");
-    await expectDisabled(sendBtn);
-    
-    await page.fill("#chat-input", "Hello");
-    await expectEnabled(sendBtn);
-    
-    await page.fill("#chat-input", "");
-    await expectDisabled(sendBtn);
+  const page = await browser.newPage();
+  await page.goto(BASE_URL);
+  await page.waitForSelector(".message--welcome");
+
+  const sendBtn = page.locator("#send-button");
+  await expectDisabled(sendBtn);
+
+  await page.fill("#chat-input", "Hello");
+  await expectEnabled(sendBtn);
+
+  await page.fill("#chat-input", "");
+  await expectDisabled(sendBtn);
 });
 ```
 
@@ -173,19 +184,21 @@ await runTest("send button disabled when input is empty", async () => {
 
 ```typescript
 await runTest("lightbox opens and closes", async () => {
-    const page = await browser.newPage();
-    await page.goto(BASE_URL);
-    await page.waitForSelector(".message--welcome");
-    
-    await page.evaluate(() => {
-        (window as any).app?.openLightbox("data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==");
-    });
-    
-    const lightbox = page.locator("#lightbox");
-    await lightbox.waitFor({ state: "visible" });
-    
-    await page.locator(".lightbox-backdrop").click();
-    await lightbox.waitFor({ state: "hidden" });
+  const page = await browser.newPage();
+  await page.goto(BASE_URL);
+  await page.waitForSelector(".message--welcome");
+
+  await page.evaluate(() => {
+    (window as any).app?.openLightbox(
+      "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==",
+    );
+  });
+
+  const lightbox = page.locator("#lightbox");
+  await lightbox.waitFor({ state: "visible" });
+
+  await page.locator(".lightbox-backdrop").click();
+  await lightbox.waitFor({ state: "hidden" });
 });
 ```
 
@@ -195,33 +208,33 @@ await runTest("lightbox opens and closes", async () => {
 
 ```typescript
 await runTest("onboarding shows on first visit", async () => {
-    const page = await browser.newPage();
-    await page.goto(BASE_URL);
-    
-    const onboarding = page.locator("#onboarding");
-    await onboarding.waitFor({ state: "visible" });
+  const page = await browser.newPage();
+  await page.goto(BASE_URL);
+
+  const onboarding = page.locator("#onboarding");
+  await onboarding.waitFor({ state: "visible" });
 });
 
 await runTest("onboarding completes and hides", async () => {
-    const page = await browser.newPage();
-    await page.goto(BASE_URL);
-    await page.waitForSelector("#onboarding");
-    
-    // Click through slides SEQUENTIALLY (not combined selector)
-    await page.locator(".onboarding-next").click();
-    await page.waitForTimeout(100);
-    
-    await page.locator("#onboarding-try-chat").click();
-    await page.waitForTimeout(100);
-    
-    await page.locator("#onboarding-try-create").click();
-    await page.waitForTimeout(100);
-    
-    await page.locator("#onboarding-done").click();
-    await page.waitForTimeout(100);
-    
-    const onboarding = page.locator("#onboarding");
-    await onboarding.waitFor({ state: "hidden" });
+  const page = await browser.newPage();
+  await page.goto(BASE_URL);
+  await page.waitForSelector("#onboarding");
+
+  // Click through slides SEQUENTIALLY (not combined selector)
+  await page.locator(".onboarding-next").click();
+  await page.waitForTimeout(100);
+
+  await page.locator("#onboarding-try-chat").click();
+  await page.waitForTimeout(100);
+
+  await page.locator("#onboarding-try-create").click();
+  await page.waitForTimeout(100);
+
+  await page.locator("#onboarding-done").click();
+  await page.waitForTimeout(100);
+
+  const onboarding = page.locator("#onboarding");
+  await onboarding.waitFor({ state: "hidden" });
 });
 ```
 
@@ -229,46 +242,46 @@ await runTest("onboarding completes and hides", async () => {
 
 ```typescript
 await runTest("create modal opens and shows tabs", async () => {
-    const page = await browser.newPage();
-    await page.goto(BASE_URL);
-    await page.waitForSelector(".message--welcome");
-    
-    await page.click("#create-btn");
-    const modal = page.locator("#create-modal");
-    await modal.waitFor({ state: "visible" });  // Wait for VISIBILITY, not just existence
-    
-    await expectVisible(page, ".create-tab[data-tab='image']");
-    await expectVisible(page, ".create-tab[data-tab='music']");
-    await expectVisible(page, ".create-tab[data-tab='voice']");
-    await expectVisible(page, ".create-tab[data-tab='search']");
+  const page = await browser.newPage();
+  await page.goto(BASE_URL);
+  await page.waitForSelector(".message--welcome");
+
+  await page.click("#create-btn");
+  const modal = page.locator("#create-modal");
+  await modal.waitFor({ state: "visible" }); // Wait for VISIBILITY, not just existence
+
+  await expectVisible(page, ".create-tab[data-tab='image']");
+  await expectVisible(page, ".create-tab[data-tab='music']");
+  await expectVisible(page, ".create-tab[data-tab='voice']");
+  await expectVisible(page, ".create-tab[data-tab='search']");
 });
 
 await runTest("create modal switches tabs", async () => {
-    const page = await browser.newPage();
-    await page.goto(BASE_URL);
-    await page.waitForSelector(".message--welcome");
-    
-    await page.click("#create-btn");
-    await page.waitForSelector("#create-modal", { state: "visible" });
-    
-    await page.click(".create-tab[data-tab='music']");
-    await expectVisible(page, "#create-music-form");
-    
-    await page.click(".create-tab[data-tab='image']");
-    await expectVisible(page, "#create-image-form");
+  const page = await browser.newPage();
+  await page.goto(BASE_URL);
+  await page.waitForSelector(".message--welcome");
+
+  await page.click("#create-btn");
+  await page.waitForSelector("#create-modal", { state: "visible" });
+
+  await page.click(".create-tab[data-tab='music']");
+  await expectVisible(page, "#create-music-form");
+
+  await page.click(".create-tab[data-tab='image']");
+  await expectVisible(page, "#create-image-form");
 });
 
 await runTest("create modal closes", async () => {
-    const page = await browser.newPage();
-    await page.goto(BASE_URL);
-    await page.waitForSelector(".message--welcome");
-    
-    await page.click("#create-btn");
-    await page.waitForSelector("#create-modal", { state: "visible" });
-    
-    await page.click("#create-close");
-    const modal = page.locator("#create-modal");
-    await modal.waitFor({ state: "hidden" });
+  const page = await browser.newPage();
+  await page.goto(BASE_URL);
+  await page.waitForSelector(".message--welcome");
+
+  await page.click("#create-btn");
+  await page.waitForSelector("#create-modal", { state: "visible" });
+
+  await page.click("#create-close");
+  const modal = page.locator("#create-modal");
+  await modal.waitFor({ state: "hidden" });
 });
 ```
 
@@ -276,15 +289,15 @@ await runTest("create modal closes", async () => {
 
 ```typescript
 await runTest("quota badge shows in header", async () => {
-    const page = await browser.newPage();
-    await page.goto(BASE_URL);
-    await page.waitForSelector(".message--welcome");
-    
-    const badge = page.locator("#quota-badge");
-    await badge.waitFor({ state: "visible" });
-    
-    await expectVisible(page, ".quota-item[data-type='image']");
-    await expectVisible(page, ".quota-item[data-type='music']");
+  const page = await browser.newPage();
+  await page.goto(BASE_URL);
+  await page.waitForSelector(".message--welcome");
+
+  const badge = page.locator("#quota-badge");
+  await badge.waitFor({ state: "visible" });
+
+  await expectVisible(page, ".quota-item[data-type='image']");
+  await expectVisible(page, ".quota-item[data-type='music']");
 });
 ```
 
@@ -292,17 +305,21 @@ await runTest("quota badge shows in header", async () => {
 
 ```typescript
 await runTest("session persists across page reloads", async () => {
-    const page = await browser.newPage();
-    await page.goto(BASE_URL);
-    await page.waitForSelector(".message--welcome");
-    
-    const sessionId = await page.evaluate(() => localStorage.getItem("hallucygenie_session_id"));
-    
-    await page.reload();
-    await page.waitForSelector(".message--welcome");
-    
-    const sessionId2 = await page.evaluate(() => localStorage.getItem("hallucygenie_session_id"));
-    assertEqual(sessionId, sessionId2);
+  const page = await browser.newPage();
+  await page.goto(BASE_URL);
+  await page.waitForSelector(".message--welcome");
+
+  const sessionId = await page.evaluate(() =>
+    localStorage.getItem("hallucygenie_session_id"),
+  );
+
+  await page.reload();
+  await page.waitForSelector(".message--welcome");
+
+  const sessionId2 = await page.evaluate(() =>
+    localStorage.getItem("hallucygenie_session_id"),
+  );
+  assertEqual(sessionId, sessionId2);
 });
 ```
 

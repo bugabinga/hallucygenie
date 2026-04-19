@@ -3,9 +3,11 @@
 ### Verdict: APPROVE
 
 ### Summary
+
 The plan to create a nock-based mock file covering all MiniMax endpoints is sound. The STATUS.md checkbox correctly lists all 7 endpoints (chat, image, TTS, music, web search, vision, quota). The worker has access to the codebase and STATUS.md discoveries (D1–D5) that flag key format differences. The Step 1 review confirmed nock v14 supports Node.js v25 native fetch.
 
 ### Issues Found
+
 None blocking.
 
 ### Critical Implementation Gotchas (for the worker, not blocking)
@@ -24,9 +26,11 @@ The PROMPT.md example code has **several incorrect endpoint paths and response s
 10. **Auth headers** — Chat uses `x-api-key` header. All other endpoints use `Authorization: Bearer`. nock interceptors should match the correct headers.
 
 ### Missing Items
+
 None. The STATUS.md checkbox covers all 7 endpoints. The 7 endpoints match every `fetch()` call in the codebase.
 
 ### Suggestions
+
 - Consider using `nock.persist()` for endpoints that every test needs (chat, quota), and per-test `.reply()` for tool endpoints only needed in specific tests
 - The TTS/Music hex values can be short (e.g., `"FF00FF"`) — just enough for `Buffer.from(hex, "hex")` to produce valid base64
 - Chat mock should produce a minimal valid Anthropic SSE stream: `message_start` → `content_block_start` (type: text) → `content_block_delta` (text_delta) → `content_block_stop` → `message_delta` (stop_reason: end_turn) → `message_stop`
