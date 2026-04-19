@@ -917,6 +917,88 @@ export function init(): void {
   updateQuotaBadge();
   setInterval(updateQuotaBadge, 60_000);
 
+  // Create modal
+  const createBtn = $("#create-btn") as HTMLButtonElement;
+  const createModal = $("#create-modal");
+  const createClose = $("#create-close") as HTMLButtonElement;
+  const createBackdrop = createModal.querySelector(".create-backdrop") as HTMLElement;
+
+  createBtn.addEventListener("click", () => {
+    createModal.hidden = false;
+  });
+  createClose.addEventListener("click", () => { createModal.hidden = true; });
+  createBackdrop.addEventListener("click", () => { createModal.hidden = true; });
+
+  // Tab switching
+  const tabs = createModal.querySelectorAll<HTMLButtonElement>(".create-tab");
+  const panels = createModal.querySelectorAll<HTMLElement>(".create-panel");
+  tabs.forEach(tab => {
+    tab.addEventListener("click", () => {
+      tabs.forEach(t => t.classList.remove("active"));
+      panels.forEach(p => { p.hidden = true; });
+      tab.classList.add("active");
+      const panel = createModal.querySelector<HTMLElement>(`[data-panel="${tab.dataset.tab}"]`);
+      if (panel) panel.hidden = false;
+    });
+  });
+
+  // Form submissions — send as prompt to chat
+  const createImgForm = $("#create-image-form") as HTMLFormElement;
+  const createMusicForm = $("#create-music-form") as HTMLFormElement;
+  const createVoiceForm = $("#create-voice-form") as HTMLFormElement;
+  const createSearchForm = $("#create-search-form") as HTMLFormElement;
+  const imgPromptInput = $("#img-prompt") as HTMLTextAreaElement;
+  const imgRatioInput = $("#img-ratio") as HTMLSelectElement;
+  const musicPromptInput = $("#music-prompt") as HTMLTextAreaElement;
+  const musicLyricsInput = $("#music-lyrics") as HTMLTextAreaElement;
+  const musicInstrumentalInput = $("#music-instrumental") as HTMLInputElement;
+  const voiceTextInput = $("#voice-text") as HTMLTextAreaElement;
+  const voiceSpeedInput = $("#voice-speed") as HTMLSelectElement;
+  const searchQueryInput = $("#search-query") as HTMLTextAreaElement;
+
+  createImgForm.addEventListener("submit", (e) => {
+    e.preventDefault();
+    const prompt = imgPromptInput.value.trim();
+    const ratio = imgRatioInput.value;
+    if (prompt) {
+      createModal.hidden = true;
+      sendMessage(`Generate an image: ${prompt} (aspect ratio ${ratio})`);
+    }
+  });
+
+  createMusicForm.addEventListener("submit", (e) => {
+    e.preventDefault();
+    const prompt = musicPromptInput.value.trim();
+    const lyrics = musicLyricsInput.value.trim();
+    const instrumental = musicInstrumentalInput.checked;
+    if (prompt) {
+      createModal.hidden = true;
+      let msg = `Generate music: ${prompt}`;
+      if (lyrics) msg += `. Lyrics: ${lyrics}`;
+      if (instrumental) msg += " (instrumental only)";
+      sendMessage(msg);
+    }
+  });
+
+  createVoiceForm.addEventListener("submit", (e) => {
+    e.preventDefault();
+    const text = voiceTextInput.value.trim();
+    const speed = voiceSpeedInput.value;
+    if (text) {
+      createModal.hidden = true;
+      sendMessage(`Read this out loud: ${text} (speed: ${speed}x)`);
+    }
+  });
+
+  createSearchForm.addEventListener("submit", (e) => {
+    e.preventDefault();
+    const query = searchQueryInput.value.trim();
+    if (query) {
+      createModal.hidden = true;
+      sendMessage(`Search the web for: ${query}`);
+    }
+  });
+
   // Focus input
   input.focus();
 }

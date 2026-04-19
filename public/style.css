@@ -212,6 +212,26 @@ body {
 .quota-item.warn { color: var(--color-tertiary); }
 .quota-item.critical { color: var(--color-primary); }
 
+/* Create button */
+.create-btn {
+  display: flex;
+  align-items: center;
+  gap: var(--space-xs);
+  background: var(--color-primary);
+  color: var(--color-bg);
+  border: none;
+  border-radius: 999px;
+  padding: 4px 12px;
+  font-size: 0.75rem;
+  font-weight: bold;
+  cursor: pointer;
+  transition: opacity 0.2s, box-shadow 0.2s;
+}
+.create-btn:hover {
+  opacity: 0.9;
+  box-shadow: 0 0 12px var(--color-primary-glow);
+}
+
 @keyframes pulse-glow {
   0%, 100% { opacity: 1; box-shadow: 0 0 8px var(--color-secondary-glow); }
   50% { opacity: 0.6; box-shadow: 0 0 16px var(--color-secondary-glow); }
@@ -688,6 +708,119 @@ body {
 .lightbox-close:hover {
   background: rgba(255, 255, 255, 0.2);
 }
+
+/* ── Create Modal ───────────────────────────────────────────────── */
+.modal {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.modal[hidden] { display: none; }
+.modal-backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(0,0,0,0.7);
+  backdrop-filter: blur(4px);
+}
+.modal-content {
+  position: relative;
+  background: var(--color-bg-card);
+  border: 1px solid var(--color-border);
+  border-radius: 16px;
+  padding: var(--space-lg);
+  max-width: 400px;
+  width: 90%;
+  max-height: 80vh;
+  overflow-y: auto;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.5);
+}
+.modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: var(--space-md);
+}
+.modal-header h2 { font-size: 1rem; margin: 0; }
+.modal-close {
+  background: none;
+  border: none;
+  color: var(--color-text);
+  font-size: 1rem;
+  cursor: pointer;
+  padding: 4px 8px;
+  border-radius: 4px;
+}
+.modal-close:hover { background: var(--color-bg-hover); }
+
+.create-tabs {
+  display: flex;
+  gap: 4px;
+  margin-bottom: var(--space-md);
+  flex-wrap: wrap;
+}
+.create-tab {
+  flex: 1;
+  min-width: 70px;
+  padding: 6px 4px;
+  background: var(--color-bg);
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  color: var(--color-text-dim);
+  font-size: 0.7rem;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+.create-tab.active {
+  background: var(--color-primary);
+  border-color: var(--color-primary);
+  color: var(--color-bg);
+}
+.create-tab:hover:not(.active) { border-color: var(--color-primary-dim); color: var(--color-text); }
+
+.create-panel[hidden] { display: none; }
+.form-group { margin-bottom: var(--space-md); }
+.form-group label {
+  display: block;
+  font-size: 0.75rem;
+  color: var(--color-text-dim);
+  margin-bottom: 4px;
+}
+.form-group textarea,
+.form-group select {
+  width: 100%;
+  box-sizing: border-box;
+  background: var(--color-bg);
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  color: var(--color-text);
+  padding: 8px;
+  font-size: 0.85rem;
+  font-family: inherit;
+  resize: vertical;
+}
+.form-group select { cursor: pointer; }
+.form-group textarea::placeholder { color: var(--color-text-dim); }
+
+.btn-primary {
+  width: 100%;
+  padding: 10px;
+  background: var(--color-primary);
+  color: var(--color-bg);
+  border: none;
+  border-radius: 8px;
+  font-size: 0.85rem;
+  font-weight: bold;
+  cursor: pointer;
+  transition: opacity 0.2s, box-shadow 0.2s;
+}
+.btn-primary:hover {
+  opacity: 0.9;
+  box-shadow: 0 0 16px var(--color-primary-glow);
+}
+.btn-primary:disabled { opacity: 0.5; cursor: not-allowed; }
 
 /* ── Error Toast ────────────────────────────────────────────────────── */
 

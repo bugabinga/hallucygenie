@@ -10,7 +10,7 @@ export interface ToolDefinition {
 }
 
 export interface ToolResult {
-  type: "image" | "audio" | "error";
+  type: "image" | "audio" | "text" | "error";
   content: string;
 }
 
@@ -76,6 +76,36 @@ export function getToolDefinitions(): ToolDefinition[] {
         required: ["prompt"],
       },
     },
+    {
+      name: "web_search",
+      description:
+        "Search the web for information. Returns formatted search results.",
+      input_schema: {
+        type: "object",
+        properties: {
+          query: {
+            type: "string",
+            description: "The search query",
+          },
+        },
+        required: ["query"],
+      },
+    },
+    {
+      name: "analyze_image",
+      description:
+        "Analyze or describe an image from a URL. Returns a text description.",
+      input_schema: {
+        type: "object",
+        properties: {
+          image_url: {
+            type: "string",
+            description: "URL of the image to analyze",
+          },
+        },
+        required: ["image_url"],
+      },
+    },
   ];
 }
 
@@ -108,6 +138,10 @@ export async function executeTool(
         apiKey,
         args.lyrics as string | undefined
       );
+    case "web_search":
+      return webSearch(args.query as string, apiKey);
+    case "analyze_image":
+      return analyzeImage(args.image_url as string, apiKey);
     default:
       return { type: "error", content: `Unknown tool: ${name}` };
   }
@@ -278,5 +312,59 @@ export async function generateMusic(
       type: "error",
       content: `Music generation failed: ${String(err)}`,
     };
+  }
+}
+
+// ── Web Search ───────────────────────────────────────────────────
+
+async function webSearch(query: string, apiKey: string): Promise<ToolResult> {
+  try {
+    const resp = await fetch(`${MINIMAX_BASE}/v1/coding_plan/search`, {
+      method: "POST",
+      headers: {
+        "Authorization": `Bearer ${apiKey}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ q: query }),
+    });
+    if (!resp.ok) {
+      return { type: "error", content: `Search failed: HTTP ${resp.status}` };
+    }
+    const data = await resp.json() as { organic?: Array<{ title: string; link: string; snippet: string }> };
+    const results = data.organic ?? [];
+    if (results.length === 0) {
+      return { type: "text", content: "No search results found." };
+    }
+    const lines = results.slice(0, 5).map(
+      (r, i) => `${i + 1}. ${r.title}\n   ${r.link}\n   ${r.snippet}`
+    );
+    return { type: "text", content: lines.join("\n\n") };
+  } catch (err) {
+    return { type: "error", content: `Search failed: ${String(err)}` };
+  }
+}
+
+// ── Image Analysis (Vision) ───────────────────────────────────────
+
+async function analyzeImage(imageUrl: string, apiKey: string): Promise<ToolResult> {
+  try {
+    const resp = await fetch(`${MINIMAX_BASE}/v1/coding_plan/vlm`, {
+      method: "POST",
+      headers: {
+        "Authorization": `Bearer ${apiKey}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ prompt: "Describe this image in detail.", image_url: imageUrl }),
+    });
+    if (!resp.ok) {
+      return { type: "error", content: `Image analysis failed: HTTP ${resp.status}` };
+    }
+    const data = await resp.json() as { content?: string; base_resp?: { status_code: number; status_msg: string } };
+    if (data.base_resp && data.base_resp.status_code !== 0) {
+      return { type: "error", content: `Image analysis failed: ${data.base_resp.status_msg}` };
+    }
+    return { type: "text", content: data.content ?? "No description returned." };
+  } catch (err) {
+    return { type: "error", content: `Image analysis failed: ${String(err)}` };
   }
 }

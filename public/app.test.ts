@@ -943,22 +943,91 @@ function setupDOM(): { win: any; doc: any; errors: string[] } {
 
   // Build the full DOM structure
   doc.body.innerHTML = `
+    <header>
+      <div class="header-left"><span class="header-emoji">🧞</span></div>
+      <div class="header-right">
+        <span id="connection-status" class="status-dot"></span>
+        <button id="quota-badge">
+          <span class="quota-item" data-type="image">🎨 <span class="quota-used">—</span></span>
+          <span class="quota-item" data-type="music">🎵 <span class="quota-used">—</span></span>
+        </button>
+        <button id="create-btn">✨ Create</button>
+      </div>
+    </header>
     <form id="chat-form">
-      <textarea id="chat-input"></textarea>
-      <button id="send-button" disabled></button>
+      <div class="input-wrapper">
+        <textarea id="chat-input"></textarea>
+        <button id="send-button" disabled></button>
+      </div>
     </form>
+    <div id="steer-hint" hidden></div>
     <div id="message-list"></div>
     <div id="typing-indicator" hidden></div>
-    <div id="steer-hint" hidden></div>
+    <div id="lightbox">
+      <div class="lightbox-backdrop"></div>
+      <div class="lightbox-content"><img id="lightbox-img" /></div>
+      <button class="lightbox-close">×</button>
+    </div>
     <div id="error-toast" hidden>
+      <span id="error-toast-icon">😕</span>
       <span id="error-toast-message"></span>
     </div>
-    <div id="lightbox">
-      <button class="lightbox-close">×</button>
-      <div class="lightbox-backdrop"></div>
-      <img id="lightbox-img" />
-    </div>
     <button id="steer-close">×</button>
+    <span id="connection-status" class="status-dot"></span>
+    <div id="create-modal" hidden>
+      <div class="create-backdrop"></div>
+      <div class="create-modal-content">
+        <div class="modal-header">
+          <h2>✨ Create</h2>
+          <button id="create-close">✕</button>
+        </div>
+        <div class="create-tabs">
+          <button class="create-tab active" data-tab="image">🎨 Image</button>
+          <button class="create-tab" data-tab="music">🎵 Music</button>
+          <button class="create-tab" data-tab="voice">🎤 Voice</button>
+          <button class="create-tab" data-tab="search">🔍 Search</button>
+        </div>
+        <div class="create-panels">
+          <form id="create-image-form" class="create-panel" data-panel="image">
+            <div class="form-group">
+              <textarea id="img-prompt"></textarea>
+            </div>
+            <div class="form-group">
+              <select id="img-ratio">
+                <option value="1:1">1:1</option>
+                <option value="16:9" selected>16:9</option>
+              </select>
+            </div>
+          </form>
+          <form id="create-music-form" class="create-panel" data-panel="music" hidden>
+            <div class="form-group">
+              <textarea id="music-prompt"></textarea>
+            </div>
+            <div class="form-group">
+              <textarea id="music-lyrics"></textarea>
+            </div>
+            <div class="form-group">
+              <input type="checkbox" id="music-instrumental">
+            </div>
+          </form>
+          <form id="create-voice-form" class="create-panel" data-panel="voice" hidden>
+            <div class="form-group">
+              <textarea id="voice-text"></textarea>
+            </div>
+            <div class="form-group">
+              <select id="voice-speed">
+                <option value="1.0" selected>1.0x</option>
+              </select>
+            </div>
+          </form>
+          <form id="create-search-form" class="create-panel" data-panel="search" hidden>
+            <div class="form-group">
+              <textarea id="search-query"></textarea>
+            </div>
+          </form>
+        </div>
+      </div>
+    </div>
   `;
 
   // Set globals

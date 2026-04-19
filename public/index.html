@@ -22,6 +22,9 @@
           <span class="quota-item" data-type="image" title="Images">🎨 <span class="quota-used">—</span></span>
           <span class="quota-item" data-type="music" title="Music">🎵 <span class="quota-used">—</span></span>
         </button>
+        <button id="create-btn" class="create-btn" title="Create something" aria-label="Create media">
+          ✨ Create
+        </button>
       </div>
     </header>
 
@@ -88,6 +91,83 @@
     <div id="error-toast" class="error-toast" hidden>
       <span id="error-toast-icon">😕</span>
       <span id="error-toast-message"></span>
+    </div>
+
+    <!-- Create Modal -->
+    <div id="create-modal" class="modal" hidden>
+      <div class="modal-backdrop create-backdrop"></div>
+      <div class="modal-content create-modal-content">
+        <div class="modal-header">
+          <h2>✨ Create</h2>
+          <button id="create-close" class="modal-close" aria-label="Close">✕</button>
+        </div>
+        <div class="create-tabs">
+          <button class="create-tab active" data-tab="image">🎨 Image</button>
+          <button class="create-tab" data-tab="music">🎵 Music</button>
+          <button class="create-tab" data-tab="voice">🎤 Voice</button>
+          <button class="create-tab" data-tab="search">🔍 Search</button>
+        </div>
+        <div class="create-panels">
+          <!-- Image -->
+          <form id="create-image-form" class="create-panel" data-panel="image">
+            <div class="form-group">
+              <label for="img-prompt">Describe your image</label>
+              <textarea id="img-prompt" rows="3" placeholder="A epic gaming logo with neon lights"></textarea>
+            </div>
+            <div class="form-group">
+              <label for="img-ratio">Aspect ratio</label>
+              <select id="img-ratio">
+                <option value="1:1">1:1 (square)</option>
+                <option value="16:9" selected>16:9 (wide)</option>
+                <option value="9:16">9:16 (tall)</option>
+                <option value="4:3">4:3</option>
+              </select>
+            </div>
+            <button type="submit" class="btn-primary">Generate image 🎨</button>
+          </form>
+          <!-- Music -->
+          <form id="create-music-form" class="create-panel" data-panel="music" hidden>
+            <div class="form-group">
+              <label for="music-prompt">Describe the music</label>
+              <textarea id="music-prompt" rows="2" placeholder="Upbeat electronic chiptune gaming music"></textarea>
+            </div>
+            <div class="form-group">
+              <label for="music-lyrics">Lyrics (optional)</label>
+              <textarea id="music-lyrics" rows="3" placeholder="Verse:... Chorus:..."></textarea>
+            </div>
+            <div class="form-group">
+              <label>
+                <input type="checkbox" id="music-instrumental"> Instrumental only (no vocals)
+              </label>
+            </div>
+            <button type="submit" class="btn-primary">Generate music 🎵</button>
+          </form>
+          <!-- Voice -->
+          <form id="create-voice-form" class="create-panel" data-panel="voice" hidden>
+            <div class="form-group">
+              <label for="voice-text">Text to speak</label>
+              <textarea id="voice-text" rows="4" placeholder="Welcome to HallucyGenie! Your AI creative buddy."></textarea>
+            </div>
+            <div class="form-group">
+              <label for="voice-speed">Speed</label>
+              <select id="voice-speed">
+                <option value="0.8">0.8x (slower)</option>
+                <option value="1.0" selected>1.0x (normal)</option>
+                <option value="1.2">1.2x (faster)</option>
+              </select>
+            </div>
+            <button type="submit" class="btn-primary">Read it to me 🎤</button>
+          </form>
+          <!-- Search -->
+          <form id="create-search-form" class="create-panel" data-panel="search" hidden>
+            <div class="form-group">
+              <label for="search-query">What do you want to search for?</label>
+              <textarea id="search-query" rows="2" placeholder="Latest Minecraft update news"></textarea>
+            </div>
+            <button type="submit" class="btn-primary">Search the web 🔍</button>
+          </form>
+        </div>
+      </div>
     </div>
   </div>
 

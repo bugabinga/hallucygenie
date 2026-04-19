@@ -39,9 +39,9 @@ function jsonResponse(data: unknown, status = 200): Response {
 // ── Tool definitions ─────────────────────────────────────────────────
 
 describe("getToolDefinitions", () => {
-  it("returns three tool definitions", () => {
+  it("returns five tool definitions", () => {
     const defs = getToolDefinitions();
-    assert.equal(defs.length, 3);
+    assert.equal(defs.length, 5);
   });
 
   it("defines generate_image with correct schema", () => {
