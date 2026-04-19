@@ -34,10 +34,11 @@
 | Concurrent isolation tests | 5+ |
 | Old broken tests replaced | ≥3 |
 =======
-| Criterion                     | Target |
+| Criterion | Target |
 | ----------------------------- | ------ |
-| New tests                     | ≥25    |
-| State independence assertions | 5+     |
-| Concurrent isolation tests    | 5+     |
-| Old broken tests replaced     | ≥3     |
->>>>>>> Stashed changes
+| New tests | ≥25 |
+| State independence assertions | 5+ |
+| Concurrent isolation tests | 5+ |
+| Old broken tests replaced | ≥3 |
+
+> > > > > > > Stashed changes

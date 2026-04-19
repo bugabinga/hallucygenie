@@ -5,9 +5,10 @@
 ||||||| Stash base
 **Status:** pending
 =======
->>>>>>> Stashed changes
-**Breaking:** output format (code block class names)  
-**Dependencies:** `marked@15.0.4` (exact pin, no `^`)
+
+> > > > > > > Stashed changes
+> > > > > > > **Breaking:** output format (code block class names)  
+> > > > > > > **Dependencies:** `marked@15.0.4` (exact pin, no `^`)
 
 ## Waves
 
