@@ -2,7 +2,7 @@
 
 **Last Updated:** 2026-04-19
 **Status:** Feature complete
-**Next Task ID:** HG-020
+**Next Task ID:** HG-024
 
 ---
 
@@ -67,6 +67,7 @@ Podman quadlet deployment.
 | HG-017 | First-run onboarding         | manual |
 | HG-018 | Media tools + forms UI       | manual |
 | HG-019 | Asset persistence + gallery  | manual |
+| HG-020 | Test suite overhaul           | manual |
 
 ---
 
@@ -74,7 +75,19 @@ Podman quadlet deployment.
 
 - [ ] **Playwright E2E testing** — requires monkey-patching playwright-core registry for Android
 - [ ] **Stryker mutation testing** — OOM on this device for agent.ts/server.ts
-- [ ] **HG-020+** — new features to be planned
+## Planned Refactors (breaking)
+
+| ID | Task | Risk | Breaking |
+|----|------|------|----------|
+| HG-021 | Markdown renderer rewrite (→ marked) | low | output format | adversarial: KEEP 4 |
+| HG-022 | handleNodeRequest simplification | minimal | none | adversarial: KEEP 5 |
+| HG-023 | Module-level globals refactor | medium | none (closure factory) | adversarial: KILL→REWRITE |
+
+## Planned Features
+
+- Image History Browser (ideas.md RECOMMENDATION 1)
+- Chat Personality Selector (ideas.md RECOMMENDATION 2)
+- Gaming Co-Creator Button (ideas.md RECOMMENDATION 3, deferred)
 
 ---
 
