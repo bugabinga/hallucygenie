@@ -1,6 +1,7 @@
 # HG-023: Refactor Module-Level Globals
 
-**Status:** pending  
+**Status:** ✅ Complete
+**Last Updated:** 2026-04-19
 **Breaking:** none (no function signatures change)  
 **Risk:** medium — touches `public/app.ts` internals, SSE callback closures
 
@@ -18,3 +19,6 @@
 - [x] **Closure factory pattern** — `createStreamHandlers(state)` threads explicit state into SSE callbacks. Async event handlers are isolated from global state.
 - [x] **No function signatures change** — production call sites use `defaultState` implicitly. Tests pass their own state via factory.
 - [x] **Exports** — `createAppState` + `createStreamHandlers` exported for test use.
+
+| 2026-04-19 18:17 | Task started | Runtime V2 lane-runner execution |
+| 2026-04-19 18:17 | Task complete | .DONE created |
