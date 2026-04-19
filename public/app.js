@@ -348,7 +348,10 @@
         src: result.content
       });
       body.appendChild(audio);
-    } else if (result.type === "error") {
+    } else {
+      body.innerHTML = renderMarkdown(result.content);
+    }
+    if (result.type === "error") {
       body.textContent = `\u{1F615} ${result.content}`;
       card.style.borderColor = "var(--color-error)";
     }

@@ -11,7 +11,7 @@ interface HistoryMessage {
 }
 
 interface ToolResult {
-  type: "image" | "audio" | "error";
+  type: "image" | "audio" | "text" | "error";
   content: string;
 }
 
@@ -440,7 +440,11 @@ export function renderToolResult(toolName: string, result: ToolResult): HTMLElem
       src: result.content,
     });
     body.appendChild(audio);
-  } else if (result.type === "error") {
+  } else {
+    // text or other — render as formatted text
+    body.innerHTML = renderMarkdown(result.content);
+  }
+  if (result.type === "error") {
     body.textContent = `😕 ${result.content}`;
     card.style.borderColor = "var(--color-error)";
   }

@@ -2,7 +2,7 @@
 // Target: Node.js runtime
 
 import { mkdirSync, writeFileSync } from "node:fs";
-import { initDb, saveAsset, getAssets, getAsset, type AssetRow } from "./db.ts";
+import { initDb, saveAsset, getAssets, getAsset } from "./db.ts";
 import { dirname } from "node:path";
 import { createServer, type IncomingMessage, type ServerResponse, type Server } from "node:http";
 import { createLogger, nextReqId } from "./log.ts";
