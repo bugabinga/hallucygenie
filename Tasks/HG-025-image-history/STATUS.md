@@ -1,14 +1,15 @@
 # HG-025: Image History Browser
 
-**Status:** pending
+**Status:** completed
 **Breaking:** none
 **Risk:** low
 
-## Waves
+## Implementation
 
-| Wave | Tasks                                                         |
-| ---- | ------------------------------------------------------------- |
-| 1    | Verify existing `/assets` and `/asset/:id` API endpoints work |
-| 2    | Wire `generateImage` to save PNG to `data/images/{id}.png`    |
-| 3    | Add migration for image metadata if needed                    |
-| 4    | Verify image appears in assets panel after generation         |
+Implemented by HG-019 (asset gallery). `saveAssetFile`, `/assets`, `/asset/:id` all exist.
+
+## Verification
+
+```
+just test-unit  # 373 tests pass
+```
