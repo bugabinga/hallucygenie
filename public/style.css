@@ -822,6 +822,50 @@ body {
 }
 .btn-primary:disabled { opacity: 0.5; cursor: not-allowed; }
 
+/* ── Assets Gallery ─────────────────────────────────────────────── */
+.assets-empty {
+  text-align: center;
+  color: var(--color-text-dim);
+  font-size: 0.85rem;
+  padding: var(--space-lg) 0;
+}
+#assets-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: var(--space-sm);
+}
+.asset-card {
+  background: var(--color-bg);
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  overflow: hidden;
+  cursor: pointer;
+  transition: border-color 0.2s;
+}
+.asset-card:hover { border-color: var(--color-primary-dim); }
+.asset-thumb {
+  width: 100%;
+  aspect-ratio: 1;
+  object-fit: cover;
+  display: block;
+}
+.asset-meta {
+  padding: 4px 6px;
+  font-size: 0.65rem;
+  color: var(--color-text-dim);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.asset-card[data-type="music"] .asset-thumb,
+.asset-card[data-type="voice"] .asset-thumb {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--color-bg-card);
+  font-size: 1.5rem;
+}
+
 /* ── Error Toast ────────────────────────────────────────────────────── */
 
 .error-toast {

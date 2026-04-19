@@ -106,6 +106,7 @@
           <button class="create-tab" data-tab="music">🎵 Music</button>
           <button class="create-tab" data-tab="voice">🎤 Voice</button>
           <button class="create-tab" data-tab="search">🔍 Search</button>
+          <button class="create-tab" data-tab="assets">📁 Assets</button>
         </div>
         <div class="create-panels">
           <!-- Image -->
@@ -166,6 +167,12 @@
             </div>
             <button type="submit" class="btn-primary">Search the web 🔍</button>
           </form>
+
+          <!-- Assets -->
+          <div id="assets-panel" class="create-panel" data-panel="assets" hidden>
+            <div id="assets-grid"></div>
+            <p id="assets-empty" class="assets-empty" hidden>No assets yet — generate something! ✨</p>
+          </div>
         </div>
       </div>
     </div>

@@ -1025,6 +1025,10 @@ function setupDOM(): { win: any; doc: any; errors: string[] } {
               <textarea id="search-query"></textarea>
             </div>
           </form>
+          <div id="assets-panel" class="create-panel" data-panel="assets" hidden>
+            <div id="assets-grid"></div>
+            <p id="assets-empty" class="assets-empty" hidden>No assets yet</p>
+          </div>
         </div>
       </div>
     </div>

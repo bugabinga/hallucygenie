@@ -464,6 +464,72 @@ export function closeLightbox(): void {
   img.src = "";
 }
 
+// ── Asset Gallery ─────────────────────────────────────────────────────
+
+interface Asset {
+  id: string;
+  session_id: string;
+  type: "image" | "audio" | "music";
+  filename: string;
+  mime_type: string;
+  prompt: string | null;
+  tool_name: string;
+  size_bytes: number;
+  created_at: number;
+}
+
+export function loadAssets(): void {
+  const grid = $("#assets-grid") as HTMLElement;
+  const empty = $("#assets-empty") as HTMLElement;
+  grid.innerHTML = "";
+  empty.hidden = true;
+
+  const sessionId = getOrCreateSessionId();
+  fetch(`/assets`, { headers: { "X-Session-Id": sessionId } })
+    .then(r => r.json() as Promise<{ assets: Asset[] }>)
+    .then(({ assets }) => {
+      if (!assets.length) { empty.hidden = false; return; }
+      for (const asset of assets.slice(0, 20)) {
+        const card = document.createElement("div");
+        card.className = "asset-card";
+        (card as any).dataset.type = asset.type;
+        (card as any).dataset.id = asset.id;
+        card.title = asset.prompt ?? asset.tool_name;
+        if (asset.type === "image") {
+          const img = document.createElement("img");
+          img.className = "asset-thumb";
+          img.src = `/asset/${asset.id}`;
+          img.alt = asset.prompt ?? "Generated image";
+          img.loading = "lazy";
+          card.appendChild(img);
+        } else {
+          const icon = document.createElement("span");
+          icon.className = "asset-thumb";
+          icon.textContent = asset.type === "music" ? "🎵" : "🎤";
+          card.appendChild(icon);
+        }
+        const meta = document.createElement("div");
+        meta.className = "asset-meta";
+        meta.textContent = asset.prompt
+          ? asset.prompt.slice(0, 30) + (asset.prompt.length > 30 ? "…" : "")
+          : asset.tool_name;
+        card.appendChild(meta);
+        card.addEventListener("click", () => {
+          if (asset.type === "image") {
+            openLightbox(`/asset/${asset.id}`);
+          } else {
+            new Audio(`/asset/${asset.id}`).play().catch(() => showError("Could not play audio"));
+          }
+        });
+        grid.appendChild(card);
+      }
+    })
+    .catch(() => {
+      empty.hidden = false;
+      (empty as HTMLElement).textContent = "Failed to load assets 😕";
+    });
+}
+
 // ── Error Toast ──────────────────────────────────────────────────────
 
 let toastTimeout: ReturnType<typeof setTimeout> | null = null;
@@ -938,7 +1004,10 @@ export function init(): void {
       panels.forEach(p => { p.hidden = true; });
       tab.classList.add("active");
       const panel = createModal.querySelector<HTMLElement>(`[data-panel="${tab.dataset.tab}"]`);
-      if (panel) panel.hidden = false;
+      if (panel) {
+        panel.hidden = false;
+        if (tab.dataset.tab === "assets") loadAssets();
+      }
     });
   });
 

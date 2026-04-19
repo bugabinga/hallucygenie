@@ -59,7 +59,7 @@ describe("runMigrations", () => {
       .prepare("SELECT version FROM schema_migrations ORDER BY version")
       .all()
       .map((r: any) => r.version);
-    assert.deepEqual(versions, [1, 2, 3, 4]);
+    assert.deepEqual(versions, [1, 2, 3, 4, 5]);
 
     db.close();
   });

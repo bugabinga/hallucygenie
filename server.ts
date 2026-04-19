@@ -1,8 +1,8 @@
 // HallucyGenie — HTTP server with SSE chat proxy
 // Target: Node.js runtime
 
-import { initDb } from "./db.ts";
-import { mkdirSync } from "node:fs";
+import { mkdirSync, writeFileSync } from "node:fs";
+import { initDb, saveAsset, getAssets, getAsset, type AssetRow } from "./db.ts";
 import { dirname } from "node:path";
 import { createServer, type IncomingMessage, type ServerResponse, type Server } from "node:http";
 import { createLogger, nextReqId } from "./log.ts";
@@ -303,10 +303,14 @@ export async function handleChat(
               break;
             }
             case "tool_result": {
+              // Save image/audio assets to disk
+              const saved = sessionId
+                ? saveAssetFile(event.result!, sessionId, event.name ?? "", event.prompt ?? null)
+                : event.result;
               const sseData = `event: tool_result\ndata: ${JSON.stringify({
                 id: event.id,
                 name: event.name,
-                result: event.result,
+                result: saved,
               })}\n\n`;
               writer.write(encoder.encode(sseData));
               break;
@@ -495,6 +499,32 @@ export async function handleRequest(req: Request): Promise<Response> {
       return jsonResponse({ usage, limits: QUOTAS });
     }
 
+    // GET /assets — list assets for session
+    if (path === "/assets" && method === "GET") {
+      const database = getDb();
+      if (!database) return jsonResponse({ error: "Database not initialized" }, 500);
+      const assets = getAssets(database, sessionId!);
+      return jsonResponse({ assets });
+    }
+
+    // GET /asset/:id — serve a specific asset file
+    if (path.startsWith("/asset/") && method === "GET") {
+      const assetId = path.slice("/asset/".length);
+      const database = getDb();
+      if (!database) return jsonResponse({ error: "Database not initialized" }, 500);
+      const asset = getAsset(database, assetId);
+      if (!asset) return jsonResponse({ error: "Not found" }, 404);
+      const filePath = `data/assets/${asset.session_id}/${asset.filename}`;
+      try {
+        const file = await readFile(filePath);
+        return new Response(file, {
+          headers: { "Content-Type": asset.mime_type, "Cache-Control": "public, max-age=31536000" },
+        });
+      } catch {
+        return jsonResponse({ error: "File not found" }, 404);
+      }
+    }
+
     return jsonResponse({ error: "Not found" }, 404);
   }
 
@@ -585,6 +615,56 @@ export function initDatabase(dbPath = "data/hallucygenie.db"): DatabaseSync {
   mkdirSync(dir, { recursive: true });
   db = initDb(dbPath);
   return db;
+}
+
+/**
+ * Save a data URL (image/audio) to disk and record in SQLite.
+ * Returns the saved file path (relative to data/assets/).
+ */
+function saveAssetFile(
+  result: { type: string; content: string },
+  sessionId: string,
+  toolName: string,
+  prompt: string | null
+): { type: string; content: string } {
+  if (!result.content.startsWith("data:")) {
+    return result; // text or error — no file to save
+  }
+
+  // Parse data URL: data:{mime};base64,{data}
+  const match = result.content.match(/^data:([^;]+);base64,(.+)$/);
+  if (!match) return result;
+
+  const mime = match[1]!;
+  const b64 = match[2]!;
+  const ext = mime.split("/")[1]?.replace(/jpeg/, "jpg") ?? "bin";
+  const assetId = nextReqId();
+  const filename = `${assetId}.${ext}`;
+
+  // Ensure directory exists
+  const dir = `data/assets/${sessionId}`;
+  mkdirSync(dir, { recursive: true });
+
+  // Write binary file
+  const buf = Buffer.from(b64, "base64");
+  writeFileSync(`${dir}/${filename}`, buf);
+
+  // Record in SQLite (if db is available)
+  if (db) {
+    saveAsset(db, {
+      id: assetId,
+      session_id: sessionId,
+      type: result.type as "image" | "audio" | "music",
+      filename,
+      mime_type: mime,
+      prompt,
+      tool_name: toolName,
+      size_bytes: buf.byteLength,
+    });
+  }
+
+  // Return asset reference instead of data URL
+  return { type: result.type, content: `/asset/${assetId}` };
 }
 
 export function startServer(port = PORT): Server {

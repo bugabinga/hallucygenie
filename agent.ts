@@ -44,6 +44,7 @@ export interface AgentEvent {
   id?: string;
   name?: string;
   result?: ToolResult;
+  prompt?: string; // for tool_result: the main prompt field used
 }
 
 export interface SteerQueue {
@@ -574,6 +575,7 @@ export async function runAgentLoop(
           id: tc.id,
           name: tc.name,
           result,
+          prompt: (args.prompt as string | undefined) ?? (args.text as string | undefined) ?? (args.topic as string | undefined),
         });
 
         // Append tool result to messages

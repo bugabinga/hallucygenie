@@ -214,3 +214,45 @@ export function checkQuota(db: DatabaseSync, feature: string): QuotaStatus {
 
   return { used, limit, remaining, warning, blocked };
 }
+
+// ── Assets ─────────────────────────────────────────────────────────
+
+export interface AssetRow {
+  id: string;
+  session_id: string;
+  type: "image" | "audio" | "music";
+  filename: string;
+  mime_type: string;
+  prompt: string | null;
+  tool_name: string;
+  size_bytes: number;
+  created_at: number;
+}
+
+export function saveAsset(db: DatabaseSync, asset: Omit<AssetRow, "created_at">): void {
+  db.prepare(
+    "INSERT INTO assets (id, session_id, type, filename, mime_type, prompt, tool_name, size_bytes, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)"
+  ).run(
+    asset.id,
+    asset.session_id,
+    asset.type,
+    asset.filename,
+    asset.mime_type,
+    asset.prompt,
+    asset.tool_name,
+    asset.size_bytes,
+    Date.now()
+  );
+}
+
+export function getAssets(db: DatabaseSync, sessionId: string): AssetRow[] {
+  return db
+    .prepare("SELECT * FROM assets WHERE session_id = ? ORDER BY created_at DESC")
+    .all(sessionId) as AssetRow[];
+}
+
+export function getAsset(db: DatabaseSync, assetId: string): AssetRow | undefined {
+  return db
+    .prepare("SELECT * FROM assets WHERE id = ?")
+    .get(assetId) as AssetRow | undefined;
+}

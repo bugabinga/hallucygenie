@@ -366,6 +366,54 @@
     const img = $("#lightbox-img");
     img.src = "";
   }
+  function loadAssets() {
+    const grid = $("#assets-grid");
+    const empty = $("#assets-empty");
+    grid.innerHTML = "";
+    empty.hidden = true;
+    const sessionId = getOrCreateSessionId();
+    fetch(`/assets`, { headers: { "X-Session-Id": sessionId } }).then((r) => r.json()).then(({ assets }) => {
+      if (!assets.length) {
+        empty.hidden = false;
+        return;
+      }
+      for (const asset of assets.slice(0, 20)) {
+        const card = document.createElement("div");
+        card.className = "asset-card";
+        card.dataset.type = asset.type;
+        card.dataset.id = asset.id;
+        card.title = asset.prompt ?? asset.tool_name;
+        if (asset.type === "image") {
+          const img = document.createElement("img");
+          img.className = "asset-thumb";
+          img.src = `/asset/${asset.id}`;
+          img.alt = asset.prompt ?? "Generated image";
+          img.loading = "lazy";
+          card.appendChild(img);
+        } else {
+          const icon = document.createElement("span");
+          icon.className = "asset-thumb";
+          icon.textContent = asset.type === "music" ? "\u{1F3B5}" : "\u{1F3A4}";
+          card.appendChild(icon);
+        }
+        const meta = document.createElement("div");
+        meta.className = "asset-meta";
+        meta.textContent = asset.prompt ? asset.prompt.slice(0, 30) + (asset.prompt.length > 30 ? "\u2026" : "") : asset.tool_name;
+        card.appendChild(meta);
+        card.addEventListener("click", () => {
+          if (asset.type === "image") {
+            openLightbox(`/asset/${asset.id}`);
+          } else {
+            new Audio(`/asset/${asset.id}`).play().catch(() => showError("Could not play audio"));
+          }
+        });
+        grid.appendChild(card);
+      }
+    }).catch(() => {
+      empty.hidden = false;
+      empty.textContent = "Failed to load assets \u{1F615}";
+    });
+  }
   var toastTimeout = null;
   function showError(message, duration = 4e3) {
     const toast = $("#error-toast");
@@ -713,7 +761,10 @@
         });
         tab.classList.add("active");
         const panel = createModal.querySelector(`[data-panel="${tab.dataset.tab}"]`);
-        if (panel) panel.hidden = false;
+        if (panel) {
+          panel.hidden = false;
+          if (tab.dataset.tab === "assets") loadAssets();
+        }
       });
     });
     const createImgForm = $("#create-image-form");
