@@ -1,6 +1,7 @@
 # HG-026: Chat Personality Selector
 
-**Status:** completed
+**Status:** ✅ Complete
+**Last Updated:** 2026-04-19
 **Breaking:** none
 **Risk:** minimal
 
@@ -17,3 +18,6 @@
 ```
 just test-unit  # 373 tests pass
 ```
+
+| 2026-04-19 22:40 | Task started | Runtime V2 lane-runner execution |
+| 2026-04-19 22:40 | Task complete | .DONE created |
