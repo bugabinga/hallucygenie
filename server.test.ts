@@ -1623,3 +1623,66 @@ describe("Coverage: GET /api/history and /api/usage without DB", () => {
     initDatabase(join(import.meta.dirname ?? ".", "test-data", "test.db"));
   });
 });
+
+describe("GET /api/quota", () => {
+  it("returns 503 when MINIMAX_API_KEY is missing", async () => {
+    const prev = process.env.MINIMAX_API_KEY;
+    delete process.env.MINIMAX_API_KEY;
+    try {
+      const req = new Request("http://localhost/api/quota");
+      const resp = await handleRequest(req);
+      assert.equal(resp.status, 503);
+    } finally {
+      if (prev) process.env.MINIMAX_API_KEY = prev;
+    }
+  });
+
+  it("returns quota data from MiniMax API", async () => {
+    const mockResp: Response = {
+      ok: true,
+      status: 200,
+      json: async () => ({
+        model_remains: [
+          { model_name: "MiniMax-M*", current_interval_total_count: 4500, current_interval_usage_count: 17, remains_time: 14413545 },
+          { model_name: "speech-hd", current_interval_total_count: 9000, current_interval_usage_count: 22, remains_time: 64813545 },
+          { model_name: "image-01", current_interval_total_count: 100, current_interval_usage_count: 6, remains_time: 64813545 },
+          { model_name: "music-2.6", current_interval_total_count: 100, current_interval_usage_count: 2, remains_time: 64813545 },
+        ],
+      }),
+    } as unknown as Response;
+
+    let capturedUrl = "";
+    const prevFetch = globalThis.fetch;
+    globalThis.fetch = async (url: URL | RequestInfo) => {
+      capturedUrl = String(url);
+      return mockResp;
+    };
+
+    try {
+      const req = new Request("http://localhost/api/quota");
+      const resp = await handleRequest(req);
+      assert.equal(resp.status, 200);
+      const body = await resp.json() as Record<string, unknown>;
+      assert.equal((body.chat as Record<string, number>).used, 17);
+      assert.equal((body.chat as Record<string, number>).total, 4500);
+      assert.equal((body.image as Record<string, number>).used, 6);
+      assert.equal((body.image as Record<string, number>).total, 100);
+      assert.equal(capturedUrl, "https://api.minimax.io/v1/token_plan/remains");
+    } finally {
+      globalThis.fetch = prevFetch;
+    }
+  });
+
+  it("returns 502 when MiniMax quota API fails", async () => {
+    const mockResp: Response = { ok: false, status: 500 } as unknown as Response;
+    const prevFetch = globalThis.fetch;
+    globalThis.fetch = async () => mockResp;
+    try {
+      const req = new Request("http://localhost/api/quota");
+      const resp = await handleRequest(req);
+      assert.equal(resp.status, 502);
+    } finally {
+      globalThis.fetch = prevFetch;
+    }
+  });
+});

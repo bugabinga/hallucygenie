@@ -832,6 +832,40 @@ export function handleInputChange(): void {
   autoResizeInput();
 }
 
+// ── Quota Badge ──────────────────────────────────────────────────
+
+interface QuotaData {
+  chat: { used: number; total: number } | null;
+  speech: { used: number; total: number } | null;
+  image: { used: number; total: number } | null;
+  music: { used: number; total: number } | null;
+}
+
+async function updateQuotaBadge(): Promise<void> {
+  const badge = $("#quota-badge") as HTMLButtonElement | null;
+  if (!badge) return;
+  try {
+    const resp = await fetch("/api/quota");
+    if (!resp.ok) return;
+    const data: QuotaData = await resp.json();
+    const items = badge.querySelectorAll<HTMLSpanElement>(".quota-item[data-type]");
+    for (const item of items) {
+      const type = item.dataset.type as keyof QuotaData;
+      const q = data[type];
+      if (!q || q.total === 0) {
+        item.querySelector(".quota-used")!.textContent = "—";
+        item.className = "quota-item";
+        continue;
+      }
+      const pct = q.used / q.total;
+      item.querySelector(".quota-used")!.textContent = `${q.total - q.used}`;
+      item.className = pct >= 0.95 ? "quota-item critical" : pct >= 0.80 ? "quota-item warn" : "quota-item";
+    }
+  } catch {
+    // Non-critical — ignore
+  }
+}
+
 // ── Event Binding ────────────────────────────────────────────────────
 
 export function init(): void {
@@ -878,6 +912,10 @@ export function init(): void {
 
   // Load history on init
   loadHistory();
+
+  // Fetch and display quota badge
+  updateQuotaBadge();
+  setInterval(updateQuotaBadge, 60_000);
 
   // Focus input
   input.focus();

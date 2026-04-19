@@ -380,8 +380,7 @@ let currentAssistantEl = null;
 let currentAssistantContent = null;
 let activeToolCards = /* @__PURE__ */ new Map();
 let rawTextBuffer = "";
-let thinkBuffer = "";
-let inThinkBlock = false;
+let thinkingBuffer = "";
 async function streamChat(sessionId, messages, onEvent) {
   const resp = await fetch("/api/chat", {
     method: "POST",
@@ -432,6 +431,16 @@ function handleSSEEvent(event) {
   const { event: eventType, data } = event;
   if (data === "[DONE]") {
     finishStreaming();
+    return;
+  }
+  if (eventType === "thinking") {
+    try {
+      const parsed = JSON.parse(data);
+      if (parsed.content) {
+        appendThinking(parsed.content);
+      }
+    } catch {
+    }
     return;
   }
   if (eventType === "error") {
@@ -485,48 +494,23 @@ function handleSSEEvent(event) {
 }
 function appendText(text) {
   if (!currentAssistantContent) return;
-  let i = 0;
-  while (i < text.length) {
-    if (inThinkBlock) {
-      const closeTags = ["</think_intended>", "</think_intended>"];
-      let foundClose = false;
-      for (const close of closeTags) {
-        const idx = text.indexOf(close, i);
-        if (idx !== -1) {
-          thinkBuffer += text.slice(i, idx);
-          inThinkBlock = false;
-          i = idx + close.length;
-          foundClose = true;
-          break;
-        }
-      }
-      if (!foundClose) {
-        thinkBuffer += text.slice(i);
-        i = text.length;
-      }
-    } else {
-      const openTags = ["<think_intended>", "<think_intended>"];
-      let foundOpen = false;
-      for (const open of openTags) {
-        const idx = text.indexOf(open, i);
-        if (idx !== -1) {
-          rawTextBuffer += text.slice(i, idx);
-          thinkBuffer = "";
-          inThinkBlock = true;
-          i = idx + open.length;
-          foundOpen = true;
-          break;
-        }
-      }
-      if (!foundOpen) {
-        rawTextBuffer += text.slice(i);
-        i = text.length;
-      }
-    }
-  }
+  rawTextBuffer += text;
   let html = "";
-  if (thinkBuffer) {
-    html += renderThinkingBlock(thinkBuffer);
+  if (thinkingBuffer) {
+    html += renderThinkingBlock(thinkingBuffer);
+  }
+  if (rawTextBuffer) {
+    html += renderMarkdown(rawTextBuffer);
+  }
+  currentAssistantContent.innerHTML = html;
+  scrollToBottom();
+}
+function appendThinking(text) {
+  if (!currentAssistantContent) return;
+  thinkingBuffer += text;
+  let html = "";
+  if (thinkingBuffer) {
+    html += renderThinkingBlock(thinkingBuffer);
   }
   if (rawTextBuffer) {
     html += renderMarkdown(rawTextBuffer);
@@ -546,8 +530,7 @@ function finishStreaming() {
   currentAssistantContent = null;
   activeToolCards.clear();
   rawTextBuffer = "";
-  thinkBuffer = "";
-  inThinkBlock = false;
+  thinkingBuffer = "";
   setStreamingUI(false);
 }
 function setStreamingUI(streaming) {
@@ -647,6 +630,29 @@ function handleInputChange() {
   sendBtn.disabled = !input.value.trim();
   autoResizeInput();
 }
+async function updateQuotaBadge() {
+  const badge = $("#quota-badge");
+  if (!badge) return;
+  try {
+    const resp = await fetch("/api/quota");
+    if (!resp.ok) return;
+    const data = await resp.json();
+    const items = badge.querySelectorAll(".quota-item[data-type]");
+    for (const item of items) {
+      const type = item.dataset.type;
+      const q = data[type];
+      if (!q || q.total === 0) {
+        item.querySelector(".quota-used").textContent = "\u2014";
+        item.className = "quota-item";
+        continue;
+      }
+      const pct = q.used / q.total;
+      item.querySelector(".quota-used").textContent = `${q.total - q.used}`;
+      item.className = pct >= 0.95 ? "quota-item critical" : pct >= 0.8 ? "quota-item warn" : "quota-item";
+    }
+  } catch {
+  }
+}
 function init() {
   const form = $("#chat-form");
   const input = $("#chat-input");
@@ -679,6 +685,8 @@ function init() {
     $("#steer-hint").hidden = true;
   });
   loadHistory();
+  updateQuotaBadge();
+  setInterval(updateQuotaBadge, 6e4);
   input.focus();
 }
 if (typeof document !== "undefined" && document.readyState !== "loading") {

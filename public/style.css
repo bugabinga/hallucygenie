@@ -192,6 +192,26 @@ body {
   box-shadow: none;
 }
 
+/* Quota badge */
+.quota-badge {
+  display: flex;
+  align-items: center;
+  gap: var(--space-xs);
+  background: var(--color-bg-card);
+  border: 1px solid var(--color-border);
+  border-radius: 999px;
+  padding: 2px 8px;
+  font-size: 0.7rem;
+  color: var(--color-text);
+  cursor: pointer;
+  opacity: 0.7;
+  transition: opacity 0.2s;
+}
+.quota-badge:hover { opacity: 1; }
+.quota-item { white-space: nowrap; }
+.quota-item.warn { color: var(--color-tertiary); }
+.quota-item.critical { color: var(--color-primary); }
+
 @keyframes pulse-glow {
   0%, 100% { opacity: 1; box-shadow: 0 0 8px var(--color-secondary-glow); }
   50% { opacity: 0.6; box-shadow: 0 0 16px var(--color-secondary-glow); }

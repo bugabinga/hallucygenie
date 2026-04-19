@@ -403,6 +403,46 @@ export async function handleRequest(req: Request): Promise<Response> {
     return handleHealth();
   }
 
+  // No-session endpoints
+  if (path === "/api/quota" && method === "GET") {
+    const apiKey = process.env.MINIMAX_API_KEY;
+    if (!apiKey) {
+      return jsonResponse({ error: "MINIMAX_API_KEY not configured" }, 503);
+    }
+    try {
+      const resp = await fetch(`${MINIMAX_BASE}/v1/token_plan/remains`, {
+        headers: { Authorization: `Bearer ${apiKey}`, "User-Agent": `hallucygenie/1.0` },
+      });
+      if (!resp.ok) {
+        log.warn("quota api error", { status: resp.status });
+        return jsonResponse({ error: "Failed to fetch quota" }, 502);
+      }
+      const data = await resp.json() as {
+        model_remains: Array<{
+          model_name: string;
+          current_interval_total_count: number;
+          current_interval_usage_count: number;
+          remains_time: number;
+        }>;
+      };
+      const find = (prefix: string) =>
+        data.model_remains.find(m => m.model_name.startsWith(prefix)) ?? null;
+      const m2 = find("MiniMax-M");
+      const speech = find("speech-hd");
+      const image = find("image-01");
+      const music = find("music-2.6");
+      return jsonResponse({
+        chat: m2 ? { used: m2.current_interval_usage_count, total: m2.current_interval_total_count, resetsInMs: m2.remains_time } : null,
+        speech: speech ? { used: speech.current_interval_usage_count, total: speech.current_interval_total_count, resetsInMs: speech.remains_time } : null,
+        image: image ? { used: image.current_interval_usage_count, total: image.current_interval_total_count, resetsInMs: image.remains_time } : null,
+        music: music ? { used: music.current_interval_usage_count, total: music.current_interval_total_count, resetsInMs: music.remains_time } : null,
+      });
+    } catch (err) {
+      log.error("quota api error", { error: String(err) });
+      return jsonResponse({ error: "Failed to fetch quota" }, 502);
+    }
+  }
+
   // Session validation for all /api/* routes except health
   if (path.startsWith("/api/")) {
     const sessionId = validateSessionId(req);
