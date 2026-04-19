@@ -68,13 +68,11 @@ test-all: check
     wait
     node --experimental-strip-types --no-warnings --test integration.test.ts
 
-# playwright E2E
+# playwright E2E (real server + mocked MiniMax via nock)
 [group('test')]
 test-e2e:
-    npx esbuild public/app.ts --outfile=public/app.js --format=esm --target=esnext
-    PLAYWRIGHT_ALLOW_ANDROID=1 node --experimental-strip-types --no-warnings e2e/static-server.ts public & sleep 1
-    BASE_URL=http://localhost:3001 PLAYWRIGHT_ALLOW_ANDROID=1 node --experimental-strip-types --no-warnings e2e/run-e2e.ts; \
-    kill %1 2>/dev/null; true
+    npx esbuild public/app.ts --outfile=public/app.js --bundle --format=esm --target=esnext
+    PLAYWRIGHT_ALLOW_ANDROID=1 node --experimental-strip-types --no-warnings e2e/run-e2e.ts
 
 alias t := test-unit
 alias ti := test-integration
