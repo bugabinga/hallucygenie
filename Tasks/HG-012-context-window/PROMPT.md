@@ -29,6 +29,7 @@ Add `estimateTokens()` (chars/4 heuristic, same as pi coding agent) and `buildCo
 ## Key Reference
 
 From pi coding agent's `estimateTokens()`:
+
 ```ts
 function estimateTokens(message) {
   let chars = 0;

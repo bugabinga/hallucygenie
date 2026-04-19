@@ -30,6 +30,7 @@ Add a `/api/quota` endpoint that fetches current usage from MiniMax's quota API 
 **Auth:** `Authorization: Bearer <MINIMAX_API_KEY>` (NOT `x-api-key` — quota endpoint uses Bearer auth)
 
 **Response:**
+
 ```json
 {
   "model_remains": [
@@ -61,7 +62,7 @@ Add a `/api/quota` endpoint that fetches current usage from MiniMax's quota API 
 
 - [ ] Add `GET /api/quota` route in `handleRequest()`
 - [ ] Call MiniMax `GET /v1/token_plan/remains` with `Authorization: Bearer` header
-- [ ] Simplify response: extract key models (MiniMax-M*, speech-hd, image-01, music-2.6), return `{chat: {used, total, resetsInMs}, speech: {...}, image: {...}, music: {...}}`
+- [ ] Simplify response: extract key models (MiniMax-M\*, speech-hd, image-01, music-2.6), return `{chat: {used, total, resetsInMs}, speech: {...}, image: {...}, music: {...}}`
 - [ ] Handle API errors gracefully (return zeros, log warning)
 
 ### Step 2: Frontend usage badge

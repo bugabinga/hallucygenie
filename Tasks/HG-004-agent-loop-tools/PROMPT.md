@@ -15,6 +15,7 @@ TTS, music gen), and the steering queue. This is the "brain" — it decides when
 tools, executes them, and feeds results back to the model.
 
 **The agent loop:**
+
 ```
 while true:
   stream = call minimax with messages + tools
@@ -30,6 +31,7 @@ while true:
 ```
 
 **MiniMax API details (verified):**
+
 - Chat: `POST /v1/chat/completions`, model `MiniMax-M2.7-highspeed`, OpenAI-compatible
 - Image gen: `POST /v1/image_generation`, model `image-01`, returns `data.image_urls[]`
 - TTS: `POST /v1/t2a_v2`, model `speech-2.8-hd`, `voice_setting.voice_id`, returns hex MP3 in `data.audio`

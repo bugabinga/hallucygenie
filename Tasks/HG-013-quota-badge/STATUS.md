@@ -6,6 +6,7 @@
 ## Step Progress
 
 ### Step 1: Add quota API endpoint
+
 **Status:** ⬜ Not Started
 
 - [ ] Add `GET /api/quota` route
@@ -14,6 +15,7 @@
 - [ ] Handle errors gracefully
 
 ### Step 2: Frontend usage badge
+
 **Status:** ⬜ Not Started
 
 - [ ] Add badge in header
@@ -22,6 +24,7 @@
 - [ ] Click for detail modal
 
 ### Step 3: Test
+
 **Status:** ⬜ Not Started
 
 - [ ] Test quota endpoint
@@ -31,5 +34,5 @@
 
 ## Discoveries
 
-| # | What | Impact | Step |
-|---|------|--------|------|
+| #   | What | Impact | Step |
+| --- | ---- | ------ | ---- |

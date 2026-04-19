@@ -14,6 +14,7 @@ Fill the remaining coverage gaps in `server.ts`. Currently at 96.23% line / 91.9
 Get it to 100% line (or as close as possible — signal handlers can't be unit tested).
 
 **Uncovered lines:**
+
 - Lines 95-97: `THINK_CLOSE_ALT` branch (the `</think_intended>` close tag path)
 - Lines 115-117: `THINK_OPEN_ALT` branch (the `<think_intended>` open tag path)
 - Lines 598-603: Node adapter error catch (the `catch` block in `handleNodeRequest`)
@@ -45,14 +46,14 @@ is executed directly and can't be meaningfully unit tested.
 ### Step 1: Test THINK_CLOSE_ALT Branch
 
 - [ ] Write a test that feeds content with the `<think_intended>...</think_intended>` close tag
-    (not the `</think_intended>` form but `</think_intended>`)
+      (not the `</think_intended>` form but `</think_intended>`)
 - [ ] Verify thinking content is stripped when the close tag is `</think_intended>`
 - [ ] This covers lines 95-97
 
 ### Step 2: Test THINK_OPEN_ALT Branch
 
 - [ ] Write a test where `<think_intended>` appears BEFORE `<think_intended>` in the text
-    (so the `open2` branch wins the race)
+      (so the `open2` branch wins the race)
 - [ ] Verify the short form `<think_intended>` is detected as an open tag
 - [ ] This covers lines 115-117
 

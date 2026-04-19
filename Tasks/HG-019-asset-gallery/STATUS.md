@@ -6,6 +6,7 @@
 ## Step Progress
 
 ### Step 1: Database migration and CRUD
+
 **Status:** ⬜ Not Started
 
 - [ ] Create assets migration
@@ -13,6 +14,7 @@
 - [ ] Test CRUD
 
 ### Step 2: File storage + static serving
+
 **Status:** ⬜ Not Started
 
 - [ ] Save files from tool executors
@@ -20,6 +22,7 @@
 - [ ] Update .gitignore
 
 ### Step 3: Gallery UI
+
 **Status:** ⬜ Not Started
 
 - [ ] Gallery button in header
@@ -28,6 +31,7 @@
 - [ ] Assets API endpoint
 
 ### Step 4: Test
+
 **Status:** ⬜ Not Started
 
 - [ ] Test asset CRUD
@@ -37,5 +41,5 @@
 
 ## Discoveries
 
-| # | What | Impact | Step |
-|---|------|--------|------|
+| #   | What | Impact | Step |
+| --- | ---- | ------ | ---- |

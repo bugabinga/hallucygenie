@@ -8,19 +8,19 @@ All goals achieved: 350 tests pass (55 new), `app.ts` coverage is 95.90% line (t
 
 ### Verification Results
 
-| Criterion | Result |
-|-----------|--------|
-| `just test` passes | ✅ 350/350 pass |
-| `app.ts` line coverage ≥ 90% | ✅ 95.90% |
-| No changes to `app.ts` | ✅ Clean |
-| `renderThinkingBlock` tested | ✅ 5 tests |
-| `streamChat` error paths tested | ✅ 7 tests |
-| `streamChat` SSE processing tested | ✅ 7 tests |
-| `appendText` with thinking blocks tested | ✅ 3 tests |
-| `sendMessage` flow tested | ✅ 5 tests |
-| `loadHistory` tested | ✅ 4 tests |
-| `init` event binding tested | ✅ 8 tests |
-| Helper functions (showError, lightbox, etc.) | ✅ 16 tests |
+| Criterion                                    | Result          |
+| -------------------------------------------- | --------------- |
+| `just test` passes                           | ✅ 350/350 pass |
+| `app.ts` line coverage ≥ 90%                 | ✅ 95.90%       |
+| No changes to `app.ts`                       | ✅ Clean        |
+| `renderThinkingBlock` tested                 | ✅ 5 tests      |
+| `streamChat` error paths tested              | ✅ 7 tests      |
+| `streamChat` SSE processing tested           | ✅ 7 tests      |
+| `appendText` with thinking blocks tested     | ✅ 3 tests      |
+| `sendMessage` flow tested                    | ✅ 5 tests      |
+| `loadHistory` tested                         | ✅ 4 tests      |
+| `init` event binding tested                  | ✅ 8 tests      |
+| Helper functions (showError, lightbox, etc.) | ✅ 16 tests     |
 
 ### Issues Found
 

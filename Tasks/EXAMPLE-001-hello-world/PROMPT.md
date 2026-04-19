@@ -68,8 +68,6 @@ _No additional context needed._
 
 ### Step 3: Delivery
 
-
-
 ## Documentation Requirements
 
 **Must Update:** None

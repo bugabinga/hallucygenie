@@ -3,6 +3,7 @@
 ### Verdict: APPROVE
 
 ### Summary
+
 The plan for Step 1 is well-structured and covers the core outcomes needed: a token estimation function, a context builder that walks backward from recent messages, tool-pair integrity, and mandatory system message inclusion. The checkboxes are outcome-level and appropriate. The approach will work given the current `ChatMessage` type and existing code patterns.
 
 ### Issues Found

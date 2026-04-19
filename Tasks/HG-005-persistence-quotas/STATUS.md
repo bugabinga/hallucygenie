@@ -11,6 +11,7 @@
 ## Step Progress
 
 ### Step 0: Preflight
+
 **Status:** ✅ Complete
 
 - [x] Verify db.ts exists
@@ -18,6 +19,7 @@
 - [x] `just test` passes
 
 ### Step 1: Migration Files
+
 **Status:** ✅ Complete
 
 - [x] 001-create-schema-migrations.sql
@@ -26,6 +28,7 @@
 - [x] 004-create-usage-tracking.sql
 
 ### Step 2: Migration Runner
+
 **Status:** ✅ Complete
 
 - [x] runMigrations(db) implementation
@@ -33,6 +36,7 @@
 - [x] Tests: fresh, partial, failed rollback
 
 ### Step 3: Data Access Functions
+
 **Status:** ✅ Complete
 
 - [x] Message CRUD
@@ -42,6 +46,7 @@
 - [x] Snapshot tests for history
 
 ### Step 4: Usage Tracking and Quota Enforcement
+
 **Status:** ✅ Complete
 
 - [x] trackUsage(feature)
@@ -51,6 +56,7 @@
 - [x] Snapshot tests for quota status
 
 ### Step 5: Coverage and Mutation Testing
+
 **Status:** ✅ Complete
 
 - [x] `just test-coverage` → 100% (100% line, 96.55% branch, 100% func on db.ts)
@@ -59,8 +65,8 @@
 ## Discoveries
 
 | Step | Finding | Action Taken |
-|------|---------|-------------|
-| — | — | — |
+| ---- | ------- | ------------ |
+| —    | —       | —            |
 
 | 2026-04-17 11:52 | Task started | Runtime V2 lane-runner execution |
 | 2026-04-17 11:52 | Step 0 started | Preflight |

@@ -34,6 +34,7 @@ Switch the chat API from MiniMax's OpenAI-compatible endpoint (`/v1/chat/complet
 **Auth:** `x-api-key: <key>` header (NOT `Authorization: Bearer`)
 
 **Request:**
+
 ```json
 {
   "model": "MiniMax-M2.7-highspeed",
@@ -50,6 +51,7 @@ Switch the chat API from MiniMax's OpenAI-compatible endpoint (`/v1/chat/complet
 ```
 
 **Streaming events:**
+
 ```
 event: content_block_start   → {type: "thinking"} or {type: "text"} or {type: "tool_use"}
 event: content_block_delta   → {type: "thinking_delta", thinking: "..."} or {type: "text_delta", text: "..."} or {type: "input_json_delta", partial_json: "..."}
@@ -59,6 +61,7 @@ event: message_stop
 ```
 
 **Tool calling (assistant → tool result):**
+
 ```json
 {"role": "assistant", "content": [{"type": "tool_use", "id": "tu_123", "name": "generate_image", "input": {"prompt": "a cat"}}]}
 {"role": "user", "content": [{"type": "tool_result", "tool_use_id": "tu_123", "content": "{\"url\": \"...\"}"}]}
@@ -84,7 +87,7 @@ The agent loop stays the same shape. Only the API interface changes.
 - [ ] Change auth header from `Authorization: Bearer` to `x-api-key`
 - [ ] Rewrite `runAgentLoop()` request body: `system` as separate array param, `messages` with content blocks, `tools` with `input_schema`
 - [ ] Rewrite streaming parser: parse Anthropic SSE events (`content_block_start`, `content_block_delta`, `content_block_stop`, `message_delta`, `message_stop`)
-- [ ] Handle `thinking_delta` → emit `AgentEvent { type: "thinking", content }` 
+- [ ] Handle `thinking_delta` → emit `AgentEvent { type: "thinking", content }`
 - [ ] Handle `text_delta` → emit `AgentEvent { type: "text", content }`
 - [ ] Handle `tool_use` block → accumulate tool call (id, name, input via `input_json_delta`)
 - [ ] On `message_delta` with `stop_reason: "tool_use"` → emit `AgentEvent { type: "tool_start" }` for each tool call
@@ -163,4 +166,3 @@ HG-010: <summary of change>
 ```
 
 ## Amendments
-

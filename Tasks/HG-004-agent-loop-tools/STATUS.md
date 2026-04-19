@@ -11,6 +11,7 @@
 ## Step Progress
 
 ### Step 0: Preflight
+
 **Status:** ✅ Complete
 
 - [x] Verify agent.ts and tools.ts exist
@@ -18,6 +19,7 @@
 - [x] `just test` passes
 
 ### Step 1: Tool Definitions and Execution
+
 **Status:** ✅ Complete
 
 - [x] Define tool schemas (getToolDefinitions) in tools.ts for generate_image, text_to_speech, generate_music
@@ -31,6 +33,7 @@
 - [x] Update justfile to include tools.test.ts in test commands
 
 ### Step 2: Agent Loop
+
 **Status:** ✅ Complete
 
 - [x] Implement runAgentLoop(messages, tools, onEvent, apiKey) in agent.ts
@@ -44,6 +47,7 @@
 - [x] Snapshot tests for event sequences
 
 ### Step 3: Steering Queue
+
 **Status:** ✅ Complete
 
 - [x] Add steering queue (array + flag) to agent loop: queueSteer/drainSteer functions
@@ -52,6 +56,7 @@
 - [x] Tests: steer mid-loop, steer when idle, multiple steers queued, steer after done (ignored), steer during tool execution
 
 ### Step 4: Coverage and Mutation Testing
+
 **Status:** ✅ Complete
 
 - [x] `just test-coverage` → 100%
@@ -59,11 +64,11 @@
 
 ## Discoveries
 
-| Step | Finding | Action Taken |
-|------|---------|-------------|
-| 2 | toolCallDelta helper was called with wrong arg count (3 instead of 4), causing fields to shift | Fixed by adding missing "call_2" id argument |
-| 2 | Agent loop needs try/catch around initial fetch for network failures | Added graceful error handling |
-| 4 | Mutation testing requires bun+stryker not available on current platform | Documented, 100% line coverage achieved |
+| Step | Finding                                                                                        | Action Taken                                 |
+| ---- | ---------------------------------------------------------------------------------------------- | -------------------------------------------- |
+| 2    | toolCallDelta helper was called with wrong arg count (3 instead of 4), causing fields to shift | Fixed by adding missing "call_2" id argument |
+| 2    | Agent loop needs try/catch around initial fetch for network failures                           | Added graceful error handling                |
+| 4    | Mutation testing requires bun+stryker not available on current platform                        | Documented, 100% line coverage achieved      |
 
 | 2026-04-17 11:52 | Task started | Runtime V2 lane-runner execution |
 | 2026-04-17 11:52 | Step 0 started | Preflight |
@@ -72,6 +77,6 @@
 | 2026-04-17 12:02 | Review R001 | plan Step 2: APPROVE |
 | 2026-04-17 12:26 | Review R001 | plan Step 3: APPROVE |
 
-| 2026-04-17 12:34 | Agent reply | HG-004 task completed successfully. All 4 steps done: /  / **Step 0:** Preflight verified (agent.ts, tools.ts exist, 76 tests pass) / **Step 1:** Tool definitions and execution — `getToolDefinitions() |
+| 2026-04-17 12:34 | Agent reply | HG-004 task completed successfully. All 4 steps done: / / **Step 0:** Preflight verified (agent.ts, tools.ts exist, 76 tests pass) / **Step 1:** Tool definitions and execution — `getToolDefinitions() |
 | 2026-04-17 12:34 | Worker iter 1 | done in 2490s, tools: 116 |
 | 2026-04-17 12:34 | Task complete | .DONE created |

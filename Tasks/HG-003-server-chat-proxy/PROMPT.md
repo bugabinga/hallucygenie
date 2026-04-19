@@ -28,6 +28,7 @@ to the browser via SSE. It handles the OpenAI-compatible tool calling format whe
 MiniMax returns `tool_calls` in streaming chunks with chunked arguments.
 
 **MiniMax API details (verified):**
+
 - Base URL: `https://api.minimax.io`
 - Chat endpoint: `POST /v1/chat/completions` (OpenAI-compatible)
 - Model: `MiniMax-M2.7-highspeed` (on the user's highspeed plan)
@@ -90,6 +91,7 @@ file. Assert responses match snapshots. Update snapshots with `just test -- --up
 ## Session Contract
 
 Sessions are identified by a UUID stored in the browser's `localStorage`.
+
 - Client generates a UUID v4 on first visit, stores as `hallucygenie_session_id`
 - Every API request includes `X-Session-Id` header with this UUID
 - Server uses this to partition messages in SQLite

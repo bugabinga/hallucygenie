@@ -11,27 +11,32 @@
 ## Step Progress
 
 ### Step 0: Preflight
+
 **Status:** ✅ Complete
 
 - [x] `just test` — 295 pass
 
 ### Step 1: Test THINK_CLOSE_ALT Branch
+
 **Status:** ✅ Complete
 
 - [x] Test `</think_intended>` close tag stripping
 
 ### Step 2: Test THINK_OPEN_ALT Branch
+
 **Status:** ✅ Complete
 
 - [x] Test `<think_intended>` open tag detection
 
 ### Step 3: Test Node Adapter Error Catch
+
 **Status:** ✅ Complete
 
 - [x] Error before headers sent → 500
 - [x] Error after headers sent → graceful
 
 ### Step 4: Verify
+
 **Status:** ✅ Complete
 
 - [x] `just test` passes
@@ -40,8 +45,8 @@
 ## Discoveries
 
 | Step | Finding | Action Taken |
-|------|---------|-------------|
-| — | — | — |
+| ---- | ------- | ------------ |
+| —    | —       | —            |
 
 | 2026-04-18 16:31 | Task started | Runtime V2 lane-runner execution |
 | 2026-04-18 16:31 | Step 0 started | Preflight |

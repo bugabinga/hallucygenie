@@ -1,0 +1,24 @@
+{
+    "semi": true,
+    "singleQuote": false,
+    "trailingComma": "all",
+    "printWidth": 100,
+    "tabWidth": 4,
+    "useTabs": false,
+    "plugins": ["prettier-plugin-sql"],
+    "overrides": [
+        {
+            "files": "*.md",
+            "options": {
+                "printWidth": 80,
+                "tabWidth": 2
+            }
+        },
+        {
+            "files": "*.sql",
+            "options": {
+                "parser": "sql"
+            }
+        }
+    ]
+}

@@ -15,6 +15,7 @@ Get `public/app.ts` from 37% to ≥90% line coverage. The current tests only cov
 functions (renderMarkdown, parsing, rendering). The entire interactive runtime is untested:
 
 **Uncovered functions (must test):**
+
 - `renderThinkingBlock` — collapsible thinking block HTML
 - `streamChat` — fetch + SSE stream processing, error handling, all response codes
 - `handleSSEEvent` — SSE event routing: text, tool_start, tool_result, done, error
@@ -27,6 +28,7 @@ functions (renderMarkdown, parsing, rendering). The entire interactive runtime i
 - `init` — event binding (form submit, input, keydown, lightbox, steer)
 
 **What's already covered (DO NOT rewrite):**
+
 - `renderMarkdown` (32 tests)
 - `parseSSELine` / `parseSSEChunk` (11 tests)
 - `getOrCreateSessionId` (4 tests — local copy)
@@ -40,6 +42,7 @@ functions (renderMarkdown, parsing, rendering). The entire interactive runtime i
 **Import from `app.ts` directly** — do NOT copy/reimplement functions.
 
 For DOM-dependent functions, use `happy-dom` (already in devDependencies):
+
 ```ts
 const { Window } = await import("happy-dom");
 const win = new Window();
@@ -48,6 +51,7 @@ const doc = win.document;
 ```
 
 For `fetch`-dependent functions (`streamChat`, `loadHistory`, `sendSteer`), mock `globalThis.fetch`:
+
 ```ts
 const originalFetch = globalThis.fetch;
 globalThis.fetch = async () => new Response(...);

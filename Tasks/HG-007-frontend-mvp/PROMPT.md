@@ -24,10 +24,12 @@ browsers). Chromium must be installed via Termux packages: `pkg install chromium
 (may require `x11-repo` enabled).
 
 If Playwright cannot be made to work on this Termux setup, fall back to:
+
 1. Using Bun's built-in `happy-dom` for DOM testing (less ideal but functional)
 2. Documenting the Playwright setup for the user's actual deployment environment
 
 **SSE events from server:**
+
 ```
 event: text       → data: {"delta": "..."}
 event: tool_start → data: {"id":"...", "name":"generate_image", "arguments":{...}}
@@ -36,6 +38,7 @@ event: done       → data: {}
 ```
 
 **API endpoints:**
+
 - `POST /api/chat` → `{ messages: [{role, content}] }` → SSE stream (requires `X-Session-Id` header)
 - `POST /api/steer` → `{ message: "..." }` → 200 OK (requires `X-Session-Id` header)
 - `GET /api/history` → `{ messages: [...] }` (requires `X-Session-Id` header)
@@ -43,6 +46,7 @@ event: done       → data: {}
 - `GET /api/health` → `{ status: "ok", uptime: <seconds> }`
 
 **Session management:**
+
 - On first load, generate UUID v4, store in `localStorage` as `hallucygenie_session_id`
 - Send `X-Session-Id` header with every API request
 - If server returns 400 for missing session, show error prompting page reload
@@ -103,6 +107,7 @@ event: done       → data: {}
 ### Step 2: CSS — Design System + Mobile-First Styling
 
 **Color palette (CSS custom properties):**
+
 - `--color-primary`: red — headers, send button, active states, accents
 - `--color-secondary`: green — success states, assistant message accents, online indicators
 - `--color-tertiary`: gold — highlights, badges, achievements, important callouts
@@ -112,6 +117,7 @@ event: done       → data: {}
 - `--color-text-muted`: medium grey — timestamps, secondary info
 
 **UX principles:**
+
 - Beautiful: cohesive palette, generous spacing, smooth micro-animations (no jank), subtle shadows
 - Simple: one thing per screen section, zero learning curve, obvious what to tap
 - Kid-friendly: big targets (min 48px), emoji in UI labels, no jargon, friendly copy

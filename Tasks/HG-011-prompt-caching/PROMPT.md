@@ -26,12 +26,14 @@ Enable MiniMax prompt caching on the Anthropic endpoint. Add `cache_control: {ty
 ## Key Reference
 
 Cache breakpoints go on content blocks:
+
 ```json
 "system": [{"type": "text", "text": "...system prompt...", "cache_control": {"type": "ephemeral"}}],
 "tools": [..., last_tool_with_cache_control]
 ```
 
 Usage response:
+
 ```json
 "usage": {
   "input_tokens": 21,
@@ -40,9 +42,11 @@ Usage response:
   "cache_read_input_tokens": 0
 }
 ```
+
 Second request: `cache_read_input_tokens: 2000, cache_creation_input_tokens: 0`.
 
 Rules:
+
 - Max 4 `cache_control` breakpoints per request
 - 5-minute TTL from last hit
 - Cache hierarchy: tools → system → messages

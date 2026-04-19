@@ -17,6 +17,7 @@ endpoints for history and usage. This is the task that makes all the pieces work
 ## Session Contract
 
 Sessions are identified by a UUID sent from the browser in the `X-Session-Id` header.
+
 - Server reads `X-Session-Id` from every API request
 - If missing, return 400 with `{ error: "X-Session-Id header required" }`
 - Use this UUID to partition messages in SQLite (`session_id` column)
@@ -27,11 +28,13 @@ Sessions are identified by a UUID sent from the browser in the `X-Session-Id` he
 The system prompt is sent with every chat request to MiniMax. It defines the AI's personality.
 
 **How to write it:**
+
 - Write it as a plain text string in `agent.ts` (or load from a `system-prompt.txt` file)
 - Keep it short — every token costs quota
 - Test it by sending sample prompts and verifying the response style matches
 
 **Goals:**
+
 - The AI is a friendly, helpful buddy for an 11-year-old who likes gaming and YouTube
 - It gives creative ideas and suggestions (thumbnail ideas, video concepts, game tips)
 - It should feel like talking to a smart friend, not a corporate assistant

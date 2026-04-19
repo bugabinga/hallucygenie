@@ -8,6 +8,7 @@
 ## Step Progress
 
 ### Step 0: Preflight
+
 **Status:** ⬜ Not Started
 
 - [ ] Verify PROMPT.md readable
@@ -16,6 +17,7 @@
 - [ ] Install Bun if needed
 
 ### Step 1: Package and TypeScript Config
+
 **Status:** ⬜ Not Started
 
 - [ ] Create `package.json`
@@ -23,6 +25,7 @@
 - [ ] Create `.gitignore`
 
 ### Step 2: Justfile — Build System
+
 **Status:** ⬜ Not Started
 
 - [ ] Create justfile with all recipes
@@ -30,6 +33,7 @@
 - [ ] Run `just install`
 
 ### Step 3: Test Infrastructure
+
 **Status:** ⬜ Not Started
 
 - [ ] Create `bunfig.toml`
@@ -40,12 +44,14 @@
 - [ ] `just test-coverage` generates report
 
 ### Step 4: Server Skeleton
+
 **Status:** ⬜ Not Started
 
 - [ ] Create `server.ts` with Bun.serve, 404, env PORT
 - [ ] Export server creation for testability
 
 ### Step 5: Empty Module Files
+
 **Status:** ⬜ Not Started
 
 - [ ] Create `agent.ts`
@@ -54,6 +60,7 @@
 - [ ] Create `migrations/` directory with `.gitkeep`
 
 ### Step 6: Frontend Placeholders
+
 **Status:** ⬜ Not Started
 
 - [ ] Create `public/index.html`
@@ -61,12 +68,14 @@
 - [ ] Create `public/style.css`
 
 ### Step 7: Container Config
+
 **Status:** ⬜ Not Started
 
 - [ ] Create `Dockerfile`
 - [ ] Create `hallucygenie.container`
 
 ### Step 8: Verification
+
 **Status:** ⬜ Not Started
 
 - [ ] `just install` succeeds
@@ -79,5 +88,5 @@
 ## Discoveries
 
 | Step | Finding | Action Taken |
-|------|---------|-------------|
-| — | — | — |
+| ---- | ------- | ------------ |
+| —    | —       | —            |

@@ -15,6 +15,7 @@ usage tracking, and quota enforcement. This is the "memory" — it stores conver
 user preferences, and protects daily MiniMax quotas from being exhausted.
 
 **Migration system design:**
+
 - Numbered SQL files in `migrations/`: `001-*.sql`, `002-*.sql`, etc.
 - `schema_migrations` table tracks applied versions
 - `runMigrations(db)` reads dir sorted, checks applied, runs pending in transaction
@@ -23,6 +24,7 @@ user preferences, and protects daily MiniMax quotas from being exhausted.
 - New schema change: add numbered `.sql` file, next startup applies it
 
 **MiniMax daily quotas (Plus-Highspeed plan):**
+
 - Speech 2.8: 9,000 characters/day
 - Image gen: 100 images/day
 - Music gen: 100 songs/day
@@ -80,6 +82,7 @@ Use in-memory databases (`:memory:`) for all tests — isolated, fast, no file c
   );
   ```
 - [ ] Create `migrations/002-create-messages.sql`:
+
   ```sql
   CREATE TABLE IF NOT EXISTS messages (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -88,16 +91,18 @@ Use in-memory databases (`:memory:`) for all tests — isolated, fast, no file c
     content TEXT NOT NULL,
     tool_calls_json TEXT,
     tool_call_id TEXT,
-    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    created_at TEXT NOT NULL DEFAULT (datetime ('now'))
   );
-  CREATE INDEX IF NOT EXISTS idx_messages_session ON messages(session_id, created_at);
+  
+  CREATE INDEX IF NOT EXISTS idx_messages_session ON messages (session_id, created_at);
   ```
+
 - [ ] Create `migrations/003-create-preferences.sql`:
   ```sql
   CREATE TABLE IF NOT EXISTS preferences (
     key TEXT PRIMARY KEY,
     value TEXT NOT NULL,
-    updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+    updated_at TEXT NOT NULL DEFAULT (datetime ('now'))
   );
   ```
 - [ ] Create `migrations/004-create-usage-tracking.sql`:

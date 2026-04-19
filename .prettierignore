@@ -1,0 +1,5 @@
+node_modules/
+data/
+logs/
+public/app.js
+e2e/__snapshots__/

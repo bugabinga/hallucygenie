@@ -6,7 +6,9 @@
 ## Step Progress
 
 ### Step 1: Add new tool integrations
+
 **Status:** ⬜ Not Started
+
 > ⚠️ Hydrate: Expand after reading tools.ts for existing patterns
 
 - [ ] web_search tool
@@ -17,6 +19,7 @@
 - [ ] Quota checks for new features
 
 ### Step 2: Media tools dropdown UI
+
 **Status:** ⬜ Not Started
 
 - [ ] Header "Create" button + dropdown
@@ -29,11 +32,13 @@
 - [ ] Prompt generation on submit
 
 ### Step 3: Update agent system prompt
+
 **Status:** ⬜ Not Started
 
 - [ ] Add structured media request handling instructions
 
 ### Step 4: Test
+
 **Status:** ⬜ Not Started
 
 - [ ] Test each new tool executor
@@ -42,5 +47,5 @@
 
 ## Discoveries
 
-| # | What | Impact | Step |
-|---|------|--------|------|
+| #   | What | Impact | Step |
+| --- | ---- | ------ | ---- |

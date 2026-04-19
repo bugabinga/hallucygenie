@@ -21,28 +21,28 @@ Podman quadlet deployment.
 
 ## Key Files
 
-| Category | Path |
-|----------|------|
-| Tasks | `Tasks/` |
-| Server | `server.ts` |
-| Agent loop | `agent.ts` |
-| Tools | `tools.ts` |
-| Database | `db.ts` |
-| Frontend | `public/` |
-| Migrations | `migrations/` |
-| Tests | `*.test.ts`, `public/*.test.ts` |
+| Category   | Path                            |
+| ---------- | ------------------------------- |
+| Tasks      | `Tasks/`                        |
+| Server     | `server.ts`                     |
+| Agent loop | `agent.ts`                      |
+| Tools      | `tools.ts`                      |
+| Database   | `db.ts`                         |
+| Frontend   | `public/`                       |
+| Migrations | `migrations/`                   |
+| Tests      | `*.test.ts`, `public/*.test.ts` |
 
 ---
 
 ## Test Coverage (as of 2026-04-19)
 
-| File | Line % | Branch % | Func % |
-|------|--------|----------|--------|
-| agent.ts | 100% | ~94% | 100% |
-| db.ts | 100% | ~97% | 100% |
-| tools.ts | 100% | 100% | 100% |
-| server.ts | ~96% | ~92% | ~96% |
-| public/app.ts | ~37% | ~78% | ~25% |
+| File          | Line % | Branch % | Func % |
+| ------------- | ------ | -------- | ------ |
+| agent.ts      | 100%   | ~94%     | 100%   |
+| db.ts         | 100%   | ~97%     | 100%   |
+| tools.ts      | 100%   | 100%     | 100%   |
+| server.ts     | ~96%   | ~92%     | ~96%   |
+| public/app.ts | ~37%   | ~78%     | ~25%   |
 
 **Total unit tests:** 223 (all passing)
 
@@ -50,23 +50,23 @@ Podman quadlet deployment.
 
 ## Completed Tasks
 
-| ID | Task | Batch |
-|----|------|-------|
-| HG-002 | Project scaffold | — |
-| HG-003 | Server chat proxy | — |
-| HG-004 | Agent loop + tools | — |
-| HG-005 | Persistence + quotas | — |
-| HG-006 | Integration wiring | — |
-| HG-007 | Frontend MVP | — |
-| HG-008 | Server coverage gaps | — |
-| HG-009 | Frontend coverage gaps | — |
-| HG-010 | Anthropic endpoint migration | 3 |
-| HG-011 | Prompt caching | 4 |
-| HG-012 | Token-based context window | 4 |
-| HG-013 | Quota API + usage badge | manual |
-| HG-017 | First-run onboarding | manual |
-| HG-018 | Media tools + forms UI | manual |
-| HG-019 | Asset persistence + gallery | manual |
+| ID     | Task                         | Batch  |
+| ------ | ---------------------------- | ------ |
+| HG-002 | Project scaffold             | —      |
+| HG-003 | Server chat proxy            | —      |
+| HG-004 | Agent loop + tools           | —      |
+| HG-005 | Persistence + quotas         | —      |
+| HG-006 | Integration wiring           | —      |
+| HG-007 | Frontend MVP                 | —      |
+| HG-008 | Server coverage gaps         | —      |
+| HG-009 | Frontend coverage gaps       | —      |
+| HG-010 | Anthropic endpoint migration | 3      |
+| HG-011 | Prompt caching               | 4      |
+| HG-012 | Token-based context window   | 4      |
+| HG-013 | Quota API + usage badge      | manual |
+| HG-017 | First-run onboarding         | manual |
+| HG-018 | Media tools + forms UI       | manual |
+| HG-019 | Asset persistence + gallery  | manual |
 
 ---
 

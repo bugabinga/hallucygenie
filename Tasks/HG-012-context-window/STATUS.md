@@ -10,6 +10,7 @@
 ## Step Progress
 
 ### Step 1: Implement token estimation and context builder
+
 **Status:** ✅ Complete
 
 - [x] Implement `estimateTokens(message: ChatMessage): number` in agent.ts — chars/4 for text, thinking, tool call names+args, tool result content; ~1200 per image
@@ -17,12 +18,14 @@
 - [x] Export both functions from agent.ts
 
 ### Step 2: Wire into server.ts
+
 **Status:** ✅ Complete
 
 - [x] In `handleChat()`, after loading messages from DB, call `buildContext(messages)` before sending to agent loop
 - [x] Log when context is trimmed: `reqLog.info("context trimmed", { totalMessages, keptMessages, estimatedTokens })`
 
 ### Step 3: Test
+
 **Status:** ✅ Complete
 
 - [x] Test `estimateTokens()` with various message types (text, thinking, tool_use, tool_result)
@@ -31,10 +34,10 @@
 
 ## Discoveries
 
-| # | What | Impact | Step |
-|---|------|--------|------|
+| #                | What         | Impact                           | Step |
+| ---------------- | ------------ | -------------------------------- | ---- |
 | 2026-04-18 23:23 | Task started | Runtime V2 lane-runner execution |
-| 2026-04-18 23:26 | Review R001 | plan Step 1: APPROVE |
+| 2026-04-18 23:26 | Review R001  | plan Step 1: APPROVE             |
 
 | 2026-04-18 23:33 | Worker iter 1 | done in 651s, tools: 69 |
 | 2026-04-18 23:33 | Task complete | .DONE created |

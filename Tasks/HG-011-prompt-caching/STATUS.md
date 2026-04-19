@@ -6,6 +6,7 @@
 ## Step Progress
 
 ### Step 1: Add cache markers
+
 **Status:** ⬜ Not Started
 
 - [ ] Add `cache_control` to system prompt block
@@ -13,11 +14,13 @@
 - [ ] (Optional) Add to last user message
 
 ### Step 2: Log cache performance
+
 **Status:** ⬜ Not Started
 
 - [ ] Log cache stats after streaming response
 
 ### Step 3: Test
+
 **Status:** ⬜ Not Started
 
 - [ ] Unit test for cache markers in request
@@ -25,5 +28,5 @@
 
 ## Discoveries
 
-| # | What | Impact | Step |
-|---|------|--------|------|
+| #   | What | Impact | Step |
+| --- | ---- | ------ | ---- |

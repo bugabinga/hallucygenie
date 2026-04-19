@@ -1,244 +1,305 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <meta name="theme-color" content="#1a1a1a">
-  <meta name="description" content="HallucyGenie — your creative AI buddy">
-  <title>HallucyGenie</title>
-  <link rel="stylesheet" href="style.css">
-</head>
-<body>
-  <div id="app">
-    <!-- Header -->
-    <header id="header">
-      <div class="header-left">
-        <span class="header-emoji">🧞</span>
-        <h1 class="header-title">HallucyGenie</h1>
-      </div>
-      <div class="header-right">
-        <span id="connection-status" class="status-dot" title="Connected"></span>
-        <button id="quota-badge" class="quota-badge" title="View usage limits" aria-label="Usage limits">
-          <span class="quota-item" data-type="image" title="Images">🎨 <span class="quota-used">—</span></span>
-          <span class="quota-item" data-type="music" title="Music">🎵 <span class="quota-used">—</span></span>
-        </button>
-        <button id="create-btn" class="create-btn" title="Create something" aria-label="Create media">
-          ✨ Create
-        </button>
-      </div>
-    </header>
+    <head>
+        <meta charset="UTF-8" />
+        <meta
+            name="viewport"
+            content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"
+        />
+        <meta name="theme-color" content="#1a1a1a" />
+        <meta name="description" content="HallucyGenie — your creative AI buddy" />
+        <title>HallucyGenie</title>
+        <link rel="stylesheet" href="style.css" />
+    </head>
+    <body>
+        <div id="app">
+            <!-- Header -->
+            <header id="header">
+                <div class="header-left">
+                    <span class="header-emoji">🧞</span>
+                    <h1 class="header-title">HallucyGenie</h1>
+                </div>
+                <div class="header-right">
+                    <span id="connection-status" class="status-dot" title="Connected"></span>
+                    <button
+                        id="quota-badge"
+                        class="quota-badge"
+                        title="View usage limits"
+                        aria-label="Usage limits"
+                    >
+                        <span class="quota-item" data-type="image" title="Images"
+                            >🎨 <span class="quota-used">—</span></span
+                        >
+                        <span class="quota-item" data-type="music" title="Music"
+                            >🎵 <span class="quota-used">—</span></span
+                        >
+                    </button>
+                    <button
+                        id="create-btn"
+                        class="create-btn"
+                        title="Create something"
+                        aria-label="Create media"
+                    >
+                        ✨ Create
+                    </button>
+                </div>
+            </header>
 
-    <!-- Onboarding Overlay -->
-    <div id="onboarding" class="onboarding" hidden>
-      <div class="onboarding-backdrop"></div>
-      <div class="onboarding-card">
-        <div class="onboarding-slides" id="onboarding-slides">
-          <!-- Slide 1: Welcome -->
-          <div class="onboarding-slide active" data-slide="0">
-            <div class="onboarding-emoji">🧞</div>
-            <h2>Hey! I'm HallucyGenie ✨</h2>
-            <p>Your AI buddy for gaming, creativity, and whatever you need!</p>
-            <div class="onboarding-dots">
-              <span class="dot active"></span>
-              <span class="dot"></span>
-              <span class="dot"></span>
-              <span class="dot"></span>
+            <!-- Onboarding Overlay -->
+            <div id="onboarding" class="onboarding" hidden>
+                <div class="onboarding-backdrop"></div>
+                <div class="onboarding-card">
+                    <div class="onboarding-slides" id="onboarding-slides">
+                        <!-- Slide 1: Welcome -->
+                        <div class="onboarding-slide active" data-slide="0">
+                            <div class="onboarding-emoji">🧞</div>
+                            <h2>Hey! I'm HallucyGenie ✨</h2>
+                            <p>Your AI buddy for gaming, creativity, and whatever you need!</p>
+                            <div class="onboarding-dots">
+                                <span class="dot active"></span>
+                                <span class="dot"></span>
+                                <span class="dot"></span>
+                                <span class="dot"></span>
+                            </div>
+                            <button class="btn-primary onboarding-next">Let's go! →</button>
+                        </div>
+                        <!-- Slide 2: Chat -->
+                        <div class="onboarding-slide" data-slide="1">
+                            <div class="onboarding-emoji">💬</div>
+                            <h2>Chat with me!</h2>
+                            <p>Ask me anything — gaming tips, homework help, story ideas...</p>
+                            <div class="onboarding-dots">
+                                <span class="dot"></span>
+                                <span class="dot active"></span>
+                                <span class="dot"></span>
+                                <span class="dot"></span>
+                            </div>
+                            <button class="btn-primary" id="onboarding-try-chat">Try it! →</button>
+                        </div>
+                        <!-- Slide 3: Create -->
+                        <div class="onboarding-slide" data-slide="2">
+                            <div class="onboarding-emoji">🎨</div>
+                            <h2>Make cool stuff!</h2>
+                            <p>
+                                Generate images, music, voices, and search the web — all in one
+                                place!
+                            </p>
+                            <div class="onboarding-dots">
+                                <span class="dot"></span>
+                                <span class="dot"></span>
+                                <span class="dot active"></span>
+                                <span class="dot"></span>
+                            </div>
+                            <button class="btn-primary" id="onboarding-try-create">
+                                See what I can do! →
+                            </button>
+                        </div>
+                        <!-- Slide 4: Fun -->
+                        <div class="onboarding-slide" data-slide="3">
+                            <div class="onboarding-emoji">🎮</div>
+                            <h2>Let's have fun!</h2>
+                            <p>I'm here to help, inspire, and make you smile. Let's go! 🚀</p>
+                            <div class="onboarding-dots">
+                                <span class="dot"></span>
+                                <span class="dot"></span>
+                                <span class="dot"></span>
+                                <span class="dot active"></span>
+                            </div>
+                            <button class="btn-primary" id="onboarding-done">
+                                Start chatting! 🎉
+                            </button>
+                        </div>
+                    </div>
+                </div>
             </div>
-            <button class="btn-primary onboarding-next">Let's go! →</button>
-          </div>
-          <!-- Slide 2: Chat -->
-          <div class="onboarding-slide" data-slide="1">
-            <div class="onboarding-emoji">💬</div>
-            <h2>Chat with me!</h2>
-            <p>Ask me anything — gaming tips, homework help, story ideas...</p>
-            <div class="onboarding-dots">
-              <span class="dot"></span>
-              <span class="dot active"></span>
-              <span class="dot"></span>
-              <span class="dot"></span>
+
+            <!-- Message List -->
+            <main id="message-list" role="log" aria-live="polite" aria-label="Chat messages">
+                <!-- Welcome message -->
+                <div class="message message--assistant message--welcome">
+                    <div class="message-avatar">🧞</div>
+                    <div class="message-bubble">
+                        <div class="message-content">
+                            Hey! 👋 I'm HallucyGenie. Ask me anything — I can chat, make images 🔥,
+                            do voices 🎙️, and create music 🎵
+                        </div>
+                    </div>
+                </div>
+            </main>
+
+            <!-- Typing indicator (hidden by default) -->
+            <div id="typing-indicator" class="typing-indicator" hidden>
+                <div class="typing-dots">
+                    <span class="dot"></span>
+                    <span class="dot"></span>
+                    <span class="dot"></span>
+                </div>
             </div>
-            <button class="btn-primary" id="onboarding-try-chat">Try it! →</button>
-          </div>
-          <!-- Slide 3: Create -->
-          <div class="onboarding-slide" data-slide="2">
-            <div class="onboarding-emoji">🎨</div>
-            <h2>Make cool stuff!</h2>
-            <p>Generate images, music, voices, and search the web — all in one place!</p>
-            <div class="onboarding-dots">
-              <span class="dot"></span>
-              <span class="dot"></span>
-              <span class="dot active"></span>
-              <span class="dot"></span>
+
+            <!-- Input Area -->
+            <footer id="input-area">
+                <form id="chat-form" autocomplete="off">
+                    <div class="input-wrapper">
+                        <textarea
+                            id="chat-input"
+                            placeholder="Type a message..."
+                            rows="1"
+                            maxlength="2000"
+                            aria-label="Type your message"
+                        ></textarea>
+                        <button id="send-button" type="submit" aria-label="Send message" disabled>
+                            <svg
+                                width="24"
+                                height="24"
+                                viewBox="0 0 24 24"
+                                fill="none"
+                                stroke="currentColor"
+                                stroke-width="2"
+                                stroke-linecap="round"
+                                stroke-linejoin="round"
+                            >
+                                <line x1="22" y1="2" x2="11" y2="13"></line>
+                                <polygon points="22 2 15 22 11 13 2 9 22 2"></polygon>
+                            </svg>
+                        </button>
+                    </div>
+                </form>
+                <div id="steer-hint" class="steer-hint" hidden>
+                    <span class="steer-hint-text">💡 Type to steer the response</span>
+                    <button id="steer-close" class="steer-close" aria-label="Dismiss steer hint">
+                        ✕
+                    </button>
+                </div>
+            </footer>
+
+            <!-- Image Lightbox (hidden) -->
+            <div id="lightbox" class="lightbox" hidden>
+                <div class="lightbox-backdrop"></div>
+                <div class="lightbox-content">
+                    <img id="lightbox-img" src="" alt="Full size image" />
+                    <button class="lightbox-close" aria-label="Close image">✕</button>
+                </div>
             </div>
-            <button class="btn-primary" id="onboarding-try-create">See what I can do! →</button>
-          </div>
-          <!-- Slide 4: Fun -->
-          <div class="onboarding-slide" data-slide="3">
-            <div class="onboarding-emoji">🎮</div>
-            <h2>Let's have fun!</h2>
-            <p>I'm here to help, inspire, and make you smile. Let's go! 🚀</p>
-            <div class="onboarding-dots">
-              <span class="dot"></span>
-              <span class="dot"></span>
-              <span class="dot"></span>
-              <span class="dot active"></span>
+
+            <!-- Error Toast (hidden) -->
+            <div id="error-toast" class="error-toast" hidden>
+                <span id="error-toast-icon">😕</span>
+                <span id="error-toast-message"></span>
             </div>
-            <button class="btn-primary" id="onboarding-done">Start chatting! 🎉</button>
-          </div>
+
+            <!-- Create Modal -->
+            <div id="create-modal" class="modal" hidden>
+                <div class="modal-backdrop create-backdrop"></div>
+                <div class="modal-content create-modal-content">
+                    <div class="modal-header">
+                        <h2>✨ Create</h2>
+                        <button id="create-close" class="modal-close" aria-label="Close">✕</button>
+                    </div>
+                    <div class="create-tabs">
+                        <button class="create-tab active" data-tab="image">🎨 Image</button>
+                        <button class="create-tab" data-tab="music">🎵 Music</button>
+                        <button class="create-tab" data-tab="voice">🎤 Voice</button>
+                        <button class="create-tab" data-tab="search">🔍 Search</button>
+                        <button class="create-tab" data-tab="assets">📁 Assets</button>
+                    </div>
+                    <div class="create-panels">
+                        <!-- Image -->
+                        <form id="create-image-form" class="create-panel" data-panel="image">
+                            <div class="form-group">
+                                <label for="img-prompt">Describe your image</label>
+                                <textarea
+                                    id="img-prompt"
+                                    rows="3"
+                                    placeholder="A epic gaming logo with neon lights"
+                                ></textarea>
+                            </div>
+                            <div class="form-group">
+                                <label for="img-ratio">Aspect ratio</label>
+                                <select id="img-ratio">
+                                    <option value="1:1">1:1 (square)</option>
+                                    <option value="16:9" selected>16:9 (wide)</option>
+                                    <option value="9:16">9:16 (tall)</option>
+                                    <option value="4:3">4:3</option>
+                                </select>
+                            </div>
+                            <button type="submit" class="btn-primary">Generate image 🎨</button>
+                        </form>
+                        <!-- Music -->
+                        <form id="create-music-form" class="create-panel" data-panel="music" hidden>
+                            <div class="form-group">
+                                <label for="music-prompt">Describe the music</label>
+                                <textarea
+                                    id="music-prompt"
+                                    rows="2"
+                                    placeholder="Upbeat electronic chiptune gaming music"
+                                ></textarea>
+                            </div>
+                            <div class="form-group">
+                                <label for="music-lyrics">Lyrics (optional)</label>
+                                <textarea
+                                    id="music-lyrics"
+                                    rows="3"
+                                    placeholder="Verse:... Chorus:..."
+                                ></textarea>
+                            </div>
+                            <div class="form-group">
+                                <label>
+                                    <input type="checkbox" id="music-instrumental" /> Instrumental
+                                    only (no vocals)
+                                </label>
+                            </div>
+                            <button type="submit" class="btn-primary">Generate music 🎵</button>
+                        </form>
+                        <!-- Voice -->
+                        <form id="create-voice-form" class="create-panel" data-panel="voice" hidden>
+                            <div class="form-group">
+                                <label for="voice-text">Text to speak</label>
+                                <textarea
+                                    id="voice-text"
+                                    rows="4"
+                                    placeholder="Welcome to HallucyGenie! Your AI creative buddy."
+                                ></textarea>
+                            </div>
+                            <div class="form-group">
+                                <label for="voice-speed">Speed</label>
+                                <select id="voice-speed">
+                                    <option value="0.8">0.8x (slower)</option>
+                                    <option value="1.0" selected>1.0x (normal)</option>
+                                    <option value="1.2">1.2x (faster)</option>
+                                </select>
+                            </div>
+                            <button type="submit" class="btn-primary">Read it to me 🎤</button>
+                        </form>
+                        <!-- Search -->
+                        <form
+                            id="create-search-form"
+                            class="create-panel"
+                            data-panel="search"
+                            hidden
+                        >
+                            <div class="form-group">
+                                <label for="search-query">What do you want to search for?</label>
+                                <textarea
+                                    id="search-query"
+                                    rows="2"
+                                    placeholder="Latest Minecraft update news"
+                                ></textarea>
+                            </div>
+                            <button type="submit" class="btn-primary">Search the web 🔍</button>
+                        </form>
+
+                        <!-- Assets -->
+                        <div id="assets-panel" class="create-panel" data-panel="assets" hidden>
+                            <div id="assets-grid"></div>
+                            <p id="assets-empty" class="assets-empty" hidden>
+                                No assets yet — generate something! ✨
+                            </p>
+                        </div>
+                    </div>
+                </div>
+            </div>
         </div>
-      </div>
-    </div>
 
-    <!-- Message List -->
-    <main id="message-list" role="log" aria-live="polite" aria-label="Chat messages">
-      <!-- Welcome message -->
-      <div class="message message--assistant message--welcome">
-        <div class="message-avatar">🧞</div>
-        <div class="message-bubble">
-          <div class="message-content">Hey! 👋 I'm HallucyGenie. Ask me anything — I can chat, make images 🔥, do voices 🎙️, and create music 🎵</div>
-        </div>
-      </div>
-    </main>
-
-    <!-- Typing indicator (hidden by default) -->
-    <div id="typing-indicator" class="typing-indicator" hidden>
-      <div class="typing-dots">
-        <span class="dot"></span>
-        <span class="dot"></span>
-        <span class="dot"></span>
-      </div>
-    </div>
-
-    <!-- Input Area -->
-    <footer id="input-area">
-      <form id="chat-form" autocomplete="off">
-        <div class="input-wrapper">
-          <textarea
-            id="chat-input"
-            placeholder="Type a message..."
-            rows="1"
-            maxlength="2000"
-            aria-label="Type your message"
-          ></textarea>
-          <button
-            id="send-button"
-            type="submit"
-            aria-label="Send message"
-            disabled
-          >
-            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <line x1="22" y1="2" x2="11" y2="13"></line>
-              <polygon points="22 2 15 22 11 13 2 9 22 2"></polygon>
-            </svg>
-          </button>
-        </div>
-      </form>
-      <div id="steer-hint" class="steer-hint" hidden>
-        <span class="steer-hint-text">💡 Type to steer the response</span>
-        <button id="steer-close" class="steer-close" aria-label="Dismiss steer hint">✕</button>
-      </div>
-    </footer>
-
-    <!-- Image Lightbox (hidden) -->
-    <div id="lightbox" class="lightbox" hidden>
-      <div class="lightbox-backdrop"></div>
-      <div class="lightbox-content">
-        <img id="lightbox-img" src="" alt="Full size image">
-        <button class="lightbox-close" aria-label="Close image">✕</button>
-      </div>
-    </div>
-
-    <!-- Error Toast (hidden) -->
-    <div id="error-toast" class="error-toast" hidden>
-      <span id="error-toast-icon">😕</span>
-      <span id="error-toast-message"></span>
-    </div>
-
-    <!-- Create Modal -->
-    <div id="create-modal" class="modal" hidden>
-      <div class="modal-backdrop create-backdrop"></div>
-      <div class="modal-content create-modal-content">
-        <div class="modal-header">
-          <h2>✨ Create</h2>
-          <button id="create-close" class="modal-close" aria-label="Close">✕</button>
-        </div>
-        <div class="create-tabs">
-          <button class="create-tab active" data-tab="image">🎨 Image</button>
-          <button class="create-tab" data-tab="music">🎵 Music</button>
-          <button class="create-tab" data-tab="voice">🎤 Voice</button>
-          <button class="create-tab" data-tab="search">🔍 Search</button>
-          <button class="create-tab" data-tab="assets">📁 Assets</button>
-        </div>
-        <div class="create-panels">
-          <!-- Image -->
-          <form id="create-image-form" class="create-panel" data-panel="image">
-            <div class="form-group">
-              <label for="img-prompt">Describe your image</label>
-              <textarea id="img-prompt" rows="3" placeholder="A epic gaming logo with neon lights"></textarea>
-            </div>
-            <div class="form-group">
-              <label for="img-ratio">Aspect ratio</label>
-              <select id="img-ratio">
-                <option value="1:1">1:1 (square)</option>
-                <option value="16:9" selected>16:9 (wide)</option>
-                <option value="9:16">9:16 (tall)</option>
-                <option value="4:3">4:3</option>
-              </select>
-            </div>
-            <button type="submit" class="btn-primary">Generate image 🎨</button>
-          </form>
-          <!-- Music -->
-          <form id="create-music-form" class="create-panel" data-panel="music" hidden>
-            <div class="form-group">
-              <label for="music-prompt">Describe the music</label>
-              <textarea id="music-prompt" rows="2" placeholder="Upbeat electronic chiptune gaming music"></textarea>
-            </div>
-            <div class="form-group">
-              <label for="music-lyrics">Lyrics (optional)</label>
-              <textarea id="music-lyrics" rows="3" placeholder="Verse:... Chorus:..."></textarea>
-            </div>
-            <div class="form-group">
-              <label>
-                <input type="checkbox" id="music-instrumental"> Instrumental only (no vocals)
-              </label>
-            </div>
-            <button type="submit" class="btn-primary">Generate music 🎵</button>
-          </form>
-          <!-- Voice -->
-          <form id="create-voice-form" class="create-panel" data-panel="voice" hidden>
-            <div class="form-group">
-              <label for="voice-text">Text to speak</label>
-              <textarea id="voice-text" rows="4" placeholder="Welcome to HallucyGenie! Your AI creative buddy."></textarea>
-            </div>
-            <div class="form-group">
-              <label for="voice-speed">Speed</label>
-              <select id="voice-speed">
-                <option value="0.8">0.8x (slower)</option>
-                <option value="1.0" selected>1.0x (normal)</option>
-                <option value="1.2">1.2x (faster)</option>
-              </select>
-            </div>
-            <button type="submit" class="btn-primary">Read it to me 🎤</button>
-          </form>
-          <!-- Search -->
-          <form id="create-search-form" class="create-panel" data-panel="search" hidden>
-            <div class="form-group">
-              <label for="search-query">What do you want to search for?</label>
-              <textarea id="search-query" rows="2" placeholder="Latest Minecraft update news"></textarea>
-            </div>
-            <button type="submit" class="btn-primary">Search the web 🔍</button>
-          </form>
-
-          <!-- Assets -->
-          <div id="assets-panel" class="create-panel" data-panel="assets" hidden>
-            <div id="assets-grid"></div>
-            <p id="assets-empty" class="assets-empty" hidden>No assets yet — generate something! ✨</p>
-          </div>
-        </div>
-      </div>
-    </div>
-  </div>
-
-  <script type="module" src="app.js"></script>
-</body>
+        <script type="module" src="app.js"></script>
+    </body>
 </html>

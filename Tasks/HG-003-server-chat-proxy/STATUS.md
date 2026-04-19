@@ -11,6 +11,7 @@
 ## Step Progress
 
 ### Step 0: Preflight
+
 **Status:** ✅ Complete
 
 - [x] Verify server.ts skeleton exists
@@ -18,6 +19,7 @@
 - [x] Run `just test` — placeholders pass
 
 ### Step 1: Static File Server + Route Skeleton
+
 **Status:** ✅ Complete
 
 - [x] Static file serving from `public/`
@@ -29,6 +31,7 @@
 - [x] Snapshot tests for GET /, GET /api/health, 404
 
 ### Step 2: Chat Proxy with SSE Streaming
+
 **Status:** ✅ Complete
 
 - [x] POST /api/chat handler with SSE forwarding
@@ -38,6 +41,7 @@
 - [x] Snapshot tests for SSE streams
 
 ### Step 3: Tool Call Accumulator
+
 **Status:** ✅ Complete
 
 - [x] Chunked argument accumulation
@@ -46,6 +50,7 @@
 - [x] Snapshot tests for tool call patterns
 
 ### Step 4: Error Handling + Graceful Shutdown
+
 **Status:** ✅ Complete
 
 - [x] MiniMax error handling
@@ -56,6 +61,7 @@
 - [x] Tests for graceful shutdown
 
 ### Step 5: Coverage and Mutation Testing
+
 **Status:** ✅ Complete
 
 - [x] `just test-coverage` → 95.28% overall, 94.56% server.ts, 100% agent.ts
@@ -66,14 +72,14 @@
 ## Discoveries
 
 | Step | Finding | Action Taken |
-|------|---------|-------------|
-| — | — | — |
+| ---- | ------- | ------------ |
+| —    | —       | —            |
 
 | 2026-04-17 11:29 | Task started | Runtime V2 lane-runner execution |
 | 2026-04-17 11:29 | Step 0 started | Preflight |
 | 2026-04-17 11:35 | Bun not available on Termux/Android | Adapted to use Node.js test runner; server code targets Bun but handlers tested via Node |
 | 2026-04-17 11:40 | HG-002 scaffold missing | Created all scaffold files (package.json, tsconfig, public/, container configs) as prerequisite |
 | 2026-04-17 11:45 | Coverage at 95.28% | Remaining gaps are Bun.serve/startServer/signal handlers (untestable in Node.js) |
-| 2026-04-17 11:51 | Agent reply | HG-003 task complete. All 5 steps done. 76 tests passing, 95.28% coverage. Server implements static file serving, SSE chat proxy to MiniMax with thinking token stripping, tool call accumulator, CORS,  |
+| 2026-04-17 11:51 | Agent reply | HG-003 task complete. All 5 steps done. 76 tests passing, 95.28% coverage. Server implements static file serving, SSE chat proxy to MiniMax with thinking token stripping, tool call accumulator, CORS, |
 | 2026-04-17 11:51 | Worker iter 1 | done in 1299s, tools: 98 |
 | 2026-04-17 11:51 | Task complete | .DONE created |

@@ -14,100 +14,118 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 const SNAPSHOTS_DIR = join(__dirname, "__snapshots__");
 
 function writeSnapshot(name: string, html: string): void {
-  try {
-    mkdirSync(SNAPSHOTS_DIR, { recursive: true });
-    writeFileSync(join(SNAPSHOTS_DIR, `${name}.html`), html, "utf-8");
-  } catch {
-    // Ignore write errors in test env
-  }
+    try {
+        mkdirSync(SNAPSHOTS_DIR, { recursive: true });
+        writeFileSync(join(SNAPSHOTS_DIR, `${name}.html`), html, "utf-8");
+    } catch {
+        // Ignore write errors in test env
+    }
 }
 
 // ── Inline testable functions (mirrors app.ts logic exactly) ─────────
 
 // SSE parsing
 function parseSSELine(line: string): { field: string; value: string } | null {
-  if (line.startsWith("event:")) {
-    return { field: "event", value: line.slice(6).trim() };
-  }
-  if (line.startsWith("data:")) {
-    return { field: "data", value: line.slice(5).trim() };
-  }
-  return null;
+    if (line.startsWith("event:")) {
+        return { field: "event", value: line.slice(6).trim() };
+    }
+    if (line.startsWith("data:")) {
+        return { field: "data", value: line.slice(5).trim() };
+    }
+    return null;
 }
 
 interface SSEEvent {
-  event: string;
-  data: string;
+    event: string;
+    data: string;
 }
 
 function* parseSSEChunk(chunk: string): Generator<SSEEvent> {
-  const lines = chunk.split("\n");
-  let currentEvent = "message";
-  let currentData = "";
+    const lines = chunk.split("\n");
+    let currentEvent = "message";
+    let currentData = "";
 
-  for (const line of lines) {
-    if (line === "") {
-      if (currentData) {
+    for (const line of lines) {
+        if (line === "") {
+            if (currentData) {
+                yield { event: currentEvent, data: currentData };
+            }
+            currentEvent = "message";
+            currentData = "";
+            continue;
+        }
+        const parsed = parseSSELine(line);
+        if (parsed) {
+            if (parsed.field === "event") {
+                currentEvent = parsed.value;
+            } else if (parsed.field === "data") {
+                currentData = parsed.value;
+            }
+        }
+    }
+    if (currentData) {
         yield { event: currentEvent, data: currentData };
-      }
-      currentEvent = "message";
-      currentData = "";
-      continue;
     }
-    const parsed = parseSSELine(line);
-    if (parsed) {
-      if (parsed.field === "event") {
-        currentEvent = parsed.value;
-      } else if (parsed.field === "data") {
-        currentData = parsed.value;
-      }
-    }
-  }
-  if (currentData) {
-    yield { event: currentEvent, data: currentData };
-  }
 }
 
 // Session UUID
-function getOrCreateSessionId(localStorage: { getItem: (k: string) => string | null; setItem: (k: string, v: string) => void }, crypto: { randomUUID: () => string }): string {
-  const KEY = "hallucygenie_session_id";
-  let id = localStorage.getItem(KEY);
-  if (!id) {
-    id = crypto.randomUUID();
-    localStorage.setItem(KEY, id);
-  }
-  return id;
+function getOrCreateSessionId(
+    localStorage: {
+        getItem: (k: string) => string | null;
+        setItem: (k: string, v: string) => void;
+    },
+    crypto: { randomUUID: () => string },
+): string {
+    const KEY = "hallucygenie_session_id";
+    let id = localStorage.getItem(KEY);
+    if (!id) {
+        id = crypto.randomUUID();
+        localStorage.setItem(KEY, id);
+    }
+    return id;
 }
 
 // API headers
 function createApiHeaders(sessionId: string): Record<string, string> {
-  return {
-    "Content-Type": "application/json",
-    "X-Session-Id": sessionId,
-  };
+    return {
+        "Content-Type": "application/json",
+        "X-Session-Id": sessionId,
+    };
 }
 
 // Tool emojis
 const TOOL_EMOJIS: Record<string, string> = {
-  generate_image: "🎨",
-  text_to_speech: "🎙️",
-  generate_music: "🎵",
+    generate_image: "🎨",
+    text_to_speech: "🎙️",
+    generate_music: "🎵",
 };
 
 function getToolEmoji(name: string): string {
-  return TOOL_EMOJIS[name] ?? "🔧";
+    return TOOL_EMOJIS[name] ?? "🔧";
 }
 
 // ── Mock localStorage ──────────────────────────────────────────────────
 
 class LocalStorageMock {
-  private store = new Map<string, string>();
-  getItem(key: string): string | null { return this.store.get(key) ?? null; }
-  setItem(key: string, value: string): void { this.store.set(key, value); }
-  removeItem(key: string): void { this.store.delete(key); }
-  clear(): void { this.store.clear(); }
-  get length(): number { return this.store.size; }
-  key(index: number): string | null { return [...this.store.keys()][index] ?? null; }
+    private store = new Map<string, string>();
+    getItem(key: string): string | null {
+        return this.store.get(key) ?? null;
+    }
+    setItem(key: string, value: string): void {
+        this.store.set(key, value);
+    }
+    removeItem(key: string): void {
+        this.store.delete(key);
+    }
+    clear(): void {
+        this.store.clear();
+    }
+    get length(): number {
+        return this.store.size;
+    }
+    key(index: number): string | null {
+        return [...this.store.keys()][index] ?? null;
+    }
 }
 
 // ═══════════════════════════════════════════════════════════════════════
@@ -117,789 +135,836 @@ class LocalStorageMock {
 // ── SSE Parsing ────────────────────────────────────────────────────────
 
 describe("SSE Parsing", () => {
-  it("parseSSELine - event field", () => {
-    const result = parseSSELine("event: tool_start");
-    assert.deepEqual(result, { field: "event", value: "tool_start" });
-  });
+    it("parseSSELine - event field", () => {
+        const result = parseSSELine("event: tool_start");
+        assert.deepEqual(result, { field: "event", value: "tool_start" });
+    });
 
-  it("parseSSELine - data field", () => {
-    const result = parseSSELine('data: {"delta": "hello"}');
-    assert.deepEqual(result, { field: "data", value: '{"delta": "hello"}' });
-  });
+    it("parseSSELine - data field", () => {
+        const result = parseSSELine('data: {"delta": "hello"}');
+        assert.deepEqual(result, { field: "data", value: '{"delta": "hello"}' });
+    });
 
-  it("parseSSELine - returns null for non-SSE lines", () => {
-    assert.equal(parseSSELine("just some text"), null);
-    assert.equal(parseSSELine(""), null);
-    assert.equal(parseSSELine("#comment"), null);
-  });
+    it("parseSSELine - returns null for non-SSE lines", () => {
+        assert.equal(parseSSELine("just some text"), null);
+        assert.equal(parseSSELine(""), null);
+        assert.equal(parseSSELine("#comment"), null);
+    });
 
-  it("parseSSEChunk - single text event (OpenAI format)", () => {
-    const chunk = 'data: {"choices":[{"delta":{"content":"hi"}}]\n\n';
-    const events = [...parseSSEChunk(chunk)];
-    assert.equal(events.length, 1);
-    assert.equal(events[0].event, "message");
-    assert.equal(events[0].data, '{"choices":[{"delta":{"content":"hi"}}]');
-  });
+    it("parseSSEChunk - single text event (OpenAI format)", () => {
+        const chunk = 'data: {"choices":[{"delta":{"content":"hi"}}]\n\n';
+        const events = [...parseSSEChunk(chunk)];
+        assert.equal(events.length, 1);
+        assert.equal(events[0].event, "message");
+        assert.equal(events[0].data, '{"choices":[{"delta":{"content":"hi"}}]');
+    });
 
-  it("parseSSEChunk - tool_start event", () => {
-    const chunk = 'event: tool_start\ndata: {"id":"t1","name":"generate_image"}\n\n';
-    const events = [...parseSSEChunk(chunk)];
-    assert.equal(events.length, 1);
-    assert.equal(events[0].event, "tool_start");
-    const parsed = JSON.parse(events[0].data);
-    assert.equal(parsed.id, "t1");
-    assert.equal(parsed.name, "generate_image");
-  });
+    it("parseSSEChunk - tool_start event", () => {
+        const chunk = 'event: tool_start\ndata: {"id":"t1","name":"generate_image"}\n\n';
+        const events = [...parseSSEChunk(chunk)];
+        assert.equal(events.length, 1);
+        assert.equal(events[0].event, "tool_start");
+        const parsed = JSON.parse(events[0].data);
+        assert.equal(parsed.id, "t1");
+        assert.equal(parsed.name, "generate_image");
+    });
 
-  it("parseSSEChunk - tool_result event", () => {
-    const chunk = 'event: tool_result\ndata: {"id":"t1","name":"generate_image","result":{"type":"image","content":"http://example.com/img.png"}}\n\n';
-    const events = [...parseSSEChunk(chunk)];
-    assert.equal(events.length, 1);
-    assert.equal(events[0].event, "tool_result");
-    const parsed = JSON.parse(events[0].data);
-    assert.equal(parsed.result.type, "image");
-    assert.equal(parsed.result.content, "http://example.com/img.png");
-  });
+    it("parseSSEChunk - tool_result event", () => {
+        const chunk =
+            'event: tool_result\ndata: {"id":"t1","name":"generate_image","result":{"type":"image","content":"http://example.com/img.png"}}\n\n';
+        const events = [...parseSSEChunk(chunk)];
+        assert.equal(events.length, 1);
+        assert.equal(events[0].event, "tool_result");
+        const parsed = JSON.parse(events[0].data);
+        assert.equal(parsed.result.type, "image");
+        assert.equal(parsed.result.content, "http://example.com/img.png");
+    });
 
-  it("parseSSEChunk - [DONE] signal", () => {
-    const chunk = "data: [DONE]\n\n";
-    const events = [...parseSSEChunk(chunk)];
-    assert.equal(events.length, 1);
-    assert.equal(events[0].data, "[DONE]");
-  });
+    it("parseSSEChunk - [DONE] signal", () => {
+        const chunk = "data: [DONE]\n\n";
+        const events = [...parseSSEChunk(chunk)];
+        assert.equal(events.length, 1);
+        assert.equal(events[0].data, "[DONE]");
+    });
 
-  it("parseSSEChunk - error event", () => {
-    const chunk = 'event: error\ndata: {"error":"something broke"}\n\n';
-    const events = [...parseSSEChunk(chunk)];
-    assert.equal(events.length, 1);
-    assert.equal(events[0].event, "error");
-    const parsed = JSON.parse(events[0].data);
-    assert.equal(parsed.error, "something broke");
-  });
+    it("parseSSEChunk - error event", () => {
+        const chunk = 'event: error\ndata: {"error":"something broke"}\n\n';
+        const events = [...parseSSEChunk(chunk)];
+        assert.equal(events.length, 1);
+        assert.equal(events[0].event, "error");
+        const parsed = JSON.parse(events[0].data);
+        assert.equal(parsed.error, "something broke");
+    });
 
-  it("parseSSEChunk - multiple events in single chunk", () => {
-    const chunk = 'data: {"choices":[{"delta":{"content":"hello"}}]\n\ndata: {"choices":[{"delta":{"content":" world"}}]\n\n';
-    const events = [...parseSSEChunk(chunk)];
-    assert.equal(events.length, 2);
-    assert.equal(events[0].data, '{"choices":[{"delta":{"content":"hello"}}]');
-    assert.equal(events[1].data, '{"choices":[{"delta":{"content":" world"}}]');
-  });
+    it("parseSSEChunk - multiple events in single chunk", () => {
+        const chunk =
+            'data: {"choices":[{"delta":{"content":"hello"}}]\n\ndata: {"choices":[{"delta":{"content":" world"}}]\n\n';
+        const events = [...parseSSEChunk(chunk)];
+        assert.equal(events.length, 2);
+        assert.equal(events[0].data, '{"choices":[{"delta":{"content":"hello"}}]');
+        assert.equal(events[1].data, '{"choices":[{"delta":{"content":" world"}}]');
+    });
 
-  it("parseSSEChunk - handles no trailing newline", () => {
-    const chunk = 'data: {"test":true}';
-    const events = [...parseSSEChunk(chunk)];
-    assert.equal(events.length, 1);
-    assert.equal(events[0].data, '{"test":true}');
-  });
+    it("parseSSEChunk - handles no trailing newline", () => {
+        const chunk = 'data: {"test":true}';
+        const events = [...parseSSEChunk(chunk)];
+        assert.equal(events.length, 1);
+        assert.equal(events[0].data, '{"test":true}');
+    });
 
-  it("parseSSEChunk - empty chunk yields nothing", () => {
-    const events = [...parseSSEChunk("")];
-    assert.equal(events.length, 0);
-  });
+    it("parseSSEChunk - empty chunk yields nothing", () => {
+        const events = [...parseSSEChunk("")];
+        assert.equal(events.length, 0);
+    });
 
-  it("parseSSEChunk - mixed event types", () => {
-    const chunk = 'data: {"choices":[{"delta":{"content":"making art"}}]\n\nevent: tool_start\ndata: {"id":"t1","name":"generate_image"}\n\n';
-    const events = [...parseSSEChunk(chunk)];
-    assert.equal(events.length, 2);
-    assert.equal(events[0].event, "message");
-    assert.equal(events[1].event, "tool_start");
-  });
+    it("parseSSEChunk - mixed event types", () => {
+        const chunk =
+            'data: {"choices":[{"delta":{"content":"making art"}}]\n\nevent: tool_start\ndata: {"id":"t1","name":"generate_image"}\n\n';
+        const events = [...parseSSEChunk(chunk)];
+        assert.equal(events.length, 2);
+        assert.equal(events[0].event, "message");
+        assert.equal(events[1].event, "tool_start");
+    });
 });
 
 // ── Session UUID ───────────────────────────────────────────────────────
 
 describe("Session UUID", () => {
-  it("generates a valid UUID v4 format", () => {
-    const ls = new LocalStorageMock();
-    const crypto = { randomUUID: () => "550e8400-e29b-41d4-a716-446655440000" };
-    const id = getOrCreateSessionId(ls, crypto);
-    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
-    assert.match(id, uuidRegex);
-  });
+    it("generates a valid UUID v4 format", () => {
+        const ls = new LocalStorageMock();
+        const crypto = { randomUUID: () => "550e8400-e29b-41d4-a716-446655440000" };
+        const id = getOrCreateSessionId(ls, crypto);
+        const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+        assert.match(id, uuidRegex);
+    });
 
-  it("returns same value on subsequent calls", () => {
-    const ls = new LocalStorageMock();
-    const crypto = { randomUUID: () => "550e8400-e29b-41d4-a716-446655440000" };
-    const id1 = getOrCreateSessionId(ls, crypto);
-    const id2 = getOrCreateSessionId(ls, crypto);
-    assert.equal(id1, id2);
-  });
+    it("returns same value on subsequent calls", () => {
+        const ls = new LocalStorageMock();
+        const crypto = { randomUUID: () => "550e8400-e29b-41d4-a716-446655440000" };
+        const id1 = getOrCreateSessionId(ls, crypto);
+        const id2 = getOrCreateSessionId(ls, crypto);
+        assert.equal(id1, id2);
+    });
 
-  it("stores in localStorage", () => {
-    const ls = new LocalStorageMock();
-    const crypto = { randomUUID: () => "550e8400-e29b-41d4-a716-446655440000" };
-    const id = getOrCreateSessionId(ls, crypto);
-    assert.equal(ls.getItem("hallucygenie_session_id"), id);
-  });
+    it("stores in localStorage", () => {
+        const ls = new LocalStorageMock();
+        const crypto = { randomUUID: () => "550e8400-e29b-41d4-a716-446655440000" };
+        const id = getOrCreateSessionId(ls, crypto);
+        assert.equal(ls.getItem("hallucygenie_session_id"), id);
+    });
 
-  it("reuses existing session ID from localStorage", () => {
-    const ls = new LocalStorageMock();
-    ls.setItem("hallucygenie_session_id", "existing-id-123");
-    const crypto = { randomUUID: () => "should-not-be-called" };
-    const id = getOrCreateSessionId(ls, crypto);
-    assert.equal(id, "existing-id-123");
-  });
+    it("reuses existing session ID from localStorage", () => {
+        const ls = new LocalStorageMock();
+        ls.setItem("hallucygenie_session_id", "existing-id-123");
+        const crypto = { randomUUID: () => "should-not-be-called" };
+        const id = getOrCreateSessionId(ls, crypto);
+        assert.equal(id, "existing-id-123");
+    });
 });
 
 // ── API Headers ────────────────────────────────────────────────────────
 
 describe("API Headers", () => {
-  it("includes session ID and content type", () => {
-    const headers = createApiHeaders("test-session-123");
-    assert.equal(headers["Content-Type"], "application/json");
-    assert.equal(headers["X-Session-Id"], "test-session-123");
-  });
+    it("includes session ID and content type", () => {
+        const headers = createApiHeaders("test-session-123");
+        assert.equal(headers["Content-Type"], "application/json");
+        assert.equal(headers["X-Session-Id"], "test-session-123");
+    });
 
-  it("works with empty string session ID", () => {
-    const headers = createApiHeaders("");
-    assert.equal(headers["X-Session-Id"], "");
-  });
+    it("works with empty string session ID", () => {
+        const headers = createApiHeaders("");
+        assert.equal(headers["X-Session-Id"], "");
+    });
 });
 
 // ── Tool Emojis ────────────────────────────────────────────────────────
 
 describe("Tool Emojis", () => {
-  it("returns correct emoji for generate_image", () => {
-    assert.equal(getToolEmoji("generate_image"), "🎨");
-  });
+    it("returns correct emoji for generate_image", () => {
+        assert.equal(getToolEmoji("generate_image"), "🎨");
+    });
 
-  it("returns correct emoji for text_to_speech", () => {
-    assert.equal(getToolEmoji("text_to_speech"), "🎙️");
-  });
+    it("returns correct emoji for text_to_speech", () => {
+        assert.equal(getToolEmoji("text_to_speech"), "🎙️");
+    });
 
-  it("returns correct emoji for generate_music", () => {
-    assert.equal(getToolEmoji("generate_music"), "🎵");
-  });
+    it("returns correct emoji for generate_music", () => {
+        assert.equal(getToolEmoji("generate_music"), "🎵");
+    });
 
-  it("returns default wrench emoji for unknown tool", () => {
-    assert.equal(getToolEmoji("unknown_tool"), "🔧");
-  });
+    it("returns default wrench emoji for unknown tool", () => {
+        assert.equal(getToolEmoji("unknown_tool"), "🔧");
+    });
 
-  it("returns default for empty string", () => {
-    assert.equal(getToolEmoji(""), "🔧");
-  });
+    it("returns default for empty string", () => {
+        assert.equal(getToolEmoji(""), "🔧");
+    });
 });
 
 // ── DOM Rendering Tests ───────────────────────────────────────────────
 
 describe("DOM Rendering", () => {
-  let doc: Document;
-  let happyDOMRef: any;
+    let doc: Document;
+    let happyDOMRef: any;
 
-  before(async () => {
-    const { Window } = await import("happy-dom");
-    const win = new Window({ url: "http://localhost:3000" });
-    doc = win.document as unknown as Document;
-    happyDOMRef = win;
-  });
+    before(async () => {
+        const { Window } = await import("happy-dom");
+        const win = new Window({ url: "http://localhost:3000" });
+        doc = win.document as unknown as Document;
+        happyDOMRef = win;
+    });
 
-  after(() => {
-    // No-op cleanup — setInterval removed from init()
-    // happy-dom v14+ does not have .abort()
-  });
+    after(() => {
+        // No-op cleanup — setInterval removed from init()
+        // happy-dom v14+ does not have .abort()
+    });
 
-  // DOM helpers (same logic as app.ts)
-  function createElement(tag: string, attrs?: Record<string, string>, children?: (string | Node)[]): HTMLElement {
-    const el = doc.createElement(tag);
-    if (attrs) {
-      for (const [key, value] of Object.entries(attrs)) {
-        el.setAttribute(key, value);
-      }
-    }
-    if (children) {
-      for (const child of children) {
-        if (typeof child === "string") {
-          el.appendChild(doc.createTextNode(child));
-        } else {
-          el.appendChild(child);
+    // DOM helpers (same logic as app.ts)
+    function createElement(
+        tag: string,
+        attrs?: Record<string, string>,
+        children?: (string | Node)[],
+    ): HTMLElement {
+        const el = doc.createElement(tag);
+        if (attrs) {
+            for (const [key, value] of Object.entries(attrs)) {
+                el.setAttribute(key, value);
+            }
         }
-      }
+        if (children) {
+            for (const child of children) {
+                if (typeof child === "string") {
+                    el.appendChild(doc.createTextNode(child));
+                } else {
+                    el.appendChild(child);
+                }
+            }
+        }
+        return el;
     }
-    return el;
-  }
 
-  function renderUserMessage(content: string): HTMLElement {
-    const msg = createElement("div", { class: "message message--user" });
-    const avatar = createElement("div", { class: "message-avatar" }, ["👤"]);
-    const bubble = createElement("div", { class: "message-bubble" });
-    const contentEl = createElement("div", { class: "message-content" }, [content]);
-    bubble.appendChild(contentEl);
-    msg.appendChild(avatar);
-    msg.appendChild(bubble);
-    return msg;
-  }
-
-  function renderAssistantMessage(): { container: HTMLElement; contentEl: HTMLElement } {
-    const msg = createElement("div", { class: "message message--assistant" });
-    const avatar = createElement("div", { class: "message-avatar" }, ["🧞"]);
-    const bubble = createElement("div", { class: "message-bubble" });
-    const contentEl = createElement("div", { class: "message-content" }, [""]);
-    bubble.appendChild(contentEl);
-    msg.appendChild(avatar);
-    msg.appendChild(bubble);
-    return { container: msg, contentEl };
-  }
-
-  function renderSteerMessage(content: string): HTMLElement {
-    const msg = createElement("div", { class: "message message--steer message--user" });
-    const avatar = createElement("div", { class: "message-avatar" }, ["💡"]);
-    const bubble = createElement("div", { class: "message-bubble" });
-    const contentEl = createElement("div", { class: "message-content" }, [content]);
-    bubble.appendChild(contentEl);
-    msg.appendChild(avatar);
-    msg.appendChild(bubble);
-    return msg;
-  }
-
-  function renderToolCardLoading(name: string): HTMLElement {
-    const card = createElement("div", { class: "tool-card" });
-    const header = createElement("div", { class: "tool-card-header" });
-    const emoji = createElement("span", { class: "tool-emoji" }, [getToolEmoji(name)]);
-    const label = createElement("span", {}, [`Running ${name.replace(/_/g, " ")}...`]);
-    header.appendChild(emoji);
-    header.appendChild(label);
-    const loading = createElement("div", { class: "tool-card-loading" });
-    const spinner = createElement("div", { class: "spinner" });
-    loading.appendChild(spinner);
-    card.appendChild(header);
-    card.appendChild(loading);
-    return card;
-  }
-
-  function renderToolResult(toolName: string, result: { type: string; content: string }): HTMLElement {
-    const card = createElement("div", { class: "tool-card" });
-    const header = createElement("div", { class: "tool-card-header" });
-    const emoji = createElement("span", { class: "tool-emoji" }, [getToolEmoji(toolName)]);
-    const label = createElement("span", {}, [toolName.replace(/_/g, " ")]);
-    header.appendChild(emoji);
-    header.appendChild(label);
-    const body = createElement("div", { class: "tool-card-body" });
-    card.appendChild(header);
-    card.appendChild(body);
-    if (result.type === "image") {
-      const img = createElement("img", {
-        class: "tool-result-image",
-        src: result.content,
-        alt: "Generated image",
-        loading: "lazy",
-      });
-      body.appendChild(img);
-    } else if (result.type === "audio") {
-      const audio = createElement("audio", {
-        class: "tool-result-audio",
-        controls: "",
-        src: result.content,
-      });
-      body.appendChild(audio);
-    } else if (result.type === "error") {
-      body.textContent = `😕 ${result.content}`;
-      (card as HTMLElement).style.borderColor = "var(--color-error)";
+    function renderUserMessage(content: string): HTMLElement {
+        const msg = createElement("div", { class: "message message--user" });
+        const avatar = createElement("div", { class: "message-avatar" }, ["👤"]);
+        const bubble = createElement("div", { class: "message-bubble" });
+        const contentEl = createElement("div", { class: "message-content" }, [content]);
+        bubble.appendChild(contentEl);
+        msg.appendChild(avatar);
+        msg.appendChild(bubble);
+        return msg;
     }
-    return card;
-  }
 
-  it("user message has correct structure and classes", () => {
-    const msg = renderUserMessage("Hello!");
-    assert.equal(msg.classList.contains("message"), true);
-    assert.equal(msg.classList.contains("message--user"), true);
-    assert.ok(msg.querySelector(".message-avatar"));
-    assert.ok(msg.querySelector(".message-bubble"));
-    assert.equal(msg.querySelector(".message-content")!.textContent, "Hello!");
-  });
+    function renderAssistantMessage(): { container: HTMLElement; contentEl: HTMLElement } {
+        const msg = createElement("div", { class: "message message--assistant" });
+        const avatar = createElement("div", { class: "message-avatar" }, ["🧞"]);
+        const bubble = createElement("div", { class: "message-bubble" });
+        const contentEl = createElement("div", { class: "message-content" }, [""]);
+        bubble.appendChild(contentEl);
+        msg.appendChild(avatar);
+        msg.appendChild(bubble);
+        return { container: msg, contentEl };
+    }
 
-  it("assistant message starts with empty content", () => {
-    const { container, contentEl } = renderAssistantMessage();
-    assert.equal(container.classList.contains("message--assistant"), true);
-    assert.equal(contentEl.textContent, "");
-    assert.ok(container.querySelector(".message-avatar"));
-    assert.equal(container.querySelector(".message-avatar")!.textContent, "🧞");
-  });
+    function renderSteerMessage(content: string): HTMLElement {
+        const msg = createElement("div", { class: "message message--steer message--user" });
+        const avatar = createElement("div", { class: "message-avatar" }, ["💡"]);
+        const bubble = createElement("div", { class: "message-bubble" });
+        const contentEl = createElement("div", { class: "message-content" }, [content]);
+        bubble.appendChild(contentEl);
+        msg.appendChild(avatar);
+        msg.appendChild(bubble);
+        return msg;
+    }
 
-  it("assistant message content can be updated", () => {
-    const { contentEl } = renderAssistantMessage();
-    contentEl.textContent = "Hello there!";
-    assert.equal(contentEl.textContent, "Hello there!");
-  });
+    function renderToolCardLoading(name: string): HTMLElement {
+        const card = createElement("div", { class: "tool-card" });
+        const header = createElement("div", { class: "tool-card-header" });
+        const emoji = createElement("span", { class: "tool-emoji" }, [getToolEmoji(name)]);
+        const label = createElement("span", {}, [`Running ${name.replace(/_/g, " ")}...`]);
+        header.appendChild(emoji);
+        header.appendChild(label);
+        const loading = createElement("div", { class: "tool-card-loading" });
+        const spinner = createElement("div", { class: "spinner" });
+        loading.appendChild(spinner);
+        card.appendChild(header);
+        card.appendChild(loading);
+        return card;
+    }
 
-  it("steer message has distinct class", () => {
-    const msg = renderSteerMessage("Change the color");
-    assert.equal(msg.classList.contains("message--steer"), true);
-    assert.equal(msg.querySelector(".message-content")!.textContent, "Change the color");
-    assert.equal(msg.querySelector(".message-avatar")!.textContent, "💡");
-  });
+    function renderToolResult(
+        toolName: string,
+        result: { type: string; content: string },
+    ): HTMLElement {
+        const card = createElement("div", { class: "tool-card" });
+        const header = createElement("div", { class: "tool-card-header" });
+        const emoji = createElement("span", { class: "tool-emoji" }, [getToolEmoji(toolName)]);
+        const label = createElement("span", {}, [toolName.replace(/_/g, " ")]);
+        header.appendChild(emoji);
+        header.appendChild(label);
+        const body = createElement("div", { class: "tool-card-body" });
+        card.appendChild(header);
+        card.appendChild(body);
+        if (result.type === "image") {
+            const img = createElement("img", {
+                class: "tool-result-image",
+                src: result.content,
+                alt: "Generated image",
+                loading: "lazy",
+            });
+            body.appendChild(img);
+        } else if (result.type === "audio") {
+            const audio = createElement("audio", {
+                class: "tool-result-audio",
+                controls: "",
+                src: result.content,
+            });
+            body.appendChild(audio);
+        } else if (result.type === "error") {
+            body.textContent = `😕 ${result.content}`;
+            (card as HTMLElement).style.borderColor = "var(--color-error)";
+        }
+        return card;
+    }
 
-  it("tool loading card shows spinner and tool name", () => {
-    const card = renderToolCardLoading("generate_image");
-    assert.ok(card.classList.contains("tool-card"));
-    assert.ok(card.querySelector(".spinner"));
-    assert.ok(card.textContent!.includes("generate image"));
-    assert.ok(card.querySelector(".tool-emoji")!.textContent!.includes("🎨"));
-  });
-
-  it("tool loading card formats tool name with spaces", () => {
-    const card = renderToolCardLoading("text_to_speech");
-    assert.ok(card.textContent!.includes("text to speech"));
-  });
-
-  it("tool result image card has img element", () => {
-    const card = renderToolResult("generate_image", {
-      type: "image",
-      content: "http://example.com/img.png",
+    it("user message has correct structure and classes", () => {
+        const msg = renderUserMessage("Hello!");
+        assert.equal(msg.classList.contains("message"), true);
+        assert.equal(msg.classList.contains("message--user"), true);
+        assert.ok(msg.querySelector(".message-avatar"));
+        assert.ok(msg.querySelector(".message-bubble"));
+        assert.equal(msg.querySelector(".message-content")!.textContent, "Hello!");
     });
-    const img = card.querySelector("img");
-    assert.ok(img);
-    assert.equal(img!.getAttribute("src"), "http://example.com/img.png");
-    assert.equal(img!.getAttribute("class"), "tool-result-image");
-  });
 
-  it("tool result audio card has audio element", () => {
-    const card = renderToolResult("text_to_speech", {
-      type: "audio",
-      content: "http://example.com/audio.mp3",
+    it("assistant message starts with empty content", () => {
+        const { container, contentEl } = renderAssistantMessage();
+        assert.equal(container.classList.contains("message--assistant"), true);
+        assert.equal(contentEl.textContent, "");
+        assert.ok(container.querySelector(".message-avatar"));
+        assert.equal(container.querySelector(".message-avatar")!.textContent, "🧞");
     });
-    const audio = card.querySelector("audio");
-    assert.ok(audio);
-    assert.equal(audio!.getAttribute("src"), "http://example.com/audio.mp3");
-    assert.equal(audio!.getAttribute("controls"), "");
-  });
 
-  it("tool result music card has audio element", () => {
-    const card = renderToolResult("generate_music", {
-      type: "audio",
-      content: "http://example.com/music.mp3",
+    it("assistant message content can be updated", () => {
+        const { contentEl } = renderAssistantMessage();
+        contentEl.textContent = "Hello there!";
+        assert.equal(contentEl.textContent, "Hello there!");
     });
-    const audio = card.querySelector("audio");
-    assert.ok(audio);
-    assert.equal(audio!.getAttribute("src"), "http://example.com/music.mp3");
-  });
 
-  it("tool result error card shows friendly error", () => {
-    const card = renderToolResult("generate_image", {
-      type: "error",
-      content: "Rate limited",
+    it("steer message has distinct class", () => {
+        const msg = renderSteerMessage("Change the color");
+        assert.equal(msg.classList.contains("message--steer"), true);
+        assert.equal(msg.querySelector(".message-content")!.textContent, "Change the color");
+        assert.equal(msg.querySelector(".message-avatar")!.textContent, "💡");
     });
-    assert.ok(card.textContent!.includes("😕"));
-    assert.ok(card.textContent!.includes("Rate limited"));
-  });
+
+    it("tool loading card shows spinner and tool name", () => {
+        const card = renderToolCardLoading("generate_image");
+        assert.ok(card.classList.contains("tool-card"));
+        assert.ok(card.querySelector(".spinner"));
+        assert.ok(card.textContent!.includes("generate image"));
+        assert.ok(card.querySelector(".tool-emoji")!.textContent!.includes("🎨"));
+    });
+
+    it("tool loading card formats tool name with spaces", () => {
+        const card = renderToolCardLoading("text_to_speech");
+        assert.ok(card.textContent!.includes("text to speech"));
+    });
+
+    it("tool result image card has img element", () => {
+        const card = renderToolResult("generate_image", {
+            type: "image",
+            content: "http://example.com/img.png",
+        });
+        const img = card.querySelector("img");
+        assert.ok(img);
+        assert.equal(img!.getAttribute("src"), "http://example.com/img.png");
+        assert.equal(img!.getAttribute("class"), "tool-result-image");
+    });
+
+    it("tool result audio card has audio element", () => {
+        const card = renderToolResult("text_to_speech", {
+            type: "audio",
+            content: "http://example.com/audio.mp3",
+        });
+        const audio = card.querySelector("audio");
+        assert.ok(audio);
+        assert.equal(audio!.getAttribute("src"), "http://example.com/audio.mp3");
+        assert.equal(audio!.getAttribute("controls"), "");
+    });
+
+    it("tool result music card has audio element", () => {
+        const card = renderToolResult("generate_music", {
+            type: "audio",
+            content: "http://example.com/music.mp3",
+        });
+        const audio = card.querySelector("audio");
+        assert.ok(audio);
+        assert.equal(audio!.getAttribute("src"), "http://example.com/music.mp3");
+    });
+
+    it("tool result error card shows friendly error", () => {
+        const card = renderToolResult("generate_image", {
+            type: "error",
+            content: "Rate limited",
+        });
+        assert.ok(card.textContent!.includes("😕"));
+        assert.ok(card.textContent!.includes("Rate limited"));
+    });
 });
 
 // ── Snapshot Tests ─────────────────────────────────────────────────────
 
 describe("Snapshot Tests - Message Bubbles", () => {
-  let doc: Document;
-  let happyDOMRef: any;
+    let doc: Document;
+    let happyDOMRef: any;
 
-  before(async () => {
-    const { Window } = await import("happy-dom");
-    const win = new Window({ url: "http://localhost:3000" });
-    doc = win.document as unknown as Document;
-    happyDOMRef = win;
-  });
+    before(async () => {
+        const { Window } = await import("happy-dom");
+        const win = new Window({ url: "http://localhost:3000" });
+        doc = win.document as unknown as Document;
+        happyDOMRef = win;
+    });
 
-  after(() => {
-    // No-op cleanup — setInterval removed from init()
-    // happy-dom v14+ does not have .abort()
-  });
+    after(() => {
+        // No-op cleanup — setInterval removed from init()
+        // happy-dom v14+ does not have .abort()
+    });
 
-  function createElement(tag: string, attrs?: Record<string, string>, children?: (string | Node)[]): HTMLElement {
-    const el = doc.createElement(tag);
-    if (attrs) {
-      for (const [key, value] of Object.entries(attrs)) {
-        el.setAttribute(key, value);
-      }
-    }
-    if (children) {
-      for (const child of children) {
-        if (typeof child === "string") {
-          el.appendChild(doc.createTextNode(child));
-        } else {
-          el.appendChild(child);
+    function createElement(
+        tag: string,
+        attrs?: Record<string, string>,
+        children?: (string | Node)[],
+    ): HTMLElement {
+        const el = doc.createElement(tag);
+        if (attrs) {
+            for (const [key, value] of Object.entries(attrs)) {
+                el.setAttribute(key, value);
+            }
         }
-      }
+        if (children) {
+            for (const child of children) {
+                if (typeof child === "string") {
+                    el.appendChild(doc.createTextNode(child));
+                } else {
+                    el.appendChild(child);
+                }
+            }
+        }
+        return el;
     }
-    return el;
-  }
 
-  function renderUserMessage(content: string): HTMLElement {
-    const msg = createElement("div", { class: "message message--user" });
-    msg.appendChild(createElement("div", { class: "message-avatar" }, ["👤"]));
-    const bubble = createElement("div", { class: "message-bubble" });
-    bubble.appendChild(createElement("div", { class: "message-content" }, [content]));
-    msg.appendChild(bubble);
-    return msg;
-  }
-
-  function renderAssistantMessage(): HTMLElement {
-    const msg = createElement("div", { class: "message message--assistant" });
-    msg.appendChild(createElement("div", { class: "message-avatar" }, ["🧞"]));
-    const bubble = createElement("div", { class: "message-bubble" });
-    bubble.appendChild(createElement("div", { class: "message-content" }, ["Hello world"]));
-    msg.appendChild(bubble);
-    return msg;
-  }
-
-  function renderSteerMessage(content: string): HTMLElement {
-    const msg = createElement("div", { class: "message message--steer message--user" });
-    msg.appendChild(createElement("div", { class: "message-avatar" }, ["💡"]));
-    const bubble = createElement("div", { class: "message-bubble" });
-    bubble.appendChild(createElement("div", { class: "message-content" }, [content]));
-    msg.appendChild(bubble);
-    return msg;
-  }
-
-  function renderToolCardLoading(name: string): HTMLElement {
-    const card = createElement("div", { class: "tool-card" });
-    const header = createElement("div", { class: "tool-card-header" });
-    header.appendChild(createElement("span", { class: "tool-emoji" }, [getToolEmoji(name)]));
-    header.appendChild(createElement("span", {}, [`Running ${name.replace(/_/g, " ")}...`]));
-    const loading = createElement("div", { class: "tool-card-loading" });
-    loading.appendChild(createElement("div", { class: "spinner" }));
-    card.appendChild(header);
-    card.appendChild(loading);
-    return card;
-  }
-
-  function renderToolResult(toolName: string, result: { type: string; content: string }): HTMLElement {
-    const card = createElement("div", { class: "tool-card" });
-    const header = createElement("div", { class: "tool-card-header" });
-    header.appendChild(createElement("span", { class: "tool-emoji" }, [getToolEmoji(toolName)]));
-    header.appendChild(createElement("span", {}, [toolName.replace(/_/g, " ")]));
-    const body = createElement("div", { class: "tool-card-body" });
-    card.appendChild(header);
-    card.appendChild(body);
-    if (result.type === "image") {
-      body.appendChild(createElement("img", { class: "tool-result-image", src: result.content, alt: "Generated image" }));
-    } else if (result.type === "audio") {
-      body.appendChild(createElement("audio", { class: "tool-result-audio", controls: "", src: result.content }));
-    } else if (result.type === "error") {
-      body.textContent = `😕 ${result.content}`;
+    function renderUserMessage(content: string): HTMLElement {
+        const msg = createElement("div", { class: "message message--user" });
+        msg.appendChild(createElement("div", { class: "message-avatar" }, ["👤"]));
+        const bubble = createElement("div", { class: "message-bubble" });
+        bubble.appendChild(createElement("div", { class: "message-content" }, [content]));
+        msg.appendChild(bubble);
+        return msg;
     }
-    return card;
-  }
 
-  // Snapshot tests use inline HTML comparison since Node.js test runner
-  // doesn't have assert.snapshot like Bun's test runner
+    function renderAssistantMessage(): HTMLElement {
+        const msg = createElement("div", { class: "message message--assistant" });
+        msg.appendChild(createElement("div", { class: "message-avatar" }, ["🧞"]));
+        const bubble = createElement("div", { class: "message-bubble" });
+        bubble.appendChild(createElement("div", { class: "message-content" }, ["Hello world"]));
+        msg.appendChild(bubble);
+        return msg;
+    }
 
-  it("snapshot: user message bubble HTML structure", () => {
-    const msg = renderUserMessage("Hello HallucyGenie!");
-    const html = msg.outerHTML;
-    // Verify key structural elements
-    assert.ok(html.includes('class="message message--user"'));
-    assert.ok(html.includes('class="message-avatar"'));
-    assert.ok(html.includes('class="message-bubble"'));
-    assert.ok(html.includes('class="message-content"'));
-    assert.ok(html.includes('Hello HallucyGenie!'));
-    // Write snapshot to file for reference
-    writeSnapshot("user-message", html);
-  });
+    function renderSteerMessage(content: string): HTMLElement {
+        const msg = createElement("div", { class: "message message--steer message--user" });
+        msg.appendChild(createElement("div", { class: "message-avatar" }, ["💡"]));
+        const bubble = createElement("div", { class: "message-bubble" });
+        bubble.appendChild(createElement("div", { class: "message-content" }, [content]));
+        msg.appendChild(bubble);
+        return msg;
+    }
 
-  it("snapshot: assistant message bubble HTML structure", () => {
-    const msg = renderAssistantMessage();
-    const html = msg.outerHTML;
-    assert.ok(html.includes('class="message message--assistant"'));
-    assert.ok(html.includes('class="message-avatar"'));
-    assert.ok(html.includes('🧞'));
-    assert.ok(html.includes('Hello world'));
-    writeSnapshot("assistant-message", html);
-  });
+    function renderToolCardLoading(name: string): HTMLElement {
+        const card = createElement("div", { class: "tool-card" });
+        const header = createElement("div", { class: "tool-card-header" });
+        header.appendChild(createElement("span", { class: "tool-emoji" }, [getToolEmoji(name)]));
+        header.appendChild(createElement("span", {}, [`Running ${name.replace(/_/g, " ")}...`]));
+        const loading = createElement("div", { class: "tool-card-loading" });
+        loading.appendChild(createElement("div", { class: "spinner" }));
+        card.appendChild(header);
+        card.appendChild(loading);
+        return card;
+    }
 
-  it("snapshot: steer message bubble HTML structure", () => {
-    const msg = renderSteerMessage("Make it more colorful");
-    const html = msg.outerHTML;
-    assert.ok(html.includes('message--steer'));
-    assert.ok(html.includes('💡'));
-    assert.ok(html.includes('Make it more colorful'));
-    writeSnapshot("steer-message", html);
-  });
+    function renderToolResult(
+        toolName: string,
+        result: { type: string; content: string },
+    ): HTMLElement {
+        const card = createElement("div", { class: "tool-card" });
+        const header = createElement("div", { class: "tool-card-header" });
+        header.appendChild(
+            createElement("span", { class: "tool-emoji" }, [getToolEmoji(toolName)]),
+        );
+        header.appendChild(createElement("span", {}, [toolName.replace(/_/g, " ")]));
+        const body = createElement("div", { class: "tool-card-body" });
+        card.appendChild(header);
+        card.appendChild(body);
+        if (result.type === "image") {
+            body.appendChild(
+                createElement("img", {
+                    class: "tool-result-image",
+                    src: result.content,
+                    alt: "Generated image",
+                }),
+            );
+        } else if (result.type === "audio") {
+            body.appendChild(
+                createElement("audio", {
+                    class: "tool-result-audio",
+                    controls: "",
+                    src: result.content,
+                }),
+            );
+        } else if (result.type === "error") {
+            body.textContent = `😕 ${result.content}`;
+        }
+        return card;
+    }
 
-  it("snapshot: tool card loading HTML structure", () => {
-    const card = renderToolCardLoading("generate_image");
-    const html = card.outerHTML;
-    assert.ok(html.includes('class="tool-card"'));
-    assert.ok(html.includes('class="spinner"'));
-    assert.ok(html.includes('🎨'));
-    assert.ok(html.includes('generate image'));
-    writeSnapshot("tool-loading", html);
-  });
+    // Snapshot tests use inline HTML comparison since Node.js test runner
+    // doesn't have assert.snapshot like Bun's test runner
 
-  it("snapshot: tool result image card HTML structure", () => {
-    const card = renderToolResult("generate_image", { type: "image", content: "http://example.com/gen.png" });
-    const html = card.outerHTML;
-    assert.ok(html.includes('tool-result-image'));
-    assert.ok(html.includes('src="http://example.com/gen.png"'));
-    assert.ok(html.includes('alt="Generated image"'));
-    writeSnapshot("tool-image", html);
-  });
+    it("snapshot: user message bubble HTML structure", () => {
+        const msg = renderUserMessage("Hello HallucyGenie!");
+        const html = msg.outerHTML;
+        // Verify key structural elements
+        assert.ok(html.includes('class="message message--user"'));
+        assert.ok(html.includes('class="message-avatar"'));
+        assert.ok(html.includes('class="message-bubble"'));
+        assert.ok(html.includes('class="message-content"'));
+        assert.ok(html.includes("Hello HallucyGenie!"));
+        // Write snapshot to file for reference
+        writeSnapshot("user-message", html);
+    });
 
-  it("snapshot: tool result audio card (TTS) HTML structure", () => {
-    const card = renderToolResult("text_to_speech", { type: "audio", content: "http://example.com/speech.mp3" });
-    const html = card.outerHTML;
-    assert.ok(html.includes('tool-result-audio'));
-    assert.ok(html.includes('src="http://example.com/speech.mp3"'));
-    assert.ok(html.includes('controls=""'));
-    assert.ok(html.includes('🎙️'));
-    writeSnapshot("tool-tts", html);
-  });
+    it("snapshot: assistant message bubble HTML structure", () => {
+        const msg = renderAssistantMessage();
+        const html = msg.outerHTML;
+        assert.ok(html.includes('class="message message--assistant"'));
+        assert.ok(html.includes('class="message-avatar"'));
+        assert.ok(html.includes("🧞"));
+        assert.ok(html.includes("Hello world"));
+        writeSnapshot("assistant-message", html);
+    });
 
-  it("snapshot: tool result audio card (music) HTML structure", () => {
-    const card = renderToolResult("generate_music", { type: "audio", content: "http://example.com/music.mp3" });
-    const html = card.outerHTML;
-    assert.ok(html.includes('tool-result-audio'));
-    assert.ok(html.includes('src="http://example.com/music.mp3"'));
-    assert.ok(html.includes('🎵'));
-    writeSnapshot("tool-music", html);
-  });
+    it("snapshot: steer message bubble HTML structure", () => {
+        const msg = renderSteerMessage("Make it more colorful");
+        const html = msg.outerHTML;
+        assert.ok(html.includes("message--steer"));
+        assert.ok(html.includes("💡"));
+        assert.ok(html.includes("Make it more colorful"));
+        writeSnapshot("steer-message", html);
+    });
 
-  it("snapshot: tool result error card HTML structure", () => {
-    const card = renderToolResult("generate_image", { type: "error", content: "Rate limited" });
-    const html = card.outerHTML;
-    assert.ok(html.includes('😕'));
-    assert.ok(html.includes('Rate limited'));
-    writeSnapshot("tool-error", html);
-  });
+    it("snapshot: tool card loading HTML structure", () => {
+        const card = renderToolCardLoading("generate_image");
+        const html = card.outerHTML;
+        assert.ok(html.includes('class="tool-card"'));
+        assert.ok(html.includes('class="spinner"'));
+        assert.ok(html.includes("🎨"));
+        assert.ok(html.includes("generate image"));
+        writeSnapshot("tool-loading", html);
+    });
+
+    it("snapshot: tool result image card HTML structure", () => {
+        const card = renderToolResult("generate_image", {
+            type: "image",
+            content: "http://example.com/gen.png",
+        });
+        const html = card.outerHTML;
+        assert.ok(html.includes("tool-result-image"));
+        assert.ok(html.includes('src="http://example.com/gen.png"'));
+        assert.ok(html.includes('alt="Generated image"'));
+        writeSnapshot("tool-image", html);
+    });
+
+    it("snapshot: tool result audio card (TTS) HTML structure", () => {
+        const card = renderToolResult("text_to_speech", {
+            type: "audio",
+            content: "http://example.com/speech.mp3",
+        });
+        const html = card.outerHTML;
+        assert.ok(html.includes("tool-result-audio"));
+        assert.ok(html.includes('src="http://example.com/speech.mp3"'));
+        assert.ok(html.includes('controls=""'));
+        assert.ok(html.includes("🎙️"));
+        writeSnapshot("tool-tts", html);
+    });
+
+    it("snapshot: tool result audio card (music) HTML structure", () => {
+        const card = renderToolResult("generate_music", {
+            type: "audio",
+            content: "http://example.com/music.mp3",
+        });
+        const html = card.outerHTML;
+        assert.ok(html.includes("tool-result-audio"));
+        assert.ok(html.includes('src="http://example.com/music.mp3"'));
+        assert.ok(html.includes("🎵"));
+        writeSnapshot("tool-music", html);
+    });
+
+    it("snapshot: tool result error card HTML structure", () => {
+        const card = renderToolResult("generate_image", { type: "error", content: "Rate limited" });
+        const html = card.outerHTML;
+        assert.ok(html.includes("😕"));
+        assert.ok(html.includes("Rate limited"));
+        writeSnapshot("tool-error", html);
+    });
 });
 
 // ── Markdown Rendering Tests ──────────────────────────────────────────
 
 describe("renderMarkdown", () => {
-  // ── Inline formatting ────────────────────────────────────────────
+    // ── Inline formatting ────────────────────────────────────────────
 
-  it("renders bold text", () => {
-    const result = renderMarkdown("hello **world** end");
-    assert.ok(result.includes("<strong>world</strong>"));
-    assert.ok(!result.includes("**"));
-  });
+    it("renders bold text", () => {
+        const result = renderMarkdown("hello **world** end");
+        assert.ok(result.includes("<strong>world</strong>"));
+        assert.ok(!result.includes("**"));
+    });
 
-  it("renders bold with __", () => {
-    const result = renderMarkdown("hello __world__ end");
-    assert.ok(result.includes("<strong>world</strong>"));
-  });
+    it("renders bold with __", () => {
+        const result = renderMarkdown("hello __world__ end");
+        assert.ok(result.includes("<strong>world</strong>"));
+    });
 
-  it("renders italic text", () => {
-    const result = renderMarkdown("hello *world* end");
-    assert.ok(result.includes("<em>world</em>"));
-    assert.ok(!result.includes("*world*"));
-  });
+    it("renders italic text", () => {
+        const result = renderMarkdown("hello *world* end");
+        assert.ok(result.includes("<em>world</em>"));
+        assert.ok(!result.includes("*world*"));
+    });
 
-  it("renders strikethrough", () => {
-    const result = renderMarkdown("hello ~~world~~ end");
-    assert.ok(result.includes("<del>world</del>"));
-  });
+    it("renders strikethrough", () => {
+        const result = renderMarkdown("hello ~~world~~ end");
+        assert.ok(result.includes("<del>world</del>"));
+    });
 
-  it("renders inline code", () => {
-    const result = renderMarkdown("use `const x = 1` here");
-    assert.ok(result.includes("<code>const x = 1</code>"));
-  });
+    it("renders inline code", () => {
+        const result = renderMarkdown("use `const x = 1` here");
+        assert.ok(result.includes("<code>const x = 1</code>"));
+    });
 
-  it("renders named links", () => {
-    const result = renderMarkdown("click [here](https://example.com)");
-    assert.ok(result.includes('<a href="https://example.com" target="_blank" rel="noopener">here</a>'));
-  });
+    it("renders named links", () => {
+        const result = renderMarkdown("click [here](https://example.com)");
+        assert.ok(
+            result.includes(
+                '<a href="https://example.com" target="_blank" rel="noopener">here</a>',
+            ),
+        );
+    });
 
-  it("renders autolinks for bare URLs", () => {
-    const result = renderMarkdown("see https://example.com for info");
-    assert.ok(result.includes('<a href="https://example.com"'));
-    assert.ok(result.includes('>https://example.com</a>'));
-  });
+    it("renders autolinks for bare URLs", () => {
+        const result = renderMarkdown("see https://example.com for info");
+        assert.ok(result.includes('<a href="https://example.com"'));
+        assert.ok(result.includes(">https://example.com</a>"));
+    });
 
-  it("does not double-link already linked URLs", () => {
-    const result = renderMarkdown("[text](https://example.com)");
-    assert.equal((result.match(/<a /g) || []).length, 1);
-  });
+    it("does not double-link already linked URLs", () => {
+        const result = renderMarkdown("[text](https://example.com)");
+        assert.equal((result.match(/<a /g) || []).length, 1);
+    });
 
-  // ── Headings ─────────────────────────────────────────────────────
+    // ── Headings ─────────────────────────────────────────────────────
 
-  it("renders h1 through h6", () => {
-    for (let i = 1; i <= 6; i++) {
-      const hashes = "#".repeat(i);
-      const result = renderMarkdown(`${hashes} Title`);
-      assert.ok(result.includes(`<h${i}>Title</h${i}>`), `h${i} not found`);
-    }
-  });
+    it("renders h1 through h6", () => {
+        for (let i = 1; i <= 6; i++) {
+            const hashes = "#".repeat(i);
+            const result = renderMarkdown(`${hashes} Title`);
+            assert.ok(result.includes(`<h${i}>Title</h${i}>`), `h${i} not found`);
+        }
+    });
 
-  it("does not render heading without space after #", () => {
-    const result = renderMarkdown("#not_a_heading");
-    assert.ok(!result.includes("<h1>"));
-  });
+    it("does not render heading without space after #", () => {
+        const result = renderMarkdown("#not_a_heading");
+        assert.ok(!result.includes("<h1>"));
+    });
 
-  // ── Lists ────────────────────────────────────────────────────────
+    // ── Lists ────────────────────────────────────────────────────────
 
-  it("renders unordered list with -", () => {
-    const result = renderMarkdown("- one\n- two\n- three");
-    assert.ok(result.includes("<ul>"));
-    assert.ok(result.includes("<li>one</li>"));
-    assert.ok(result.includes("<li>two</li>"));
-    assert.ok(result.includes("</ul>"));
-  });
+    it("renders unordered list with -", () => {
+        const result = renderMarkdown("- one\n- two\n- three");
+        assert.ok(result.includes("<ul>"));
+        assert.ok(result.includes("<li>one</li>"));
+        assert.ok(result.includes("<li>two</li>"));
+        assert.ok(result.includes("</ul>"));
+    });
 
-  it("renders unordered list with *", () => {
-    const result = renderMarkdown("* one\n* two");
-    assert.ok(result.includes("<ul>"));
-    assert.ok(result.includes("<li>one</li>"));
-  });
+    it("renders unordered list with *", () => {
+        const result = renderMarkdown("* one\n* two");
+        assert.ok(result.includes("<ul>"));
+        assert.ok(result.includes("<li>one</li>"));
+    });
 
-  it("renders ordered list", () => {
-    const result = renderMarkdown("1. first\n2. second\n3. third");
-    assert.ok(result.includes("<ol>"));
-    assert.ok(result.includes("<li>first</li>"));
-    assert.ok(result.includes("<li>second</li>"));
-    assert.ok(result.includes("</ol>"));
-  });
+    it("renders ordered list", () => {
+        const result = renderMarkdown("1. first\n2. second\n3. third");
+        assert.ok(result.includes("<ol>"));
+        assert.ok(result.includes("<li>first</li>"));
+        assert.ok(result.includes("<li>second</li>"));
+        assert.ok(result.includes("</ol>"));
+    });
 
-  it("closes list when non-list line follows", () => {
-    const result = renderMarkdown("- item\nparagraph");
-    assert.ok(result.includes("</ul>"));
-    assert.ok(result.includes("<p>paragraph</p>"));
-  });
+    it("closes list when non-list line follows", () => {
+        const result = renderMarkdown("- item\nparagraph");
+        assert.ok(result.includes("</ul>"));
+        assert.ok(result.includes("<p>paragraph</p>"));
+    });
 
-  // ── Code blocks ──────────────────────────────────────────────────
+    // ── Code blocks ──────────────────────────────────────────────────
 
-  it("renders fenced code block with language", () => {
-    const input = "```js\nconst x = 1;\n```";
-    const result = renderMarkdown(input);
-    assert.ok(result.includes('<pre><code class="lang-js">'), `got: ${result}`);
-    assert.ok(result.includes("const x = 1;"));
-  });
+    it("renders fenced code block with language", () => {
+        const input = "```js\nconst x = 1;\n```";
+        const result = renderMarkdown(input);
+        assert.ok(result.includes('<pre><code class="lang-js">'), `got: ${result}`);
+        assert.ok(result.includes("const x = 1;"));
+    });
 
-  it("renders fenced code block without language", () => {
-    const input = "```\nhello\n```";
-    const result = renderMarkdown(input);
-    assert.ok(result.includes("<pre><code>"));
-    assert.ok(result.includes("hello"));
-  });
+    it("renders fenced code block without language", () => {
+        const input = "```\nhello\n```";
+        const result = renderMarkdown(input);
+        assert.ok(result.includes("<pre><code>"));
+        assert.ok(result.includes("hello"));
+    });
 
-  it("does not apply inline markdown inside code blocks", () => {
-    const input = "```\n**not bold**\n```";
-    const result = renderMarkdown(input);
-    assert.ok(!result.includes("<strong>"), `should not have strong inside code: ${result}`);
-    assert.ok(result.includes("**not bold**"));
-  });
+    it("does not apply inline markdown inside code blocks", () => {
+        const input = "```\n**not bold**\n```";
+        const result = renderMarkdown(input);
+        assert.ok(!result.includes("<strong>"), `should not have strong inside code: ${result}`);
+        assert.ok(result.includes("**not bold**"));
+    });
 
-  it("does not apply inline markdown inside inline code", () => {
-    const result = renderMarkdown("`**not bold**`");
-    assert.ok(!result.includes("<strong>"));
-  });
+    it("does not apply inline markdown inside inline code", () => {
+        const result = renderMarkdown("`**not bold**`");
+        assert.ok(!result.includes("<strong>"));
+    });
 
-  it("escapes HTML in code blocks", () => {
-    const input = "```\n<div>test</div>\n```";
-    const result = renderMarkdown(input);
-    assert.ok(result.includes("&lt;div&gt;"), `should escape HTML: ${result}`);
-  });
+    it("escapes HTML in code blocks", () => {
+        const input = "```\n<div>test</div>\n```";
+        const result = renderMarkdown(input);
+        assert.ok(result.includes("&lt;div&gt;"), `should escape HTML: ${result}`);
+    });
 
-  // ── Blockquotes ──────────────────────────────────────────────────
+    // ── Blockquotes ──────────────────────────────────────────────────
 
-  it("renders blockquote", () => {
-    const result = renderMarkdown("> this is a quote");
-    assert.ok(result.includes("<blockquote>"));
-    assert.ok(result.includes("this is a quote"));
-    assert.ok(result.includes("</blockquote>"));
-  });
+    it("renders blockquote", () => {
+        const result = renderMarkdown("> this is a quote");
+        assert.ok(result.includes("<blockquote>"));
+        assert.ok(result.includes("this is a quote"));
+        assert.ok(result.includes("</blockquote>"));
+    });
 
-  it("closes blockquote when non-quote line follows", () => {
-    const result = renderMarkdown("> quote\nparagraph");
-    assert.ok(result.includes("</blockquote>"));
-    assert.ok(result.includes("<p>paragraph</p>"));
-  });
+    it("closes blockquote when non-quote line follows", () => {
+        const result = renderMarkdown("> quote\nparagraph");
+        assert.ok(result.includes("</blockquote>"));
+        assert.ok(result.includes("<p>paragraph</p>"));
+    });
 
-  // ── Tables ───────────────────────────────────────────────────────
+    // ── Tables ───────────────────────────────────────────────────────
 
-  it("renders table with headers", () => {
-    const input = "| Name | Age |\n|------|-----|\n| Alice | 30 |";
-    const result = renderMarkdown(input);
-    assert.ok(result.includes("<table>"), `no table tag: ${result}`);
-    assert.ok(result.includes("<thead>"));
-    assert.ok(result.includes("<th>Name</th>"));
-    assert.ok(result.includes("<th>Age</th>"));
-    assert.ok(result.includes("<td>Alice</td>"));
-    assert.ok(result.includes("<td>30</td>"));
-    assert.ok(result.includes("</table>"));
-  });
+    it("renders table with headers", () => {
+        const input = "| Name | Age |\n|------|-----|\n| Alice | 30 |";
+        const result = renderMarkdown(input);
+        assert.ok(result.includes("<table>"), `no table tag: ${result}`);
+        assert.ok(result.includes("<thead>"));
+        assert.ok(result.includes("<th>Name</th>"));
+        assert.ok(result.includes("<th>Age</th>"));
+        assert.ok(result.includes("<td>Alice</td>"));
+        assert.ok(result.includes("<td>30</td>"));
+        assert.ok(result.includes("</table>"));
+    });
 
-  it("closes table when non-table line follows", () => {
-    const input = "| A | B |\n|---|---|\n| 1 | 2 |\nparagraph";
-    const result = renderMarkdown(input);
-    assert.ok(result.includes("</table>"));
-    assert.ok(result.includes("<p>paragraph</p>"));
-  });
+    it("closes table when non-table line follows", () => {
+        const input = "| A | B |\n|---|---|\n| 1 | 2 |\nparagraph";
+        const result = renderMarkdown(input);
+        assert.ok(result.includes("</table>"));
+        assert.ok(result.includes("<p>paragraph</p>"));
+    });
 
-  // ── Task lists ───────────────────────────────────────────────────
+    // ── Task lists ───────────────────────────────────────────────────
 
-  it("renders unchecked task", () => {
-    const result = renderMarkdown("- [ ] todo");
-    assert.ok(result.includes('class="task-checkbox"'));
-    assert.ok(!result.includes("checked"));
-  });
+    it("renders unchecked task", () => {
+        const result = renderMarkdown("- [ ] todo");
+        assert.ok(result.includes('class="task-checkbox"'));
+        assert.ok(!result.includes("checked"));
+    });
 
-  it("renders checked task", () => {
-    const result = renderMarkdown("- [x] done");
-    assert.ok(result.includes("checked"));
-    assert.ok(result.includes('class="task-checkbox task-checked"'));
-  });
+    it("renders checked task", () => {
+        const result = renderMarkdown("- [x] done");
+        assert.ok(result.includes("checked"));
+        assert.ok(result.includes('class="task-checkbox task-checked"'));
+    });
 
-  // ── Horizontal rule ──────────────────────────────────────────────
+    // ── Horizontal rule ──────────────────────────────────────────────
 
-  it("renders horizontal rule with ---", () => {
-    const result = renderMarkdown("---");
-    assert.ok(result.includes("<hr>"));
-  });
+    it("renders horizontal rule with ---", () => {
+        const result = renderMarkdown("---");
+        assert.ok(result.includes("<hr>"));
+    });
 
-  it("renders horizontal rule with ***", () => {
-    const result = renderMarkdown("***");
-    assert.ok(result.includes("<hr>"));
-  });
+    it("renders horizontal rule with ***", () => {
+        const result = renderMarkdown("***");
+        assert.ok(result.includes("<hr>"));
+    });
 
-  // ── HTML escaping ────────────────────────────────────────────────
+    // ── HTML escaping ────────────────────────────────────────────────
 
-  it("escapes HTML in regular text", () => {
-    const result = renderMarkdown("<script>alert('xss')</script>");
-    assert.ok(!result.includes("<script>"));
-    assert.ok(result.includes("&lt;script&gt;"));
-  });
+    it("escapes HTML in regular text", () => {
+        const result = renderMarkdown("<script>alert('xss')</script>");
+        assert.ok(!result.includes("<script>"));
+        assert.ok(result.includes("&lt;script&gt;"));
+    });
 
-  // ── Plain text ───────────────────────────────────────────────────
+    // ── Plain text ───────────────────────────────────────────────────
 
-  it("wraps plain text in <p>", () => {
-    const result = renderMarkdown("hello world");
-    assert.ok(result.includes("<p>hello world</p>"));
-  });
+    it("wraps plain text in <p>", () => {
+        const result = renderMarkdown("hello world");
+        assert.ok(result.includes("<p>hello world</p>"));
+    });
 
-  it("handles empty input", () => {
-    const result = renderMarkdown("");
-    assert.equal(result.trim(), "");
-  });
+    it("handles empty input", () => {
+        const result = renderMarkdown("");
+        assert.equal(result.trim(), "");
+    });
 
-  // ── Snapshot tests ───────────────────────────────────────────────
+    // ── Snapshot tests ───────────────────────────────────────────────
 
-  it("snapshot: GFM sample document", () => {
-    const input = [
-      "# Chat Response",
-      "",
-      "Here's what I found:",      "",
-      "- **Bold item** with *italic*",
-      "- ~~old info~~ → new info",
-      "",
-      "> Important note",
-      "",
-      "| Feature | Status |",
-      "|---------|--------|",
-      "| Images  | ✅     |",
-      "| Music   | ✅     |",
-      "",
-      "```js",
-      "const x = 42;",
-      "```",
-      "",
-      "- [x] Done",
-      "- [ ] Todo",
-    ].join("\n");
-    const result = renderMarkdown(input);
-    writeSnapshot("gfm-sample", result);
-  });
+    it("snapshot: GFM sample document", () => {
+        const input = [
+            "# Chat Response",
+            "",
+            "Here's what I found:",
+            "",
+            "- **Bold item** with *italic*",
+            "- ~~old info~~ → new info",
+            "",
+            "> Important note",
+            "",
+            "| Feature | Status |",
+            "|---------|--------|",
+            "| Images  | ✅     |",
+            "| Music   | ✅     |",
+            "",
+            "```js",
+            "const x = 42;",
+            "```",
+            "",
+            "- [x] Done",
+            "- [ ] Todo",
+        ].join("\n");
+        const result = renderMarkdown(input);
+        writeSnapshot("gfm-sample", result);
+    });
 
-  it("snapshot: simple message", () => {
-    const result = renderMarkdown("Hey! Here's a **cool idea**: try `console.log` and see https://example.com for more.");
-    writeSnapshot("simple-message", result);
-  });
+    it("snapshot: simple message", () => {
+        const result = renderMarkdown(
+            "Hey! Here's a **cool idea**: try `console.log` and see https://example.com for more.",
+        );
+        writeSnapshot("simple-message", result);
+    });
 });
 
 // ═══════════════════════════════════════════════════════════════════════
@@ -911,26 +976,26 @@ describe("renderMarkdown", () => {
 
 import { Window } from "happy-dom";
 import {
-  renderThinkingBlock,
-  fetchHistory,
-  sendSteer,
-  $,
-  createElement,
-  renderUserMessage,
-  renderAssistantMessage,
-  renderSteerMessage,
-  renderToolCardLoading,
-  renderToolResult,
-  openLightbox,
-  closeLightbox,
-  showError,
-  streamChat,
-  sendMessage,
-  sendSteerMessage,
-  loadHistory,
-  autoResizeInput,
-  handleInputChange,
-  init,
+    renderThinkingBlock,
+    fetchHistory,
+    sendSteer,
+    $,
+    createElement,
+    renderUserMessage,
+    renderAssistantMessage,
+    renderSteerMessage,
+    renderToolCardLoading,
+    renderToolResult,
+    openLightbox,
+    closeLightbox,
+    showError,
+    streamChat,
+    sendMessage,
+    sendSteerMessage,
+    loadHistory,
+    autoResizeInput,
+    handleInputChange,
+    init,
 } from "./app.ts";
 
 // ── DOM Setup Helpers ────────────────────────────────────────────────
@@ -940,14 +1005,13 @@ import {
  * Sets globalThis.document, window, localStorage, etc.
  */
 function setupDOM(): { win: any; doc: any; errors: string[] } {
-  const win = new Window();
-  const doc = win.document;
+    const win = new Window();
+    const doc = win.document;
 
-  // Inject clearAllIntervals for test cleanup — clears intervals started by app.ts init()
+    // Inject clearAllIntervals for test cleanup — clears intervals started by app.ts init()
 
-
-  // Build the full DOM structure
-  doc.body.innerHTML = `
+    // Build the full DOM structure
+    doc.body.innerHTML = `
     <header>
       <div class="header-left"><span class="header-emoji">🧞</span></div>
       <div class="header-right">
@@ -1058,86 +1122,92 @@ function setupDOM(): { win: any; doc: any; errors: string[] } {
     </div>
   `;
 
-  // Set globals
-  globalThis.document = doc;
-  globalThis.window = win;
-  (globalThis as any).localStorage = {
-    getItem: () => null,
-    setItem: () => {},
-    removeItem: () => {},
-  };
-  (globalThis as any).requestAnimationFrame = (cb: () => void) => {
-    cb();
-    return 1;
-  };
+    // Set globals
+    globalThis.document = doc;
+    globalThis.window = win;
+    (globalThis as any).localStorage = {
+        getItem: () => null,
+        setItem: () => {},
+        removeItem: () => {},
+    };
+    (globalThis as any).requestAnimationFrame = (cb: () => void) => {
+        cb();
+        return 1;
+    };
 
-  const errors: string[] = [];
-  (globalThis as any).fetch = () => {
-    return Promise.resolve(new Response(null, { status: 500 }));
-  };
+    const errors: string[] = [];
+    (globalThis as any).fetch = () => {
+        return Promise.resolve(new Response(null, { status: 500 }));
+    };
 
-  return { win, doc, errors };
+    return { win, doc, errors };
 }
 
 /**
  * Creates a mock SSE response body (ReadableStream) from an array of SSE chunks.
  */
-function createSSEResponse(chunks: string[], options: { status?: number; json?: any } = {}): Response {
-  const status = options.status ?? 200;
-  if (status !== 200) {
-    const body = options.json ? JSON.stringify(options.json) : "{}";
-    return new Response(body, {
-      status,
-      headers: { "Content-Type": "application/json" },
+function createSSEResponse(
+    chunks: string[],
+    options: { status?: number; json?: any } = {},
+): Response {
+    const status = options.status ?? 200;
+    if (status !== 200) {
+        const body = options.json ? JSON.stringify(options.json) : "{}";
+        return new Response(body, {
+            status,
+            headers: { "Content-Type": "application/json" },
+        });
+    }
+
+    const encoder = new TextEncoder();
+    const fullBody = chunks.join("");
+    let offset = 0;
+
+    const stream = new ReadableStream({
+        pull(controller) {
+            if (offset < fullBody.length) {
+                // Deliver chunk by chunk
+                const chunk = fullBody.slice(
+                    offset,
+                    offset + Math.max(1, Math.ceil(fullBody.length / chunks.length)),
+                );
+                controller.enqueue(encoder.encode(chunk));
+                offset += chunk.length;
+            } else {
+                controller.close();
+            }
+        },
     });
-  }
 
-  const encoder = new TextEncoder();
-  const fullBody = chunks.join("");
-  let offset = 0;
-
-  const stream = new ReadableStream({
-    pull(controller) {
-      if (offset < fullBody.length) {
-        // Deliver chunk by chunk
-        const chunk = fullBody.slice(offset, offset + Math.max(1, Math.ceil(fullBody.length / chunks.length)));
-        controller.enqueue(encoder.encode(chunk));
-        offset += chunk.length;
-      } else {
-        controller.close();
-      }
-    },
-  });
-
-  return new Response(stream, {
-    status: 200,
-    headers: { "Content-Type": "text/event-stream" },
-  });
+    return new Response(stream, {
+        status: 200,
+        headers: { "Content-Type": "text/event-stream" },
+    });
 }
 
 /**
  * Creates a simple SSE event string.
  */
 function sseEvent(event: string, data: string): string {
-  return `event: ${event}\ndata: ${data}\n\n`;
+    return `event: ${event}\ndata: ${data}\n\n`;
 }
 
 /**
  * Creates a text message SSE event (OpenAI-style format, used by our browser protocol).
  */
 function sseText(content: string): string {
-  return sseEvent("message", JSON.stringify({ choices: [{ delta: { content } }] }));
+    return sseEvent("message", JSON.stringify({ choices: [{ delta: { content } }] }));
 }
 
 /**
  * Creates a thinking SSE event (Anthropic streaming format via server).
  */
 function sseThinking(content: string): string {
-  return sseEvent("thinking", JSON.stringify({ content }));
+    return sseEvent("thinking", JSON.stringify({ content }));
 }
 
 function sseDone(): string {
-  return sseEvent("message", "[DONE]");
+    return sseEvent("message", "[DONE]");
 }
 
 // Set up DOM before importing (already done above, but ensure globals are set)
@@ -1148,36 +1218,36 @@ setupDOM();
 // ═══════════════════════════════════════════════════════════════════════
 
 describe("renderThinkingBlock (imported)", () => {
-  it("single line thinking shows '💭 Thinking…'", () => {
-    const html = renderThinkingBlock("hello world");
-    assert.ok(html.includes("💭 Thinking…"));
-    assert.ok(!html.includes("lines"));
-  });
+    it("single line thinking shows '💭 Thinking…'", () => {
+        const html = renderThinkingBlock("hello world");
+        assert.ok(html.includes("💭 Thinking…"));
+        assert.ok(!html.includes("lines"));
+    });
 
-  it("multi-line thinking shows line count", () => {
-    const text = "line 1\nline 2\nline 3";
-    const html = renderThinkingBlock(text);
-    assert.ok(html.includes("(3 lines)"));
-  });
+    it("multi-line thinking shows line count", () => {
+        const text = "line 1\nline 2\nline 3";
+        const html = renderThinkingBlock(text);
+        assert.ok(html.includes("(3 lines)"));
+    });
 
-  it("content is rendered through renderMarkdown", () => {
-    const html = renderThinkingBlock("**bold** text");
-    assert.ok(html.includes("<strong>bold</strong>"));
-  });
+    it("content is rendered through renderMarkdown", () => {
+        const html = renderThinkingBlock("**bold** text");
+        assert.ok(html.includes("<strong>bold</strong>"));
+    });
 
-  it("output contains details and summary tags", () => {
-    const html = renderThinkingBlock("thinking");
-    assert.ok(html.includes("<details"));
-    assert.ok(html.includes("<summary>"));
-    assert.ok(html.includes("thinking-block"));
-    assert.ok(html.includes("thinking-content"));
-  });
+    it("output contains details and summary tags", () => {
+        const html = renderThinkingBlock("thinking");
+        assert.ok(html.includes("<details"));
+        assert.ok(html.includes("<summary>"));
+        assert.ok(html.includes("thinking-block"));
+        assert.ok(html.includes("thinking-content"));
+    });
 
-  it("trims whitespace before counting lines", () => {
-    const html = renderThinkingBlock("  single line  ");
-    assert.ok(html.includes("💭 Thinking…"));
-    assert.ok(!html.includes("lines"));
-  });
+    it("trims whitespace before counting lines", () => {
+        const html = renderThinkingBlock("  single line  ");
+        assert.ok(html.includes("💭 Thinking…"));
+        assert.ok(!html.includes("lines"));
+    });
 });
 
 // ═══════════════════════════════════════════════════════════════════════
@@ -1185,87 +1255,86 @@ describe("renderThinkingBlock (imported)", () => {
 // ═══════════════════════════════════════════════════════════════════════
 
 describe("streamChat error paths", () => {
-  let doc: any;
+    let doc: any;
 
-  before(() => {
-    const { doc: d } = setupDOM();
-    doc = d;
-  });
+    before(() => {
+        const { doc: d } = setupDOM();
+        doc = d;
+    });
 
-  it("400 response → showError with session expired message", async () => {
-    (globalThis as any).fetch = () =>
-      Promise.resolve(
-        new Response(JSON.stringify({ error: "Bad request" }), {
-          status: 400,
-          headers: { "Content-Type": "application/json" },
-        })
-      );
+    it("400 response → showError with session expired message", async () => {
+        (globalThis as any).fetch = () =>
+            Promise.resolve(
+                new Response(JSON.stringify({ error: "Bad request" }), {
+                    status: 400,
+                    headers: { "Content-Type": "application/json" },
+                }),
+            );
 
-    await streamChat("session-1", [{ role: "user", content: "hi" }]);
-    const msg = doc.querySelector("#error-toast-message").textContent;
-    assert.equal(msg, "Bad request");
-  });
+        await streamChat("session-1", [{ role: "user", content: "hi" }]);
+        const msg = doc.querySelector("#error-toast-message").textContent;
+        assert.equal(msg, "Bad request");
+    });
 
-  it("400 with unparseable JSON → shows default message", async () => {
-    (globalThis as any).fetch = () =>
-      Promise.resolve(new Response("not json", { status: 400 }));
+    it("400 with unparseable JSON → shows default message", async () => {
+        (globalThis as any).fetch = () =>
+            Promise.resolve(new Response("not json", { status: 400 }));
 
-    await streamChat("session-1", [{ role: "user", content: "hi" }]);
-    const msg = doc.querySelector("#error-toast-message").textContent;
-    assert.equal(msg, "Session expired — please reload the page 🔄");
-  });
+        await streamChat("session-1", [{ role: "user", content: "hi" }]);
+        const msg = doc.querySelector("#error-toast-message").textContent;
+        assert.equal(msg, "Session expired — please reload the page 🔄");
+    });
 
-  it("503 response → showError with error message", async () => {
-    (globalThis as any).fetch = () =>
-      Promise.resolve(
-        new Response(JSON.stringify({ error: "Service unavailable" }), {
-          status: 503,
-          headers: { "Content-Type": "application/json" },
-        })
-      );
+    it("503 response → showError with error message", async () => {
+        (globalThis as any).fetch = () =>
+            Promise.resolve(
+                new Response(JSON.stringify({ error: "Service unavailable" }), {
+                    status: 503,
+                    headers: { "Content-Type": "application/json" },
+                }),
+            );
 
-    await streamChat("session-1", [{ role: "user", content: "hi" }]);
-    const msg = doc.querySelector("#error-toast-message").textContent;
-    assert.equal(msg, "Service unavailable");
-  });
+        await streamChat("session-1", [{ role: "user", content: "hi" }]);
+        const msg = doc.querySelector("#error-toast-message").textContent;
+        assert.equal(msg, "Service unavailable");
+    });
 
-  it("503 with unparseable JSON → shows status code message", async () => {
-    (globalThis as any).fetch = () =>
-      Promise.resolve(new Response("not json", { status: 503 }));
+    it("503 with unparseable JSON → shows status code message", async () => {
+        (globalThis as any).fetch = () =>
+            Promise.resolve(new Response("not json", { status: 503 }));
 
-    await streamChat("session-1", [{ role: "user", content: "hi" }]);
-    const msg = doc.querySelector("#error-toast-message").textContent;
-    assert.equal(msg, "Something went wrong (503). Try again! 🤷");
-  });
+        await streamChat("session-1", [{ role: "user", content: "hi" }]);
+        const msg = doc.querySelector("#error-toast-message").textContent;
+        assert.equal(msg, "Something went wrong (503). Try again! 🤷");
+    });
 
-  it("200 with null body → showError 'No response'", async () => {
-    (globalThis as any).fetch = () =>
-      Promise.resolve(new Response(null, { status: 200 }));
+    it("200 with null body → showError 'No response'", async () => {
+        (globalThis as any).fetch = () => Promise.resolve(new Response(null, { status: 200 }));
 
-    await streamChat("session-1", [{ role: "user", content: "hi" }]);
-    const msg = doc.querySelector("#error-toast-message").textContent;
-    assert.equal(msg, "No response from server 😴");
-  });
+        await streamChat("session-1", [{ role: "user", content: "hi" }]);
+        const msg = doc.querySelector("#error-toast-message").textContent;
+        assert.equal(msg, "No response from server 😴");
+    });
 
-  it("network error (fetch throws) → rejects with error", async () => {
-    (globalThis as any).fetch = () => Promise.reject(new Error("Network error"));
+    it("network error (fetch throws) → rejects with error", async () => {
+        (globalThis as any).fetch = () => Promise.reject(new Error("Network error"));
 
-    // streamChat doesn't catch — it propagates. sendMessage catches.
-    await assert.rejects(
-      () => streamChat("session-1", [{ role: "user", content: "hi" }]),
-      /Network error/
-    );
-  });
+        // streamChat doesn't catch — it propagates. sendMessage catches.
+        await assert.rejects(
+            () => streamChat("session-1", [{ role: "user", content: "hi" }]),
+            /Network error/,
+        );
+    });
 
-  it("onEvent callback receives events", async () => {
-    const events: SSEEvent[] = [];
-    (globalThis as any).fetch = () =>
-      Promise.resolve(createSSEResponse([sseText("hello"), sseDone()]));
+    it("onEvent callback receives events", async () => {
+        const events: SSEEvent[] = [];
+        (globalThis as any).fetch = () =>
+            Promise.resolve(createSSEResponse([sseText("hello"), sseDone()]));
 
-    await streamChat("session-1", [{ role: "user", content: "hi" }], (e) => events.push(e));
-    assert.ok(events.length > 0);
-    assert.equal(events[0].event, "message");
-  });
+        await streamChat("session-1", [{ role: "user", content: "hi" }], (e) => events.push(e));
+        assert.ok(events.length > 0);
+        assert.equal(events[0].event, "message");
+    });
 });
 
 // ═══════════════════════════════════════════════════════════════════════
@@ -1273,117 +1342,97 @@ describe("streamChat error paths", () => {
 // ═══════════════════════════════════════════════════════════════════════
 
 describe("streamChat SSE processing", () => {
-  let doc: any;
+    let doc: any;
 
-  before(() => {
-    const { doc: d } = setupDOM();
-    doc = d;
-  });
-
-  it("text events → content accumulated via appendText", async () => {
-    const events: SSEEvent[] = [];
-    const chunks = [
-      sseText("Hello "),
-      sseText("world"),
-      sseDone(),
-    ];
-    (globalThis as any).fetch = () =>
-      Promise.resolve(createSSEResponse(chunks));
-
-    // Need to set up currentAssistantContent for appendText to work
-    // We do this by creating an assistant message container and appending it
-    const messageList = doc.querySelector("#message-list");
-    const { container, contentEl } = renderAssistantMessage();
-    messageList.appendChild(container);
-
-    await streamChat("session-1", [{ role: "user", content: "hi" }], (e) => events.push(e));
-
-    // The content element should have the rendered text
-    // Note: since module state isn't reset, currentAssistantContent might be null
-    // But the SSE events are delivered via onEvent callback
-    assert.ok(events.some(e => e.data.includes("Hello")));
-  });
-
-  it("tool_start event → tool card created", async () => {
-    const events: SSEEvent[] = [];
-    const toolStartData = JSON.stringify({ id: "tool-1", name: "generate_image" });
-    const chunks = [
-      sseEvent("tool_start", toolStartData),
-      sseDone(),
-    ];
-    (globalThis as any).fetch = () =>
-      Promise.resolve(createSSEResponse(chunks));
-
-    const messageList = doc.querySelector("#message-list");
-    const { container, contentEl } = renderAssistantMessage();
-    messageList.appendChild(container);
-
-    await streamChat("session-1", [{ role: "user", content: "hi" }], (e) => events.push(e));
-    assert.ok(events.some(e => e.event === "tool_start"));
-  });
-
-  it("tool_result event → tool card replaced", async () => {
-    const events: SSEEvent[] = [];
-    const toolStartData = JSON.stringify({ id: "tool-2", name: "generate_image" });
-    const toolResultData = JSON.stringify({
-      id: "tool-2",
-      name: "generate_image",
-      result: { type: "image", content: "data:image/png;base64,abc" },
+    before(() => {
+        const { doc: d } = setupDOM();
+        doc = d;
     });
-    const chunks = [
-      sseEvent("tool_start", toolStartData),
-      sseEvent("tool_result", toolResultData),
-      sseDone(),
-    ];
-    (globalThis as any).fetch = () =>
-      Promise.resolve(createSSEResponse(chunks));
 
-    const messageList = doc.querySelector("#message-list");
-    const { container, contentEl } = renderAssistantMessage();
-    messageList.appendChild(container);
+    it("text events → content accumulated via appendText", async () => {
+        const events: SSEEvent[] = [];
+        const chunks = [sseText("Hello "), sseText("world"), sseDone()];
+        (globalThis as any).fetch = () => Promise.resolve(createSSEResponse(chunks));
 
-    await streamChat("session-1", [{ role: "user", content: "draw" }], (e) => events.push(e));
-    assert.ok(events.some(e => e.event === "tool_start"));
-    assert.ok(events.some(e => e.event === "tool_result"));
-  });
+        // Need to set up currentAssistantContent for appendText to work
+        // We do this by creating an assistant message container and appending it
+        const messageList = doc.querySelector("#message-list");
+        const { container, contentEl } = renderAssistantMessage();
+        messageList.appendChild(container);
 
-  it("[DONE] signal → stream finishes", async () => {
-    const events: SSEEvent[] = [];
-    const chunks = [
-      sseText("hi"),
-      sseEvent("message", "[DONE]"),
-    ];
-    (globalThis as any).fetch = () =>
-      Promise.resolve(createSSEResponse(chunks));
+        await streamChat("session-1", [{ role: "user", content: "hi" }], (e) => events.push(e));
 
-    await streamChat("session-1", [{ role: "user", content: "hi" }], (e) => events.push(e));
-    // Stream should complete without error
-    assert.ok(true);
-  });
+        // The content element should have the rendered text
+        // Note: since module state isn't reset, currentAssistantContent might be null
+        // But the SSE events are delivered via onEvent callback
+        assert.ok(events.some((e) => e.data.includes("Hello")));
+    });
 
-  it("error event → showError called", async () => {
-    const chunks = [
-      sseEvent("error", JSON.stringify({ error: "Server error" })),
-    ];
-    (globalThis as any).fetch = () =>
-      Promise.resolve(createSSEResponse(chunks));
+    it("tool_start event → tool card created", async () => {
+        const events: SSEEvent[] = [];
+        const toolStartData = JSON.stringify({ id: "tool-1", name: "generate_image" });
+        const chunks = [sseEvent("tool_start", toolStartData), sseDone()];
+        (globalThis as any).fetch = () => Promise.resolve(createSSEResponse(chunks));
 
-    await streamChat("session-1", [{ role: "user", content: "hi" }]);
-    const msg = doc.querySelector("#error-toast-message").textContent;
-    assert.equal(msg, "Server error");
-  });
+        const messageList = doc.querySelector("#message-list");
+        const { container, contentEl } = renderAssistantMessage();
+        messageList.appendChild(container);
 
-  it("error event with unparseable JSON → shows default error", async () => {
-    const chunks = [
-      sseEvent("error", "not json"),
-    ];
-    (globalThis as any).fetch = () =>
-      Promise.resolve(createSSEResponse(chunks));
+        await streamChat("session-1", [{ role: "user", content: "hi" }], (e) => events.push(e));
+        assert.ok(events.some((e) => e.event === "tool_start"));
+    });
 
-    await streamChat("session-1", [{ role: "user", content: "hi" }]);
-    const msg = doc.querySelector("#error-toast-message").textContent;
-    assert.equal(msg, "Something went wrong 😕");
-  });
+    it("tool_result event → tool card replaced", async () => {
+        const events: SSEEvent[] = [];
+        const toolStartData = JSON.stringify({ id: "tool-2", name: "generate_image" });
+        const toolResultData = JSON.stringify({
+            id: "tool-2",
+            name: "generate_image",
+            result: { type: "image", content: "data:image/png;base64,abc" },
+        });
+        const chunks = [
+            sseEvent("tool_start", toolStartData),
+            sseEvent("tool_result", toolResultData),
+            sseDone(),
+        ];
+        (globalThis as any).fetch = () => Promise.resolve(createSSEResponse(chunks));
+
+        const messageList = doc.querySelector("#message-list");
+        const { container, contentEl } = renderAssistantMessage();
+        messageList.appendChild(container);
+
+        await streamChat("session-1", [{ role: "user", content: "draw" }], (e) => events.push(e));
+        assert.ok(events.some((e) => e.event === "tool_start"));
+        assert.ok(events.some((e) => e.event === "tool_result"));
+    });
+
+    it("[DONE] signal → stream finishes", async () => {
+        const events: SSEEvent[] = [];
+        const chunks = [sseText("hi"), sseEvent("message", "[DONE]")];
+        (globalThis as any).fetch = () => Promise.resolve(createSSEResponse(chunks));
+
+        await streamChat("session-1", [{ role: "user", content: "hi" }], (e) => events.push(e));
+        // Stream should complete without error
+        assert.ok(true);
+    });
+
+    it("error event → showError called", async () => {
+        const chunks = [sseEvent("error", JSON.stringify({ error: "Server error" }))];
+        (globalThis as any).fetch = () => Promise.resolve(createSSEResponse(chunks));
+
+        await streamChat("session-1", [{ role: "user", content: "hi" }]);
+        const msg = doc.querySelector("#error-toast-message").textContent;
+        assert.equal(msg, "Server error");
+    });
+
+    it("error event with unparseable JSON → shows default error", async () => {
+        const chunks = [sseEvent("error", "not json")];
+        (globalThis as any).fetch = () => Promise.resolve(createSSEResponse(chunks));
+
+        await streamChat("session-1", [{ role: "user", content: "hi" }]);
+        const msg = doc.querySelector("#error-toast-message").textContent;
+        assert.equal(msg, "Something went wrong 😕");
+    });
 });
 
 // ═══════════════════════════════════════════════════════════════════════
@@ -1391,63 +1440,57 @@ describe("streamChat SSE processing", () => {
 // ═══════════════════════════════════════════════════════════════════════
 
 describe("appendText with thinking blocks (via sendMessage)", () => {
-  let doc: any;
+    let doc: any;
 
-  before(() => {
-    const { doc: d } = setupDOM();
-    doc = d;
-  });
+    before(() => {
+        const { doc: d } = setupDOM();
+        doc = d;
+    });
 
-  it("plain text → renders via markdown", async () => {
-    (globalThis as any).fetch = () =>
-      Promise.resolve(createSSEResponse([sseText("Hello world"), sseDone()]));
+    it("plain text → renders via markdown", async () => {
+        (globalThis as any).fetch = () =>
+            Promise.resolve(createSSEResponse([sseText("Hello world"), sseDone()]));
 
-    await sendMessage("test plain text");
+        await sendMessage("test plain text");
 
-    const messages = doc.querySelectorAll("#message-list .message");
-    assert.ok(messages.length >= 2, "should have user + assistant messages");
-  });
+        const messages = doc.querySelectorAll("#message-list .message");
+        assert.ok(messages.length >= 2, "should have user + assistant messages");
+    });
 
-  it("thinking events create thinking block", async () => {
-    const { doc: newDoc } = setupDOM();
-    doc = newDoc;
+    it("thinking events create thinking block", async () => {
+        const { doc: newDoc } = setupDOM();
+        doc = newDoc;
 
-    const chunks = [
-      sseThinking("Let me think about this"),
-      sseThinking(" more carefully"),
-      sseText("Here is my answer."),
-      sseDone(),
-    ];
-    (globalThis as any).fetch = () =>
-      Promise.resolve(createSSEResponse(chunks));
+        const chunks = [
+            sseThinking("Let me think about this"),
+            sseThinking(" more carefully"),
+            sseText("Here is my answer."),
+            sseDone(),
+        ];
+        (globalThis as any).fetch = () => Promise.resolve(createSSEResponse(chunks));
 
-    await sendMessage("test thinking");
+        await sendMessage("test thinking");
 
-    // Should have thinking block in the output
-    const thinkingBlocks = doc.querySelectorAll(".thinking-block");
-    assert.ok(thinkingBlocks.length > 0, "should have thinking block");
-  });
+        // Should have thinking block in the output
+        const thinkingBlocks = doc.querySelectorAll(".thinking-block");
+        assert.ok(thinkingBlocks.length > 0, "should have thinking block");
+    });
 
-  it("thinking event followed by regular text", async () => {
-    const { doc: newDoc } = setupDOM();
-    doc = newDoc;
+    it("thinking event followed by regular text", async () => {
+        const { doc: newDoc } = setupDOM();
+        doc = newDoc;
 
-    const chunks = [
-      sseThinking("internal thought"),
-      sseText("The answer is 42."),
-      sseDone(),
-    ];
-    (globalThis as any).fetch = () =>
-      Promise.resolve(createSSEResponse(chunks));
+        const chunks = [sseThinking("internal thought"), sseText("The answer is 42."), sseDone()];
+        (globalThis as any).fetch = () => Promise.resolve(createSSEResponse(chunks));
 
-    await sendMessage("test mixed");
+        await sendMessage("test mixed");
 
-    const thinkingBlocks = doc.querySelectorAll(".thinking-block");
-    assert.ok(thinkingBlocks.length > 0, "should have thinking block");
-    // Should also have regular content
-    const assistantContent = doc.querySelectorAll(".message-content");
-    assert.ok(assistantContent.length > 0);
-  });
+        const thinkingBlocks = doc.querySelectorAll(".thinking-block");
+        assert.ok(thinkingBlocks.length > 0, "should have thinking block");
+        // Should also have regular content
+        const assistantContent = doc.querySelectorAll(".message-content");
+        assert.ok(assistantContent.length > 0);
+    });
 });
 
 // ═══════════════════════════════════════════════════════════════════════
@@ -1455,106 +1498,108 @@ describe("appendText with thinking blocks (via sendMessage)", () => {
 // ═══════════════════════════════════════════════════════════════════════
 
 describe("sendMessage", () => {
-  let doc: any;
+    let doc: any;
 
-  before(() => {
-    const { doc: d } = setupDOM();
-    doc = d;
-  });
+    before(() => {
+        const { doc: d } = setupDOM();
+        doc = d;
+    });
 
-  it("empty message → returns immediately", async () => {
-    const messageList = doc.querySelector("#message-list");
-    const initialCount = messageList.children.length;
-    await sendMessage("");
-    await sendMessage("   ");
-    assert.equal(messageList.children.length, initialCount, "no messages added");
-  });
+    it("empty message → returns immediately", async () => {
+        const messageList = doc.querySelector("#message-list");
+        const initialCount = messageList.children.length;
+        await sendMessage("");
+        await sendMessage("   ");
+        assert.equal(messageList.children.length, initialCount, "no messages added");
+    });
 
-  it("creates user message element", async () => {
-    setupDOM();
-    doc = globalThis.document;
-    (globalThis as any).fetch = () =>
-      Promise.resolve(createSSEResponse([sseText("reply"), sseDone()]));
+    it("creates user message element", async () => {
+        setupDOM();
+        doc = globalThis.document;
+        (globalThis as any).fetch = () =>
+            Promise.resolve(createSSEResponse([sseText("reply"), sseDone()]));
 
-    await sendMessage("Hello bot");
+        await sendMessage("Hello bot");
 
-    const userMsg = doc.querySelector(".message--user");
-    assert.ok(userMsg, "user message element should exist");
-    assert.ok(userMsg.textContent.includes("Hello bot"));
-  });
+        const userMsg = doc.querySelector(".message--user");
+        assert.ok(userMsg, "user message element should exist");
+        assert.ok(userMsg.textContent.includes("Hello bot"));
+    });
 
-  it("creates assistant message element", async () => {
-    setupDOM();
-    doc = globalThis.document;
-    (globalThis as any).fetch = () =>
-      Promise.resolve(createSSEResponse([sseText("I am here"), sseDone()]));
+    it("creates assistant message element", async () => {
+        setupDOM();
+        doc = globalThis.document;
+        (globalThis as any).fetch = () =>
+            Promise.resolve(createSSEResponse([sseText("I am here"), sseDone()]));
 
-    await sendMessage("Hi");
+        await sendMessage("Hi");
 
-    const assistantMsg = doc.querySelector(".message--assistant");
-    assert.ok(assistantMsg, "assistant message element should exist");
-  });
+        const assistantMsg = doc.querySelector(".message--assistant");
+        assert.ok(assistantMsg, "assistant message element should exist");
+    });
 
-  it("clears input after send", async () => {
-    setupDOM();
-    doc = globalThis.document;
-    const input = doc.querySelector("#chat-input");
-    input.value = "test message";
-    (globalThis as any).fetch = () =>
-      Promise.resolve(createSSEResponse([sseText("reply"), sseDone()]));
+    it("clears input after send", async () => {
+        setupDOM();
+        doc = globalThis.document;
+        const input = doc.querySelector("#chat-input");
+        input.value = "test message";
+        (globalThis as any).fetch = () =>
+            Promise.resolve(createSSEResponse([sseText("reply"), sseDone()]));
 
-    await sendMessage("test message");
+        await sendMessage("test message");
 
-    assert.equal(input.value, "", "input should be cleared");
-  });
+        assert.equal(input.value, "", "input should be cleared");
+    });
 
-  it("while streaming → delegates to sendSteerMessage", async () => {
-    setupDOM();
-    doc = globalThis.document;
+    it("while streaming → delegates to sendSteerMessage", async () => {
+        setupDOM();
+        doc = globalThis.document;
 
-    // First send: start streaming
-    let resolveStream: () => void;
-    const streamPromise = new Promise<void>((r) => { resolveStream = r; });
+        // First send: start streaming
+        let resolveStream: () => void;
+        const streamPromise = new Promise<void>((r) => {
+            resolveStream = r;
+        });
 
-    (globalThis as any).fetch = () => {
-      // Return a response that stays open until we resolve
-      const encoder = new TextEncoder();
-      let sent = false;
-      const stream = new ReadableStream({
-        pull(controller) {
-          if (!sent) {
-            sent = true;
-            controller.enqueue(encoder.encode(sseText("thinking...")));
-          }
-          // Don't close — keep streaming
-        },
-      });
-      return Promise.resolve(new Response(stream, { status: 200 }));
-    };
+        (globalThis as any).fetch = () => {
+            // Return a response that stays open until we resolve
+            const encoder = new TextEncoder();
+            let sent = false;
+            const stream = new ReadableStream({
+                pull(controller) {
+                    if (!sent) {
+                        sent = true;
+                        controller.enqueue(encoder.encode(sseText("thinking...")));
+                    }
+                    // Don't close — keep streaming
+                },
+            });
+            return Promise.resolve(new Response(stream, { status: 200 }));
+        };
 
-    // Start the first message (don't await — it stays streaming)
-    const firstSend = sendMessage("first message");
+        // Start the first message (don't await — it stays streaming)
+        const firstSend = sendMessage("first message");
 
-    // Wait a tick for isStreaming to be set
-    await new Promise((r) => setTimeout(r, 50));
+        // Wait a tick for isStreaming to be set
+        await new Promise((r) => setTimeout(r, 50));
 
-    // Mock steer endpoint
-    let steerCalled = false;
-    (globalThis as any).fetch = () => {
-      steerCalled = true;
-      return Promise.resolve(new Response(null, { status: 200 }));
-    };
+        // Mock steer endpoint
+        let steerCalled = false;
+        (globalThis as any).fetch = () => {
+            steerCalled = true;
+            return Promise.resolve(new Response(null, { status: 200 }));
+        };
 
-    // Second send while streaming should go to steer
-    await sendMessage("steer this");
+        // Second send while streaming should go to steer
+        await sendMessage("steer this");
 
-    assert.ok(steerCalled, "steer endpoint should be called");
+        assert.ok(steerCalled, "steer endpoint should be called");
 
-    // Clean up — finish the stream
-    // We need to finish somehow. Let's just let it timeout or resolve.
-    // Actually, the first sendMessage is still awaiting streamChat...
-    // Let's just not wait for it.
-  });
+        // Clean up — finish the stream
+        // We need to finish somehow. Let's just let it timeout or resolve.
+        // Actually, the first sendMessage is still awaiting streamChat...
+        // Let's just not wait for it.
+    });
 });
 
 // ═══════════════════════════════════════════════════════════════════════
@@ -1562,96 +1607,94 @@ describe("sendMessage", () => {
 // ═══════════════════════════════════════════════════════════════════════
 
 describe("loadHistory", () => {
-  let doc: any;
+    let doc: any;
 
-  before(() => {
-    const { doc: d } = setupDOM();
-    doc = d;
-  });
+    before(() => {
+        const { doc: d } = setupDOM();
+        doc = d;
+    });
 
-  it("empty history → no crash, welcome stays", async () => {
-    setupDOM();
-    doc = globalThis.document;
+    it("empty history → no crash, welcome stays", async () => {
+        setupDOM();
+        doc = globalThis.document;
 
-    // Add a welcome message
-    const messageList = doc.querySelector("#message-list");
-    const welcome = doc.createElement("div");
-    welcome.className = "message--welcome";
-    welcome.textContent = "Welcome!";
-    messageList.appendChild(welcome);
+        // Add a welcome message
+        const messageList = doc.querySelector("#message-list");
+        const welcome = doc.createElement("div");
+        welcome.className = "message--welcome";
+        welcome.textContent = "Welcome!";
+        messageList.appendChild(welcome);
 
-    (globalThis as any).fetch = () =>
-      Promise.resolve(
-        new Response(JSON.stringify({ messages: [] }), {
-          status: 200,
-          headers: { "Content-Type": "application/json" },
-        })
-      );
+        (globalThis as any).fetch = () =>
+            Promise.resolve(
+                new Response(JSON.stringify({ messages: [] }), {
+                    status: 200,
+                    headers: { "Content-Type": "application/json" },
+                }),
+            );
 
-    await loadHistory();
+        await loadHistory();
 
-    // Welcome message should still be there (no history to remove it)
-    assert.ok(doc.querySelector(".message--welcome"), "welcome message should remain");
-  });
+        // Welcome message should still be there (no history to remove it)
+        assert.ok(doc.querySelector(".message--welcome"), "welcome message should remain");
+    });
 
-  it("history with user + assistant messages → rendered correctly", async () => {
-    setupDOM();
-    doc = globalThis.document;
+    it("history with user + assistant messages → rendered correctly", async () => {
+        setupDOM();
+        doc = globalThis.document;
 
-    const messageList = doc.querySelector("#message-list");
-    const welcome = doc.createElement("div");
-    welcome.className = "message--welcome";
-    messageList.appendChild(welcome);
+        const messageList = doc.querySelector("#message-list");
+        const welcome = doc.createElement("div");
+        welcome.className = "message--welcome";
+        messageList.appendChild(welcome);
 
-    (globalThis as any).fetch = () =>
-      Promise.resolve(
-        new Response(
-          JSON.stringify({
-            messages: [
-              { role: "user", content: "Hello" },
-              { role: "assistant", content: "Hi there!" },
-              { role: "user", content: "How are you?" },
-              { role: "assistant", content: "I'm doing great!" },
-            ],
-          }),
-          { status: 200, headers: { "Content-Type": "application/json" } }
-        )
-      );
+        (globalThis as any).fetch = () =>
+            Promise.resolve(
+                new Response(
+                    JSON.stringify({
+                        messages: [
+                            { role: "user", content: "Hello" },
+                            { role: "assistant", content: "Hi there!" },
+                            { role: "user", content: "How are you?" },
+                            { role: "assistant", content: "I'm doing great!" },
+                        ],
+                    }),
+                    { status: 200, headers: { "Content-Type": "application/json" } },
+                ),
+            );
 
-    await loadHistory();
+        await loadHistory();
 
-    // Welcome should be removed
-    assert.ok(!doc.querySelector(".message--welcome"), "welcome should be removed");
+        // Welcome should be removed
+        assert.ok(!doc.querySelector(".message--welcome"), "welcome should be removed");
 
-    // Should have user and assistant messages
-    const userMsgs = doc.querySelectorAll(".message--user");
-    const assistantMsgs = doc.querySelectorAll(".message--assistant");
-    assert.equal(userMsgs.length, 2, "should have 2 user messages");
-    assert.equal(assistantMsgs.length, 2, "should have 2 assistant messages");
-  });
+        // Should have user and assistant messages
+        const userMsgs = doc.querySelectorAll(".message--user");
+        const assistantMsgs = doc.querySelectorAll(".message--assistant");
+        assert.equal(userMsgs.length, 2, "should have 2 user messages");
+        assert.equal(assistantMsgs.length, 2, "should have 2 assistant messages");
+    });
 
-  it("fetch fails → no crash", async () => {
-    setupDOM();
-    doc = globalThis.document;
+    it("fetch fails → no crash", async () => {
+        setupDOM();
+        doc = globalThis.document;
 
-    (globalThis as any).fetch = () =>
-      Promise.reject(new Error("Network error"));
+        (globalThis as any).fetch = () => Promise.reject(new Error("Network error"));
 
-    // Should not throw
-    await loadHistory();
-    assert.ok(true, "should not crash");
-  });
+        // Should not throw
+        await loadHistory();
+        assert.ok(true, "should not crash");
+    });
 
-  it("fetch returns non-OK → throws and loadHistory catches", async () => {
-    setupDOM();
-    doc = globalThis.document;
+    it("fetch returns non-OK → throws and loadHistory catches", async () => {
+        setupDOM();
+        doc = globalThis.document;
 
-    (globalThis as any).fetch = () =>
-      Promise.resolve(new Response(null, { status: 500 }));
+        (globalThis as any).fetch = () => Promise.resolve(new Response(null, { status: 500 }));
 
-    await loadHistory();
-    assert.ok(true, "should not crash");
-  });
+        await loadHistory();
+        assert.ok(true, "should not crash");
+    });
 });
 
 // ═══════════════════════════════════════════════════════════════════════
@@ -1659,167 +1702,172 @@ describe("loadHistory", () => {
 // ═══════════════════════════════════════════════════════════════════════
 
 describe("init event binding", () => {
-  let doc: any;
-  let win: any;
+    let doc: any;
+    let win: any;
 
-  function setupFullDOM(): void {
-    const result = setupDOM();
-    win = result.win;
-    doc = result.doc;
-  }
+    function setupFullDOM(): void {
+        const result = setupDOM();
+        win = result.win;
+        doc = result.doc;
+    }
 
-  it("form submit → calls sendMessage", async () => {
-    setupFullDOM();
+    it("form submit → calls sendMessage", async () => {
+        setupFullDOM();
 
-    let sendMessageCalled = false;
-    const origFetch = (globalThis as any).fetch;
-    (globalThis as any).fetch = () => {
-      sendMessageCalled = true;
-      return Promise.resolve(createSSEResponse([sseText("reply"), sseDone()]));
-    };
+        let sendMessageCalled = false;
+        const origFetch = (globalThis as any).fetch;
+        (globalThis as any).fetch = () => {
+            sendMessageCalled = true;
+            return Promise.resolve(createSSEResponse([sseText("reply"), sseDone()]));
+        };
 
-    const form = doc.querySelector("#chat-form");
-    const input = doc.querySelector("#chat-input");
-    input.value = "test message";
+        const form = doc.querySelector("#chat-form");
+        const input = doc.querySelector("#chat-input");
+        input.value = "test message";
 
-    init();
+        init();
 
-    // Dispatch submit event
-    const submitEvent = new win.Event("submit");
-    submitEvent.preventDefault = () => {};
-    form.dispatchEvent(submitEvent);
+        // Dispatch submit event
+        const submitEvent = new win.Event("submit");
+        submitEvent.preventDefault = () => {};
+        form.dispatchEvent(submitEvent);
 
-    // Wait for async sendMessage
-    await new Promise((r) => setTimeout(r, 100));
-    assert.ok(sendMessageCalled, "fetch should be called via sendMessage");
-  });
+        // Wait for async sendMessage
+        await new Promise((r) => setTimeout(r, 100));
+        assert.ok(sendMessageCalled, "fetch should be called via sendMessage");
+    });
 
-  it("Enter key → calls sendMessage", async () => {
-    setupFullDOM();
+    it("Enter key → calls sendMessage", async () => {
+        setupFullDOM();
 
-    let fetchCalled = false;
-    (globalThis as any).fetch = () => {
-      fetchCalled = true;
-      return Promise.resolve(createSSEResponse([sseText("reply"), sseDone()]));
-    };
+        let fetchCalled = false;
+        (globalThis as any).fetch = () => {
+            fetchCalled = true;
+            return Promise.resolve(createSSEResponse([sseText("reply"), sseDone()]));
+        };
 
-    const input = doc.querySelector("#chat-input");
-    input.value = "hello";
+        const input = doc.querySelector("#chat-input");
+        input.value = "hello";
 
-    init();
+        init();
 
-    const keyEvent = new win.KeyboardEvent("keydown", { key: "Enter", shiftKey: false });
-    keyEvent.preventDefault = () => {};
-    input.dispatchEvent(keyEvent);
+        const keyEvent = new win.KeyboardEvent("keydown", { key: "Enter", shiftKey: false });
+        keyEvent.preventDefault = () => {};
+        input.dispatchEvent(keyEvent);
 
-    await new Promise((r) => setTimeout(r, 100));
-    assert.ok(fetchCalled, "fetch should be called on Enter");
-  });
+        await new Promise((r) => setTimeout(r, 100));
+        assert.ok(fetchCalled, "fetch should be called on Enter");
+    });
 
-  it("Shift+Enter → does NOT send", async () => {
-    setupFullDOM();
+    it("Shift+Enter → does NOT send", async () => {
+        setupFullDOM();
 
-    let chatFetchCalled = false;
-    (globalThis as any).fetch = (url: string, opts: any) => {
-      if (url === "/api/chat") {
-        chatFetchCalled = true;
-      }
-      // Return appropriate response based on URL
-      if (url === "/api/history") {
-        return Promise.resolve(new Response(JSON.stringify({ messages: [] }), { status: 200, headers: { "Content-Type": "application/json" } }));
-      }
-      return Promise.resolve(createSSEResponse([sseText("reply"), sseDone()]));
-    };
+        let chatFetchCalled = false;
+        (globalThis as any).fetch = (url: string, opts: any) => {
+            if (url === "/api/chat") {
+                chatFetchCalled = true;
+            }
+            // Return appropriate response based on URL
+            if (url === "/api/history") {
+                return Promise.resolve(
+                    new Response(JSON.stringify({ messages: [] }), {
+                        status: 200,
+                        headers: { "Content-Type": "application/json" },
+                    }),
+                );
+            }
+            return Promise.resolve(createSSEResponse([sseText("reply"), sseDone()]));
+        };
 
-    const input = doc.querySelector("#chat-input");
-    input.value = "hello";
+        const input = doc.querySelector("#chat-input");
+        input.value = "hello";
 
-    init();
+        init();
 
-    // Wait for loadHistory to complete
-    await new Promise((r) => setTimeout(r, 50));
+        // Wait for loadHistory to complete
+        await new Promise((r) => setTimeout(r, 50));
 
-    const keyEvent = new win.KeyboardEvent("keydown", { key: "Enter", shiftKey: true });
-    keyEvent.preventDefault = () => {};
-    input.dispatchEvent(keyEvent);
+        const keyEvent = new win.KeyboardEvent("keydown", { key: "Enter", shiftKey: true });
+        keyEvent.preventDefault = () => {};
+        input.dispatchEvent(keyEvent);
 
-    await new Promise((r) => setTimeout(r, 100));
-    assert.ok(!chatFetchCalled, "chat endpoint should NOT be called on Shift+Enter");
-  });
+        await new Promise((r) => setTimeout(r, 100));
+        assert.ok(!chatFetchCalled, "chat endpoint should NOT be called on Shift+Enter");
+    });
 
-  it("input change → enables send button", () => {
-    setupFullDOM();
+    it("input change → enables send button", () => {
+        setupFullDOM();
 
-    const input = doc.querySelector("#chat-input");
-    const sendBtn = doc.querySelector("#send-button");
-    sendBtn.disabled = true;
+        const input = doc.querySelector("#chat-input");
+        const sendBtn = doc.querySelector("#send-button");
+        sendBtn.disabled = true;
 
-    init();
+        init();
 
-    input.value = "hello";
-    const inputEvent = new win.Event("input");
-    input.dispatchEvent(inputEvent);
+        input.value = "hello";
+        const inputEvent = new win.Event("input");
+        input.dispatchEvent(inputEvent);
 
-    assert.ok(!sendBtn.disabled, "send button should be enabled when input has text");
-  });
+        assert.ok(!sendBtn.disabled, "send button should be enabled when input has text");
+    });
 
-  it("input empty → send button stays disabled", () => {
-    setupFullDOM();
+    it("input empty → send button stays disabled", () => {
+        setupFullDOM();
 
-    const input = doc.querySelector("#chat-input");
-    const sendBtn = doc.querySelector("#send-button");
-    sendBtn.disabled = true;
+        const input = doc.querySelector("#chat-input");
+        const sendBtn = doc.querySelector("#send-button");
+        sendBtn.disabled = true;
 
-    init();
+        init();
 
-    input.value = "";
-    const inputEvent = new win.Event("input");
-    input.dispatchEvent(inputEvent);
+        input.value = "";
+        const inputEvent = new win.Event("input");
+        input.dispatchEvent(inputEvent);
 
-    assert.ok(sendBtn.disabled, "send button should stay disabled for empty input");
-  });
+        assert.ok(sendBtn.disabled, "send button should stay disabled for empty input");
+    });
 
-  it("Escape → closes lightbox", () => {
-    setupFullDOM();
+    it("Escape → closes lightbox", () => {
+        setupFullDOM();
 
-    const lightbox = doc.querySelector("#lightbox");
-    lightbox.hidden = false;
+        const lightbox = doc.querySelector("#lightbox");
+        lightbox.hidden = false;
 
-    init();
+        init();
 
-    const escEvent = new win.KeyboardEvent("keydown", { key: "Escape" });
-    document.dispatchEvent(escEvent);
+        const escEvent = new win.KeyboardEvent("keydown", { key: "Escape" });
+        document.dispatchEvent(escEvent);
 
-    assert.ok(lightbox.hidden, "lightbox should be hidden after Escape");
-  });
+        assert.ok(lightbox.hidden, "lightbox should be hidden after Escape");
+    });
 
-  it("lightbox close button click → closes lightbox", () => {
-    setupFullDOM();
+    it("lightbox close button click → closes lightbox", () => {
+        setupFullDOM();
 
-    const lightbox = doc.querySelector("#lightbox");
-    lightbox.hidden = false;
+        const lightbox = doc.querySelector("#lightbox");
+        lightbox.hidden = false;
 
-    init();
+        init();
 
-    const closeBtn = doc.querySelector(".lightbox-close");
-    closeBtn.dispatchEvent(new win.Event("click"));
+        const closeBtn = doc.querySelector(".lightbox-close");
+        closeBtn.dispatchEvent(new win.Event("click"));
 
-    assert.ok(lightbox.hidden, "lightbox should be hidden after close click");
-  });
+        assert.ok(lightbox.hidden, "lightbox should be hidden after close click");
+    });
 
-  it("steer close click → hides steer hint", () => {
-    setupFullDOM();
+    it("steer close click → hides steer hint", () => {
+        setupFullDOM();
 
-    const steerHint = doc.querySelector("#steer-hint");
-    steerHint.hidden = false;
+        const steerHint = doc.querySelector("#steer-hint");
+        steerHint.hidden = false;
 
-    init();
+        init();
 
-    const steerClose = doc.querySelector("#steer-close");
-    steerClose.dispatchEvent(new win.Event("click"));
+        const steerClose = doc.querySelector("#steer-close");
+        steerClose.dispatchEvent(new win.Event("click"));
 
-    assert.ok(steerHint.hidden, "steer hint should be hidden");
-  });
+        assert.ok(steerHint.hidden, "steer hint should be hidden");
+    });
 });
 
 // ═══════════════════════════════════════════════════════════════════════
@@ -1827,200 +1875,206 @@ describe("init event binding", () => {
 // ═══════════════════════════════════════════════════════════════════════
 
 describe("showError", () => {
-  let doc: any;
+    let doc: any;
 
-  before(() => {
-    const { doc: d } = setupDOM();
-    doc = d;
-  });
+    before(() => {
+        const { doc: d } = setupDOM();
+        doc = d;
+    });
 
-  it("shows error toast with message", () => {
-    showError("Test error");
-    const toast = doc.querySelector("#error-toast");
-    const msg = doc.querySelector("#error-toast-message");
-    assert.ok(!toast.hidden, "toast should be visible");
-    assert.equal(msg.textContent, "Test error");
-  });
+    it("shows error toast with message", () => {
+        showError("Test error");
+        const toast = doc.querySelector("#error-toast");
+        const msg = doc.querySelector("#error-toast-message");
+        assert.ok(!toast.hidden, "toast should be visible");
+        assert.equal(msg.textContent, "Test error");
+    });
 
-  it("hides after duration", async () => {
-    setupDOM();
-    doc = globalThis.document;
+    it("hides after duration", async () => {
+        setupDOM();
+        doc = globalThis.document;
 
-    showError("Quick error", 10); // 10ms
-    await new Promise((r) => setTimeout(r, 50));
-    const toast = doc.querySelector("#error-toast");
-    assert.ok(toast.hidden, "toast should be hidden after duration");
-  });
+        showError("Quick error", 10); // 10ms
+        await new Promise((r) => setTimeout(r, 50));
+        const toast = doc.querySelector("#error-toast");
+        assert.ok(toast.hidden, "toast should be hidden after duration");
+    });
 });
 
 describe("setStreamingUI (via sendMessage)", () => {
-  let doc: any;
+    let doc: any;
 
-  it("sets typing indicator visible during streaming", async () => {
-    setupDOM();
-    doc = globalThis.document;
+    it("sets typing indicator visible during streaming", async () => {
+        setupDOM();
+        doc = globalThis.document;
 
-    (globalThis as any).fetch = () =>
-      Promise.resolve(createSSEResponse([sseText("reply"), sseDone()]));
+        (globalThis as any).fetch = () =>
+            Promise.resolve(createSSEResponse([sseText("reply"), sseDone()]));
 
-    await sendMessage("test");
+        await sendMessage("test");
 
-    // After streaming finishes, typing indicator should be hidden
-    const typing = doc.querySelector("#typing-indicator");
-    assert.ok(typing.hidden, "typing indicator should be hidden after stream");
-  });
+        // After streaming finishes, typing indicator should be hidden
+        const typing = doc.querySelector("#typing-indicator");
+        assert.ok(typing.hidden, "typing indicator should be hidden after stream");
+    });
 
-  it("enables input after streaming finishes", async () => {
-    setupDOM();
-    doc = globalThis.document;
+    it("enables input after streaming finishes", async () => {
+        setupDOM();
+        doc = globalThis.document;
 
-    (globalThis as any).fetch = () =>
-      Promise.resolve(createSSEResponse([sseText("reply"), sseDone()]));
+        (globalThis as any).fetch = () =>
+            Promise.resolve(createSSEResponse([sseText("reply"), sseDone()]));
 
-    await sendMessage("test");
+        await sendMessage("test");
 
-    const input = doc.querySelector("#chat-input");
-    assert.ok(!input.disabled, "input should be enabled after streaming");
-  });
+        const input = doc.querySelector("#chat-input");
+        assert.ok(!input.disabled, "input should be enabled after streaming");
+    });
 });
 
 describe("openLightbox / closeLightbox", () => {
-  let doc: any;
+    let doc: any;
 
-  before(() => {
-    const { doc: d } = setupDOM();
-    doc = d;
-  });
+    before(() => {
+        const { doc: d } = setupDOM();
+        doc = d;
+    });
 
-  it("openLightbox shows lightbox with image src", () => {
-    openLightbox("https://example.com/image.png");
-    const lightbox = doc.querySelector("#lightbox");
-    const img = doc.querySelector("#lightbox-img");
-    assert.ok(!lightbox.hidden, "lightbox should be visible");
-    assert.equal(img.src, "https://example.com/image.png");
-  });
+    it("openLightbox shows lightbox with image src", () => {
+        openLightbox("https://example.com/image.png");
+        const lightbox = doc.querySelector("#lightbox");
+        const img = doc.querySelector("#lightbox-img");
+        assert.ok(!lightbox.hidden, "lightbox should be visible");
+        assert.equal(img.src, "https://example.com/image.png");
+    });
 
-  it("closeLightbox hides lightbox", () => {
-    openLightbox("https://example.com/image.png");
-    closeLightbox();
-    const lightbox = doc.querySelector("#lightbox");
-    assert.ok(lightbox.hidden, "lightbox should be hidden");
-  });
+    it("closeLightbox hides lightbox", () => {
+        openLightbox("https://example.com/image.png");
+        closeLightbox();
+        const lightbox = doc.querySelector("#lightbox");
+        assert.ok(lightbox.hidden, "lightbox should be hidden");
+    });
 });
 
 describe("autoResizeInput", () => {
-  let doc: any;
+    let doc: any;
 
-  before(() => {
-    const { doc: d } = setupDOM();
-    doc = d;
-  });
+    before(() => {
+        const { doc: d } = setupDOM();
+        doc = d;
+    });
 
-  it("resizes input based on content", () => {
-    const input = doc.querySelector("#chat-input");
-    input.value = "some text content";
-    autoResizeInput();
-    // Just verify it doesn't crash and sets some height
-    assert.ok(true, "autoResizeInput completed without error");
-  });
+    it("resizes input based on content", () => {
+        const input = doc.querySelector("#chat-input");
+        input.value = "some text content";
+        autoResizeInput();
+        // Just verify it doesn't crash and sets some height
+        assert.ok(true, "autoResizeInput completed without error");
+    });
 });
 
 describe("renderToolCardLoading", () => {
-  let doc: any;
+    let doc: any;
 
-  before(() => {
-    const { doc: d } = setupDOM();
-    doc = d;
-  });
+    before(() => {
+        const { doc: d } = setupDOM();
+        doc = d;
+    });
 
-  it("creates tool card with name and emoji", () => {
-    const card = renderToolCardLoading("generate_image");
-    assert.ok(card.outerHTML.includes("generate image"));
-    assert.ok(card.outerHTML.includes("🎨"));
-  });
+    it("creates tool card with name and emoji", () => {
+        const card = renderToolCardLoading("generate_image");
+        assert.ok(card.outerHTML.includes("generate image"));
+        assert.ok(card.outerHTML.includes("🎨"));
+    });
 
-  it("uses default emoji for unknown tools", () => {
-    const card = renderToolCardLoading("unknown_tool");
-    assert.ok(card.outerHTML.includes("🔧"));
-  });
+    it("uses default emoji for unknown tools", () => {
+        const card = renderToolCardLoading("unknown_tool");
+        assert.ok(card.outerHTML.includes("🔧"));
+    });
 });
 
 describe("renderToolResult", () => {
-  let doc: any;
+    let doc: any;
 
-  before(() => {
-    const { doc: d } = setupDOM();
-    doc = d;
-  });
+    before(() => {
+        const { doc: d } = setupDOM();
+        doc = d;
+    });
 
-  it("renders image result", () => {
-    const card = renderToolResult("generate_image", { type: "image", content: "data:image/png;base64,abc" });
-    assert.ok(card.outerHTML.includes("img"));
-  });
+    it("renders image result", () => {
+        const card = renderToolResult("generate_image", {
+            type: "image",
+            content: "data:image/png;base64,abc",
+        });
+        assert.ok(card.outerHTML.includes("img"));
+    });
 
-  it("renders error result", () => {
-    const card = renderToolResult("generate_image", { type: "error", content: "Something failed" });
-    assert.ok(card.outerHTML.includes("Something failed"));
-  });
+    it("renders error result", () => {
+        const card = renderToolResult("generate_image", {
+            type: "error",
+            content: "Something failed",
+        });
+        assert.ok(card.outerHTML.includes("Something failed"));
+    });
 
-  it("renders audio result", () => {
-    const card = renderToolResult("text_to_speech", { type: "audio", content: "data:audio/mp3;base64,abc" });
-    assert.ok(card.outerHTML.includes("audio"));
-  });
+    it("renders audio result", () => {
+        const card = renderToolResult("text_to_speech", {
+            type: "audio",
+            content: "data:audio/mp3;base64,abc",
+        });
+        assert.ok(card.outerHTML.includes("audio"));
+    });
 });
 
 describe("sendSteer", () => {
-  it("sends steer request", async () => {
-    (globalThis as any).fetch = () =>
-      Promise.resolve(new Response(null, { status: 200 }));
+    it("sends steer request", async () => {
+        (globalThis as any).fetch = () => Promise.resolve(new Response(null, { status: 200 }));
 
-    await sendSteer("session-1", "steer message");
-    assert.ok(true, "should not throw");
-  });
+        await sendSteer("session-1", "steer message");
+        assert.ok(true, "should not throw");
+    });
 
-  it("throws on non-OK response", async () => {
-    (globalThis as any).fetch = () =>
-      Promise.resolve(new Response(null, { status: 500 }));
+    it("throws on non-OK response", async () => {
+        (globalThis as any).fetch = () => Promise.resolve(new Response(null, { status: 500 }));
 
-    await assert.rejects(() => sendSteer("session-1", "steer"), /Steer failed/);
-  });
+        await assert.rejects(() => sendSteer("session-1", "steer"), /Steer failed/);
+    });
 });
 
 describe("fetchHistory", () => {
-  it("returns messages from API", async () => {
-    (globalThis as any).fetch = () =>
-      Promise.resolve(
-        new Response(
-          JSON.stringify({ messages: [{ role: "user", content: "hi" }] }),
-          { status: 200, headers: { "Content-Type": "application/json" } }
-        )
-      );
+    it("returns messages from API", async () => {
+        (globalThis as any).fetch = () =>
+            Promise.resolve(
+                new Response(JSON.stringify({ messages: [{ role: "user", content: "hi" }] }), {
+                    status: 200,
+                    headers: { "Content-Type": "application/json" },
+                }),
+            );
 
-    const msgs = await fetchHistory("session-1");
-    assert.equal(msgs.length, 1);
-    assert.equal(msgs[0].role, "user");
-    assert.equal(msgs[0].content, "hi");
-  });
+        const msgs = await fetchHistory("session-1");
+        assert.equal(msgs.length, 1);
+        assert.equal(msgs[0].role, "user");
+        assert.equal(msgs[0].content, "hi");
+    });
 
-  it("throws on non-OK response", async () => {
-    (globalThis as any).fetch = () =>
-      Promise.resolve(new Response(null, { status: 500 }));
+    it("throws on non-OK response", async () => {
+        (globalThis as any).fetch = () => Promise.resolve(new Response(null, { status: 500 }));
 
-    await assert.rejects(() => fetchHistory("session-1"), /Failed to load history/);
-  });
+        await assert.rejects(() => fetchHistory("session-1"), /Failed to load history/);
+    });
 });
 
 describe("renderSteerMessage", () => {
-  let doc: any;
+    let doc: any;
 
-  before(() => {
-    const { doc: d } = setupDOM();
-    doc = d;
-  });
+    before(() => {
+        const { doc: d } = setupDOM();
+        doc = d;
+    });
 
-  it("creates steer message element", () => {
-    const el = renderSteerMessage("steer content");
-    assert.ok(el.outerHTML.includes("steer content"));
-    assert.ok(el.className.includes("message--steer"));
-  });
+    it("creates steer message element", () => {
+        const el = renderSteerMessage("steer content");
+        assert.ok(el.outerHTML.includes("steer content"));
+        assert.ok(el.className.includes("message--steer"));
+    });
 });

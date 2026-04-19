@@ -6,12 +6,14 @@
 ## Step Progress
 
 ### Step 1: Onboarding state management
+
 **Status:** ⬜ Not Started
 
 - [ ] Check `onboarding_done` preference on session connect
 - [ ] Save preference on dismiss
 
 ### Step 2: Onboarding overlay UI
+
 **Status:** ⬜ Not Started
 
 - [ ] Full-screen modal with slide navigation
@@ -24,12 +26,14 @@
 - [ ] CSS animations between slides
 
 ### Step 3: Help button
+
 **Status:** ⬜ Not Started
 
 - [ ] Header help button
 - [ ] Reopens onboarding
 
 ### Step 4: Test
+
 **Status:** ⬜ Not Started
 
 - [ ] Test rendering when preference not set
@@ -40,5 +44,5 @@
 
 ## Discoveries
 
-| # | What | Impact | Step |
-|---|------|--------|------|
+| #   | What | Impact | Step |
+| --- | ---- | ------ | ---- |
