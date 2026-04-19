@@ -1,6 +1,7 @@
 # HG-024: Test the Refactor — State Isolation Verification
 
-**Status:** pending  
+**Status:** ✅ Complete
+**Last Updated:** 2026-04-19
 **Prerequisite:** HG-023 complete  
 **Breaking:** none  
 **Risk:** low — tests verify the refactor, no code changes
@@ -22,3 +23,6 @@
 | State independence assertions | 5+ |
 | Concurrent isolation tests | 5+ |
 | Old broken tests replaced | ≥3 |
+
+| 2026-04-19 18:17 | Task started | Runtime V2 lane-runner execution |
+| 2026-04-19 18:17 | Task complete | .DONE created |
