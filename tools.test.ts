@@ -619,7 +619,6 @@ describe("executeTool web_search", () => {
         ],
       });
 
-    const { executeTool } = await import("./tools.ts");
     const result = await executeTool("web_search", { query: "gaming news" }, API_KEY);
     assert.equal(result.type, "text");
     assert.ok(result.content.includes("Gaming News"));
@@ -628,7 +627,6 @@ describe("executeTool web_search", () => {
 
   it("returns error on HTTP failure", async () => {
     globalThis.fetch = async () => new Response(null, { status: 500 });
-    const { executeTool } = await import("./tools.ts");
     const result = await executeTool("web_search", { query: "test" }, API_KEY);
     assert.equal(result.type, "error");
     assert.ok(result.content.includes("500"));
@@ -636,7 +634,6 @@ describe("executeTool web_search", () => {
 
   it("returns text on empty results", async () => {
     globalThis.fetch = async () => jsonResponse({ organic: [] });
-    const { executeTool } = await import("./tools.ts");
     const result = await executeTool("web_search", { query: "xyz" }, API_KEY);
     assert.equal(result.type, "text");
     assert.ok(result.content.includes("No search results"));
@@ -651,7 +648,6 @@ describe("executeTool analyze_image", () => {
   it("returns text description on success", async () => {
     globalThis.fetch = async () =>
       jsonResponse({ content: "A colorful gaming logo with neon lights" });
-    const { executeTool } = await import("./tools.ts");
     const result = await executeTool("analyze_image", { image_url: "https://example.com/img.png" }, API_KEY);
     assert.equal(result.type, "text");
     assert.ok(result.content.includes("gaming logo"));
@@ -659,7 +655,6 @@ describe("executeTool analyze_image", () => {
 
   it("returns error on HTTP failure", async () => {
     globalThis.fetch = async () => new Response(null, { status: 400 });
-    const { executeTool } = await import("./tools.ts");
     const result = await executeTool("analyze_image", { image_url: "https://example.com/img.png" }, API_KEY);
     assert.equal(result.type, "error");
     assert.ok(result.content.includes("400"));
@@ -668,7 +663,6 @@ describe("executeTool analyze_image", () => {
   it("returns error on API error response", async () => {
     globalThis.fetch = async () =>
       jsonResponse({ base_resp: { status_code: 1001, status_msg: "invalid image" } });
-    const { executeTool } = await import("./tools.ts");
     const result = await executeTool("analyze_image", { image_url: "https://example.com/bad.png" }, API_KEY);
     assert.equal(result.type, "error");
     assert.ok(result.content.includes("invalid image"));
@@ -679,7 +673,6 @@ describe("executeTool analyze_image", () => {
 
 describe("getToolDefinitions schema content", () => {
   it("generate_image schema has required prompt field", async () => {
-    const { getToolDefinitions } = await import("./tools.ts");
     const tool = getToolDefinitions().find(t => t.name === "generate_image");
     assert.ok(tool, "generate_image tool should exist");
     assert.ok(tool.input_schema.properties?.prompt, "should have prompt property");
@@ -687,7 +680,6 @@ describe("getToolDefinitions schema content", () => {
   });
 
   it("web_search schema has required query field", async () => {
-    const { getToolDefinitions } = await import("./tools.ts");
     const tool = getToolDefinitions().find(t => t.name === "web_search");
     assert.ok(tool, "web_search tool should exist");
     assert.ok(tool.input_schema.properties?.query, "should have query property");
@@ -695,7 +687,6 @@ describe("getToolDefinitions schema content", () => {
   });
 
   it("analyze_image schema has required image_url field", async () => {
-    const { getToolDefinitions } = await import("./tools.ts");
     const tool = getToolDefinitions().find(t => t.name === "analyze_image");
     assert.ok(tool, "analyze_image tool should exist");
     assert.ok(tool.input_schema.properties?.image_url, "should have image_url property");

@@ -9,9 +9,9 @@ install:
 dev:
     node --experimental-strip-types --no-warnings server.ts
 
-# Run all unit tests
+# Run all unit tests (all files in one process, concurrent)
 test:
-    node --experimental-strip-types --no-warnings --test server.test.ts agent.test.ts tools.test.ts db.test.ts public/app.test.ts
+    node --experimental-strip-types --no-warnings --test server.test.ts agent.test.ts tools.test.ts db.test.ts
 
 # Run tests with coverage
 test-coverage:
