@@ -1,6 +1,7 @@
 # HG-021: Markdown Renderer Rewrite
 
-**Status:** pending  
+**Status:** ✅ Complete
+**Last Updated:** 2026-04-19
 **Breaking:** output format (code block class names)  
 **Dependencies:** `marked@15.0.4` (exact pin, no `^`)
 
@@ -18,3 +19,6 @@
 - [x] `sanitize: true` — XSS barrier on raw HTML input
 - [x] Checkbox renderer override — preserves `class="task-checkbox"`
 - [x] Exact version pin — no `^` range
+
+| 2026-04-19 18:17 | Task started | Runtime V2 lane-runner execution |
+| 2026-04-19 18:17 | Task complete | .DONE created |
