@@ -296,7 +296,7 @@ function toAnthropicPayload(
   messages: ChatMessage[],
   tools: AnthropicTool[]
 ): Record<string, unknown> {
-  const system: Array<{ type: string; text: string }> = [];
+  const system: Array<{ type: string; text: string; cache_control?: { type: string } }> = [];
   const anthropicMessages: Array<{
     role: string;
     content: string | Array<Record<string, unknown>>;
@@ -304,7 +304,7 @@ function toAnthropicPayload(
 
   for (const msg of messages) {
     if (msg.role === "system") {
-      system.push({ type: "text", text: msg.content });
+      system.push({ type: "text", text: msg.content, cache_control: { type: "ephemeral" } });
     } else if (msg.role === "user") {
       anthropicMessages.push({ role: "user", content: msg.content });
     } else if (msg.role === "assistant") {
@@ -350,11 +350,18 @@ function toAnthropicPayload(
     }
   }
 
+  // Add cache_control to last tool for prompt caching
+  const cachedTools = tools.map((t, i) =>
+    i === tools.length - 1
+      ? { ...t, cache_control: { type: "ephemeral" } }
+      : t
+  );
+
   const payload: Record<string, unknown> = {
     model: MINIMAX_MODEL,
     max_tokens: 4096,
     messages: anthropicMessages,
-    tools,
+    tools: cachedTools,
     stream: true,
   };
   if (system.length > 0) {

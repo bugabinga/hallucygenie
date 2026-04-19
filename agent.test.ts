@@ -1443,3 +1443,55 @@ describe("buildContext", () => {
     );
   });
 });
+
+// ── Prompt Caching ────────────────────────────────────────────────────
+
+describe("Prompt Caching", () => {
+  it("adds cache_control to system prompt content block", async () => {
+    let capturedBody = "";
+    globalThis.fetch = async (_url: string | URL | Request, init?: RequestInit) => {
+      capturedBody = init?.body as string;
+      return anthropicResponse(textResponse(["Hi"]));
+    };
+
+    const { onEvent } = collectEvents();
+    await runAgentLoop(
+      [
+        { role: "system", content: "You are helpful" },
+        { role: "user", content: "hello" },
+      ],
+      "test-key",
+      onEvent
+    );
+
+    const parsed = JSON.parse(capturedBody);
+    assert.ok(parsed.system, "should have system field");
+    assert.equal(parsed.system[0].cache_control?.type, "ephemeral", "system block should have cache_control");
+  });
+
+  it("adds cache_control to last tool definition", async () => {
+    let capturedBody = "";
+    globalThis.fetch = async (_url: string | URL | Request, init?: RequestInit) => {
+      capturedBody = init?.body as string;
+      return anthropicResponse(textResponse(["Hi"]));
+    };
+
+    const { onEvent } = collectEvents();
+    await runAgentLoop(
+      [{ role: "user", content: "hello" }],
+      "test-key",
+      onEvent
+    );
+
+    const parsed = JSON.parse(capturedBody);
+    assert.ok(parsed.tools, "should have tools");
+    assert.equal(parsed.tools.length, 3, "should have 3 tools");
+
+    // First two tools should NOT have cache_control
+    assert.equal(parsed.tools[0].cache_control, undefined, "first tool should not have cache_control");
+    assert.equal(parsed.tools[1].cache_control, undefined, "second tool should not have cache_control");
+
+    // Last tool should have cache_control
+    assert.equal(parsed.tools[2].cache_control?.type, "ephemeral", "last tool should have cache_control");
+  });
+});
