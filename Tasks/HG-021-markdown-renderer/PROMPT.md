@@ -5,6 +5,7 @@ Replace custom 6-phase markdown pipeline with `marked` library. **Breaking outpu
 ## Why
 
 Current implementation (~125 lines, `public/app.ts` lines 248–400):
+
 - Manual code block extraction via `\x00CODE\x00` placeholders
 - Manual inline code extraction (same pattern)
 - Manual block-level line-by-line renderer with `BlockState` FSM
@@ -15,13 +16,13 @@ Current implementation (~125 lines, `public/app.ts` lines 248–400):
 
 ## Breaking Output Changes
 
-| Element | Old | New |
-|---------|-----|-----|
-| Code lang | `class="lang-ts"` | `class="language-ts"` |
+| Element       | Old                           | New                               |
+| ------------- | ----------------------------- | --------------------------------- |
+| Code lang     | `class="lang-ts"`             | `class="language-ts"`             |
 | Code wrapping | `<pre><code class="lang-ts">` | `<pre><code class="language-ts">` |
-| Headings | `<h1>` | `<h1>` (unchanged) |
-| Task lists | same | same |
-| Tables | not supported | GFM tables |
+| Headings      | `<h1>`                        | `<h1>` (unchanged)                |
+| Task lists    | same                          | same                              |
+| Tables        | not supported                 | GFM tables                        |
 
 **Action:** Add `.language-*` CSS aliases for all existing `.lang-*` styles.
 
@@ -29,17 +30,18 @@ Current implementation (~125 lines, `public/app.ts` lines 248–400):
 
 1. `npm install marked@^15` (dev dep)
 2. Create `public/markdown.ts`:
+
    ```typescript
    import { marked } from "marked";
-   
+
    // Configure: GFM, sync mode, sanitized output
    marked.use({
      gfm: true,
-     async: false,           // synchronous — returns string, not Promise
-     sanitize: true,          // escape raw HTML in input (XSS barrier)
+     async: false, // synchronous — returns string, not Promise
+     sanitize: true, // escape raw HTML in input (XSS barrier)
      breaks: false,
    });
-   
+
    export function renderMarkdown(text: string): string {
      return marked.parse(text) as string;
    }
@@ -51,6 +53,7 @@ Current implementation (~125 lines, `public/app.ts` lines 248–400):
 
    **Checkbox class:** marked outputs `<input type="checkbox" disabled>` for GFM task lists.
    To preserve `class="task-checkbox"` for CSS styling, add a renderer override:
+
    ```typescript
    marked.use({
      renderer: {
@@ -64,6 +67,7 @@ Current implementation (~125 lines, `public/app.ts` lines 248–400):
      },
    });
    ```
+
 3. Export `renderMarkdown` from `public/app.ts` — re-export from `markdown.ts` for backward compat.
 4. Update CSS: for every `.lang-*` rule in `public/style.css`, add a `.language-*` alias.
 5. Update `public/app.test.ts`:

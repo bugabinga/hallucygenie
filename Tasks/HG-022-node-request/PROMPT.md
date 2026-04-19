@@ -5,40 +5,41 @@ Replace manual Web Stream byte-by-byte streaming with `Readable.fromWeb().pipe()
 ## Why
 
 Current `handleNodeRequest` (`server.ts` lines 611–648) has two verbose patterns:
+
 1. **Request body**: `for await` + `Buffer.concat()` — correct, keep as-is
 2. **Response streaming**: manual `getReader()`/`while` loop — verbose, no backpressure
 
 ```typescript
 // OLD (lines 638–645):
 if (webRes.body) {
-    const reader = webRes.body.getReader();
-    while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        res.write(value);
-    }
+  const reader = webRes.body.getReader();
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    res.write(value);
+  }
 }
 
 // NEW:
 if (webRes.body) {
-    const readable = Readable.fromWeb(webRes.body);
+  const readable = Readable.fromWeb(webRes.body);
 
-    // Propagate stream errors to the error handler below
-    readable.on("error", (err) => {
-        reqLog.error("response stream error", { error: String(err) });
-        if (!res.headersSent) {
-            res.statusCode = 500;
-            res.end(JSON.stringify({ error: "Upstream error" }));
-        }
-    });
+  // Propagate stream errors to the error handler below
+  readable.on("error", (err) => {
+    reqLog.error("response stream error", { error: String(err) });
+    if (!res.headersSent) {
+      res.statusCode = 500;
+      res.end(JSON.stringify({ error: "Upstream error" }));
+    }
+  });
 
-    // Handle client disconnect — clean up resources
-    res.on("close", () => readable.destroy());
+  // Handle client disconnect — clean up resources
+  res.on("close", () => readable.destroy());
 
-    // pipe() calls res.end() automatically when readable closes cleanly
-    readable.pipe(res);
+  // pipe() calls res.end() automatically when readable closes cleanly
+  readable.pipe(res);
 } else {
-    res.end();
+  res.end();
 }
 ```
 
@@ -52,9 +53,9 @@ In `server.ts`, replace the manual streaming block in `handleNodeRequest` with:
 
 ```typescript
 if (webRes.body) {
-    Readable.fromWeb(webRes.body).pipe(res);
+  Readable.fromWeb(webRes.body).pipe(res);
 } else {
-    res.end();
+  res.end();
 }
 ```
 
