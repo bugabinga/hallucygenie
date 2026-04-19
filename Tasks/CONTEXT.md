@@ -91,7 +91,7 @@ Podman quadlet deployment.
 | ------ | ---------------------------------------------------- | -------- |
 | HG-025 | Image History Browser — already implemented (HG-019) |
 | HG-026 | Chat Personality Selector                            |
-| HG-027 | E2E Test Overhaul                              | — |
+| HG-027 | E2E Test Overhaul                                    | —        |
 | HG-028 | Gaming Co-Creator Button                             | deferred |
 
 - ~~Image History Browser~~ → HG-025

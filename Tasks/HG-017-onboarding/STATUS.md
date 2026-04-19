@@ -9,6 +9,7 @@ First-run onboarding modal with slides explaining the app. Stored in localStorag
 ## Verification
 
 Onboarding shows on first visit, hides after completion.
+
 ```
 just test-unit  # 373 tests pass
 ```

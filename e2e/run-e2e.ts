@@ -1,22 +1,26 @@
 #!/usr/bin/env node
 // HallucyGenie E2E Test Runner
-// Uses local playwright-core with system Chromium on Termux/Android
+// Runs against the REAL server with MiniMax API mocked via nock.
+// Architecture:
+//   Browser → Real Server → Mocked MiniMax (nock)
+//                ↓
+//           Real SQLite (temp)
 
-import { chromium } from "playwright-core";
-import { readFile } from "node:fs/promises";
+import { chromium, type Browser, type Page } from "playwright-core";
 import { resolve, join } from "node:path";
-import { fileURLToPath } from "node:url";
+import { tmpdir } from "node:os";
+import { mkdtempSync, rmSync } from "node:fs";
+import { randomUUID } from "node:crypto";
 
-const __dirname = resolve(dirname(fileURLToPath(import.meta.url)));
-const E2E_DIR = resolve(__dirname, "e2e");
+import { startServer, initDatabase, shutdown, resetStateForTesting } from "../server.ts";
+import { setupMinimaxMocks, cleanupMinimaxMocks } from "./minimax-mock.ts";
+
 const CHROMIUM_PATH = "/data/data/com.termux/files/usr/lib/chromium/chrome";
-const BASE_URL = process.env.BASE_URL || "http://localhost:3000";
+const TEST_PORT = 3001;
+const BASE_URL = `http://localhost:${TEST_PORT}`;
 
-function dirname(path: string): string {
-    return path.substring(0, path.lastIndexOf("/")) || ".";
-}
+// ── Test framework ──────────────────────────────────────────────────
 
-// Simple test framework
 interface TestResult {
     name: string;
     passed: boolean;
@@ -24,13 +28,111 @@ interface TestResult {
     duration: number;
 }
 
+// ── Helpers ──────────────────────────────────────────────────────────
+
+function assertEqual(actual: unknown, expected: unknown, label: string): void {
+    if (actual !== expected) {
+        throw new Error(`${label}: expected "${expected}", got "${actual}"`);
+    }
+}
+
+async function expectVisible(page: Page, selector: string): Promise<void> {
+    const el = page.locator(selector);
+    await el.waitFor({ state: "visible", timeout: 5000 });
+}
+
+async function expectHidden(page: Page, selector: string): Promise<void> {
+    const el = page.locator(selector);
+    await el.waitFor({ state: "hidden", timeout: 5000 });
+}
+
+async function expectDisabled(locator: ReturnType<Page["locator"]>): Promise<void> {
+    const disabled = await locator.isDisabled();
+    if (!disabled) throw new Error("Expected element to be disabled");
+}
+
+async function expectEnabled(locator: ReturnType<Page["locator"]>): Promise<void> {
+    const enabled = await locator.isEnabled();
+    if (!enabled) throw new Error("Expected element to be enabled");
+}
+
+/**
+ * Reliable "app is ready" signal:
+ * 1. Navigate to page
+ * 2. Wait for init() to complete (session UUID in localStorage)
+ * 3. Wait for #send-button to be in DOM
+ *
+ * Optionally dismiss onboarding overlay for tests that need to interact
+ * with elements behind it.
+ */
+async function waitForApp(page: Page, options?: { dismissOnboarding?: boolean }): Promise<void> {
+    await page.goto(BASE_URL);
+
+    // Wait for init() to run — it sets session UUID in localStorage synchronously
+    await page.waitForFunction(() => localStorage.getItem("hallucygenie_session_id") !== null, {
+        timeout: 10000,
+    });
+
+    // Wait for DOM elements to be ready
+    await page.waitForSelector("#send-button");
+
+    // Dismiss onboarding overlay if requested (it blocks clicks on elements behind it)
+    if (options?.dismissOnboarding) {
+        const onboarding = page.locator("#onboarding");
+        const isVisible = await onboarding.isVisible().catch(() => false);
+        if (isVisible) {
+            // Set localStorage to prevent onboarding, then dismiss
+            await page.evaluate(() => {
+                localStorage.setItem("hg_onboarding_done", "1");
+                const ob = document.getElementById("onboarding");
+                if (ob) ob.hidden = true;
+            });
+            await page.waitForTimeout(50);
+        }
+    }
+}
+
+// ── Main test runner ─────────────────────────────────────────────────
+
+// Temp directory module-level so cleanup() can access it
+let _tmpDir: string | undefined;
+
 async function runE2ETests(): Promise<void> {
     console.log("🧪 HallucyGenie E2E Tests");
     console.log(`   Browser: ${CHROMIUM_PATH}`);
     console.log(`   URL: ${BASE_URL}`);
     console.log();
 
-    let browser;
+    // ── Setup: temp directory + database ──────────────────────────────
+    _tmpDir = mkdtempSync(join(tmpdir(), "hg-e2e-"));
+    const dbPath = join(_tmpDir, "test.db");
+
+    // Set API key so server.ts doesn't bail on /api/chat requests
+    process.env.MINIMAX_API_KEY = "test-key-for-e2e";
+    process.env.DATA_DIR = _tmpDir;
+
+    // Set up nock mocks BEFORE starting server (server makes calls during init)
+    setupMinimaxMocks();
+
+    // Initialize database and start real server
+    initDatabase(dbPath);
+    const server = startServer(TEST_PORT);
+
+    // Wait for server to be listening
+    await new Promise<void>((resolve, reject) => {
+        server.on("listening", () => resolve());
+        server.on("error", (err) => reject(err));
+        // Also handle the case where it's already listening
+        if (server.listening) resolve();
+    });
+
+    console.log(`   Server: http://localhost:${TEST_PORT}`);
+    console.log(`   DB: ${dbPath}`);
+    console.log();
+
+    // ── Launch browser ────────────────────────────────────────────────
+
+    let browser: Browser;
     try {
         browser = await chromium.launch({
             executablePath: CHROMIUM_PATH,
@@ -42,20 +144,23 @@ async function runE2ETests(): Promise<void> {
                 "--disable-dev-shm-usage",
             ],
         });
-    } catch (err: any) {
-        console.error("❌ Failed to launch Chromium:", err.message);
+    } catch (err: unknown) {
+        const msg = err instanceof Error ? err.message : String(err);
+        console.error("❌ Failed to launch Chromium:", msg);
+        await cleanup();
         process.exit(1);
     }
 
     const results: TestResult[] = [];
 
-    // Test 1: Page loads
+    // ── Existing Tests (fixed) ────────────────────────────────────────
+
+    // Test 1: Page loads with correct title and elements
     await runTest(
         "page loads with correct title and elements",
         async () => {
             const page = await browser!.newPage();
-            await page.goto(BASE_URL);
-            await page.waitForSelector("#chat-input", { timeout: 10000 });
+            await waitForApp(page);
 
             const title = await page.title();
             assertEqual(title, "HallucyGenie", "Page title");
@@ -72,43 +177,41 @@ async function runE2ETests(): Promise<void> {
         results,
     );
 
-    // Test 2: Send button disabled when empty
+    // Test 2: Send button disabled when input is empty
     await runTest(
         "send button disabled when input is empty",
         async () => {
             const page = await browser!.newPage();
-            await page.goto(BASE_URL);
-            await page.waitForSelector("#chat-input");
+            await waitForApp(page);
 
             const sendBtn = page.locator("#send-button");
-            await expectDisabled(sendBtn, "#send-button");
+            await expectDisabled(sendBtn);
 
             await page.fill("#chat-input", "Hello");
-            await expectEnabled(sendBtn, "#send-button");
+            await expectEnabled(sendBtn);
 
             await page.fill("#chat-input", "");
-            await expectDisabled(sendBtn, "#send-button");
+            await expectDisabled(sendBtn);
 
             await page.close();
         },
         results,
     );
 
-    // Test 3: Enter key sends message
+    // Test 3: Enter key sends message (needs real server + mocked MiniMax)
     await runTest(
         "Enter key sends message",
         async () => {
             const page = await browser!.newPage();
-            await page.goto(BASE_URL);
-            await page.waitForSelector("#chat-input");
+            await waitForApp(page, { dismissOnboarding: true });
 
             await page.fill("#chat-input", "Test message");
             await page.press("#chat-input", "Enter");
 
-            // User message should appear
+            // User message should appear immediately (frontend renders before API call)
             const userMsg = page.locator(".message--user .message-content").last();
             await userMsg.waitFor({ timeout: 5000 });
-            const text = await userMsg.textContent();
+            const text = (await userMsg.textContent())?.trim();
             assertEqual(text, "Test message", "User message text");
 
             await page.close();
@@ -116,13 +219,12 @@ async function runE2ETests(): Promise<void> {
         results,
     );
 
-    // Test 4: Session UUID in localStorage
+    // Test 4: Session UUID stored in localStorage
     await runTest(
         "session UUID stored in localStorage",
         async () => {
             const page = await browser!.newPage();
-            await page.goto(BASE_URL);
-            await page.waitForSelector("#chat-input");
+            await waitForApp(page);
 
             const sessionId = await page.evaluate(() => {
                 return localStorage.getItem("hallucygenie_session_id");
@@ -142,13 +244,12 @@ async function runE2ETests(): Promise<void> {
         results,
     );
 
-    // Test 5: Error toast
+    // Test 5: Error toast appears and auto-dismisses
     await runTest(
         "error toast appears and auto-dismisses",
         async () => {
             const page = await browser!.newPage();
-            await page.goto(BASE_URL);
-            await page.waitForSelector("#chat-input");
+            await waitForApp(page, { dismissOnboarding: true });
 
             await page.evaluate(() => {
                 const toast = document.getElementById("error-toast")!;
@@ -167,13 +268,12 @@ async function runE2ETests(): Promise<void> {
         results,
     );
 
-    // Test 6: Lightbox
+    // Test 6: Lightbox opens and closes
     await runTest(
         "lightbox opens and closes",
         async () => {
             const page = await browser!.newPage();
-            await page.goto(BASE_URL);
-            await page.waitForSelector("#chat-input");
+            await waitForApp(page, { dismissOnboarding: true });
 
             await page.evaluate(() => {
                 const lightbox = document.getElementById("lightbox")!;
@@ -199,8 +299,7 @@ async function runE2ETests(): Promise<void> {
         "mobile viewport (375x812)",
         async () => {
             const page = await browser!.newPage({ viewport: { width: 375, height: 812 } });
-            await page.goto(BASE_URL);
-            await page.waitForSelector("#chat-input");
+            await waitForApp(page);
 
             await expectVisible(page, "#header");
             await expectVisible(page, "#input-area");
@@ -216,8 +315,7 @@ async function runE2ETests(): Promise<void> {
         "desktop viewport (1280x800)",
         async () => {
             const page = await browser!.newPage({ viewport: { width: 1280, height: 800 } });
-            await page.goto(BASE_URL);
-            await page.waitForSelector("#chat-input");
+            await waitForApp(page);
 
             await expectVisible(page, "#header");
             await expectVisible(page, "#input-area");
@@ -232,8 +330,7 @@ async function runE2ETests(): Promise<void> {
         "textarea auto-resizes with content",
         async () => {
             const page = await browser!.newPage();
-            await page.goto(BASE_URL);
-            await page.waitForSelector("#chat-input");
+            await waitForApp(page);
 
             const initialHeight = await page.evaluate(() => {
                 return (document.getElementById("chat-input") as HTMLTextAreaElement).offsetHeight;
@@ -253,31 +350,30 @@ async function runE2ETests(): Promise<void> {
         results,
     );
 
-    // Test 10: Steering UI shows hint during streaming
+    // Test 10: Steering message renders with distinct style
     await runTest(
         "steer message renders with distinct style",
         async () => {
             const page = await browser!.newPage();
-            await page.goto(BASE_URL);
-            await page.waitForSelector("#chat-input");
+            await waitForApp(page, { dismissOnboarding: true });
 
             // Inject a steer message directly
             await page.evaluate(() => {
                 const msg = document.createElement("div");
                 msg.className = "message message--steer message--user";
                 msg.innerHTML = `
-        <div class="message-avatar">💡</div>
-        <div class="message-bubble">
-          <div class="message-content">Steer test</div>
-        </div>
-      `;
+                    <div class="message-avatar">💡</div>
+                    <div class="message-bubble">
+                        <div class="message-content">Steer test</div>
+                    </div>
+                `;
                 document.getElementById("message-list")!.appendChild(msg);
             });
 
             const steerMsg = page.locator(".message--steer");
             await steerMsg.waitFor({ timeout: 5000 });
-            const hasSteerClass = await steerMsg.count();
-            if (hasSteerClass === 0) throw new Error("Steer message not found");
+            const count = await steerMsg.count();
+            if (count === 0) throw new Error("Steer message not found");
 
             const content = await page.textContent(".message--steer .message-content");
             assertEqual(content, "Steer test", "Steer message content");
@@ -287,7 +383,166 @@ async function runE2ETests(): Promise<void> {
         results,
     );
 
-    // ── Report ──────────────────────────────────────────────────────────
+    // ── New Tests ─────────────────────────────────────────────────────
+
+    // Test 11: Onboarding shows on first visit
+    await runTest(
+        "onboarding shows on first visit",
+        async () => {
+            const page = await browser!.newPage();
+            // Fresh page context — no localStorage, so onboarding should show
+            await page.goto(BASE_URL);
+
+            const onboarding = page.locator("#onboarding");
+            await onboarding.waitFor({ state: "visible", timeout: 10000 });
+
+            await page.close();
+        },
+        results,
+    );
+
+    // Test 12: Onboarding completes and hides
+    await runTest(
+        "onboarding completes and hides",
+        async () => {
+            const page = await browser!.newPage();
+            await page.goto(BASE_URL);
+
+            const onboarding = page.locator("#onboarding");
+            await onboarding.waitFor({ state: "visible", timeout: 10000 });
+
+            // Click through all onboarding slides sequentially
+            // Each slide has a button that either advances or dismisses
+            const allButtons = [
+                ".onboarding-slide.active .onboarding-next",
+                "#onboarding-try-chat",
+                "#onboarding-try-create",
+                "#onboarding-done",
+            ];
+
+            for (const selector of allButtons) {
+                const btn = page.locator(selector);
+                const visible = await btn.isVisible().catch(() => false);
+                if (visible) {
+                    await btn.click();
+                    await page.waitForTimeout(100);
+                }
+            }
+
+            await onboarding.waitFor({ state: "hidden", timeout: 5000 });
+
+            await page.close();
+        },
+        results,
+    );
+
+    // Test 13: Create modal opens and shows tabs
+    await runTest(
+        "create modal opens and shows tabs",
+        async () => {
+            const page = await browser!.newPage();
+            await waitForApp(page, { dismissOnboarding: true });
+
+            await page.click("#create-btn");
+            const modal = page.locator("#create-modal");
+            await modal.waitFor({ state: "visible" });
+
+            await expectVisible(page, ".create-tab[data-tab='image']");
+            await expectVisible(page, ".create-tab[data-tab='music']");
+            await expectVisible(page, ".create-tab[data-tab='voice']");
+            await expectVisible(page, ".create-tab[data-tab='search']");
+
+            await page.close();
+        },
+        results,
+    );
+
+    // Test 14: Create modal switches tabs
+    await runTest(
+        "create modal switches tabs",
+        async () => {
+            const page = await browser!.newPage();
+            await waitForApp(page, { dismissOnboarding: true });
+
+            await page.click("#create-btn");
+            await page.waitForSelector("#create-modal", { state: "visible" });
+
+            // Switch to music tab
+            await page.click(".create-tab[data-tab='music']");
+            await expectVisible(page, "#create-music-form");
+
+            // Switch back to image tab
+            await page.click(".create-tab[data-tab='image']");
+            await expectVisible(page, "#create-image-form");
+
+            await page.close();
+        },
+        results,
+    );
+
+    // Test 15: Create modal closes
+    await runTest(
+        "create modal closes",
+        async () => {
+            const page = await browser!.newPage();
+            await waitForApp(page, { dismissOnboarding: true });
+
+            await page.click("#create-btn");
+            await page.waitForSelector("#create-modal", { state: "visible" });
+
+            await page.click("#create-close");
+            const modal = page.locator("#create-modal");
+            await modal.waitFor({ state: "hidden" });
+
+            await page.close();
+        },
+        results,
+    );
+
+    // Test 16: Quota badge shows in header
+    await runTest(
+        "quota badge shows in header",
+        async () => {
+            const page = await browser!.newPage();
+            await waitForApp(page, { dismissOnboarding: true });
+
+            // Wait for quota badge to be populated (async fetch from /api/quota)
+            const badge = page.locator("#quota-badge");
+            await badge.waitFor({ state: "visible", timeout: 5000 });
+
+            await expectVisible(page, ".quota-item[data-type='image']");
+            await expectVisible(page, ".quota-item[data-type='music']");
+
+            await page.close();
+        },
+        results,
+    );
+
+    // Test 17: Session persists across page reloads
+    await runTest(
+        "session persists across page reloads",
+        async () => {
+            const page = await browser!.newPage();
+            await waitForApp(page);
+
+            const sessionId = await page.evaluate(() =>
+                localStorage.getItem("hallucygenie_session_id"),
+            );
+
+            await page.reload();
+            await waitForApp(page);
+
+            const sessionId2 = await page.evaluate(() =>
+                localStorage.getItem("hallucygenie_session_id"),
+            );
+            assertEqual(sessionId, sessionId2, "Session ID persistence");
+
+            await page.close();
+        },
+        results,
+    );
+
+    // ── Report ────────────────────────────────────────────────────────
 
     console.log();
     const passed = results.filter((r) => r.passed).length;
@@ -308,12 +563,36 @@ async function runE2ETests(): Promise<void> {
     console.log(`ℹ fail ${failed}`);
     console.log(`ℹ duration_ms ${results.reduce((sum, r) => sum + r.duration, 0).toFixed(0)}`);
 
+    // ── Cleanup ───────────────────────────────────────────────────────
+
     await browser.close();
+    await cleanup();
 
     process.exit(failed > 0 ? 1 : 0);
 }
 
-// ── Helpers ──────────────────────────────────────────────────────────
+// ── Helpers: run + cleanup ───────────────────────────────────────────
+
+async function cleanup(): Promise<void> {
+    cleanupMinimaxMocks();
+    try {
+        await shutdown();
+    } catch {
+        // Ignore shutdown errors
+    }
+    resetStateForTesting();
+    delete process.env.MINIMAX_API_KEY;
+    delete process.env.DATA_DIR;
+
+    // Clean up temp directory
+    if (_tmpDir) {
+        try {
+            rmSync(_tmpDir, { recursive: true, force: true });
+        } catch {
+            // Ignore cleanup errors
+        }
+    }
+}
 
 async function runTest(
     name: string,
@@ -325,44 +604,17 @@ async function runTest(
         await fn();
         results.push({ name, passed: true, duration: performance.now() - start });
         console.log(`  ✔ ${name}`);
-    } catch (err: any) {
+    } catch (err: unknown) {
+        const msg = err instanceof Error ? err.message : String(err);
         results.push({
             name,
             passed: false,
-            error: err.message,
+            error: msg,
             duration: performance.now() - start,
         });
         console.log(`  ✖ ${name}`);
-        console.log(`    ${err.message}`);
+        console.log(`    ${msg}`);
     }
-}
-
-function assertEqual(actual: any, expected: any, label: string): void {
-    if (actual !== expected) {
-        throw new Error(`${label}: expected "${expected}", got "${actual}"`);
-    }
-}
-
-async function expectVisible(page: any, selector: string): Promise<void> {
-    const el = page.locator(selector);
-    const visible = await el.isVisible();
-    if (!visible) throw new Error(`Expected ${selector} to be visible`);
-}
-
-async function expectHidden(page: any, selector: string): Promise<void> {
-    const el = page.locator(selector);
-    const hidden = await el.isHidden();
-    if (!hidden) throw new Error(`Expected ${selector} to be hidden`);
-}
-
-async function expectDisabled(locator: any, label: string): Promise<void> {
-    const disabled = await locator.isDisabled();
-    if (!disabled) throw new Error(`Expected ${label} to be disabled`);
-}
-
-async function expectEnabled(locator: any, label: string): Promise<void> {
-    const enabled = await locator.isEnabled();
-    if (!enabled) throw new Error(`Expected ${label} to be enabled`);
 }
 
 // ── Run ──────────────────────────────────────────────────────────────
