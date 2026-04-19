@@ -2,7 +2,7 @@
 
 **Last Updated:** 2026-04-19
 **Status:** Feature complete
-**Next Task ID:** HG-027
+**Next Task ID:** HG-028
 
 ---
 
@@ -91,7 +91,8 @@ Podman quadlet deployment.
 | ------ | ---------------------------------------------------- | -------- |
 | HG-025 | Image History Browser — already implemented (HG-019) |
 | HG-026 | Chat Personality Selector                            |
-| HG-027 | Gaming Co-Creator Button                             | deferred |
+| HG-027 | E2E Test Overhaul                              | — |
+| HG-028 | Gaming Co-Creator Button                             | deferred |
 
 - ~~Image History Browser~~ → HG-025
 - Chat Personality Selector (ideas.md RECOMMENDATION 2)
