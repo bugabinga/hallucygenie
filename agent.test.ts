@@ -1183,16 +1183,23 @@ describe("System Prompt", () => {
         assert.ok(lower.includes("youtube"), "should mention YouTube");
     });
 
-    it("buildSystemPrompt returns base prompt without preferences", () => {
-        assert.equal(buildSystemPrompt(), SYSTEM_PROMPT);
-        assert.equal(buildSystemPrompt({}), SYSTEM_PROMPT);
-        assert.equal(buildSystemPrompt(undefined), SYSTEM_PROMPT);
+    it("buildSystemPrompt returns personality prefix + base prompt", () => {
+        const result = buildSystemPrompt();
+        assert.ok(result.includes(SYSTEM_PROMPT), "should include base prompt");
+        assert.ok(result.includes("gaming buddy"), "should include default personality prefix");
+    });
+
+    it("buildSystemPrompt with empty prefs returns personality + base", () => {
+        const result = buildSystemPrompt({});
+        assert.ok(result.includes(SYSTEM_PROMPT));
+        assert.ok(result.includes("gaming buddy"));
     });
 
     it("buildSystemPrompt appends preferences", () => {
         const prefs = { favorite_game: "Roblox", channel_name: "GamerKid" };
         const result = buildSystemPrompt(prefs);
-        assert.ok(result.startsWith(SYSTEM_PROMPT), "should start with base prompt");
+        assert.ok(result.includes(SYSTEM_PROMPT), "should include base prompt");
+        assert.ok(result.includes("gaming buddy"), "should include personality prefix");
         assert.ok(
             result.includes("What you know about the user:"),
             "should have preferences header",
