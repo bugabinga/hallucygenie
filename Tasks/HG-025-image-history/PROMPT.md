@@ -51,8 +51,11 @@ curl http://localhost:3000/asset/abc123
 If `assets` table doesn't have image metadata, add migration `006_add_image_history.sql`:
 
 ```sql
-ALTER TABLE assets ADD COLUMN filename TEXT;
-ALTER TABLE assets ADD COLUMN prompt TEXT;
+ALTER TABLE assets
+ADD COLUMN filename TEXT;
+
+ALTER TABLE assets
+ADD COLUMN prompt TEXT;
 ```
 
 ## Verification
@@ -68,19 +71,19 @@ Add to `server.test.ts`:
 
 ```typescript
 describe("GET /assets", () => {
-    it("returns assets with type, id, timestamp", async () => {
-        const resp = await fetch("/assets", { headers });
-        const data = await resp.json();
-        assert.ok(Array.isArray(data.assets));
-    });
+  it("returns assets with type, id, timestamp", async () => {
+    const resp = await fetch("/assets", { headers });
+    const data = await resp.json();
+    assert.ok(Array.isArray(data.assets));
+  });
 });
 
 describe("GET /asset/:id", () => {
-    it("returns image/png for image assets", async () => {
-        const resp = await fetch("/asset/test-id", { headers });
-        // Returns 404 if not found, 200 with image if found
-        assert.ok([200, 404].includes(resp.status));
-    });
+  it("returns image/png for image assets", async () => {
+    const resp = await fetch("/asset/test-id", { headers });
+    // Returns 404 if not found, 200 with image if found
+    assert.ok([200, 404].includes(resp.status));
+  });
 });
 ```
 
