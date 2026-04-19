@@ -954,6 +954,25 @@ function setupDOM(): { win: any; doc: any; errors: string[] } {
         <button id="create-btn">✨ Create</button>
       </div>
     </header>
+    <div id="onboarding" class="onboarding" hidden>
+      <div class="onboarding-backdrop"></div>
+      <div class="onboarding-card">
+        <div class="onboarding-slides">
+          <div class="onboarding-slide active" data-slide="0">
+            <button class="btn-primary onboarding-next">Let's go!</button>
+          </div>
+          <div class="onboarding-slide" data-slide="1">
+            <button class="btn-primary" id="onboarding-try-chat">Try it!</button>
+          </div>
+          <div class="onboarding-slide" data-slide="2">
+            <button class="btn-primary" id="onboarding-try-create">See!</button>
+          </div>
+          <div class="onboarding-slide" data-slide="3">
+            <button class="btn-primary" id="onboarding-done">Start!</button>
+          </div>
+        </div>
+      </div>
+    </div>
     <form id="chat-form">
       <div class="input-wrapper">
         <textarea id="chat-input"></textarea>

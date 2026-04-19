@@ -976,7 +976,54 @@ export function init(): void {
     $("#steer-hint").hidden = true;
   });
 
-  // Load history on init
+  // ── Onboarding ──────────────────────────────────────────────────
+  const ONBOARDING_KEY = "hg_onboarding_done";
+  const onboarding = $("#onboarding");
+  const slides = onboarding.querySelectorAll<HTMLElement>(".onboarding-slide");
+  const dots = onboarding.querySelectorAll<HTMLElement>(".onboarding-dots .dot");
+  let currentSlide = 0;
+
+  function showSlide(idx: number): void {
+    slides.forEach((s, i) => { s.classList.toggle("active", i === idx); });
+    dots.forEach((d, i) => { d.classList.toggle("active", i === idx); });
+    currentSlide = idx;
+  }
+
+  function dismissOnboarding(): void {
+    onboarding.hidden = true;
+    localStorage.setItem(ONBOARDING_KEY, "1");
+  }
+
+  // Show onboarding on first visit
+  if (!localStorage.getItem(ONBOARDING_KEY)) {
+    onboarding.hidden = false;
+    showSlide(0);
+  }
+
+  // Next buttons (slides 0 and 1 → next slide)
+  onboarding.querySelectorAll<HTMLButtonElement>(".onboarding-next").forEach(btn => {
+    btn.addEventListener("click", () => showSlide(currentSlide + 1));
+  });
+
+  // Slide 2: Try chat button
+  $("#onboarding-try-chat").addEventListener("click", () => {
+    dismissOnboarding();
+    const input = $("#chat-input") as HTMLTextAreaElement;
+    input.value = "What are the top 3 gaming tips for a beginner?";
+    input.dispatchEvent(new Event("input"));
+    input.focus();
+  });
+
+  // Slide 3: Try create button
+  $("#onboarding-try-create").addEventListener("click", () => {
+    dismissOnboarding();
+    createModal.hidden = false;
+  });
+
+  // Done button
+  $("#onboarding-done").addEventListener("click", dismissOnboarding);
+
+  // ── Load history ────────────────────────────────────────────────
   loadHistory();
 
   // Fetch and display quota badge

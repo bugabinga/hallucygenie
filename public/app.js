@@ -735,6 +735,43 @@
     steerClose.addEventListener("click", () => {
       $("#steer-hint").hidden = true;
     });
+    const ONBOARDING_KEY = "hg_onboarding_done";
+    const onboarding = $("#onboarding");
+    const slides = onboarding.querySelectorAll(".onboarding-slide");
+    const dots = onboarding.querySelectorAll(".onboarding-dots .dot");
+    let currentSlide = 0;
+    function showSlide(idx) {
+      slides.forEach((s, i) => {
+        s.classList.toggle("active", i === idx);
+      });
+      dots.forEach((d, i) => {
+        d.classList.toggle("active", i === idx);
+      });
+      currentSlide = idx;
+    }
+    function dismissOnboarding() {
+      onboarding.hidden = true;
+      localStorage.setItem(ONBOARDING_KEY, "1");
+    }
+    if (!localStorage.getItem(ONBOARDING_KEY)) {
+      onboarding.hidden = false;
+      showSlide(0);
+    }
+    onboarding.querySelectorAll(".onboarding-next").forEach((btn) => {
+      btn.addEventListener("click", () => showSlide(currentSlide + 1));
+    });
+    $("#onboarding-try-chat").addEventListener("click", () => {
+      dismissOnboarding();
+      const input2 = $("#chat-input");
+      input2.value = "What are the top 3 gaming tips for a beginner?";
+      input2.dispatchEvent(new Event("input"));
+      input2.focus();
+    });
+    $("#onboarding-try-create").addEventListener("click", () => {
+      dismissOnboarding();
+      createModal.hidden = false;
+    });
+    $("#onboarding-done").addEventListener("click", dismissOnboarding);
     loadHistory();
     updateQuotaBadge();
     setInterval(updateQuotaBadge, 6e4);

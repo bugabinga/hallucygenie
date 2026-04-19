@@ -28,6 +28,67 @@
       </div>
     </header>
 
+    <!-- Onboarding Overlay -->
+    <div id="onboarding" class="onboarding" hidden>
+      <div class="onboarding-backdrop"></div>
+      <div class="onboarding-card">
+        <div class="onboarding-slides" id="onboarding-slides">
+          <!-- Slide 1: Welcome -->
+          <div class="onboarding-slide active" data-slide="0">
+            <div class="onboarding-emoji">🧞</div>
+            <h2>Hey! I'm HallucyGenie ✨</h2>
+            <p>Your AI buddy for gaming, creativity, and whatever you need!</p>
+            <div class="onboarding-dots">
+              <span class="dot active"></span>
+              <span class="dot"></span>
+              <span class="dot"></span>
+              <span class="dot"></span>
+            </div>
+            <button class="btn-primary onboarding-next">Let's go! →</button>
+          </div>
+          <!-- Slide 2: Chat -->
+          <div class="onboarding-slide" data-slide="1">
+            <div class="onboarding-emoji">💬</div>
+            <h2>Chat with me!</h2>
+            <p>Ask me anything — gaming tips, homework help, story ideas...</p>
+            <div class="onboarding-dots">
+              <span class="dot"></span>
+              <span class="dot active"></span>
+              <span class="dot"></span>
+              <span class="dot"></span>
+            </div>
+            <button class="btn-primary" id="onboarding-try-chat">Try it! →</button>
+          </div>
+          <!-- Slide 3: Create -->
+          <div class="onboarding-slide" data-slide="2">
+            <div class="onboarding-emoji">🎨</div>
+            <h2>Make cool stuff!</h2>
+            <p>Generate images, music, voices, and search the web — all in one place!</p>
+            <div class="onboarding-dots">
+              <span class="dot"></span>
+              <span class="dot"></span>
+              <span class="dot active"></span>
+              <span class="dot"></span>
+            </div>
+            <button class="btn-primary" id="onboarding-try-create">See what I can do! →</button>
+          </div>
+          <!-- Slide 4: Fun -->
+          <div class="onboarding-slide" data-slide="3">
+            <div class="onboarding-emoji">🎮</div>
+            <h2>Let's have fun!</h2>
+            <p>I'm here to help, inspire, and make you smile. Let's go! 🚀</p>
+            <div class="onboarding-dots">
+              <span class="dot"></span>
+              <span class="dot"></span>
+              <span class="dot"></span>
+              <span class="dot active"></span>
+            </div>
+            <button class="btn-primary" id="onboarding-done">Start chatting! 🎉</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
     <!-- Message List -->
     <main id="message-list" role="log" aria-live="polite" aria-label="Chat messages">
       <!-- Welcome message -->
