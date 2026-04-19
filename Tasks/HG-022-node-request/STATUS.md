@@ -6,10 +6,10 @@
 
 ## Waves
 
-| Wave | Tasks |
-|------|-------|
-| 1 | Replace manual streaming loop with `Readable.fromWeb()` + error + close handlers |
-| 2 | Verify `server.test.ts` passes |
+| Wave | Tasks                                                                            |
+| ---- | -------------------------------------------------------------------------------- |
+| 1    | Replace manual streaming loop with `Readable.fromWeb()` + error + close handlers |
+| 2    | Verify `server.test.ts` passes                                                   |
 
 ## Fixes from Adversarial Review
 

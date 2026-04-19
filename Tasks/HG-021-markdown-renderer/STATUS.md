@@ -6,11 +6,11 @@
 
 ## Waves
 
-| Wave | Tasks |
-|------|-------|
-| 1 | `npm install marked@15.0.4`, create `public/markdown.ts` with sanitize + async:false + checkbox renderer |
-| 2 | Re-export `renderMarkdown` from `public/app.ts`, update `app.test.ts` snapshots |
-| 3 | Verify `renderMarkdown("<script>")` escapes, checkbox has class, `just check` + `just test-unit` |
+| Wave | Tasks                                                                                                    |
+| ---- | -------------------------------------------------------------------------------------------------------- |
+| 1    | `npm install marked@15.0.4`, create `public/markdown.ts` with sanitize + async:false + checkbox renderer |
+| 2    | Re-export `renderMarkdown` from `public/app.ts`, update `app.test.ts` snapshots                          |
+| 3    | Verify `renderMarkdown("<script>")` escapes, checkbox has class, `just check` + `just test-unit`         |
 
 ## Fixes from Adversarial Review
 

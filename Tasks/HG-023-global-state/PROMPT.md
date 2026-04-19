@@ -6,17 +6,18 @@ Wrap mutable module state in an explicit `AppState` object. Use closure factory 
 
 Current `public/app.ts` has 6 module-level mutable variables:
 
-| Variable | Type | Mutated by |
-|----------|------|------------|
-| `toastTimeout` | `Timeout \| null` | `showError` |
-| `isStreaming` | `boolean` | `streamChat` |
-| `currentAssistantEl` | `HTMLElement \| null` | `streamChat`, `renderAssistantMessage` |
-| `currentAssistantContent` | `HTMLElement \| null` | `streamChat`, `renderAssistantMessage` |
-| `activeToolCards` | `Map<string, HTMLElement>` | `appendToolResult`, `showToolCard` |
-| `rawTextBuffer` | `string` | SSE `text` event callbacks |
-| `thinkingBuffer` | `string` | SSE `thinking` event callbacks |
+| Variable                  | Type                       | Mutated by                             |
+| ------------------------- | -------------------------- | -------------------------------------- |
+| `toastTimeout`            | `Timeout \| null`          | `showError`                            |
+| `isStreaming`             | `boolean`                  | `streamChat`                           |
+| `currentAssistantEl`      | `HTMLElement \| null`      | `streamChat`, `renderAssistantMessage` |
+| `currentAssistantContent` | `HTMLElement \| null`      | `streamChat`, `renderAssistantMessage` |
+| `activeToolCards`         | `Map<string, HTMLElement>` | `appendToolResult`, `showToolCard`     |
+| `rawTextBuffer`           | `string`                   | SSE `text` event callbacks             |
+| `thinkingBuffer`          | `string`                   | SSE `thinking` event callbacks         |
 
 **Problems:**
+
 1. SSE event callbacks (registered inside `streamChat`) run **after** `streamChat` returns. They mutate module-level state. Tests that mock SSE responses mutate real global state — no isolation.
 2. Async state mutations are invisible — no reset mechanism between tests.
 3. Hard to trace state flow — grep for `let ` declarations across 1245-line file.
@@ -107,6 +108,7 @@ Extract: `AppState` interface, `createAppState()`, `defaultState`, `createStream
 ### 2. Update `public/app.ts`
 
 **a) Replace module-level globals** with import from `state.ts`:
+
 ```typescript
 // REMOVE:
 let toastTimeout: ReturnType<typeof setTimeout> | null = null;
@@ -119,47 +121,50 @@ const state = defaultState;
 ```
 
 **b) Update `showError`** — use `state`:
+
 ```typescript
 export function showError(message: string, duration = 4000): void {
-    if (state.toastTimeout) clearTimeout(state.toastTimeout);
-    state.toastTimeout = setTimeout(() => {
-        state.toastTimeout = null;
-        toast.hidden = true;
-    }, duration);
+  if (state.toastTimeout) clearTimeout(state.toastTimeout);
+  state.toastTimeout = setTimeout(() => {
+    state.toastTimeout = null;
+    toast.hidden = true;
+  }, duration);
 }
 ```
 
 **c) Update `streamChat`** — create handlers with state:
+
 ```typescript
 export async function streamChat(
-    sessionId: string,
-    messages: Array<{ role: string; content: string }>,
-    onEvent?: (event: SSEEvent) => void,
+  sessionId: string,
+  messages: Array<{ role: string; content: string }>,
+  onEvent?: (event: SSEEvent) => void,
 ): Promise<void> {
-    state.isStreaming = true;
-    const handlers = createStreamHandlers(state);
+  state.isStreaming = true;
+  const handlers = createStreamHandlers(state);
 
-    // SSE callbacks use explicit handlers with state
-    const handleSSEEvent = (event: SSEEvent) => {
-        if (event.event === "text") {
-            handlers.handleText(event.data);
-        } else if (event.event === "thinking") {
-            handlers.handleThinking(event.data);
-        } else if (event.event === "tool_card") {
-            const card = handlers.handleToolCard(reqId, name);
-            // ...
-        } else if (event.event === "tool_result") {
-            handlers.appendToolResult(reqId, result);
-        } else if (event.event === "done") {
-            handlers.finish();
-        }
-        onEvent?.(event);
-    };
-    // ...
+  // SSE callbacks use explicit handlers with state
+  const handleSSEEvent = (event: SSEEvent) => {
+    if (event.event === "text") {
+      handlers.handleText(event.data);
+    } else if (event.event === "thinking") {
+      handlers.handleThinking(event.data);
+    } else if (event.event === "tool_card") {
+      const card = handlers.handleToolCard(reqId, name);
+      // ...
+    } else if (event.event === "tool_result") {
+      handlers.appendToolResult(reqId, result);
+    } else if (event.event === "done") {
+      handlers.finish();
+    }
+    onEvent?.(event);
+  };
+  // ...
 }
 ```
 
 **d) Export for tests:**
+
 ```typescript
 export { AppState } from "./state";
 export { createAppState, createStreamHandlers, defaultState } from "./state";
@@ -173,35 +178,37 @@ Tests use their own state via `createAppState()` + `createStreamHandlers()`:
 import { createAppState, createStreamHandlers } from "../app";
 
 test("showError clears previous timeout", () => {
-    document.body.innerHTML = '...';
-    const state = createAppState();
-    showError("first", 10000);   // uses defaultState
-    showError("second", 100);     // uses defaultState — old timeout cleared
-    // state is NOT used here — showError uses defaultState (no API change)
+  document.body.innerHTML = "...";
+  const state = createAppState();
+  showError("first", 10000); // uses defaultState
+  showError("second", 100); // uses defaultState — old timeout cleared
+  // state is NOT used here — showError uses defaultState (no API change)
 });
 
 // SSE handler isolation test:
 test("streamChat SSE callbacks use correct state", async () => {
-    const state = createAppState();
-    const handlers = createStreamHandlers(state);
+  const state = createAppState();
+  const handlers = createStreamHandlers(state);
 
-    // Simulate SSE events against the handlers directly
-    handlers.handleText("hello ");
-    handlers.handleText("world");
-    expect(state.rawTextBuffer).toBe("hello world");
+  // Simulate SSE events against the handlers directly
+  handlers.handleText("hello ");
+  handlers.handleText("world");
+  expect(state.rawTextBuffer).toBe("hello world");
 
-    handlers.finish();
-    expect(state.rawTextBuffer).toBe("");
-    expect(state.isStreaming).toBe(false);
+  handlers.finish();
+  expect(state.rawTextBuffer).toBe("");
+  expect(state.isStreaming).toBe(false);
 });
 ```
 
 ### 4. CSS: no changes
+
 ### 5. Server/frontend wiring: no changes
 
 ## Tests
 
 Add to `public/app.test.ts`:
+
 - `showError` clears previous timeout on `defaultState`
 - `createAppState` produces clean state
 - `createStreamHandlers` produces handlers bound to passed state

@@ -6,12 +6,12 @@
 
 ## Waves
 
-| Wave | Tasks |
-|------|-------|
-| 1 | Create `public/state.ts` — `AppState`, `createAppState()`, `createStreamHandlers()` |
-| 2 | Update `public/app.ts` — replace module globals with `import { defaultState }` |
-| 3 | Update `streamChat` — use `createStreamHandlers(state)` for SSE callbacks |
-| 4 | Add state isolation tests to `app.test.ts`, `just check` + `just test-unit` |
+| Wave | Tasks                                                                               |
+| ---- | ----------------------------------------------------------------------------------- |
+| 1    | Create `public/state.ts` — `AppState`, `createAppState()`, `createStreamHandlers()` |
+| 2    | Update `public/app.ts` — replace module globals with `import { defaultState }`      |
+| 3    | Update `streamChat` — use `createStreamHandlers(state)` for SSE callbacks           |
+| 4    | Add state isolation tests to `app.test.ts`, `just check` + `just test-unit`         |
 
 ## Fixes from Adversarial Review
 
