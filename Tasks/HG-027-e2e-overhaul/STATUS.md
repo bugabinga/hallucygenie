@@ -18,11 +18,17 @@
 
 ### Step 3: Overhaul `e2e/run-e2e.ts`
 - [ ] Integrate real server (import startServer/initDatabase from server.ts) instead of static file server
-- [ ] Add nock mock setup/teardown around test runs
-- [ ] Fix broken test: "send button disabled when input is empty" — wait for .message--welcome
-- [ ] Fix broken test: "Enter key sends message" — wait for .message--welcome and handle SSE
-- [ ] Fix broken test: "session UUID stored in localStorage" — wait for init
+- [ ] Set MINIMAX_API_KEY env var before starting server (required by server.ts handleChat)
+- [ ] Await server listen callback before running tests (startServer is async)
+- [ ] Use temp directory for database and assets, clean up after tests
+- [ ] Add nock mock setup/teardown around test runs — use .persist() for quota/chat mocks
+- [ ] Add proper server shutdown + cleanup in teardown (shutdown(), nock.cleanAll(), temp dir cleanup)
+- [ ] Create reliable waitForApp helper: page.goto + wait for session UUID in localStorage + wait for #send-button
+- [ ] Fix broken test: "send button disabled when input is empty" — use waitForApp helper
+- [ ] Fix broken test: "Enter key sends message" — use waitForApp helper, MiniMax mock provides SSE
+- [ ] Fix broken test: "session UUID stored in localStorage" — use waitForApp helper
 - [ ] Fix broken test: "lightbox opens and closes" — fix backdrop click handler
+- [ ] For tests interacting with elements behind onboarding, dismiss onboarding first or pre-set localStorage
 
 ### Step 4: Add New Tests
 - [ ] Add test: "onboarding shows on first visit"
@@ -59,3 +65,6 @@
 ## Blockers
 
 None.
+| 2026-04-19 22:47 | Review R001 | plan Step 1: APPROVE |
+| 2026-04-19 22:52 | Review R001 | plan Step 2: APPROVE |
+| 2026-04-19 22:58 | Review R001 | plan Step 3: REVISE |
