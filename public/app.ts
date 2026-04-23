@@ -799,23 +799,6 @@ export function init(): void {
         $("#steer-hint").hidden = true;
     });
 
-    // Personality selector
-    const personalitySelect = $("#personality-select") as HTMLSelectElement;
-    personalitySelect.value = localStorage.getItem("personality") ?? "gaming";
-    personalitySelect.addEventListener("change", async () => {
-        const personality = personalitySelect.value;
-        localStorage.setItem("personality", personality);
-        try {
-            await fetch("/api/preferences", {
-                method: "POST",
-                headers: createApiHeaders(getOrCreateSessionId()),
-                body: JSON.stringify({ key: "personality", value: personality }),
-            });
-        } catch {
-            // Non-critical — preference saved locally
-        }
-    });
-
     // ── Onboarding ──────────────────────────────────────────────────
     const ONBOARDING_KEY = "hg_onboarding_done";
     const onboarding = $("#onboarding");

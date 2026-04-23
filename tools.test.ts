@@ -9,6 +9,8 @@ import {
     generateImage,
     textToSpeech,
     generateMusic,
+    webSearch,
+    analyzeImage,
     MINIMAX_BASE,
 } from "./tools.ts";
 
@@ -657,6 +659,320 @@ describe("executeTool analyze_image", () => {
         );
         assert.equal(result.type, "error");
         assert.ok(result.content.includes("invalid image"));
+    });
+});
+
+// ── MINIMAX_BASE constant ───────────────────────────────────────────
+
+describe("MINIMAX_BASE", () => {
+    it("exports correct base URL", () => {
+        assert.equal(MINIMAX_BASE, "https://api.minimax.io");
+    });
+
+    it("is a non-empty string", () => {
+        assert.equal(typeof MINIMAX_BASE, "string");
+        assert.ok(MINIMAX_BASE.length > 0);
+    });
+});
+
+// ── generateMusic HTTP structure ────────────────────────────────────
+
+describe("generateMusic HTTP request structure", () => {
+    beforeEach(() => {
+        originalFetch = globalThis.fetch;
+    });
+
+    afterEach(() => {
+        globalThis.fetch = originalFetch;
+    });
+
+    it("POSTs to correct endpoint with music-2.6 model", async () => {
+        let capturedUrl = "";
+        let capturedInit: RequestInit | undefined;
+        globalThis.fetch = async (url: string | URL | Request, init?: RequestInit) => {
+            capturedUrl = url.toString();
+            capturedInit = init;
+            return jsonResponse({ data: { audio: "4d75736963" } });
+        };
+
+        await generateMusic("epic gaming theme", API_KEY);
+
+        assert.ok(
+            capturedUrl.includes("/v1/music_generation"),
+            "should call music generation endpoint",
+        );
+        assert.equal(capturedInit?.method, "POST", "should use POST method");
+
+        const body = JSON.parse(capturedInit!.body as string);
+        assert.equal(body.model, "music-2.6", "should specify music-2.6 model");
+        assert.equal(body.prompt, "epic gaming theme", "should include prompt in body");
+    });
+
+    it("sends Authorization Bearer header", async () => {
+        let capturedHeaders: Record<string, string> = {};
+        globalThis.fetch = async (_url: string | URL | Request, init?: RequestInit) => {
+            capturedHeaders = init?.headers as Record<string, string>;
+            return jsonResponse({ data: { audio: "4d75736963" } });
+        };
+
+        await generateMusic("test", API_KEY);
+
+        assert.ok(
+            capturedHeaders["Authorization"]?.startsWith("Bearer "),
+            "should have Authorization Bearer header",
+        );
+        assert.ok(
+            capturedHeaders["Authorization"]?.includes(API_KEY),
+            "Authorization header should contain API key",
+        );
+        assert.equal(
+            capturedHeaders["Content-Type"],
+            "application/json",
+            "should have Content-Type header",
+        );
+    });
+
+    it("omits lyrics field when not provided", async () => {
+        let capturedBody = "";
+        globalThis.fetch = async (_url: string | URL | Request, init?: RequestInit) => {
+            capturedBody = init?.body as string;
+            return jsonResponse({ data: { audio: "4d75736963" } });
+        };
+
+        await generateMusic("song", API_KEY);
+
+        const body = JSON.parse(capturedBody);
+        assert.equal("lyrics" in body, false, "should not have lyrics key when not provided");
+    });
+
+    it("includes lyrics field when provided", async () => {
+        let capturedBody = "";
+        globalThis.fetch = async (_url: string | URL | Request, init?: RequestInit) => {
+            capturedBody = init?.body as string;
+            return jsonResponse({ data: { audio: "4d75736963" } });
+        };
+
+        await generateMusic("song", API_KEY, "verse one, chorus one");
+
+        const body = JSON.parse(capturedBody);
+        assert.equal(body.lyrics, "verse one, chorus one", "should include lyrics when provided");
+    });
+});
+
+// ── webSearch HTTP structure ─────────────────────────────────────────
+
+describe("webSearch HTTP request structure", () => {
+    beforeEach(() => {
+        originalFetch = globalThis.fetch;
+    });
+
+    afterEach(() => {
+        globalThis.fetch = originalFetch;
+    });
+
+    it("POSTs to correct endpoint", async () => {
+        let capturedUrl = "";
+        let capturedInit: RequestInit | undefined;
+        globalThis.fetch = async (url: string | URL | Request, init?: RequestInit) => {
+            capturedUrl = url.toString();
+            capturedInit = init;
+            return jsonResponse({ organic: [] });
+        };
+
+        await webSearch("minecraft tips", API_KEY);
+
+        assert.ok(capturedUrl.includes("/v1/coding_plan/search"), "should call search endpoint");
+        assert.equal(capturedInit?.method, "POST", "should use POST method");
+    });
+
+    it("sends Authorization Bearer header", async () => {
+        let capturedHeaders: Record<string, string> = {};
+        globalThis.fetch = async (_url: string | URL | Request, init?: RequestInit) => {
+            capturedHeaders = init?.headers as Record<string, string>;
+            return jsonResponse({ organic: [] });
+        };
+
+        await webSearch("test", API_KEY);
+
+        assert.ok(
+            capturedHeaders["Authorization"]?.includes(API_KEY),
+            "Authorization header should contain API key",
+        );
+    });
+
+    it("sends query in request body", async () => {
+        let capturedBody = "";
+        globalThis.fetch = async (_url: string | URL | Request, init?: RequestInit) => {
+            capturedBody = init?.body as string;
+            return jsonResponse({ organic: [] });
+        };
+
+        await webSearch("fortnite season 6 news", API_KEY);
+
+        const body = JSON.parse(capturedBody);
+        assert.equal(body.q, "fortnite season 6 news", "should send query as 'q' field in body");
+    });
+
+    it("formats results with numbered items and newlines", async () => {
+        globalThis.fetch = async () =>
+            jsonResponse({
+                organic: [
+                    { title: "Game Tip 1", link: "https://ex.com/1", snippet: "Do this" },
+                    { title: "Game Tip 2", link: "https://ex.com/2", snippet: "Also this" },
+                ],
+            });
+
+        const result = await webSearch("tips", API_KEY);
+
+        assert.ok(result.content.includes("1."), "should number results starting at 1");
+        assert.ok(result.content.includes("2."), "should include second result");
+        assert.ok(result.content.includes("https://ex.com/1"), "should include link");
+        assert.ok(result.content.includes("Do this"), "should include snippet");
+        assert.ok(result.content.includes("\n\n"), "should join with double newline");
+    });
+
+    it("limits results to 5", async () => {
+        globalThis.fetch = async () =>
+            jsonResponse({
+                organic: Array.from({ length: 10 }, (_, i) => ({
+                    title: `Result ${i}`,
+                    link: `https://ex.com/${i}`,
+                    snippet: `Snippet ${i}`,
+                })),
+            });
+
+        const result = await webSearch("many results", API_KEY);
+        assert.ok(!result.content.includes("Result 6"), "should limit to 5 results");
+    });
+
+    it("handles missing organic field gracefully", async () => {
+        globalThis.fetch = async () => jsonResponse({});
+
+        const result = await webSearch("test", API_KEY);
+        assert.equal(result.type, "text");
+        assert.ok(result.content.includes("No search results"));
+    });
+
+    it("handles network failure", async () => {
+        globalThis.fetch = async () => {
+            throw new Error("DNS lookup failed");
+        };
+
+        const result = await webSearch("test", API_KEY);
+        assert.equal(result.type, "error");
+        assert.ok(result.content.includes("DNS lookup failed"));
+    });
+});
+
+// ── analyzeImage HTTP structure ─────────────────────────────────────
+
+describe("analyzeImage HTTP request structure", () => {
+    beforeEach(() => {
+        originalFetch = globalThis.fetch;
+    });
+
+    afterEach(() => {
+        globalThis.fetch = originalFetch;
+    });
+
+    it("POSTs to correct endpoint", async () => {
+        let capturedUrl = "";
+        let capturedInit: RequestInit | undefined;
+        globalThis.fetch = async (url: string | URL | Request, init?: RequestInit) => {
+            capturedUrl = url.toString();
+            capturedInit = init;
+            return jsonResponse({ content: "A cat" });
+        };
+
+        await analyzeImage("https://example.com/photo.png", API_KEY);
+
+        assert.ok(capturedUrl.includes("/v1/coding_plan/vlm"), "should call VLM endpoint");
+        assert.equal(capturedInit?.method, "POST", "should use POST method");
+    });
+
+    it("sends Authorization Bearer header", async () => {
+        let capturedHeaders: Record<string, string> = {};
+        globalThis.fetch = async (_url: string | URL | Request, init?: RequestInit) => {
+            capturedHeaders = init?.headers as Record<string, string>;
+            return jsonResponse({ content: "A cat" });
+        };
+
+        await analyzeImage("https://example.com/img.jpg", API_KEY);
+
+        assert.ok(
+            capturedHeaders["Authorization"]?.includes(API_KEY),
+            "Authorization header should contain API key",
+        );
+    });
+
+    it("sends prompt and image_url in request body", async () => {
+        let capturedBody = "";
+        globalThis.fetch = async (_url: string | URL | Request, init?: RequestInit) => {
+            capturedBody = init?.body as string;
+            return jsonResponse({ content: "A gaming logo" });
+        };
+
+        await analyzeImage("https://cdn.example.com/logo.png", API_KEY);
+
+        const body = JSON.parse(capturedBody);
+        assert.ok(body.prompt, "should have prompt field");
+        assert.equal(
+            body.image_url,
+            "https://cdn.example.com/logo.png",
+            "should include image URL",
+        );
+    });
+
+    it("returns description on success", async () => {
+        globalThis.fetch = async () =>
+            jsonResponse({ content: "A colorful gaming logo with neon lights" });
+
+        const result = await analyzeImage("https://example.com/img.png", API_KEY);
+        assert.equal(result.type, "text");
+        assert.ok(result.content.includes("gaming logo"));
+    });
+
+    it("returns error on HTTP failure", async () => {
+        globalThis.fetch = async () => new Response(null, { status: 502 });
+
+        const result = await analyzeImage("https://example.com/bad.png", API_KEY);
+        assert.equal(result.type, "error");
+        assert.ok(result.content.includes("502"));
+    });
+
+    it("returns error on base_resp status_code != 0", async () => {
+        globalThis.fetch = async () =>
+            jsonResponse({ base_resp: { status_code: 1004, status_msg: "login fail" } });
+
+        const result = await analyzeImage("https://example.com/img.png", API_KEY);
+        assert.equal(result.type, "error");
+        assert.ok(result.content.includes("login fail"));
+    });
+
+    it("handles network failure", async () => {
+        globalThis.fetch = async () => {
+            throw new Error("Connection refused");
+        };
+
+        const result = await analyzeImage("https://example.com/img.png", API_KEY);
+        assert.equal(result.type, "error");
+        assert.ok(result.content.includes("Connection refused"));
+    });
+
+    it("handles empty content field gracefully", async () => {
+        globalThis.fetch = async () => jsonResponse({ content: "" });
+
+        const result = await analyzeImage("https://example.com/empty.png", API_KEY);
+        assert.equal(result.type, "text");
+        assert.equal(result.content, "No description returned.");
+    });
+
+    it("handles missing content field gracefully", async () => {
+        globalThis.fetch = async () => jsonResponse({});
+
+        const result = await analyzeImage("https://example.com/no-content.png", API_KEY);
+        assert.equal(result.type, "text");
+        assert.equal(result.content, "No description returned.");
     });
 });
 

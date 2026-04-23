@@ -78,6 +78,7 @@ alias t := test-unit
 alias ti := test-integration
 alias ta := test-all
 alias e2e := test-e2e
+alias verify := test-all
 
 # update pi globally
 [group('pi')]
@@ -133,3 +134,8 @@ clean:
 [group('util')]
 list:
     just --list
+
+# run taskplane dashboard
+[group('util')]
+dashboard:
+    taskplane dashboard &

@@ -8,7 +8,6 @@ export default {
         command: "node --experimental-strip-types --no-warnings --test agent.test.ts",
     },
     reporters: ["clear-text", "progress"],
-    dryRunTimeout: 60000,
     timeoutFactor: 2,
     timeoutMS: 120000,
 };

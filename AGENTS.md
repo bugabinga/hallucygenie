@@ -136,6 +136,23 @@ Speech quota is tracked **per function call** (increments by 1 per TTS invocatio
 - All external calls mocked. No real API calls.
 - `just check` must pass before commit. `just test-unit` must also pass.
 
+### Every Task Requires Tests
+
+**This is not optional.** Every task must add appropriate tests before completion.
+
+| Task Size | Required Tests                 |
+| --------- | ------------------------------ |
+| **S**     | Unit tests for new functions   |
+| **M**     | Unit tests + integration tests |
+| **L**     | Unit + integration + E2E tests |
+
+**Decision framework:**
+
+- New/modified functions → unit tests in `*.test.ts`
+- New/modified API endpoints → integration tests in `integration.test.ts`
+- New/modified UI features → E2E tests in `e2e/run-e2e.ts`
+- Stable output formats → snapshot tests
+
 ## Logger
 
 ```ts

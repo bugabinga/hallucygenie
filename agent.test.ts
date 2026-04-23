@@ -1183,23 +1183,29 @@ describe("System Prompt", () => {
         assert.ok(lower.includes("youtube"), "should mention YouTube");
     });
 
-    it("buildSystemPrompt returns personality prefix + base prompt", () => {
+    it("buildSystemPrompt returns base prompt when no preferences", () => {
         const result = buildSystemPrompt();
         assert.ok(result.includes(SYSTEM_PROMPT), "should include base prompt");
-        assert.ok(result.includes("gaming buddy"), "should include default personality prefix");
+        assert.ok(
+            !result.includes("What you know about the user:"),
+            "should not have prefs header with no preferences",
+        );
     });
 
-    it("buildSystemPrompt with empty prefs returns personality + base", () => {
+    it("buildSystemPrompt with empty prefs returns base prompt only", () => {
         const result = buildSystemPrompt({});
         assert.ok(result.includes(SYSTEM_PROMPT));
-        assert.ok(result.includes("gaming buddy"));
+        assert.ok(
+            !result.includes("What you know about the user:"),
+            "empty prefs should not add user knowledge section",
+        );
     });
 
     it("buildSystemPrompt appends preferences", () => {
         const prefs = { favorite_game: "Roblox", channel_name: "GamerKid" };
         const result = buildSystemPrompt(prefs);
         assert.ok(result.includes(SYSTEM_PROMPT), "should include base prompt");
-        assert.ok(result.includes("gaming buddy"), "should include personality prefix");
+
         assert.ok(
             result.includes("What you know about the user:"),
             "should have preferences header",
@@ -1558,6 +1564,65 @@ describe("buildContext tool edge cases", () => {
     });
 });
 
+// ── buildContext tool-pair edge cases ──────────────────────────
+
+describe("buildContext tool pair boundary conditions", () => {
+    it("tool pair skipped when combined turn exceeds budget", () => {
+        // system=1, user=4, assistant w/ tool=~15, tool result=~3 → total ≈23
+        // Set budget so only system fits, forcing everything else to be dropped
+        const messages: ChatMessage[] = [
+            { role: "system" as const, content: "a" }, // 1 token
+            { role: "user" as const, content: "aaaa" }, // 4 tokens
+            {
+                role: "assistant" as const,
+                content: "",
+                tool_calls: [{ id: "tc1", name: "gen", input: { prompt: "a".repeat(40) } }],
+            }, // ~15 tokens
+            { role: "tool" as const, content: "result here", tool_call_id: "tc1" }, // ~3 tokens
+        ];
+        // Budget=10 → system(1) + remaining(9) → tool turn (~18) exceeds → skip
+        const result = buildContext(messages, 10);
+        // Should only have system message
+        assert.equal(result.length, 1);
+        assert.equal(result[0].role, "system");
+    });
+
+    it("orphan tool result included when standalone budget allows", () => {
+        const messages: ChatMessage[] = [
+            { role: "system" as const, content: "a" }, // 1 token
+            { role: "tool" as const, content: "orphan result", tool_call_id: "nonexistent" }, // ~5 tokens
+        ];
+        const result = buildContext(messages, 1000);
+        assert.equal(result.length, 2);
+        assert.equal(result[1].role, "tool");
+    });
+
+    it("paired tool result with no tool_use in context skipped correctly", () => {
+        // system=1, user=4, assistant+tool≈4 → total=6 (fits budget=7)
+        // Use budget=5 to force tool turn to be skipped
+        const messages: ChatMessage[] = [
+            { role: "system" as const, content: "a" }, // 1 token
+            { role: "user" as const, content: "aaaa" }, // 1 token
+            {
+                role: "assistant" as const,
+                content: "",
+                tool_calls: [{ id: "tc1", name: "gen", input: {} }],
+            }, // 3 tokens
+            { role: "tool" as const, content: "r", tool_call_id: "tc1" }, // 1 token
+        ];
+        // Budget=5: system(1)+user(1)=2, remaining=3
+        // tool turn=4 > remaining(3) → skip
+        const result = buildContext(messages, 5);
+        assert.ok(result.some((m) => m.role === "system"));
+        assert.ok(result.some((m) => m.role === "user"));
+        assert.ok(
+            !result.some((m) => m.role === "assistant" && (m as any).tool_calls),
+            "assistant with tool_calls should be skipped when turn exceeds budget",
+        );
+        assert.ok(!result.some((m) => m.role === "tool"));
+    });
+});
+
 // ── toAnthropicPayload edge cases ─────────────────────────
 
 describe("toAnthropicPayload edge cases", () => {
@@ -1574,5 +1639,741 @@ describe("toAnthropicPayload edge cases", () => {
         assert.ok(assistantMsg);
         assert.equal((assistantMsg!.content as any[])[0].type, "text");
         assert.equal((assistantMsg!.content as any[])[0].text, "");
+    });
+
+    it("consecutive tool results coalesce into single user message", () => {
+        const messages: ChatMessage[] = [
+            { role: "system" as const, content: "sys" },
+            {
+                role: "assistant" as const,
+                content: "",
+                tool_calls: [
+                    { id: "tc1", name: "gen_image", input: {} },
+                    { id: "tc2", name: "tts", input: {} },
+                ],
+            },
+            { role: "tool" as const, content: "image result", tool_call_id: "tc1" },
+            { role: "tool" as const, content: "audio result", tool_call_id: "tc2" },
+        ];
+        const payload = toAnthropicPayload(messages, []);
+        const msgs = payload.messages as Array<{ role: string; content: unknown }>;
+        const toolMsgs = msgs.filter((m) => m.role === "user" && Array.isArray(m.content));
+        // Both tool results should be in ONE user message
+        assert.equal(toolMsgs.length, 1);
+        const toolContents = toolMsgs[0].content as Array<{ type: string }>;
+        assert.equal(toolContents.length, 2);
+        assert.ok(toolContents.every((c) => c.type === "tool_result"));
+    });
+
+    it("tool result appended to existing user message (coalescing)", () => {
+        const messages: ChatMessage[] = [
+            { role: "system" as const, content: "sys" },
+            { role: "user" as const, content: "draw and speak" },
+            {
+                role: "assistant" as const,
+                content: "",
+                tool_calls: [{ id: "tc1", name: "gen", input: {} }],
+            },
+            { role: "tool" as const, content: "done", tool_call_id: "tc1" },
+        ];
+        const payload = toAnthropicPayload(messages, []);
+        const msgs = payload.messages as Array<{ role: string; content: unknown }>;
+        // Last message should have the tool result appended
+        const lastMsg = msgs[msgs.length - 1];
+        assert.equal(lastMsg.role, "user");
+        const contents = lastMsg.content as Array<{ type: string }>;
+        assert.equal(contents.length, 1);
+        assert.equal(contents[0].type, "tool_result");
+    });
+
+    it("empty system array when no system messages", () => {
+        const messages: ChatMessage[] = [
+            { role: "user" as const, content: "hello" },
+            { role: "assistant" as const, content: "hi" },
+        ];
+        const payload = toAnthropicPayload(messages, []);
+        assert.equal(
+            "system" in payload,
+            false,
+            "should not have system field when no system messages",
+        );
+    });
+
+    it("tool_use content blocks have all required fields", () => {
+        const messages: ChatMessage[] = [
+            { role: "system" as const, content: "sys" },
+            {
+                role: "assistant" as const,
+                content: "",
+                tool_calls: [{ id: "tu_99", name: "generate_image", input: { prompt: "cat" } }],
+            },
+        ];
+        const payload = toAnthropicPayload(messages, []);
+        const msgs = payload.messages as Array<{ role: string; content: unknown }>;
+        const assistantMsg = msgs.find((m) => m.role === "assistant");
+        const contents = assistantMsg!.content as Array<Record<string, unknown>>;
+        const toolUse = contents.find((c) => c.type === "tool_use");
+        assert.equal(toolUse!.type, "tool_use");
+        assert.equal(toolUse!.id, "tu_99");
+        assert.equal(toolUse!.name, "generate_image");
+        assert.deepEqual(toolUse!.input, { prompt: "cat" });
+    });
+
+    it("tool_result has correct tool_use_id field", () => {
+        const messages: ChatMessage[] = [
+            { role: "system" as const, content: "sys" },
+            {
+                role: "assistant" as const,
+                content: "",
+                tool_calls: [{ id: "call_x", name: "tts", input: {} }],
+            },
+            { role: "tool" as const, content: "audio data", tool_call_id: "call_x" },
+        ];
+        const payload = toAnthropicPayload(messages, []);
+        const msgs = payload.messages as Array<{ role: string; content: unknown }>;
+        const toolMsgs = msgs.filter((m) => m.role === "user");
+        const toolContent = (toolMsgs[0].content as Array<Record<string, unknown>>)[0];
+        assert.equal(toolContent.type, "tool_result");
+        assert.equal(toolContent.tool_use_id, "call_x");
+    });
+
+    it("sends stream: true in payload", () => {
+        const messages: ChatMessage[] = [{ role: "user" as const, content: "hi" }];
+        const payload = toAnthropicPayload(messages, []);
+        assert.equal(payload.stream, true);
+    });
+
+    it("sends max_tokens: 4096", () => {
+        const messages: ChatMessage[] = [{ role: "user" as const, content: "hi" }];
+        const payload = toAnthropicPayload(messages, []);
+        assert.equal(payload.max_tokens, 4096);
+    });
+
+    it("sends correct model name", () => {
+        const messages: ChatMessage[] = [{ role: "user" as const, content: "hi" }];
+        const payload = toAnthropicPayload(messages, []);
+        assert.equal(payload.model, "MiniMax-M2.7-highspeed");
+    });
+
+    it("prompt caching adds cache_control to last tool only", () => {
+        const tools = [
+            { name: "tool1", description: "d1", input_schema: {} },
+            { name: "tool2", description: "d2", input_schema: {} },
+        ] as any[];
+        const messages: ChatMessage[] = [{ role: "user" as const, content: "hi" }];
+        const payload = toAnthropicPayload(messages, tools) as any;
+        assert.equal(payload.tools[0].cache_control, undefined);
+        assert.equal(payload.tools[1].cache_control?.type, "ephemeral");
+    });
+
+    it("tool result with error prefix when result type is error", () => {
+        const messages: ChatMessage[] = [
+            { role: "system" as const, content: "sys" },
+            {
+                role: "assistant" as const,
+                content: "",
+                tool_calls: [{ id: "tc_err", name: "bad_tool", input: {} }],
+            },
+            {
+                role: "tool" as const,
+                content: "Error: something went wrong",
+                tool_call_id: "tc_err",
+            },
+        ];
+        const payload = toAnthropicPayload(messages, []) as any;
+        const msgs = payload.messages;
+        const lastMsg = msgs[msgs.length - 1];
+        const toolContent = lastMsg.content[0];
+        assert.equal(toolContent.content, "Error: something went wrong");
+    });
+
+    it("multiple user messages stay separate", () => {
+        const messages: ChatMessage[] = [
+            { role: "system" as const, content: "sys" },
+            { role: "user" as const, content: "first question" },
+            { role: "assistant" as const, content: "answer one" },
+            { role: "user" as const, content: "second question" },
+        ];
+        const payload = toAnthropicPayload(messages, []) as any;
+        const userMsgs = payload.messages.filter((m: any) => m.role === "user");
+        assert.equal(userMsgs.length, 2);
+        assert.equal(userMsgs[0].content, "first question");
+        assert.equal(userMsgs[1].content, "second question");
+    });
+});
+
+// ── MINIMAX_BASE constant ────────────────────────────────────────────
+
+describe("MINIMAX_BASE constant", () => {
+    it("exports correct base URL", async () => {
+        // MINIMAX_BASE is used in runAgentLoop for the API endpoint
+        const { MINIMAX_BASE } = await import("./agent.ts");
+        assert.equal(MINIMAX_BASE, "https://api.minimax.io");
+    });
+});
+
+// ── SSE parser — error path coverage ────────────────────────────────
+
+describe("SSE parser error paths", () => {
+    let _origFetch: typeof globalThis.fetch;
+
+    beforeEach(() => {
+        _origFetch = globalThis.fetch;
+    });
+
+    afterEach(() => {
+        globalThis.fetch = _origFetch;
+    });
+
+    // Build SSE streams programmatically to avoid literal newlines in string literals
+    function buildSseStream(
+        chunks: Array<{ kind: "event" | "done" | "comment" | "raw"; value: string }>,
+    ): ReadableStream {
+        const enc = new TextEncoder();
+        return new ReadableStream({
+            start(controller) {
+                for (const chunk of chunks) {
+                    if (chunk.kind === "done") {
+                        controller.enqueue(enc.encode("data: [DONE]\n\n"));
+                    } else if (chunk.kind === "comment") {
+                        controller.enqueue(enc.encode(": " + chunk.value + "\n"));
+                    } else if (chunk.kind === "raw") {
+                        controller.enqueue(enc.encode(chunk.value));
+                    } else {
+                        controller.enqueue(
+                            enc.encode(
+                                "event: " +
+                                    chunk.value.split("\n")[0] +
+                                    "\ndata: " +
+                                    chunk.value.split("\n").slice(1).join("\ndata: ") +
+                                    "\n\n",
+                            ),
+                        );
+                    }
+                }
+                controller.close();
+            },
+        });
+    }
+
+    // Simpler helper: encode a single SSE event
+    function sseEvent(eventName: string, data: unknown): Uint8Array {
+        const enc = new TextEncoder();
+        const eventLine = "event: " + eventName + "\n";
+        const dataLine = "data: " + JSON.stringify(data) + "\n";
+        return enc.encode(eventLine + dataLine + "\n");
+    }
+
+    // Encode a raw data-only SSE line
+    function sseData(line: string): Uint8Array {
+        return new TextEncoder().encode(line);
+    }
+
+    // Build a complete SSE response stream with events
+    function makeStream(events: Array<{ type: string; data?: unknown }>): ReadableStream {
+        const enc = new TextEncoder();
+        const parts: Uint8Array[] = [];
+        for (const ev of events) {
+            parts.push(enc.encode("event: " + ev.type + "\n"));
+            if (ev.data !== undefined) {
+                parts.push(enc.encode("data: " + JSON.stringify(ev.data) + "\n"));
+            }
+            parts.push(enc.encode("\n"));
+        }
+        return new ReadableStream({
+            start(controller) {
+                for (const part of parts) {
+                    controller.enqueue(part);
+                }
+                controller.close();
+            },
+        });
+    }
+
+    it("handles stream with SSE comment lines (starting with colon)", async () => {
+        const stream = new ReadableStream({
+            start(controller) {
+                const enc = new TextEncoder();
+                controller.enqueue(enc.encode(": this is a comment\n"));
+                controller.enqueue(
+                    sseEvent("content_block_start", {
+                        type: "content_block_start",
+                        index: 0,
+                        content_block: { type: "text", text: "" },
+                    }),
+                );
+                controller.enqueue(
+                    sseEvent("content_block_delta", {
+                        type: "content_block_delta",
+                        index: 0,
+                        delta: { type: "text_delta", text: "Hi" },
+                    }),
+                );
+                controller.enqueue(
+                    sseEvent("content_block_stop", { type: "content_block_stop", index: 0 }),
+                );
+                controller.enqueue(
+                    sseEvent("message_delta", {
+                        type: "message_delta",
+                        delta: { stop_reason: "end_turn" },
+                    }),
+                );
+                controller.enqueue(sseEvent("message_stop", { type: "message_stop" }));
+                controller.close();
+            },
+        });
+        globalThis.fetch = async () =>
+            new Response(stream, { status: 200, headers: { "Content-Type": "text/event-stream" } });
+        const { events: ev1, onEvent: onEv1 } = collectEvents();
+        await runAgentLoop([{ role: "user", content: "hi" }], "test-key", onEv1);
+        const textEvents = ev1.filter((e) => e.type === "text");
+        assert.equal(textEvents.length, 1);
+        assert.equal(textEvents[0].content, "Hi");
+        assert.equal(ev1[ev1.length - 1].type, "done");
+    });
+
+    it("handles stream with empty lines", async () => {
+        const stream = new ReadableStream({
+            start(controller) {
+                const enc = new TextEncoder();
+                controller.enqueue(enc.encode("\n"));
+                controller.enqueue(
+                    sseEvent("content_block_start", {
+                        type: "content_block_start",
+                        index: 0,
+                        content_block: { type: "text", text: "" },
+                    }),
+                );
+                controller.enqueue(enc.encode("\n"));
+                controller.enqueue(
+                    sseEvent("content_block_delta", {
+                        type: "content_block_delta",
+                        index: 0,
+                        delta: { type: "text_delta", text: "Works" },
+                    }),
+                );
+                controller.enqueue(
+                    sseEvent("message_delta", {
+                        type: "message_delta",
+                        delta: { stop_reason: "end_turn" },
+                    }),
+                );
+                controller.enqueue(sseEvent("message_stop", { type: "message_stop" }));
+                controller.close();
+            },
+        });
+        globalThis.fetch = async () =>
+            new Response(stream, { status: 200, headers: { "Content-Type": "text/event-stream" } });
+        const { events: ev2, onEvent: onEv2 } = collectEvents();
+        await runAgentLoop([{ role: "user", content: "hi" }], "test-key", onEv2);
+        const textEvents = ev2.filter((e) => e.type === "text");
+        assert.equal(textEvents[0].content, "Works");
+    });
+
+    it("handles stream with [DONE] message", async () => {
+        const stream = new ReadableStream({
+            start(controller) {
+                const enc = new TextEncoder();
+                controller.enqueue(
+                    sseEvent("content_block_start", {
+                        type: "content_block_start",
+                        index: 0,
+                        content_block: { type: "text", text: "" },
+                    }),
+                );
+                controller.enqueue(
+                    sseEvent("content_block_delta", {
+                        type: "content_block_delta",
+                        index: 0,
+                        delta: { type: "text_delta", text: "Hi" },
+                    }),
+                );
+                controller.enqueue(
+                    sseEvent("content_block_stop", { type: "content_block_stop", index: 0 }),
+                );
+                controller.enqueue(enc.encode("data: [DONE]\n\n"));
+                controller.enqueue(
+                    sseEvent("message_delta", {
+                        type: "message_delta",
+                        delta: { stop_reason: "end_turn" },
+                    }),
+                );
+                controller.enqueue(sseEvent("message_stop", { type: "message_stop" }));
+                controller.close();
+            },
+        });
+        globalThis.fetch = async () =>
+            new Response(stream, { status: 200, headers: { "Content-Type": "text/event-stream" } });
+        const { events: ev3, onEvent: onEv3 } = collectEvents();
+        await runAgentLoop([{ role: "user", content: "hi" }], "test-key", onEv3);
+        const textEvents = ev3.filter((e) => e.type === "text");
+        assert.equal(textEvents[0].content, "Hi");
+        assert.equal(ev3[ev3.length - 1].type, "done");
+    });
+
+    it("handles stream with invalid JSON (skips gracefully)", async () => {
+        const stream = new ReadableStream({
+            start(controller) {
+                const enc = new TextEncoder();
+                controller.enqueue(
+                    enc.encode("event: content_block_start\ndata: not valid json\n\n"),
+                );
+                controller.enqueue(
+                    sseEvent("content_block_start", {
+                        type: "content_block_start",
+                        index: 0,
+                        content_block: { type: "text", text: "" },
+                    }),
+                );
+                controller.enqueue(
+                    sseEvent("content_block_delta", {
+                        type: "content_block_delta",
+                        index: 0,
+                        delta: { type: "text_delta", text: "After invalid" },
+                    }),
+                );
+                controller.enqueue(
+                    sseEvent("message_delta", {
+                        type: "message_delta",
+                        delta: { stop_reason: "end_turn" },
+                    }),
+                );
+                controller.enqueue(sseEvent("message_stop", { type: "message_stop" }));
+                controller.close();
+            },
+        });
+        globalThis.fetch = async () =>
+            new Response(stream, { status: 200, headers: { "Content-Type": "text/event-stream" } });
+        const { events: ev4, onEvent: onEv4 } = collectEvents();
+        await runAgentLoop([{ role: "user", content: "hi" }], "test-key", onEv4);
+        const textEvents = ev4.filter((e) => e.type === "text");
+        assert.equal(textEvents[0].content, "After invalid");
+    });
+
+    it("handles data line without data: prefix (skipped)", async () => {
+        const stream = new ReadableStream({
+            start(controller) {
+                const enc = new TextEncoder();
+                controller.enqueue(enc.encode("some random text here\n"));
+                controller.enqueue(
+                    sseEvent("content_block_start", {
+                        type: "content_block_start",
+                        index: 0,
+                        content_block: { type: "text", text: "" },
+                    }),
+                );
+                controller.enqueue(
+                    sseEvent("content_block_delta", {
+                        type: "content_block_delta",
+                        index: 0,
+                        delta: { type: "text_delta", text: "Works" },
+                    }),
+                );
+                controller.enqueue(
+                    sseEvent("message_delta", {
+                        type: "message_delta",
+                        delta: { stop_reason: "end_turn" },
+                    }),
+                );
+                controller.enqueue(sseEvent("message_stop", { type: "message_stop" }));
+                controller.close();
+            },
+        });
+        globalThis.fetch = async () =>
+            new Response(stream, { status: 200, headers: { "Content-Type": "text/event-stream" } });
+        const { events: ev5, onEvent: onEv5 } = collectEvents();
+        await runAgentLoop([{ role: "user", content: "hi" }], "test-key", onEv5);
+        const textEvents = ev5.filter((e) => e.type === "text");
+        assert.equal(textEvents[0].content, "Works");
+    });
+
+    it("handles thinking block delta", async () => {
+        const stream = new ReadableStream({
+            start(controller) {
+                controller.enqueue(
+                    sseEvent("content_block_start", {
+                        type: "content_block_start",
+                        index: 0,
+                        content_block: { type: "thinking", thinking: "" },
+                    }),
+                );
+                controller.enqueue(
+                    sseEvent("content_block_delta", {
+                        type: "content_block_delta",
+                        index: 0,
+                        delta: { type: "thinking_delta", thinking: "Let me think..." },
+                    }),
+                );
+                controller.enqueue(
+                    sseEvent("content_block_stop", { type: "content_block_stop", index: 0 }),
+                );
+                controller.enqueue(
+                    sseEvent("message_delta", {
+                        type: "message_delta",
+                        delta: { stop_reason: "end_turn" },
+                    }),
+                );
+                controller.enqueue(sseEvent("message_stop", { type: "message_stop" }));
+                controller.close();
+            },
+        });
+        globalThis.fetch = async () =>
+            new Response(stream, { status: 200, headers: { "Content-Type": "text/event-stream" } });
+        const { events: ev6, onEvent: onEv6 } = collectEvents();
+        await runAgentLoop([{ role: "user", content: "hi" }], "test-key", onEv6);
+        const thinkingEvents = ev6.filter((e) => e.type === "thinking");
+        assert.equal(thinkingEvents[0].content, "Let me think...");
+    });
+
+    it("handles input_json_delta accumulation", async () => {
+        // Two JSON delta chunks that must be concatenated
+        const stream = new ReadableStream({
+            start(controller) {
+                const enc = new TextEncoder();
+                // Block start
+                controller.enqueue(
+                    sseEvent("content_block_start", {
+                        type: "content_block_start",
+                        index: 0,
+                        content_block: {
+                            type: "tool_use",
+                            id: "tu_1",
+                            name: "generate_image",
+                            input: {},
+                        },
+                    }),
+                );
+                // First JSON chunk: {"p
+                controller.enqueue(
+                    enc.encode(
+                        "event: content_block_delta\ndata: " +
+                            JSON.stringify({
+                                type: "content_block_delta",
+                                index: 0,
+                                delta: { type: "input_json_delta", partial_json: '{\\"p' },
+                            }) +
+                            "\n\n",
+                    ),
+                );
+                // Second JSON chunk: "prompt":"a cat"}
+                controller.enqueue(
+                    enc.encode(
+                        "event: content_block_delta\ndata: " +
+                            JSON.stringify({
+                                type: "content_block_delta",
+                                index: 0,
+                                delta: {
+                                    type: "input_json_delta",
+                                    partial_json: '\\"prompt\\":\\"a cat\\"}',
+                                },
+                            }) +
+                            "\n\n",
+                    ),
+                );
+                controller.enqueue(
+                    sseEvent("content_block_stop", { type: "content_block_stop", index: 0 }),
+                );
+                controller.enqueue(
+                    sseEvent("message_delta", {
+                        type: "message_delta",
+                        delta: { stop_reason: "tool_use" },
+                    }),
+                );
+                controller.enqueue(sseEvent("message_stop", { type: "message_stop" }));
+                controller.close();
+            },
+        });
+        globalThis.fetch = async (url: string | URL | Request) => {
+            const urlStr = url.toString();
+            if (urlStr.includes("/anthropic/v1/messages")) {
+                return new Response(stream, {
+                    status: 200,
+                    headers: { "Content-Type": "text/event-stream" },
+                });
+            }
+            return new Response(
+                JSON.stringify({ data: { image_urls: ["https://example.com/cat.png"] } }),
+                { status: 200, headers: { "Content-Type": "application/json" } },
+            );
+        };
+        const { events: ev7, onEvent: onEv7 } = collectEvents();
+        await runAgentLoop([{ role: "user", content: "draw" }], "test-key", onEv7);
+        const toolStartEvents = ev7.filter((e) => e.type === "tool_start");
+        assert.equal(toolStartEvents.length, 1);
+        assert.equal(toolStartEvents[0].id, "tu_1");
+        const toolResultEvents = ev7.filter((e) => e.type === "tool_result");
+        assert.equal(toolResultEvents.length, 1);
+        assert.equal(toolResultEvents[0].result?.type, "image");
+    });
+
+    it("handles message_delta with no stop_reason", async () => {
+        const stream = new ReadableStream({
+            start(controller) {
+                controller.enqueue(
+                    sseEvent("content_block_start", {
+                        type: "content_block_start",
+                        index: 0,
+                        content_block: { type: "text", text: "" },
+                    }),
+                );
+                controller.enqueue(
+                    sseEvent("content_block_delta", {
+                        type: "content_block_delta",
+                        index: 0,
+                        delta: { type: "text_delta", text: "Hi" },
+                    }),
+                );
+                controller.enqueue(sseEvent("message_delta", { type: "message_delta", delta: {} }));
+                controller.enqueue(sseEvent("message_stop", { type: "message_stop" }));
+                controller.close();
+            },
+        });
+        globalThis.fetch = async () =>
+            new Response(stream, { status: 200, headers: { "Content-Type": "text/event-stream" } });
+        const { events: ev8, onEvent: onEv8 } = collectEvents();
+        await runAgentLoop([{ role: "user", content: "hi" }], "test-key", onEv8);
+        const textEvents = ev8.filter((e) => e.type === "text");
+        assert.equal(textEvents[0].content, "Hi");
+    });
+
+    it("handles multiple tool_use blocks in sequence", async () => {
+        const stream = new ReadableStream({
+            start(controller) {
+                const enc = new TextEncoder();
+                // Tool 1
+                controller.enqueue(
+                    sseEvent("content_block_start", {
+                        type: "content_block_start",
+                        index: 0,
+                        content_block: { type: "tool_use", id: "tc1", name: "gen", input: {} },
+                    }),
+                );
+                controller.enqueue(
+                    enc.encode(
+                        "event: content_block_delta\ndata: " +
+                            JSON.stringify({
+                                type: "content_block_delta",
+                                index: 0,
+                                delta: {
+                                    type: "input_json_delta",
+                                    partial_json: '{\\"p\\":\\"a\\"}',
+                                },
+                            }) +
+                            "\n\n",
+                    ),
+                );
+                controller.enqueue(
+                    sseEvent("content_block_stop", { type: "content_block_stop", index: 0 }),
+                );
+                // Tool 2
+                controller.enqueue(
+                    sseEvent("content_block_start", {
+                        type: "content_block_start",
+                        index: 1,
+                        content_block: { type: "tool_use", id: "tc2", name: "tts", input: {} },
+                    }),
+                );
+                controller.enqueue(
+                    enc.encode(
+                        "event: content_block_delta\ndata: " +
+                            JSON.stringify({
+                                type: "content_block_delta",
+                                index: 1,
+                                delta: {
+                                    type: "input_json_delta",
+                                    partial_json: '{\\"t\\":\\"hi\\"}',
+                                },
+                            }) +
+                            "\n\n",
+                    ),
+                );
+                controller.enqueue(
+                    sseEvent("content_block_stop", { type: "content_block_stop", index: 1 }),
+                );
+                controller.enqueue(
+                    sseEvent("message_delta", {
+                        type: "message_delta",
+                        delta: { stop_reason: "tool_use" },
+                    }),
+                );
+                controller.enqueue(sseEvent("message_stop", { type: "message_stop" }));
+                controller.close();
+            },
+        });
+        globalThis.fetch = async (url: string | URL | Request) => {
+            const urlStr = url.toString();
+            if (urlStr.includes("/anthropic/v1/messages")) {
+                return new Response(stream, {
+                    status: 200,
+                    headers: { "Content-Type": "text/event-stream" },
+                });
+            }
+            return new Response(
+                JSON.stringify({ data: { image_urls: ["https://example.com/img.png"] } }),
+                { status: 200, headers: { "Content-Type": "application/json" } },
+            );
+        };
+        const { events: ev9, onEvent: onEv9 } = collectEvents();
+        await runAgentLoop([{ role: "user", content: "draw" }], "test-key", onEv9);
+        const toolStartEvents = ev9.filter((e) => e.type === "tool_start");
+        assert.equal(toolStartEvents.length, 2);
+        assert.equal(toolStartEvents[0].id, "tc1");
+        assert.equal(toolStartEvents[1].id, "tc2");
+    });
+
+    it("tool call with malformed JSON defaults to empty object", async () => {
+        const stream = new ReadableStream({
+            start(controller) {
+                const enc = new TextEncoder();
+                controller.enqueue(
+                    sseEvent("content_block_start", {
+                        type: "content_block_start",
+                        index: 0,
+                        content_block: {
+                            type: "tool_use",
+                            id: "tu_mal",
+                            name: "generate_image",
+                            input: {},
+                        },
+                    }),
+                );
+                controller.enqueue(
+                    sseEvent("content_block_delta", {
+                        type: "content_block_delta",
+                        index: 0,
+                        delta: { type: "input_json_delta", partial_json: "not json at all" },
+                    }),
+                );
+                controller.enqueue(
+                    sseEvent("content_block_stop", { type: "content_block_stop", index: 0 }),
+                );
+                controller.enqueue(
+                    sseEvent("message_delta", {
+                        type: "message_delta",
+                        delta: { stop_reason: "tool_use" },
+                    }),
+                );
+                controller.enqueue(sseEvent("message_stop", { type: "message_stop" }));
+                controller.close();
+            },
+        });
+        globalThis.fetch = async (url: string | URL | Request) => {
+            const urlStr = url.toString();
+            if (urlStr.includes("/anthropic/v1/messages")) {
+                return new Response(stream, {
+                    status: 200,
+                    headers: { "Content-Type": "text/event-stream" },
+                });
+            }
+            return new Response(
+                JSON.stringify({ data: { image_urls: ["https://example.com/img.png"] } }),
+                { status: 200, headers: { "Content-Type": "application/json" } },
+            );
+        };
+        const { events: ev10, onEvent: onEv10 } = collectEvents();
+        await runAgentLoop([{ role: "user", content: "draw" }], "test-key", onEv10);
+        const toolStartEvents = ev10.filter((e) => e.type === "tool_start");
+        assert.equal(toolStartEvents[0].id, "tu_mal");
+        assert.equal(ev10[ev10.length - 1].type, "done");
     });
 });

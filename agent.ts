@@ -6,20 +6,6 @@ import type { ChatMessage } from "./server.ts";
 import { executeTool, getToolDefinitions } from "./tools.ts";
 import type { ToolResult } from "./tools.ts";
 
-// ── Chat Personality ────────────────────────────────────────────────
-
-/**
- * Chat personality types. Each maps to a different system prompt prefix.
- * Stored in preferences as { personality: "gaming" | "chill" | "funny" }
- */
-export type ChatPersonality = "gaming" | "chill" | "funny";
-
-const PERSONALITY_PROMPTS: Record<ChatPersonality, string> = {
-    gaming: "You're an enthusiastic gaming buddy who loves talking about games, Minecraft builds, YouTube ideas, and streaming. Get excited about game news and creative ideas!",
-    chill: "You're a super chill dude who's relaxed about everything. Keep it casual, use laid-back language, and never stress about anything.",
-    funny: "You're a silly, joke-cracking companion who loves puns, dad jokes, and making the kid laugh. Be playful and lighthearted!",
-};
-
 // ── System Prompt ────────────────────────────────────────────────────
 
 export const SYSTEM_PROMPT = `You are HallucyGenie, a creative buddy for an 11-year-old gaming YouTuber.
@@ -33,19 +19,16 @@ Rules:
 - Give creative ideas: thumbnail concepts, video ideas, game tips, channel growth suggestions.`;
 
 /**
- * Build the full system prompt, applying personality prefix and user preferences.
+ * Build the full system prompt, applying user preferences.
  */
 export function buildSystemPrompt(preferences?: Record<string, string>): string {
-    const personality = (preferences?.personality as ChatPersonality) ?? "gaming";
-    const prefix = PERSONALITY_PROMPTS[personality] ?? PERSONALITY_PROMPTS.gaming;
-
     if (!preferences || Object.keys(preferences).length === 0) {
-        return `${prefix}\n\n${SYSTEM_PROMPT}`;
+        return SYSTEM_PROMPT;
     }
     const prefLines = Object.entries(preferences)
         .map(([key, value]) => `- ${key}: ${value}`)
         .join("\n");
-    return `${prefix}\n\n${SYSTEM_PROMPT}\n\nWhat you know about the user:\n${prefLines}`;
+    return `${SYSTEM_PROMPT}\n\nWhat you know about the user:\n${prefLines}`;
 }
 
 // ── Configuration ────────────────────────────────────────────────────

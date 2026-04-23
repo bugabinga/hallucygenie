@@ -58,8 +58,8 @@
 | 2026-04-19 22:40 | Task started       | Runtime V2 lane-runner execution        |
 | 2026-04-20 00:00 | Hydrated STATUS.md | Expanded steps with granular checkboxes |
 | 2026-04-20 01:18 | Steps 1-5 complete | All 17 E2E tests passing, 0 failures    |
-| 2026-04-19 23:26 | Worker iter 1 | done in 2774s, tools: 150 |
-| 2026-04-19 23:26 | Task complete | .DONE created |
+| 2026-04-19 23:26 | Worker iter 1      | done in 2774s, tools: 150               |
+| 2026-04-19 23:26 | Task complete      | .DONE created                           |
 
 ## Discoveries
 

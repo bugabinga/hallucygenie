@@ -308,7 +308,7 @@ export async function generateMusic(
 
 // ── Web Search ───────────────────────────────────────────────────
 
-async function webSearch(query: string, apiKey: string): Promise<ToolResult> {
+export async function webSearch(query: string, apiKey: string): Promise<ToolResult> {
     try {
         const resp = await fetch(`${MINIMAX_BASE}/v1/coding_plan/search`, {
             method: "POST",
@@ -339,7 +339,7 @@ async function webSearch(query: string, apiKey: string): Promise<ToolResult> {
 
 // ── Image Analysis (Vision) ───────────────────────────────────────
 
-async function analyzeImage(imageUrl: string, apiKey: string): Promise<ToolResult> {
+export async function analyzeImage(imageUrl: string, apiKey: string): Promise<ToolResult> {
     try {
         const resp = await fetch(`${MINIMAX_BASE}/v1/coding_plan/vlm`, {
             method: "POST",
@@ -362,7 +362,7 @@ async function analyzeImage(imageUrl: string, apiKey: string): Promise<ToolResul
                 content: `Image analysis failed: ${data.base_resp.status_msg}`,
             };
         }
-        return { type: "text", content: data.content ?? "No description returned." };
+        return { type: "text", content: data.content || "No description returned." };
     } catch (err) {
         return { type: "error", content: `Image analysis failed: ${String(err)}` };
     }
