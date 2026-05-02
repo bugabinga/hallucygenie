@@ -1,5 +1,6 @@
 # Dependencies
 node_modules/
+package-lock.json
 
 # Environment
 .env
@@ -13,6 +14,8 @@ data/
 # Build
 coverage/
 dist/
+public/app.js
+.pulse.json
 
 # Mutation testing
 .stryker-tmp/
@@ -21,16 +24,17 @@ reports/
 # OS
 .DS_Store
 
-# Taskplane runtime / telemetry / cache
+# Pi/runtime browser cache
 .pi/
 .pi-lens/
-.worktrees/
-.taskplane-tasks/
+.system/chrome-profile/
+.system/chrome-profile-test/
 
 # Test artifacts
 test-data*/
+.artifacts/
+.act-cache/
 
 # Screenshots (local only)
 public/screenshot-*.png
 logs/
-Tasks/*/.DONE

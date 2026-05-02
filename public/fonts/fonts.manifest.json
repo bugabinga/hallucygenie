@@ -1,0 +1,65 @@
+{
+    "version": 1,
+    "generated_at": "2026-04-30T23:52:52.514Z",
+    "source": {
+        "repo": "https://github.com/google/fonts",
+        "commit": "8fee968603b86ac85d4fbf0f3ffbde3fed1d84e1",
+        "downloaded_by": "just fonts-update"
+    },
+    "fonts": [
+        {
+            "id": "playwrite-de-sas",
+            "family": "Playwrite DE SAS",
+            "css_family": "HG Playwrite DE SAS",
+            "role": "user",
+            "source_path": "ofl/playwritedesas/PlaywriteDESAS[wght].ttf",
+            "file": "public/fonts/playwrite-de-sas/PlaywriteDESAS.woff2",
+            "format": "woff2",
+            "axes": {
+                "wght": [100, 400]
+            },
+            "sha256": "29ddde14a269fec7a3a8435df393633760ad31dbe216038f369aae46cc3b5dea",
+            "license": "public/fonts/playwrite-de-sas/OFL.txt"
+        },
+        {
+            "id": "roboto-flex",
+            "family": "Roboto Flex",
+            "css_family": "HG Roboto Flex",
+            "role": "assistant",
+            "source_path": "ofl/robotoflex/RobotoFlex[GRAD,XOPQ,XTRA,YOPQ,YTAS,YTDE,YTFI,YTLC,YTUC,opsz,slnt,wdth,wght].ttf",
+            "file": "public/fonts/roboto-flex/RobotoFlex.woff2",
+            "format": "woff2",
+            "axes": {
+                "GRAD": [-200, 150],
+                "XOPQ": [27, 175],
+                "XTRA": [323, 603],
+                "YOPQ": [25, 135],
+                "YTAS": [649, 854],
+                "YTDE": [-305, -98],
+                "YTFI": [560, 788],
+                "YTLC": [416, 570],
+                "YTUC": [528, 760],
+                "opsz": [8, 144],
+                "slnt": [-10, 0],
+                "wdth": [25, 151],
+                "wght": [100, 1000]
+            },
+            "sha256": "0b75943534dc43c6d41d78e57261aa37f2c2432ccffeb05f613e6b609bbb151a",
+            "license": "public/fonts/roboto-flex/OFL.txt"
+        },
+        {
+            "id": "pixelify-sans",
+            "family": "Pixelify Sans",
+            "css_family": "HG Pixelify Sans",
+            "role": "ui",
+            "source_path": "ofl/pixelifysans/PixelifySans[wght].ttf",
+            "file": "public/fonts/pixelify-sans/PixelifySans.woff2",
+            "format": "woff2",
+            "axes": {
+                "wght": [400, 700]
+            },
+            "sha256": "807d95f498d0ccc257522b02d34ed48efe4e01496ffa345dab3779dd84ad08f5",
+            "license": "public/fonts/pixelify-sans/OFL.txt"
+        }
+    ]
+}

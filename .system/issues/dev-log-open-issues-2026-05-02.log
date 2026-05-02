@@ -1,0 +1,300 @@
+{"level":"warn","msg":"tool returned error","time":"2026-05-01T22:02:11.938Z","service":"agent","toolName":"gen","error":"Unknown tool: gen"}
+{"level":"warn","msg":"tool returned error","time":"2026-05-01T22:02:11.938Z","service":"agent","toolName":"tts","error":"Unknown tool: tts"}
+{"level":"warn","msg":"minimax api error","time":"2026-05-01T22:02:11.993Z","service":"agent","status":500,"error":"Internal Server Error"}
+{"level":"warn","msg":"minimax api error","time":"2026-05-01T22:02:12.019Z","service":"agent","status":401,"error":"{\"error\":{\"message\":\"Invalid API key\"}}"}
+{"level":"warn","msg":"tool returned error","time":"2026-05-01T22:02:12.019Z","service":"agent","toolName":"test","error":"Unknown tool: test"}
+
+--- HallucyGenie started 2026-05-01T22:25:26.872Z ---
+{"level":"warn","msg":"tool execution failed","time":"2026-05-01T22:25:26.878Z","service":"agent","toolName":"generate_image","error":"Error: boom"}
+{"level":"warn","msg":"minimax api error","time":"2026-05-01T22:25:26.890Z","service":"agent","status":500,"error":"Internal Server Error"}
+{"level":"warn","msg":"minimax rejected tool result id","time":"2026-05-01T22:25:26.891Z","service":"agent","status":400,"error":"{\"type\":\"error\",\"error\":{\"type\":\"invalid_request_error\",\"message\":\"invalid params, tool result's tool id(call_function_ynt4kuk8nlse_1) not found (2013)\"}}"}
+{"level":"warn","msg":"tool returned error","time":"2026-05-01T22:25:26.891Z","service":"agent","toolName":"generate_music","error":"{\"base_resp\":{\"status_code\":2061,\"status_msg\":\"plan not support\"}}"}
+{"level":"warn","msg":"minimax context window exceeded","time":"2026-05-01T22:25:26.891Z","service":"agent","status":400,"error":"{\"type\":\"error\",\"error\":{\"message\":\"invalid params, context window exceeds limit (2013)\"}}"}
+{"level":"warn","msg":"tool returned error","time":"2026-05-01T22:25:26.908Z","service":"agent","toolName":"gen","error":"Unknown tool: gen"}
+{"level":"warn","msg":"tool returned error","time":"2026-05-01T22:25:26.908Z","service":"agent","toolName":"tts","error":"Unknown tool: tts"}
+{"level":"warn","msg":"minimax api error","time":"2026-05-01T22:25:26.960Z","service":"agent","status":500,"error":"Internal Server Error"}
+{"level":"warn","msg":"minimax api error","time":"2026-05-01T22:25:26.984Z","service":"agent","status":401,"error":"{\"error\":{\"message\":\"Invalid API key\"}}"}
+{"level":"warn","msg":"tool returned error","time":"2026-05-01T22:25:26.985Z","service":"agent","toolName":"test","error":"Unknown tool: test"}
+
+--- HallucyGenie started 2026-05-01T22:36:01.913Z ---
+{"level":"warn","msg":"tool execution failed","time":"2026-05-01T22:36:01.919Z","service":"agent","toolName":"generate_image","error":"Error: boom"}
+{"level":"warn","msg":"minimax api error","time":"2026-05-01T22:36:01.933Z","service":"agent","status":500,"error":"Internal Server Error"}
+{"level":"warn","msg":"minimax rejected tool result id","time":"2026-05-01T22:36:01.934Z","service":"agent","status":400,"error":"{\"type\":\"error\",\"error\":{\"type\":\"invalid_request_error\",\"message\":\"invalid params, tool result's tool id(call_function_ynt4kuk8nlse_1) not found (2013)\"}}"}
+{"level":"warn","msg":"tool returned error","time":"2026-05-01T22:36:01.934Z","service":"agent","toolName":"generate_music","error":"{\"base_resp\":{\"status_code\":2061,\"status_msg\":\"plan not support\"}}"}
+{"level":"warn","msg":"minimax context window exceeded","time":"2026-05-01T22:36:01.934Z","service":"agent","status":400,"error":"{\"type\":\"error\",\"error\":{\"message\":\"invalid params, context window exceeds limit (2013)\"}}"}
+{"level":"warn","msg":"tool returned error","time":"2026-05-01T22:36:01.953Z","service":"agent","toolName":"gen","error":"Unknown tool: gen"}
+{"level":"warn","msg":"tool returned error","time":"2026-05-01T22:36:01.953Z","service":"agent","toolName":"tts","error":"Unknown tool: tts"}
+{"level":"warn","msg":"minimax api error","time":"2026-05-01T22:36:02.019Z","service":"agent","status":500,"error":"Internal Server Error"}
+{"level":"warn","msg":"minimax api error","time":"2026-05-01T22:36:02.045Z","service":"agent","status":401,"error":"{\"error\":{\"message\":\"Invalid API key\"}}"}
+{"level":"warn","msg":"tool returned error","time":"2026-05-01T22:36:02.046Z","service":"agent","toolName":"test","error":"Unknown tool: test"}
+
+--- HallucyGenie started 2026-05-01T22:48:08.802Z ---
+{"level":"info","msg":"server started","time":"2026-05-01T22:48:08.808Z","service":"hallucygenie","port":3000}
+{"level":"debug","msg":"request received","time":"2026-05-01T22:48:10.932Z","service":"hallucygenie","reqId":"000001","method":"GET","path":"/"}
+{"level":"info","msg":"response sent","time":"2026-05-01T22:48:10.936Z","service":"hallucygenie","reqId":"000001","method":"GET","path":"/","status":200}
+{"level":"debug","msg":"request received","time":"2026-05-01T22:48:10.946Z","service":"hallucygenie","reqId":"000002","method":"GET","path":"/style.css"}
+{"level":"info","msg":"response sent","time":"2026-05-01T22:48:10.948Z","service":"hallucygenie","reqId":"000002","method":"GET","path":"/style.css","status":200}
+{"level":"debug","msg":"request received","time":"2026-05-01T22:48:10.950Z","service":"hallucygenie","reqId":"000003","method":"GET","path":"/app.js"}
+{"level":"info","msg":"response sent","time":"2026-05-01T22:48:10.952Z","service":"hallucygenie","reqId":"000003","method":"GET","path":"/app.js","status":200}
+{"level":"debug","msg":"request received","time":"2026-05-01T22:48:10.981Z","service":"hallucygenie","reqId":"000004","method":"GET","path":"/api/history"}
+{"level":"info","msg":"response sent","time":"2026-05-01T22:48:10.982Z","service":"hallucygenie","reqId":"000004","method":"GET","path":"/api/history","status":200}
+{"level":"debug","msg":"request received","time":"2026-05-01T22:48:10.982Z","service":"hallucygenie","reqId":"000005","method":"GET","path":"/api/quota"}
+{"level":"info","msg":"response sent","time":"2026-05-01T22:48:11.687Z","service":"hallucygenie","reqId":"000005","method":"GET","path":"/api/quota","status":200}
+{"level":"debug","msg":"request received","time":"2026-05-01T22:48:25.907Z","service":"hallucygenie","reqId":"000006","method":"POST","path":"/api/chat"}
+{"level":"info","msg":"response sent","time":"2026-05-01T22:48:25.927Z","service":"hallucygenie","reqId":"000006","method":"POST","path":"/api/chat","status":200}
+{"level":"warn","msg":"asset save failed","time":"2026-05-01T22:48:40.693Z","service":"hallucygenie","toolName":"generate_image","error":"SQLiteError: UNIQUE constraint failed: assets.id"}
+{"level":"debug","msg":"request received","time":"2026-05-01T22:48:40.702Z","service":"hallucygenie","reqId":"000009","method":"GET","path":"/api/quota"}
+{"level":"info","msg":"response sent","time":"2026-05-01T22:48:40.966Z","service":"hallucygenie","reqId":"000009","method":"GET","path":"/api/quota","status":200}
+
+--- HallucyGenie started 2026-05-01T23:06:03.368Z ---
+{"level":"warn","msg":"minimax api error","time":"2026-05-01T23:06:03.417Z","service":"agent","status":500,"error":"Internal Server Error"}
+{"level":"warn","msg":"minimax api error","time":"2026-05-01T23:06:03.498Z","service":"agent","status":401,"error":"{\"error\":{\"message\":\"Invalid API key\"}}"}
+{"level":"warn","msg":"tool returned error","time":"2026-05-01T23:06:03.499Z","service":"agent","toolName":"test","error":"Unknown tool: test"}
+
+--- HallucyGenie started 2026-05-01T23:06:14.693Z ---
+{"level":"warn","msg":"tool execution failed","time":"2026-05-01T23:06:14.698Z","service":"agent","toolName":"generate_image","error":"Error: boom"}
+{"level":"warn","msg":"minimax api error","time":"2026-05-01T23:06:14.710Z","service":"agent","status":500,"error":"Internal Server Error"}
+{"level":"warn","msg":"minimax rejected tool result id","time":"2026-05-01T23:06:14.710Z","service":"agent","status":400,"error":"{\"type\":\"error\",\"error\":{\"type\":\"invalid_request_error\",\"message\":\"invalid params, tool result's tool id(call_function_ynt4kuk8nlse_1) not found (2013)\"}}"}
+{"level":"warn","msg":"tool returned error","time":"2026-05-01T23:06:14.711Z","service":"agent","toolName":"generate_music","error":"{\"base_resp\":{\"status_code\":2061,\"status_msg\":\"plan not support\"}}"}
+{"level":"warn","msg":"minimax context window exceeded","time":"2026-05-01T23:06:14.711Z","service":"agent","status":400,"error":"{\"type\":\"error\",\"error\":{\"message\":\"invalid params, context window exceeds limit (2013)\"}}"}
+{"level":"warn","msg":"tool returned error","time":"2026-05-01T23:06:14.727Z","service":"agent","toolName":"gen","error":"Unknown tool: gen"}
+{"level":"warn","msg":"tool returned error","time":"2026-05-01T23:06:14.727Z","service":"agent","toolName":"tts","error":"Unknown tool: tts"}
+{"level":"warn","msg":"minimax api error","time":"2026-05-01T23:06:14.796Z","service":"agent","status":500,"error":"Internal Server Error"}
+{"level":"warn","msg":"minimax api error","time":"2026-05-01T23:06:14.871Z","service":"agent","status":401,"error":"{\"error\":{\"message\":\"Invalid API key\"}}"}
+{"level":"warn","msg":"tool returned error","time":"2026-05-01T23:06:14.872Z","service":"agent","toolName":"test","error":"Unknown tool: test"}
+
+--- HallucyGenie started 2026-05-01T23:08:40.808Z ---
+{"level":"info","msg":"server started","time":"2026-05-01T23:08:40.815Z","service":"hallucygenie","port":3000}
+{"level":"debug","msg":"request received","time":"2026-05-01T23:08:42.964Z","service":"hallucygenie","reqId":"000001","method":"GET","path":"/"}
+{"level":"info","msg":"response sent","time":"2026-05-01T23:08:42.968Z","service":"hallucygenie","reqId":"000001","method":"GET","path":"/","status":200}
+{"level":"debug","msg":"request received","time":"2026-05-01T23:08:42.977Z","service":"hallucygenie","reqId":"000002","method":"GET","path":"/style.css"}
+{"level":"info","msg":"response sent","time":"2026-05-01T23:08:42.978Z","service":"hallucygenie","reqId":"000002","method":"GET","path":"/style.css","status":200}
+{"level":"debug","msg":"request received","time":"2026-05-01T23:08:42.983Z","service":"hallucygenie","reqId":"000003","method":"GET","path":"/app.js"}
+{"level":"info","msg":"response sent","time":"2026-05-01T23:08:42.984Z","service":"hallucygenie","reqId":"000003","method":"GET","path":"/app.js","status":200}
+{"level":"debug","msg":"request received","time":"2026-05-01T23:08:42.994Z","service":"hallucygenie","reqId":"000004","method":"GET","path":"/api/history"}
+{"level":"info","msg":"response sent","time":"2026-05-01T23:08:42.995Z","service":"hallucygenie","reqId":"000004","method":"GET","path":"/api/history","status":200}
+{"level":"debug","msg":"request received","time":"2026-05-01T23:08:42.995Z","service":"hallucygenie","reqId":"000005","method":"GET","path":"/api/quota"}
+{"level":"info","msg":"response sent","time":"2026-05-01T23:08:44.046Z","service":"hallucygenie","reqId":"000005","method":"GET","path":"/api/quota","status":200}
+{"level":"debug","msg":"request received","time":"2026-05-01T23:09:06.026Z","service":"hallucygenie","reqId":"000006","method":"POST","path":"/api/chat"}
+{"level":"info","msg":"response sent","time":"2026-05-01T23:09:06.045Z","service":"hallucygenie","reqId":"000006","method":"POST","path":"/api/chat","status":200}
+{"level":"debug","msg":"request received","time":"2026-05-01T23:09:21.666Z","service":"hallucygenie","reqId":"000007","method":"GET","path":"/api/quota"}
+{"level":"debug","msg":"request received","time":"2026-05-01T23:09:21.670Z","service":"hallucygenie","reqId":"000008","method":"GET","path":"/asset/asset_aae7e751-450e-4948-b0f2-b90db53b3596?s=65d2206f-99f6-4681-9d80-235209acad71"}
+{"level":"info","msg":"response sent","time":"2026-05-01T23:09:21.671Z","service":"hallucygenie","reqId":"000008","method":"GET","path":"/asset/asset_aae7e751-450e-4948-b0f2-b90db53b3596?s=65d2206f-99f6-4681-9d80-235209acad71","status":200}
+{"level":"info","msg":"response sent","time":"2026-05-01T23:09:21.906Z","service":"hallucygenie","reqId":"000007","method":"GET","path":"/api/quota","status":200}
+{"level":"debug","msg":"request received","time":"2026-05-01T23:09:51.427Z","service":"hallucygenie","reqId":"000009","method":"POST","path":"/api/chat"}
+{"level":"info","msg":"response sent","time":"2026-05-01T23:09:51.443Z","service":"hallucygenie","reqId":"000009","method":"POST","path":"/api/chat","status":200}
+{"level":"debug","msg":"request received","time":"2026-05-01T23:12:13.375Z","service":"hallucygenie","reqId":"00000a","method":"GET","path":"/api/quota"}
+{"level":"debug","msg":"request received","time":"2026-05-01T23:12:13.375Z","service":"hallucygenie","reqId":"00000b","method":"GET","path":"/asset/asset_b6ec844f-8201-4ad7-a2d7-8f54162436c5?s=65d2206f-99f6-4681-9d80-235209acad71"}
+{"level":"info","msg":"response sent","time":"2026-05-01T23:12:13.378Z","service":"hallucygenie","reqId":"00000b","method":"GET","path":"/asset/asset_b6ec844f-8201-4ad7-a2d7-8f54162436c5?s=65d2206f-99f6-4681-9d80-235209acad71","status":200}
+{"level":"info","msg":"response sent","time":"2026-05-01T23:12:14.458Z","service":"hallucygenie","reqId":"00000a","method":"GET","path":"/api/quota","status":200}
+{"level":"debug","msg":"request received","time":"2026-05-01T23:12:29.298Z","service":"hallucygenie","reqId":"00000c","method":"GET","path":"/api/quota"}
+{"level":"debug","msg":"request received","time":"2026-05-01T23:12:29.305Z","service":"hallucygenie","reqId":"00000d","method":"GET","path":"/asset/asset_816213f5-3d44-400d-b8f4-3d8827052145?s=65d2206f-99f6-4681-9d80-235209acad71"}
+{"level":"info","msg":"response sent","time":"2026-05-01T23:12:29.307Z","service":"hallucygenie","reqId":"00000d","method":"GET","path":"/asset/asset_816213f5-3d44-400d-b8f4-3d8827052145?s=65d2206f-99f6-4681-9d80-235209acad71","status":200}
+{"level":"info","msg":"response sent","time":"2026-05-01T23:12:29.589Z","service":"hallucygenie","reqId":"00000c","method":"GET","path":"/api/quota","status":200}
+{"level":"debug","msg":"request received","time":"2026-05-01T23:12:44.150Z","service":"hallucygenie","reqId":"00000e","method":"GET","path":"/api/quota"}
+{"level":"debug","msg":"request received","time":"2026-05-01T23:12:44.153Z","service":"hallucygenie","reqId":"00000f","method":"GET","path":"/asset/asset_cf12a258-0fad-4551-a43f-59e0f5615845?s=65d2206f-99f6-4681-9d80-235209acad71"}
+{"level":"info","msg":"response sent","time":"2026-05-01T23:12:44.153Z","service":"hallucygenie","reqId":"00000f","method":"GET","path":"/asset/asset_cf12a258-0fad-4551-a43f-59e0f5615845?s=65d2206f-99f6-4681-9d80-235209acad71","status":200}
+{"level":"warn","msg":"minimax rejected tool result id","time":"2026-05-01T23:12:44.335Z","service":"agent","status":400,"error":"{\"type\":\"error\",\"error\":{\"type\":\"invalid_request_error\",\"message\":\"invalid params, tool result's tool id(call_function_1k8yhvd6k318_3) not found (2013)\"},\"request_id\":\"0644666c525837575b3f55356bb450a5\"}"}
+{"level":"info","msg":"response sent","time":"2026-05-01T23:12:44.407Z","service":"hallucygenie","reqId":"00000e","method":"GET","path":"/api/quota","status":200}
+{"level":"debug","msg":"request received","time":"2026-05-01T23:13:22.613Z","service":"hallucygenie","reqId":"000010","method":"GET","path":"/favicon.ico"}
+{"level":"info","msg":"response sent","time":"2026-05-01T23:13:22.614Z","service":"hallucygenie","reqId":"000010","method":"GET","path":"/favicon.ico","status":404}
+{"level":"debug","msg":"request received","time":"2026-05-01T23:15:02.825Z","service":"hallucygenie","reqId":"000011","method":"GET","path":"/"}
+{"level":"info","msg":"response sent","time":"2026-05-01T23:15:02.826Z","service":"hallucygenie","reqId":"000011","method":"GET","path":"/","status":200}
+{"level":"debug","msg":"request received","time":"2026-05-01T23:15:02.835Z","service":"hallucygenie","reqId":"000012","method":"GET","path":"/style.css"}
+{"level":"info","msg":"response sent","time":"2026-05-01T23:15:02.835Z","service":"hallucygenie","reqId":"000012","method":"GET","path":"/style.css","status":200}
+{"level":"debug","msg":"request received","time":"2026-05-01T23:15:02.837Z","service":"hallucygenie","reqId":"000013","method":"GET","path":"/app.js"}
+{"level":"info","msg":"response sent","time":"2026-05-01T23:15:02.839Z","service":"hallucygenie","reqId":"000013","method":"GET","path":"/app.js","status":200}
+{"level":"debug","msg":"request received","time":"2026-05-01T23:15:02.848Z","service":"hallucygenie","reqId":"000014","method":"GET","path":"/api/history"}
+{"level":"info","msg":"response sent","time":"2026-05-01T23:15:02.848Z","service":"hallucygenie","reqId":"000014","method":"GET","path":"/api/history","status":200}
+{"level":"debug","msg":"request received","time":"2026-05-01T23:15:02.849Z","service":"hallucygenie","reqId":"000015","method":"GET","path":"/api/quota"}
+{"level":"info","msg":"response sent","time":"2026-05-01T23:15:09.232Z","service":"hallucygenie","reqId":"000015","method":"GET","path":"/api/quota","status":200}
+
+--- HallucyGenie started 2026-05-01T23:32:26.246Z ---
+{"level":"warn","msg":"minimax api error","time":"2026-05-01T23:32:26.291Z","service":"agent","status":500,"error":"Internal Server Error"}
+{"level":"warn","msg":"minimax api error","time":"2026-05-01T23:32:26.371Z","service":"agent","status":401,"error":"{\"error\":{\"message\":\"Invalid API key\"}}"}
+{"level":"warn","msg":"tool returned error","time":"2026-05-01T23:32:26.372Z","service":"agent","toolName":"test","error":"Unknown tool: test"}
+{"level":"info","msg":"server started","time":"2026-05-01T23:32:26.739Z","service":"hallucygenie","port":0}
+{"level":"debug","msg":"request received","time":"2026-05-01T23:32:26.743Z","service":"hallucygenie","reqId":"000001","method":"GET","path":"/api/health"}
+{"level":"info","msg":"response sent","time":"2026-05-01T23:32:26.745Z","service":"hallucygenie","reqId":"000001","method":"GET","path":"/api/health","status":200}
+{"level":"info","msg":"server started","time":"2026-05-01T23:32:26.760Z","service":"hallucygenie","port":0}
+{"level":"debug","msg":"request received","time":"2026-05-01T23:32:26.760Z","service":"hallucygenie","reqId":"000002","method":"POST","path":"/api/chat"}
+{"level":"info","msg":"response sent","time":"2026-05-01T23:32:26.762Z","service":"hallucygenie","reqId":"000002","method":"POST","path":"/api/chat","status":503}
+{"level":"info","msg":"server started","time":"2026-05-01T23:32:26.766Z","service":"hallucygenie","port":0}
+{"level":"debug","msg":"request received","time":"2026-05-01T23:32:26.766Z","service":"hallucygenie","reqId":"000003","method":"GET","path":"/nonexistent"}
+{"level":"info","msg":"response sent","time":"2026-05-01T23:32:26.767Z","service":"hallucygenie","reqId":"000003","method":"GET","path":"/nonexistent","status":404}
+{"level":"info","msg":"server started","time":"2026-05-01T23:32:26.770Z","service":"hallucygenie","port":0}
+{"level":"info","msg":"server started","time":"2026-05-01T23:32:26.773Z","service":"hallucygenie","port":0}
+{"level":"warn","msg":"quota api error","time":"2026-05-01T23:32:26.775Z","service":"hallucygenie","status":500}
+
+--- HallucyGenie started 2026-05-01T23:33:21.702Z ---
+{"level":"warn","msg":"tool execution failed","time":"2026-05-01T23:33:21.707Z","service":"agent","toolName":"generate_image","error":"Error: boom"}
+{"level":"warn","msg":"minimax api error","time":"2026-05-01T23:33:21.718Z","service":"agent","status":500,"error":"Internal Server Error"}
+{"level":"warn","msg":"minimax rejected tool result id","time":"2026-05-01T23:33:21.718Z","service":"agent","status":400,"error":"{\"type\":\"error\",\"error\":{\"type\":\"invalid_request_error\",\"message\":\"invalid params, tool result's tool id(call_function_ynt4kuk8nlse_1) not found (2013)\"}}"}
+{"level":"warn","msg":"tool returned error","time":"2026-05-01T23:33:21.719Z","service":"agent","toolName":"generate_music","error":"{\"base_resp\":{\"status_code\":2061,\"status_msg\":\"plan not support\"}}"}
+{"level":"warn","msg":"minimax context window exceeded","time":"2026-05-01T23:33:21.719Z","service":"agent","status":400,"error":"{\"type\":\"error\",\"error\":{\"message\":\"invalid params, context window exceeds limit (2013)\"}}"}
+{"level":"warn","msg":"tool returned error","time":"2026-05-01T23:33:21.735Z","service":"agent","toolName":"gen","error":"Unknown tool: gen"}
+{"level":"warn","msg":"tool returned error","time":"2026-05-01T23:33:21.735Z","service":"agent","toolName":"tts","error":"Unknown tool: tts"}
+{"level":"warn","msg":"minimax api error","time":"2026-05-01T23:33:21.791Z","service":"agent","status":500,"error":"Internal Server Error"}
+{"level":"warn","msg":"minimax api error","time":"2026-05-01T23:33:21.859Z","service":"agent","status":401,"error":"{\"error\":{\"message\":\"Invalid API key\"}}"}
+{"level":"warn","msg":"tool returned error","time":"2026-05-01T23:33:21.860Z","service":"agent","toolName":"test","error":"Unknown tool: test"}
+
+--- HallucyGenie started 2026-05-01T23:38:42.337Z ---
+{"level":"info","msg":"server started","time":"2026-05-01T23:38:42.349Z","service":"hallucygenie","port":3000}
+{"level":"debug","msg":"request received","time":"2026-05-01T23:40:38.256Z","service":"hallucygenie","reqId":"000001","method":"GET","path":"/"}
+{"level":"info","msg":"response sent","time":"2026-05-01T23:40:38.260Z","service":"hallucygenie","reqId":"000001","method":"GET","path":"/","status":200}
+{"level":"debug","msg":"request received","time":"2026-05-01T23:40:38.269Z","service":"hallucygenie","reqId":"000002","method":"GET","path":"/style.css"}
+{"level":"debug","msg":"request received","time":"2026-05-01T23:40:38.269Z","service":"hallucygenie","reqId":"000003","method":"GET","path":"/app.js"}
+{"level":"info","msg":"response sent","time":"2026-05-01T23:40:38.270Z","service":"hallucygenie","reqId":"000002","method":"GET","path":"/style.css","status":200}
+{"level":"info","msg":"response sent","time":"2026-05-01T23:40:38.271Z","service":"hallucygenie","reqId":"000003","method":"GET","path":"/app.js","status":200}
+{"level":"debug","msg":"request received","time":"2026-05-01T23:40:38.320Z","service":"hallucygenie","reqId":"000004","method":"GET","path":"/fonts/pixelify-sans/PixelifySans.woff2?v=807d95f498d0"}
+{"level":"debug","msg":"request received","time":"2026-05-01T23:40:38.321Z","service":"hallucygenie","reqId":"000005","method":"GET","path":"/fonts/roboto-flex/RobotoFlex.woff2?v=0b75943534dc"}
+{"level":"info","msg":"response sent","time":"2026-05-01T23:40:38.321Z","service":"hallucygenie","reqId":"000004","method":"GET","path":"/fonts/pixelify-sans/PixelifySans.woff2?v=807d95f498d0","status":200}
+{"level":"debug","msg":"request received","time":"2026-05-01T23:40:38.322Z","service":"hallucygenie","reqId":"000006","method":"GET","path":"/fonts/playwrite-de-sas/PlaywriteDESAS.woff2?v=29ddde14a269"}
+{"level":"info","msg":"response sent","time":"2026-05-01T23:40:38.324Z","service":"hallucygenie","reqId":"000005","method":"GET","path":"/fonts/roboto-flex/RobotoFlex.woff2?v=0b75943534dc","status":200}
+{"level":"info","msg":"response sent","time":"2026-05-01T23:40:38.325Z","service":"hallucygenie","reqId":"000006","method":"GET","path":"/fonts/playwrite-de-sas/PlaywriteDESAS.woff2?v=29ddde14a269","status":200}
+{"level":"debug","msg":"request received","time":"2026-05-01T23:40:38.330Z","service":"hallucygenie","reqId":"000007","method":"GET","path":"/api/history"}
+{"level":"info","msg":"response sent","time":"2026-05-01T23:40:38.331Z","service":"hallucygenie","reqId":"000007","method":"GET","path":"/api/history","status":200}
+{"level":"debug","msg":"request received","time":"2026-05-01T23:40:38.331Z","service":"hallucygenie","reqId":"000008","method":"GET","path":"/api/quota"}
+{"level":"debug","msg":"request received","time":"2026-05-01T23:40:38.393Z","service":"hallucygenie","reqId":"000009","method":"GET","path":"/"}
+{"level":"info","msg":"response sent","time":"2026-05-01T23:40:38.393Z","service":"hallucygenie","reqId":"000009","method":"GET","path":"/","status":200}
+{"level":"debug","msg":"request received","time":"2026-05-01T23:40:38.402Z","service":"hallucygenie","reqId":"00000a","method":"GET","path":"/style.css"}
+{"level":"debug","msg":"request received","time":"2026-05-01T23:40:38.403Z","service":"hallucygenie","reqId":"00000b","method":"GET","path":"/app.js"}
+{"level":"info","msg":"response sent","time":"2026-05-01T23:40:38.403Z","service":"hallucygenie","reqId":"00000a","method":"GET","path":"/style.css","status":200}
+{"level":"info","msg":"response sent","time":"2026-05-01T23:40:38.404Z","service":"hallucygenie","reqId":"00000b","method":"GET","path":"/app.js","status":200}
+{"level":"debug","msg":"request received","time":"2026-05-01T23:40:38.413Z","service":"hallucygenie","reqId":"00000c","method":"GET","path":"/api/history"}
+{"level":"info","msg":"response sent","time":"2026-05-01T23:40:38.414Z","service":"hallucygenie","reqId":"00000c","method":"GET","path":"/api/history","status":200}
+{"level":"debug","msg":"request received","time":"2026-05-01T23:40:38.414Z","service":"hallucygenie","reqId":"00000d","method":"GET","path":"/api/quota"}
+{"level":"debug","msg":"request received","time":"2026-05-01T23:40:38.451Z","service":"hallucygenie","reqId":"00000e","method":"GET","path":"/asset/asset_manual_hg014?s=manual-hg-014-session"}
+{"level":"info","msg":"response sent","time":"2026-05-01T23:40:38.452Z","service":"hallucygenie","reqId":"00000e","method":"GET","path":"/asset/asset_manual_hg014?s=manual-hg-014-session","status":200}
+{"level":"info","msg":"response sent","time":"2026-05-01T23:40:38.989Z","service":"hallucygenie","reqId":"000008","method":"GET","path":"/api/quota","status":200}
+{"level":"info","msg":"response sent","time":"2026-05-01T23:40:39.037Z","service":"hallucygenie","reqId":"00000d","method":"GET","path":"/api/quota","status":200}
+{"level":"debug","msg":"request received","time":"2026-05-01T23:41:02.293Z","service":"hallucygenie","reqId":"00000f","method":"GET","path":"/"}
+{"level":"info","msg":"response sent","time":"2026-05-01T23:41:02.294Z","service":"hallucygenie","reqId":"00000f","method":"GET","path":"/","status":200}
+{"level":"debug","msg":"request received","time":"2026-05-01T23:41:02.301Z","service":"hallucygenie","reqId":"000010","method":"GET","path":"/style.css"}
+{"level":"debug","msg":"request received","time":"2026-05-01T23:41:02.302Z","service":"hallucygenie","reqId":"000011","method":"GET","path":"/app.js"}
+{"level":"info","msg":"response sent","time":"2026-05-01T23:41:02.302Z","service":"hallucygenie","reqId":"000010","method":"GET","path":"/style.css","status":200}
+{"level":"info","msg":"response sent","time":"2026-05-01T23:41:02.303Z","service":"hallucygenie","reqId":"000011","method":"GET","path":"/app.js","status":200}
+{"level":"debug","msg":"request received","time":"2026-05-01T23:41:02.309Z","service":"hallucygenie","reqId":"000012","method":"GET","path":"/api/history"}
+{"level":"info","msg":"response sent","time":"2026-05-01T23:41:02.310Z","service":"hallucygenie","reqId":"000012","method":"GET","path":"/api/history","status":200}
+{"level":"debug","msg":"request received","time":"2026-05-01T23:41:02.311Z","service":"hallucygenie","reqId":"000013","method":"GET","path":"/api/quota"}
+{"level":"info","msg":"response sent","time":"2026-05-01T23:41:02.560Z","service":"hallucygenie","reqId":"000013","method":"GET","path":"/api/quota","status":200}
+
+--- HallucyGenie started 2026-05-02T00:01:06.040Z ---
+{"level":"info","msg":"server started","time":"2026-05-02T00:01:06.047Z","service":"hallucygenie","port":3000}
+{"level":"debug","msg":"request received","time":"2026-05-02T00:01:13.780Z","service":"hallucygenie","reqId":"000001","method":"GET","path":"/"}
+{"level":"info","msg":"response sent","time":"2026-05-02T00:01:13.784Z","service":"hallucygenie","reqId":"000001","method":"GET","path":"/","status":200}
+{"level":"debug","msg":"request received","time":"2026-05-02T00:01:13.796Z","service":"hallucygenie","reqId":"000002","method":"GET","path":"/style.css"}
+{"level":"info","msg":"response sent","time":"2026-05-02T00:01:13.796Z","service":"hallucygenie","reqId":"000002","method":"GET","path":"/style.css","status":200}
+{"level":"debug","msg":"request received","time":"2026-05-02T00:01:13.797Z","service":"hallucygenie","reqId":"000003","method":"GET","path":"/app.js"}
+{"level":"info","msg":"response sent","time":"2026-05-02T00:01:13.799Z","service":"hallucygenie","reqId":"000003","method":"GET","path":"/app.js","status":200}
+{"level":"debug","msg":"request received","time":"2026-05-02T00:01:13.852Z","service":"hallucygenie","reqId":"000004","method":"GET","path":"/api/history"}
+{"level":"info","msg":"response sent","time":"2026-05-02T00:01:13.852Z","service":"hallucygenie","reqId":"000004","method":"GET","path":"/api/history","status":200}
+{"level":"debug","msg":"request received","time":"2026-05-02T00:01:13.853Z","service":"hallucygenie","reqId":"000005","method":"GET","path":"/api/quota"}
+{"level":"info","msg":"response sent","time":"2026-05-02T00:01:14.970Z","service":"hallucygenie","reqId":"000005","method":"GET","path":"/api/quota","status":200}
+{"level":"debug","msg":"request received","time":"2026-05-02T00:01:37.979Z","service":"hallucygenie","reqId":"000006","method":"POST","path":"/api/chat"}
+{"level":"info","msg":"response sent","time":"2026-05-02T00:01:37.999Z","service":"hallucygenie","reqId":"000006","method":"POST","path":"/api/chat","status":200}
+{"level":"debug","msg":"request received","time":"2026-05-02T00:01:53.196Z","service":"hallucygenie","reqId":"000007","method":"GET","path":"/api/quota"}
+{"level":"debug","msg":"request received","time":"2026-05-02T00:01:53.198Z","service":"hallucygenie","reqId":"000008","method":"GET","path":"/asset/asset_4bf76cb5-8559-4118-943d-bb5236f59282?s=9e0abff4-316a-4a78-b712-33376260a582"}
+{"level":"info","msg":"response sent","time":"2026-05-02T00:01:53.199Z","service":"hallucygenie","reqId":"000008","method":"GET","path":"/asset/asset_4bf76cb5-8559-4118-943d-bb5236f59282?s=9e0abff4-316a-4a78-b712-33376260a582","status":200}
+{"level":"info","msg":"response sent","time":"2026-05-02T00:01:53.448Z","service":"hallucygenie","reqId":"000007","method":"GET","path":"/api/quota","status":200}
+{"level":"debug","msg":"request received","time":"2026-05-02T00:02:06.992Z","service":"hallucygenie","reqId":"000009","method":"GET","path":"/"}
+{"level":"info","msg":"response sent","time":"2026-05-02T00:02:06.993Z","service":"hallucygenie","reqId":"000009","method":"GET","path":"/","status":200}
+{"level":"debug","msg":"request received","time":"2026-05-02T00:02:07.001Z","service":"hallucygenie","reqId":"00000a","method":"GET","path":"/style.css"}
+{"level":"info","msg":"response sent","time":"2026-05-02T00:02:07.002Z","service":"hallucygenie","reqId":"00000a","method":"GET","path":"/style.css","status":200}
+{"level":"debug","msg":"request received","time":"2026-05-02T00:02:07.003Z","service":"hallucygenie","reqId":"00000b","method":"GET","path":"/app.js"}
+{"level":"info","msg":"response sent","time":"2026-05-02T00:02:07.003Z","service":"hallucygenie","reqId":"00000b","method":"GET","path":"/app.js","status":200}
+{"level":"debug","msg":"request received","time":"2026-05-02T00:02:07.010Z","service":"hallucygenie","reqId":"00000c","method":"GET","path":"/api/history"}
+{"level":"info","msg":"response sent","time":"2026-05-02T00:02:07.011Z","service":"hallucygenie","reqId":"00000c","method":"GET","path":"/api/history","status":200}
+{"level":"debug","msg":"request received","time":"2026-05-02T00:02:07.011Z","service":"hallucygenie","reqId":"00000d","method":"GET","path":"/api/quota"}
+{"level":"info","msg":"response sent","time":"2026-05-02T00:02:07.266Z","service":"hallucygenie","reqId":"00000d","method":"GET","path":"/api/quota","status":200}
+{"level":"debug","msg":"request received","time":"2026-05-02T00:02:25.920Z","service":"hallucygenie","reqId":"00000e","method":"POST","path":"/api/chat"}
+{"level":"info","msg":"response sent","time":"2026-05-02T00:02:25.933Z","service":"hallucygenie","reqId":"00000e","method":"POST","path":"/api/chat","status":200}
+{"level":"debug","msg":"request received","time":"2026-05-02T00:02:47.863Z","service":"hallucygenie","reqId":"00000f","method":"GET","path":"/api/quota"}
+{"level":"debug","msg":"request received","time":"2026-05-02T00:02:47.869Z","service":"hallucygenie","reqId":"000010","method":"GET","path":"/asset/asset_ea3fc8cc-5655-45e2-952d-63d1197d5c88?s=9e0abff4-316a-4a78-b712-33376260a582"}
+{"level":"info","msg":"response sent","time":"2026-05-02T00:02:47.870Z","service":"hallucygenie","reqId":"000010","method":"GET","path":"/asset/asset_ea3fc8cc-5655-45e2-952d-63d1197d5c88?s=9e0abff4-316a-4a78-b712-33376260a582","status":200}
+{"level":"warn","msg":"minimax rejected tool result id","time":"2026-05-02T00:02:48.056Z","service":"agent","status":400,"error":"{\"type\":\"error\",\"error\":{\"type\":\"invalid_request_error\",\"message\":\"invalid params, tool result's tool id(call_function_t3e97itv9li0_1) not found (2013)\"},\"request_id\":\"064472277d4b0712654bdfa2ffe2d9f7\"}"}
+{"level":"info","msg":"response sent","time":"2026-05-02T00:02:48.656Z","service":"hallucygenie","reqId":"00000f","method":"GET","path":"/api/quota","status":200}
+{"level":"debug","msg":"request received","time":"2026-05-02T00:03:08.406Z","service":"hallucygenie","reqId":"000011","method":"POST","path":"/api/chat"}
+{"level":"info","msg":"response sent","time":"2026-05-02T00:03:08.416Z","service":"hallucygenie","reqId":"000011","method":"POST","path":"/api/chat","status":200}
+{"level":"debug","msg":"request received","time":"2026-05-02T00:03:30.056Z","service":"hallucygenie","reqId":"000012","method":"GET","path":"/api/quota"}
+{"level":"debug","msg":"request received","time":"2026-05-02T00:03:30.058Z","service":"hallucygenie","reqId":"000013","method":"GET","path":"/asset/asset_f1a8a447-4eaf-49e8-8e50-3d43fb40f73e?s=9e0abff4-316a-4a78-b712-33376260a582"}
+{"level":"info","msg":"response sent","time":"2026-05-02T00:03:30.058Z","service":"hallucygenie","reqId":"000013","method":"GET","path":"/asset/asset_f1a8a447-4eaf-49e8-8e50-3d43fb40f73e?s=9e0abff4-316a-4a78-b712-33376260a582","status":200}
+{"level":"warn","msg":"minimax rejected tool result id","time":"2026-05-02T00:03:30.176Z","service":"agent","status":400,"error":"{\"type\":\"error\",\"error\":{\"type\":\"invalid_request_error\",\"message\":\"invalid params, tool result's tool id(call_function_4mnh3hefuboh_1) not found (2013)\"},\"request_id\":\"06447252d7c1a21e0198b4bd15b206fb\"}"}
+{"level":"info","msg":"response sent","time":"2026-05-02T00:03:30.344Z","service":"hallucygenie","reqId":"000012","method":"GET","path":"/api/quota","status":200}
+{"level":"debug","msg":"request received","time":"2026-05-02T00:03:41.730Z","service":"hallucygenie","reqId":"000014","method":"GET","path":"/"}
+{"level":"info","msg":"response sent","time":"2026-05-02T00:03:41.731Z","service":"hallucygenie","reqId":"000014","method":"GET","path":"/","status":200}
+{"level":"debug","msg":"request received","time":"2026-05-02T00:03:41.740Z","service":"hallucygenie","reqId":"000015","method":"GET","path":"/style.css"}
+{"level":"info","msg":"response sent","time":"2026-05-02T00:03:41.740Z","service":"hallucygenie","reqId":"000015","method":"GET","path":"/style.css","status":200}
+{"level":"debug","msg":"request received","time":"2026-05-02T00:03:41.741Z","service":"hallucygenie","reqId":"000016","method":"GET","path":"/app.js"}
+{"level":"info","msg":"response sent","time":"2026-05-02T00:03:41.742Z","service":"hallucygenie","reqId":"000016","method":"GET","path":"/app.js","status":200}
+{"level":"debug","msg":"request received","time":"2026-05-02T00:03:41.750Z","service":"hallucygenie","reqId":"000017","method":"GET","path":"/api/history"}
+{"level":"info","msg":"response sent","time":"2026-05-02T00:03:41.751Z","service":"hallucygenie","reqId":"000017","method":"GET","path":"/api/history","status":200}
+{"level":"debug","msg":"request received","time":"2026-05-02T00:03:41.751Z","service":"hallucygenie","reqId":"000018","method":"GET","path":"/api/quota"}
+{"level":"info","msg":"response sent","time":"2026-05-02T00:03:42.389Z","service":"hallucygenie","reqId":"000018","method":"GET","path":"/api/quota","status":200}
+{"level":"debug","msg":"request received","time":"2026-05-02T00:03:52.945Z","service":"hallucygenie","reqId":"000019","method":"GET","path":"/assets"}
+{"level":"info","msg":"response sent","time":"2026-05-02T00:03:52.945Z","service":"hallucygenie","reqId":"000019","method":"GET","path":"/assets","status":200}
+
+--- HallucyGenie started 2026-05-02T00:10:24.071Z ---
+{"level":"info","msg":"server started","time":"2026-05-02T00:10:24.076Z","service":"hallucygenie","port":3000}
+{"level":"debug","msg":"request received","time":"2026-05-02T00:10:43.458Z","service":"hallucygenie","reqId":"000001","method":"GET","path":"/"}
+{"level":"info","msg":"response sent","time":"2026-05-02T00:10:43.460Z","service":"hallucygenie","reqId":"000001","method":"GET","path":"/","status":200}
+{"level":"debug","msg":"request received","time":"2026-05-02T00:10:43.470Z","service":"hallucygenie","reqId":"000002","method":"GET","path":"/style.css"}
+{"level":"debug","msg":"request received","time":"2026-05-02T00:10:43.470Z","service":"hallucygenie","reqId":"000003","method":"GET","path":"/app.js"}
+{"level":"info","msg":"response sent","time":"2026-05-02T00:10:43.471Z","service":"hallucygenie","reqId":"000002","method":"GET","path":"/style.css","status":200}
+{"level":"info","msg":"response sent","time":"2026-05-02T00:10:43.472Z","service":"hallucygenie","reqId":"000003","method":"GET","path":"/app.js","status":200}
+{"level":"debug","msg":"request received","time":"2026-05-02T00:10:43.479Z","service":"hallucygenie","reqId":"000004","method":"GET","path":"/api/history"}
+{"level":"info","msg":"response sent","time":"2026-05-02T00:10:43.480Z","service":"hallucygenie","reqId":"000004","method":"GET","path":"/api/history","status":200}
+{"level":"debug","msg":"request received","time":"2026-05-02T00:10:43.480Z","service":"hallucygenie","reqId":"000005","method":"GET","path":"/api/quota"}
+{"level":"debug","msg":"request received","time":"2026-05-02T00:10:43.537Z","service":"hallucygenie","reqId":"000006","method":"GET","path":"/fonts/pixelify-sans/PixelifySans.woff2?v=807d95f498d0"}
+{"level":"info","msg":"response sent","time":"2026-05-02T00:10:43.537Z","service":"hallucygenie","reqId":"000006","method":"GET","path":"/fonts/pixelify-sans/PixelifySans.woff2?v=807d95f498d0","status":200}
+{"level":"debug","msg":"request received","time":"2026-05-02T00:10:43.538Z","service":"hallucygenie","reqId":"000007","method":"GET","path":"/fonts/roboto-flex/RobotoFlex.woff2?v=0b75943534dc"}
+{"level":"debug","msg":"request received","time":"2026-05-02T00:10:43.538Z","service":"hallucygenie","reqId":"000008","method":"GET","path":"/fonts/playwrite-de-sas/PlaywriteDESAS.woff2?v=29ddde14a269"}
+{"level":"info","msg":"response sent","time":"2026-05-02T00:10:43.540Z","service":"hallucygenie","reqId":"000008","method":"GET","path":"/fonts/playwrite-de-sas/PlaywriteDESAS.woff2?v=29ddde14a269","status":200}
+{"level":"info","msg":"response sent","time":"2026-05-02T00:10:43.541Z","service":"hallucygenie","reqId":"000007","method":"GET","path":"/fonts/roboto-flex/RobotoFlex.woff2?v=0b75943534dc","status":200}
+{"level":"info","msg":"response sent","time":"2026-05-02T00:10:44.437Z","service":"hallucygenie","reqId":"000005","method":"GET","path":"/api/quota","status":200}
+{"level":"debug","msg":"request received","time":"2026-05-02T00:11:42.897Z","service":"hallucygenie","reqId":"000009","method":"GET","path":"/"}
+{"level":"info","msg":"response sent","time":"2026-05-02T00:11:42.898Z","service":"hallucygenie","reqId":"000009","method":"GET","path":"/","status":200}
+{"level":"debug","msg":"request received","time":"2026-05-02T00:11:42.905Z","service":"hallucygenie","reqId":"00000a","method":"GET","path":"/style.css"}
+{"level":"debug","msg":"request received","time":"2026-05-02T00:11:42.906Z","service":"hallucygenie","reqId":"00000b","method":"GET","path":"/app.js"}
+{"level":"info","msg":"response sent","time":"2026-05-02T00:11:42.906Z","service":"hallucygenie","reqId":"00000a","method":"GET","path":"/style.css","status":200}
+{"level":"info","msg":"response sent","time":"2026-05-02T00:11:42.906Z","service":"hallucygenie","reqId":"00000b","method":"GET","path":"/app.js","status":200}
+{"level":"debug","msg":"request received","time":"2026-05-02T00:11:42.914Z","service":"hallucygenie","reqId":"00000c","method":"GET","path":"/api/history"}
+{"level":"info","msg":"response sent","time":"2026-05-02T00:11:42.914Z","service":"hallucygenie","reqId":"00000c","method":"GET","path":"/api/history","status":200}
+{"level":"debug","msg":"request received","time":"2026-05-02T00:11:42.915Z","service":"hallucygenie","reqId":"00000d","method":"GET","path":"/api/quota"}
+{"level":"debug","msg":"request received","time":"2026-05-02T00:11:42.930Z","service":"hallucygenie","reqId":"00000e","method":"GET","path":"/asset/asset_manual_hg018?s=manual-hg-018-session"}
+{"level":"info","msg":"response sent","time":"2026-05-02T00:11:42.932Z","service":"hallucygenie","reqId":"00000e","method":"GET","path":"/asset/asset_manual_hg018?s=manual-hg-018-session","status":200}
+{"level":"info","msg":"response sent","time":"2026-05-02T00:11:43.186Z","service":"hallucygenie","reqId":"00000d","method":"GET","path":"/api/quota","status":200}
+{"level":"debug","msg":"request received","time":"2026-05-02T00:11:43.931Z","service":"hallucygenie","reqId":"00000f","method":"GET","path":"/api/history"}
+{"level":"info","msg":"response sent","time":"2026-05-02T00:11:43.931Z","service":"hallucygenie","reqId":"00000f","method":"GET","path":"/api/history","status":200}
+{"level":"debug","msg":"request received","time":"2026-05-02T00:12:16.808Z","service":"hallucygenie","reqId":"000010","method":"GET","path":"/"}
+{"level":"info","msg":"response sent","time":"2026-05-02T00:12:16.809Z","service":"hallucygenie","reqId":"000010","method":"GET","path":"/","status":200}
+{"level":"debug","msg":"request received","time":"2026-05-02T00:12:16.817Z","service":"hallucygenie","reqId":"000011","method":"GET","path":"/style.css"}
+{"level":"debug","msg":"request received","time":"2026-05-02T00:12:16.817Z","service":"hallucygenie","reqId":"000012","method":"GET","path":"/app.js"}
+{"level":"info","msg":"response sent","time":"2026-05-02T00:12:16.817Z","service":"hallucygenie","reqId":"000012","method":"GET","path":"/app.js","status":200}
+{"level":"info","msg":"response sent","time":"2026-05-02T00:12:16.818Z","service":"hallucygenie","reqId":"000011","method":"GET","path":"/style.css","status":200}
+{"level":"debug","msg":"request received","time":"2026-05-02T00:12:16.828Z","service":"hallucygenie","reqId":"000013","method":"GET","path":"/api/history"}
+{"level":"info","msg":"response sent","time":"2026-05-02T00:12:16.828Z","service":"hallucygenie","reqId":"000013","method":"GET","path":"/api/history","status":200}
+{"level":"debug","msg":"request received","time":"2026-05-02T00:12:16.829Z","service":"hallucygenie","reqId":"000014","method":"GET","path":"/api/quota"}
+{"level":"info","msg":"response sent","time":"2026-05-02T00:12:17.089Z","service":"hallucygenie","reqId":"000014","method":"GET","path":"/api/quota","status":200}
+{"level":"debug","msg":"request received","time":"2026-05-02T00:12:28.456Z","service":"hallucygenie","reqId":"000015","method":"GET","path":"/"}
+{"level":"info","msg":"response sent","time":"2026-05-02T00:12:28.457Z","service":"hallucygenie","reqId":"000015","method":"GET","path":"/","status":200}
+{"level":"debug","msg":"request received","time":"2026-05-02T00:12:28.466Z","service":"hallucygenie","reqId":"000016","method":"GET","path":"/style.css"}
+{"level":"debug","msg":"request received","time":"2026-05-02T00:12:28.466Z","service":"hallucygenie","reqId":"000017","method":"GET","path":"/app.js"}
+{"level":"info","msg":"response sent","time":"2026-05-02T00:12:28.466Z","service":"hallucygenie","reqId":"000016","method":"GET","path":"/style.css","status":200}
+{"level":"info","msg":"response sent","time":"2026-05-02T00:12:28.467Z","service":"hallucygenie","reqId":"000017","method":"GET","path":"/app.js","status":200}
+{"level":"debug","msg":"request received","time":"2026-05-02T00:12:28.474Z","service":"hallucygenie","reqId":"000018","method":"GET","path":"/api/history"}
+{"level":"info","msg":"response sent","time":"2026-05-02T00:12:28.475Z","service":"hallucygenie","reqId":"000018","method":"GET","path":"/api/history","status":200}
+{"level":"debug","msg":"request received","time":"2026-05-02T00:12:28.475Z","service":"hallucygenie","reqId":"000019","method":"GET","path":"/api/quota"}
+{"level":"info","msg":"response sent","time":"2026-05-02T00:12:29.066Z","service":"hallucygenie","reqId":"000019","method":"GET","path":"/api/quota","status":200}
+
+--- HallucyGenie started 2026-05-02T00:13:06.058Z ---
+{"level":"warn","msg":"tool execution failed","time":"2026-05-02T00:13:06.064Z","service":"agent","toolName":"generate_image","error":"Error: boom"}
+{"level":"warn","msg":"minimax api error","time":"2026-05-02T00:13:06.076Z","service":"agent","status":500,"error":"Internal Server Error"}
+{"level":"warn","msg":"minimax rejected tool result id","time":"2026-05-02T00:13:06.077Z","service":"agent","status":400,"error":"{\"type\":\"error\",\"error\":{\"type\":\"invalid_request_error\",\"message\":\"invalid params, tool result's tool id(call_function_ynt4kuk8nlse_1) not found (2013)\"}}"}
+{"level":"warn","msg":"tool returned error","time":"2026-05-02T00:13:06.077Z","service":"agent","toolName":"generate_music","error":"{\"base_resp\":{\"status_code\":2061,\"status_msg\":\"plan not support\"}}"}
+{"level":"warn","msg":"minimax context window exceeded","time":"2026-05-02T00:13:06.077Z","service":"agent","status":400,"error":"{\"type\":\"error\",\"error\":{\"message\":\"invalid params, context window exceeds limit (2013)\"}}"}
+{"level":"warn","msg":"tool returned error","time":"2026-05-02T00:13:06.094Z","service":"agent","toolName":"gen","error":"Unknown tool: gen"}
+{"level":"warn","msg":"tool returned error","time":"2026-05-02T00:13:06.094Z","service":"agent","toolName":"tts","error":"Unknown tool: tts"}
+{"level":"warn","msg":"minimax api error","time":"2026-05-02T00:13:06.151Z","service":"agent","status":500,"error":"Internal Server Error"}
+{"level":"warn","msg":"minimax api error","time":"2026-05-02T00:13:06.219Z","service":"agent","status":401,"error":"{\"error\":{\"message\":\"Invalid API key\"}}"}
+{"level":"warn","msg":"tool returned error","time":"2026-05-02T00:13:06.220Z","service":"agent","toolName":"test","error":"Unknown tool: test"}

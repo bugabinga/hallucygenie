@@ -13,7 +13,7 @@
         "declarationMap": true,
         "sourceMap": true,
         "outDir": "dist",
-        "types": ["@types/node"],
+        "types": ["@types/node", "@types/bun"],
         "lib": ["ESNext", "DOM"]
     },
     "include": ["**/*.ts"],
@@ -24,6 +24,6 @@
         "reports",
         "e2e",
         "**/*.test.ts",
-        "playwright.config.ts"
+        "**/playwright.config.ts"
     ]
 }

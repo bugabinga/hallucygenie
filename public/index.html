@@ -9,137 +9,97 @@
         <meta name="theme-color" content="#1a1a1a" />
         <meta name="description" content="HallucyGenie — your creative AI buddy" />
         <title>HallucyGenie</title>
+        <link
+            rel="icon"
+            href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E%F0%9F%A7%9E%3C/text%3E%3C/svg%3E"
+        />
         <link rel="stylesheet" href="style.css" />
     </head>
     <body>
         <div id="app">
-            <!-- Header -->
             <header id="header">
                 <div class="header-left">
-                    <span class="header-emoji">🧞</span>
+                    <span class="header-emoji" aria-hidden="true">🧞</span>
                     <h1 class="header-title">HallucyGenie</h1>
                 </div>
                 <div class="header-right">
-                    <span id="connection-status" class="status-dot" title="Connected"></span>
-                    <button
-                        id="quota-badge"
-                        class="quota-badge"
-                        title="View usage limits"
-                        aria-label="Usage limits"
-                    >
-                        <span class="quota-item" data-type="image" title="Images"
-                            >🎨 <span class="quota-used">—</span></span
-                        >
-                        <span class="quota-item" data-type="music" title="Music"
-                            >🎵 <span class="quota-used">—</span></span
-                        >
-                    </button>
-                    <button
-                        id="create-btn"
-                        class="create-btn"
-                        title="Create something"
-                        aria-label="Create media"
-                    >
-                        ✨ Create
-                    </button>
+                    <span
+                        id="connection-status"
+                        class="status-dot"
+                        title="Connected"
+                        role="status"
+                        aria-label="Connection status: Connected"
+                    ></span>
+                    <!-- prettier-ignore -->
+                    <span id="quota-badge" class="quota-badge" title="Images, voice, and music remaining today" role="status" aria-label="Images, voice, and music remaining today"><span class="quota-item" data-type="image" title="Images">🎨 <span class="quota-used">—</span></span><span class="quota-item" data-type="speech" title="Voice">🎙️ <span class="quota-used">—</span></span><span class="quota-item" data-type="music" title="Music">🎵 <span class="quota-used">—</span></span></span>
+                    <!-- prettier-ignore -->
+                    <button id="create-btn" class="create-btn" title="Create something" aria-label="Create media">✨ Create</button>
                 </div>
             </header>
 
-            <!-- Onboarding Overlay -->
             <div id="onboarding" class="onboarding" hidden>
                 <div class="onboarding-backdrop"></div>
-                <div class="onboarding-card">
+                <div class="onboarding-card" role="dialog" aria-modal="true" aria-label="Welcome">
                     <div class="onboarding-slides" id="onboarding-slides">
-                        <!-- Slide 1: Welcome -->
                         <div class="onboarding-slide active" data-slide="0">
-                            <div class="onboarding-emoji">🧞</div>
+                            <div class="onboarding-emoji" aria-hidden="true">🧞</div>
                             <h2>Hey! I'm HallucyGenie ✨</h2>
                             <p>Your AI buddy for gaming, creativity, and whatever you need!</p>
-                            <div class="onboarding-dots">
-                                <span class="dot active"></span>
-                                <span class="dot"></span>
-                                <span class="dot"></span>
-                                <span class="dot"></span>
-                            </div>
                             <button class="btn-primary onboarding-next">Let's go! →</button>
                         </div>
-                        <!-- Slide 2: Chat -->
                         <div class="onboarding-slide" data-slide="1">
-                            <div class="onboarding-emoji">💬</div>
+                            <div class="onboarding-emoji" aria-hidden="true">💬</div>
                             <h2>Chat with me!</h2>
                             <p>Ask me anything — gaming tips, homework help, story ideas...</p>
-                            <div class="onboarding-dots">
-                                <span class="dot"></span>
-                                <span class="dot active"></span>
-                                <span class="dot"></span>
-                                <span class="dot"></span>
-                            </div>
                             <button class="btn-primary" id="onboarding-try-chat">Try it! →</button>
                         </div>
-                        <!-- Slide 3: Create -->
                         <div class="onboarding-slide" data-slide="2">
-                            <div class="onboarding-emoji">🎨</div>
+                            <div class="onboarding-emoji" aria-hidden="true">🎨</div>
                             <h2>Make cool stuff!</h2>
-                            <p>
-                                Generate images, music, voices, and search the web — all in one
-                                place!
-                            </p>
-                            <div class="onboarding-dots">
-                                <span class="dot"></span>
-                                <span class="dot"></span>
-                                <span class="dot active"></span>
-                                <span class="dot"></span>
-                            </div>
-                            <button class="btn-primary" id="onboarding-try-create">
-                                See what I can do! →
-                            </button>
+                            <!-- prettier-ignore -->
+                            <p>Generate images, music, voices, and search the web — all in one place!</p>
+                            <!-- prettier-ignore -->
+                            <button class="btn-primary" id="onboarding-try-create">See what I can do! →</button>
                         </div>
-                        <!-- Slide 4: Fun -->
                         <div class="onboarding-slide" data-slide="3">
-                            <div class="onboarding-emoji">🎮</div>
+                            <div class="onboarding-emoji" aria-hidden="true">🎮</div>
                             <h2>Let's have fun!</h2>
                             <p>I'm here to help, inspire, and make you smile. Let's go! 🚀</p>
-                            <div class="onboarding-dots">
-                                <span class="dot"></span>
-                                <span class="dot"></span>
-                                <span class="dot"></span>
-                                <span class="dot active"></span>
-                            </div>
-                            <button class="btn-primary" id="onboarding-done">
-                                Start chatting! 🎉
-                            </button>
+                            <!-- prettier-ignore -->
+                            <button class="btn-primary" id="onboarding-done">Start chatting! 🎉</button>
                         </div>
+                    </div>
+                    <div class="onboarding-dots" aria-label="Onboarding progress">
+                        <span class="dot active" aria-hidden="true"></span>
+                        <span class="dot" aria-hidden="true"></span>
+                        <span class="dot" aria-hidden="true"></span>
+                        <span class="dot" aria-hidden="true"></span>
                     </div>
                 </div>
             </div>
 
-            <!-- Message List -->
             <main id="message-list" role="log" aria-live="polite" aria-label="Chat messages">
-                <!-- Welcome message -->
                 <div class="message message--assistant message--welcome">
-                    <div class="message-avatar">🧞</div>
+                    <div class="message-avatar" aria-hidden="true">🧞</div>
                     <div class="message-bubble">
-                        <div class="message-content">
-                            Hey! 👋 I'm HallucyGenie. Ask me anything — I can chat, make images 🔥,
-                            do voices 🎙️, and create music 🎵
-                        </div>
+                        <!-- prettier-ignore -->
+                        <div class="message-content">Hey! 👋 I'm HallucyGenie. Ask me anything — I can chat, make images 🔥, do voices 🎙️, and create music 🎵</div>
                     </div>
                 </div>
             </main>
 
-            <!-- Typing indicator (hidden by default) -->
             <div id="typing-indicator" class="typing-indicator" hidden>
-                <div class="typing-dots">
+                <div class="typing-dots" aria-hidden="true">
                     <span class="dot"></span>
                     <span class="dot"></span>
                     <span class="dot"></span>
                 </div>
             </div>
 
-            <!-- Input Area -->
             <footer id="input-area">
                 <form id="chat-form" autocomplete="off">
                     <div class="input-wrapper">
+                        <label for="chat-input" class="sr-only">Type your message</label>
                         <textarea
                             id="chat-input"
                             placeholder="Type a message..."
@@ -157,6 +117,7 @@
                                 stroke-width="2"
                                 stroke-linecap="round"
                                 stroke-linejoin="round"
+                                aria-hidden="true"
                             >
                                 <line x1="22" y1="2" x2="11" y2="13"></line>
                                 <polygon points="22 2 15 22 11 13 2 9 22 2"></polygon>
@@ -166,13 +127,11 @@
                 </form>
                 <div id="steer-hint" class="steer-hint" hidden>
                     <span class="steer-hint-text">💡 Type to steer the response</span>
-                    <button id="steer-close" class="steer-close" aria-label="Dismiss steer hint">
-                        ✕
-                    </button>
+                    <!-- prettier-ignore -->
+                    <button id="steer-close" class="steer-close" aria-label="Dismiss steer hint">✕</button>
                 </div>
             </footer>
 
-            <!-- Image Lightbox (hidden) -->
             <div id="lightbox" class="lightbox" hidden>
                 <div class="lightbox-backdrop"></div>
                 <div class="lightbox-content">
@@ -181,36 +140,43 @@
                 </div>
             </div>
 
-            <!-- Error Toast (hidden) -->
             <div id="error-toast" class="error-toast" hidden>
-                <span id="error-toast-icon">😕</span>
+                <span id="error-toast-icon" aria-hidden="true">😕</span>
                 <span id="error-toast-message"></span>
             </div>
 
-            <!-- Create Modal -->
-            <div id="create-modal" class="modal" hidden>
+            <div
+                id="create-modal"
+                class="modal"
+                role="dialog"
+                aria-modal="true"
+                aria-labelledby="create-title"
+                hidden
+            >
                 <div class="modal-backdrop create-backdrop"></div>
                 <div class="modal-content create-modal-content">
                     <div class="modal-header">
-                        <h2>✨ Create</h2>
+                        <h2 id="create-title">✨ Create</h2>
                         <button id="create-close" class="modal-close" aria-label="Close">✕</button>
                     </div>
-                    <div class="create-tabs">
-                        <button class="create-tab active" data-tab="image">🎨 Image</button>
-                        <button class="create-tab" data-tab="music">🎵 Music</button>
-                        <button class="create-tab" data-tab="voice">🎤 Voice</button>
-                        <button class="create-tab" data-tab="search">🔍 Search</button>
-                        <button class="create-tab" data-tab="assets">📁 Assets</button>
+                    <div class="create-tabs" role="tablist" aria-label="Create type">
+                        <!-- prettier-ignore -->
+                        <button class="create-tab active" data-tab="image" type="button">🎨 Image</button>
+                        <button class="create-tab" data-tab="music" type="button">🎵 Music</button>
+                        <button class="create-tab" data-tab="voice" type="button">🎤 Voice</button>
+                        <!-- prettier-ignore -->
+                        <button class="create-tab" data-tab="search" type="button">🔍 Search</button>
+                        <!-- prettier-ignore -->
+                        <button class="create-tab" data-tab="assets" type="button">📁 Assets</button>
                     </div>
                     <div class="create-panels">
-                        <!-- Image -->
                         <form id="create-image-form" class="create-panel" data-panel="image">
                             <div class="form-group">
                                 <label for="img-prompt">Describe your image</label>
                                 <textarea
                                     id="img-prompt"
                                     rows="3"
-                                    placeholder="A epic gaming logo with neon lights"
+                                    placeholder="An epic gaming logo with neon lights"
                                 ></textarea>
                             </div>
                             <div class="form-group">
@@ -224,7 +190,6 @@
                             </div>
                             <button type="submit" class="btn-primary">Generate image 🎨</button>
                         </form>
-                        <!-- Music -->
                         <form id="create-music-form" class="create-panel" data-panel="music" hidden>
                             <div class="form-group">
                                 <label for="music-prompt">Describe the music</label>
@@ -235,22 +200,17 @@
                                 ></textarea>
                             </div>
                             <div class="form-group">
-                                <label for="music-lyrics">Lyrics (optional)</label>
+                                <label for="music-lyrics"
+                                    >Lyrics (optional, empty = instrumental)</label
+                                >
                                 <textarea
                                     id="music-lyrics"
                                     rows="3"
                                     placeholder="Verse:... Chorus:..."
                                 ></textarea>
                             </div>
-                            <div class="form-group">
-                                <label>
-                                    <input type="checkbox" id="music-instrumental" /> Instrumental
-                                    only (no vocals)
-                                </label>
-                            </div>
                             <button type="submit" class="btn-primary">Generate music 🎵</button>
                         </form>
-                        <!-- Voice -->
                         <form id="create-voice-form" class="create-panel" data-panel="voice" hidden>
                             <div class="form-group">
                                 <label for="voice-text">Text to speak</label>
@@ -270,7 +230,6 @@
                             </div>
                             <button type="submit" class="btn-primary">Read it to me 🎤</button>
                         </form>
-                        <!-- Search -->
                         <form
                             id="create-search-form"
                             class="create-panel"
@@ -287,13 +246,10 @@
                             </div>
                             <button type="submit" class="btn-primary">Search the web 🔍</button>
                         </form>
-
-                        <!-- Assets -->
                         <div id="assets-panel" class="create-panel" data-panel="assets" hidden>
                             <div id="assets-grid"></div>
-                            <p id="assets-empty" class="assets-empty" hidden>
-                                No assets yet — generate something! ✨
-                            </p>
+                            <!-- prettier-ignore -->
+                            <p id="assets-empty" class="assets-empty" hidden>No assets yet — generate something! ✨</p>
                         </div>
                     </div>
                 </div>

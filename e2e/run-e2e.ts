@@ -9,13 +9,22 @@
 import { chromium, type Browser, type Page } from "playwright-core";
 import { resolve, join } from "node:path";
 import { tmpdir } from "node:os";
-import { mkdtempSync, rmSync } from "node:fs";
+import { existsSync, mkdtempSync, rmSync } from "node:fs";
 import { randomUUID } from "node:crypto";
 
-import { startServer, initDatabase, shutdown, resetStateForTesting } from "../server.ts";
+import { startServer, initDatabase, shutdown, resetStateForTesting } from "../src/server.ts";
 import { setupMinimaxMocks, cleanupMinimaxMocks } from "./minimax-mock.ts";
 
-const CHROMIUM_PATH = "/data/data/com.termux/files/usr/lib/chromium/chrome";
+const CHROMIUM_CANDIDATES = [
+    process.env.CHROMIUM_PATH,
+    "/usr/bin/google-chrome-stable",
+    "/usr/bin/google-chrome",
+    "/usr/bin/chromium",
+    "/usr/bin/chromium-browser",
+    "/data/data/com.termux/files/usr/lib/chromium/chrome",
+].filter((path): path is string => Boolean(path));
+
+const CHROMIUM_PATH = CHROMIUM_CANDIDATES.find((path) => existsSync(path));
 const TEST_PORT = 3001;
 const BASE_URL = `http://localhost:${TEST_PORT}`;
 
@@ -99,7 +108,7 @@ let _tmpDir: string | undefined;
 
 async function runE2ETests(): Promise<void> {
     console.log("🧪 HallucyGenie E2E Tests");
-    console.log(`   Browser: ${CHROMIUM_PATH}`);
+    console.log(`   Browser: ${CHROMIUM_PATH ?? "Playwright default"}`);
     console.log(`   URL: ${BASE_URL}`);
     console.log();
 
@@ -177,7 +186,59 @@ async function runE2ETests(): Promise<void> {
         results,
     );
 
-    // Test 2: Send button disabled when input is empty
+    // Test 2: Vendored fonts load from self and apply to real selectors
+    await runTest(
+        "vendored fonts load from self and apply",
+        async () => {
+            const page = await browser!.newPage();
+            const requests: string[] = [];
+            const consoleMessages: string[] = [];
+            page.on("request", (request) => requests.push(request.url()));
+            page.on("console", (message) => consoleMessages.push(message.text()));
+
+            await waitForApp(page);
+            await page.evaluate(async () => {
+                await document.fonts.ready;
+            });
+
+            const checks = await page.evaluate(() => ({
+                pixelify: document.fonts.check('16px "HG Pixelify Sans"'),
+                roboto: document.fonts.check('16px "HG Roboto Flex"'),
+                playwrite: document.fonts.check('16px "HG Playwrite DE SAS"'),
+                header: getComputedStyle(document.querySelector(".header-title")!).fontFamily,
+                assistant: getComputedStyle(
+                    document.querySelector(".message--assistant .message-content")!,
+                ).fontFamily,
+                input: getComputedStyle(document.querySelector("#chat-input")!).fontFamily,
+            }));
+
+            if (!checks.pixelify) throw new Error("HG Pixelify Sans not loaded");
+            if (!checks.roboto) throw new Error("HG Roboto Flex not loaded");
+            if (!checks.playwrite) throw new Error("HG Playwrite DE SAS not loaded");
+            if (!checks.header.includes("HG Pixelify Sans")) throw new Error(checks.header);
+            if (!checks.assistant.includes("HG Roboto Flex")) throw new Error(checks.assistant);
+            if (!checks.input.includes("HG Playwrite DE SAS")) throw new Error(checks.input);
+
+            const googleFontRequest = requests.find(
+                (url) => url.includes("fonts.googleapis.com") || url.includes("fonts.gstatic.com"),
+            );
+            if (googleFontRequest) throw new Error(`External font request: ${googleFontRequest}`);
+
+            const fontRequests = requests.filter((url) => url.includes("/fonts/"));
+            if (fontRequests.length < 3)
+                throw new Error(`Expected 3 font requests, got ${fontRequests.length}`);
+
+            const cspMessage = consoleMessages.find((message) =>
+                /content security policy|csp/i.test(message),
+            );
+            if (cspMessage) throw new Error(`CSP violation: ${cspMessage}`);
+
+            await page.close();
+        },
+        results,
+    );
+
+    // Test 3: Send button disabled when input is empty
     await runTest(
         "send button disabled when input is empty",
         async () => {
@@ -511,6 +572,7 @@ async function runE2ETests(): Promise<void> {
             await badge.waitFor({ state: "visible", timeout: 5000 });
 
             await expectVisible(page, ".quota-item[data-type='image']");
+            await expectVisible(page, ".quota-item[data-type='speech']");
             await expectVisible(page, ".quota-item[data-type='music']");
 
             await page.close();

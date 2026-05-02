@@ -1,78 +1,230 @@
 # HallucyGenie — `just --list` to see all recipes
 
-set dotenv-load := true
-set unstable := true
+set dotenv-load
+set unstable
 
-# npm install
+SRC := "src/server.ts src/agent.ts src/tools.ts src/db.ts src/log.ts public/app.ts public/markdown.ts"
+BACKEND_TESTS := "test/server.test.ts test/agent.test.ts test/tools.test.ts test/db.test.ts"
+FRONTEND_TESTS := "test/app.test.ts test/static.test.ts test/e2e-mock.test.ts test/minimax-test-script.test.ts"
+ACT_IMAGE := "localhost/hallucygenie-act:local"
+ACT_FLAGS := "-W .github/workflows/ci.yml -P ubuntu-latest=" + ACT_IMAGE + " --container-architecture linux/amd64 --pull=false --action-offline-mode --artifact-server-path .artifacts --cache-server-path .act-cache"
+
+# install dependencies
 [group('setup')]
 install:
-    npm install
+    bun install
+
+# download newest Google font files, convert to woff2, update manifest checksums
+[group('setup')]
+fonts-update commit="main":
+    bun scripts/update-fonts.ts {{ commit }}
+
+# bundle frontend
+[group('dev')]
+build:
+    bunx esbuild public/app.ts --outfile=public/app.js --bundle --format=esm --target=esnext
 
 # start dev server (port 3000)
 [group('dev')]
-dev:
-    node --experimental-strip-types --no-warnings server.ts
+dev: build
+    bun src/server.ts
+
+# stop old server, reset local DB/assets, then start dev server
+[group('dev')]
+fresh-dev: kill reset-db dev
+
+# stop HallucyGenie dev server on port 3000 (safe: only kills bun src/server.ts)
+[group('dev')]
+kill:
+    @pids="$(lsof -ti tcp:3000 2>/dev/null || true)"; \
+    if [ -z "$pids" ]; then echo "No process listening on port 3000"; exit 0; fi; \
+    killed=0; \
+    for pid in $pids; do \
+      cmd="$(ps -o args= -p "$pid" 2>/dev/null || true)"; \
+      case "$cmd" in \
+        *"bun src/server.ts"*) echo "Killing HallucyGenie server PID $pid"; kill "$pid"; killed=1 ;; \
+        *) echo "Refusing to kill PID $pid on port 3000: $cmd" ;; \
+      esac; \
+    done; \
+    if [ "$killed" -eq 0 ]; then exit 1; fi
+
+# open app in Chrome with remote debugging
+[group('dev')]
+dev-chrome:
+    mkdir -p .system/chrome-profile
+    google-chrome-stable \
+      --remote-debugging-port=9222 \
+      --remote-allow-origins=* \
+      --user-data-dir={{ justfile_directory() }}/.system/chrome-profile \
+      --no-first-run \
+      --no-default-browser-check \
+      --disable-search-engine-choice-screen \
+      --disable-features=Translate,SigninIntercept,SyncPromoAfterSigninIntercept \
+      http://localhost:3000 &>/dev/null &
 
 # format code (just + prettier)
 [group('check')]
 fmt:
     just -f ./justfile --fmt
-    npx prettier --write .
+    bunx prettier --write .
+
+# check formatting without modifying files
+[group('check')]
+fmt-check:
+    just -f ./justfile --fmt --check
+    bunx prettier --check .
 
 # type check (tsc --noEmit)
 [group('check')]
 lint:
-    npx tsc --noEmit
+    bunx tsc --noEmit
 
 # fmt + lint pre-flight
 [group('check')]
 check: fmt lint
 
-# quick unit (backend only)
-[group('test')]
-test: fmt lint
-    node --experimental-strip-types --no-warnings --test server.test.ts agent.test.ts tools.test.ts db.test.ts
+# CI check: no file mutation
+[group('check')]
+ci-check: fmt-check lint
 
-# unit + frontend in parallel
+# pre-commit hook: no file mutation
+[group('check')]
+hook-pre-commit: fmt-check lint
+
+# pre-push hook
 [group('test')]
-test-unit: fmt lint
-    node --experimental-strip-types --no-warnings --test server.test.ts agent.test.ts tools.test.ts db.test.ts &
-    node --experimental-strip-types --no-warnings --test --test-name-pattern "." public/app.test.ts &
-    wait
+hook-pre-push: test-unit
+
+# backend unit tests
+[group('test')]
+test:
+    bun test {{ BACKEND_TESTS }}
+
+# all unit tests
+[group('test')]
+test-unit:
+    status=0; \
+    bun test {{ BACKEND_TESTS }} & backend=$!; \
+    bun test {{ FRONTEND_TESTS }} & frontend=$!; \
+    wait "$backend" || status=$?; \
+    wait "$frontend" || status=$?; \
+    exit "$status"
 
 # integration (real server + in-memory DB)
 [group('test')]
-test-integration: fmt lint
-    node --experimental-strip-types --no-warnings --test integration.test.ts
+test-integration:
+    bun test test/integration.test.ts
 
-# mutation (tools + db, parallel)
+# mutation: agent only
 [group('test')]
-test-mutation: fmt lint
-    npx stryker run stryker.config.mjs &
-    npx stryker run stryker-tools.mjs &
-    npx stryker run stryker-db.mjs &
-    wait
+test-mutation-agent:
+    bunx stryker run test/stryker.config.mjs
+
+# mutation: tools only
+[group('test')]
+test-mutation-tools:
+    bunx stryker run test/stryker-tools.mjs
+
+# mutation: db only
+[group('test')]
+test-mutation-db:
+    bunx stryker run test/stryker-db.mjs
+
+# mutation: agent + tools + db, parallel
+[group('test')]
+test-mutation: build
+    status=0; \
+    just test-mutation-agent & agent=$!; \
+    just test-mutation-tools & tools=$!; \
+    just test-mutation-db & db=$!; \
+    wait "$agent" || status=$?; \
+    wait "$tools" || status=$?; \
+    wait "$db" || status=$?; \
+    exit "$status"
 
 # coverage (backend + frontend, parallel)
 [group('test')]
-test-coverage: fmt lint
-    node --experimental-strip-types --no-warnings --experimental-test-coverage --test server.test.ts agent.test.ts tools.test.ts db.test.ts &
-    node --experimental-strip-types --no-warnings --experimental-test-coverage --test --test-name-pattern "." public/app.test.ts &
-    wait
+test-coverage:
+    status=0; \
+    bun test --coverage {{ BACKEND_TESTS }} & backend=$!; \
+    bun test --coverage {{ FRONTEND_TESTS }} & frontend=$!; \
+    wait "$backend" || status=$?; \
+    wait "$frontend" || status=$?; \
+    exit "$status"
 
 # check + unit + integration
 [group('test')]
-test-all: check
-    node --experimental-strip-types --no-warnings --test server.test.ts agent.test.ts tools.test.ts db.test.ts &
-    node --experimental-strip-types --no-warnings --test --test-name-pattern "." public/app.test.ts &
-    wait
-    node --experimental-strip-types --no-warnings --test integration.test.ts
+test-all: check build
+    status=0; \
+    bun test {{ BACKEND_TESTS }} & backend=$!; \
+    bun test {{ FRONTEND_TESTS }} & frontend=$!; \
+    wait "$backend" || status=$?; \
+    wait "$frontend" || status=$?; \
+    if [ "$status" -ne 0 ]; then exit "$status"; fi; \
+    bun test test/integration.test.ts
+
+# CI: check + unit + integration without formatting writes
+[group('test')]
+ci-test-all: ci-check build
+    status=0; \
+    bun test {{ BACKEND_TESTS }} & backend=$!; \
+    bun test {{ FRONTEND_TESTS }} & frontend=$!; \
+    wait "$backend" || status=$?; \
+    wait "$frontend" || status=$?; \
+    if [ "$status" -ne 0 ]; then exit "$status"; fi; \
+    bun test test/integration.test.ts
+
+# build local act runner image with stable apt sources
+[group('test')]
+ci-act-image:
+    docker build -f deploy/act/Dockerfile -t {{ ACT_IMAGE }} deploy/act
+
+# run all CI jobs locally with cached act actions/images/artifacts
+[group('test')]
+ci-act: ci-act-image
+    act {{ ACT_FLAGS }}
+
+# run CI test job locally with cached act actions/images/artifacts
+[group('test')]
+ci-act-test: ci-act-image
+    act {{ ACT_FLAGS }} -j test
+
+# run CI mutation job locally with cached act actions/images/artifacts
+[group('test')]
+ci-act-mutation: ci-act-image
+    act {{ ACT_FLAGS }} -j mutation
+
+# build container locally, then run CI container job under act (workflow skips nested BuildKit)
+[group('test')]
+ci-act-container: ci-act-image container-build
+    act {{ ACT_FLAGS }} -j container
+
+# run update-check workflow locally with cached act actions/images/artifacts
+[group('test')]
+ci-act-updates: ci-act-image
+    act workflow_dispatch {{ ACT_FLAGS }} -W .github/workflows/updates.yml
+
+# run CI after merging into main/master locally
+[group('test')]
+hook-post-merge:
+    branch="$(git branch --show-current)"; \
+    if [ "$branch" != "master" ] && [ "$branch" != "main" ]; then exit 0; fi; \
+    just ci-act
+
+# build production container image locally
+[group('deploy')]
+container-build:
+    docker build -f deploy/Dockerfile -t hallucygenie:local .
+
+# check dependency updates
+[group('check')]
+update-check:
+    bun outdated --latest
 
 # playwright E2E (real server + mocked MiniMax via nock)
 [group('test')]
-test-e2e:
-    npx esbuild public/app.ts --outfile=public/app.js --bundle --format=esm --target=esnext
-    PLAYWRIGHT_ALLOW_ANDROID=1 node --experimental-strip-types --no-warnings e2e/run-e2e.ts
+test-e2e: build
+    PLAYWRIGHT_ALLOW_ANDROID=1 bun e2e/run-e2e.ts
 
 alias t := test-unit
 alias ti := test-integration
@@ -80,62 +232,29 @@ alias ta := test-all
 alias e2e := test-e2e
 alias verify := test-all
 
-# update pi globally
-[group('pi')]
-pi-update:
-    npm update -g @mariozechner/pi-coding-agent
-    pi update
+HOME_DIR := env("HOME")
 
-# find slop and fix it
-[group('pi')]
-desloppy:
-    pi --skill /data/data/com.termux/files/home/.pi/agent/skills/jq --tools read,bash,edit,write,grep,find,ls -p "find ugliest slop in code. fix it good. no mercy."
-
-# tiger style enforcement
-[group('pi')]
-tiger:
-    pi --skill /data/data/com.termux/files/home/.pi/skills/tiger -p "scan code. enforce tiger style. no mercy."
-
-# roast — adversarial critique. Usage: just roast "your prompt"
-[group('pi')]
-roast prompt:
-    pi --skill /data/data/com.termux/files/home/.pi/agent/skills/adversarial --tools read,bash,edit,write,grep,find,ls -p "{{ prompt }}"
-
-# brainstorm: generate ideas for HallucyGenie project
-[group('pi')]
-brainstorm:
-    pi --skill /data/data/com.termux/files/home/.pi/agent/skills/brainstorm \
-      --tools read,bash,write,ls,grep,find \
-      -p "Brainstorm ideas for HallucyGenie. Read AGENTS.md for context. Read ideas.md to avoid duplicates. Generate ideas for features, architecture, UX improvements. Run brainstorm skill phases (diverge, challenge adversarial sub-agent, defend, converge). Append final recommendation to ideas.md."
-
-# test MiniMax API endpoints + check quota; update skill + AGENTS.md if new info found
-
-MINIMAX_KEY := env("MINIMAX_API_KEY")
-
-# test MiniMax API endpoints + check quota
+# test MiniMax API endpoints + check quota (real API; consumes TTS/image/music quota)
 [group('pi')]
 minimax-test:
-    @echo "Testing MiniMax API endpoints..."; \
-    echo "TTS:"; curl -s -X POST "https://api.minimax.io/v1/t2a_v2" -H "Content-Type: application/json" -H "Authorization: Bearer {{ MINIMAX_KEY }}" -d '{"model":"speech-2.8-hd","text":"test","voice_setting":{"voice_id":"English_expressive_narrator"}}' | python3 -c "import sys,json; r=json.load(sys.stdin); print(r.get('base_resp',{}).get('status_code'), r.get('base_resp',{}).get('status_msg'))" 2>/dev/null; \
-    echo "Image:"; curl -s -X POST "https://api.minimax.io/v1/image_generation" -H "Content-Type: application/json" -H "Authorization: Bearer {{ MINIMAX_KEY }}" -d '{"model":"image-01","prompt":"test"}' | python3 -c "import sys,json; r=json.load(sys.stdin); print(r.get('base_resp',{}).get('status_code'), r.get('base_resp',{}).get('status_msg'))" 2>/dev/null; \
-    echo "Quota:"; curl -s "https://api.minimax.io/v1/token_plan/remains" -H "Authorization: Bearer {{ MINIMAX_KEY }}" -H "User-Agent: hallucygenie/1.0" | python3 -c "import sys,json; r=json.load(sys.stdin); [print(m['model_name'], m['current_interval_total_count']) for m in r.get('model_remains',[])]" 2>/dev/null
+    bun scripts/minimax-test.ts
 
 # research MiniMax APIs: update skill + report code changes
 [group('pi')]
 minimax-research:
-    pi --skill /data/data/com.termux/files/home/.pi/agent/skills/minimax --skill /data/data/com.termux/files/home/.pi/agent/skills/research --tools read,bash,edit,write,grep,find,ls -p "You are researching MiniMax API capabilities for HallucyGenie. Check the current skill at /data/data/com.termux/files/home/.pi/agent/skills/minimax/SKILL.md and the project docs at AGENTS.md. Use the research skill to crawl MiniMax docs. Research any new models, endpoints, or changes. Update the skill file if you find improvements. Report any code changes needed in the project (tools.ts, db.ts, agent.ts, server.ts, etc.). If no changes needed, say so."
+    pi --skill {{ HOME_DIR }}/.pi/agent/skills/minimax --skill {{ HOME_DIR }}/.pi/agent/skills/research --tools read,bash,edit,write,grep,find,ls -p "You are researching MiniMax API capabilities for HallucyGenie. Check the current skill at {{ HOME_DIR }}/.pi/agent/skills/minimax/SKILL.md and the project docs at AGENTS.md. Use the research skill to crawl MiniMax docs. Research any new models, endpoints, or changes. Update the skill file if you find improvements. Report any code changes needed in the project (src/tools.ts, src/db.ts, src/agent.ts, src/server.ts, etc.). If no changes needed, say so."
 
-# rm caches
+# rm generated files and caches
 [group('util')]
 clean:
-    rm -rf node_modules/.cache reports
+    rm -rf dist coverage reports .stryker-tmp node_modules/.cache test-data* public/app.js
 
-# list recipes
+# reset local SQLite DB + generated assets
 [group('util')]
-list:
-    just --list
+reset-db:
+    rm -rf data
 
-# run taskplane dashboard
+# full local reset (keeps .env)
 [group('util')]
-dashboard:
-    taskplane dashboard &
+nuke: clean
+    rm -rf node_modules data logs

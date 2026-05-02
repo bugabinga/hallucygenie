@@ -110,10 +110,12 @@ Code in `tools.ts generateImage()`: ✅ Fixed auth, correct model.
 POST https://api.minimax.io/v1/music_generation
 Auth: Authorization: Bearer ONLY
 Model: music-2.6
-Requires: lyrics parameter (confirmed by live test: "invalid params, lyrics is required")
+Instrumental: is_instrumental=true, prompt required, omit lyrics
+Non-instrumental: is_instrumental=false, lyrics required
+Returns: hex MP3 by default
 ```
 
-Code in `tools.ts generateMusic()`: ✅ Fixed auth, correct model, correct parameter.
+Code in `tools.ts generateMusic()`: ✅ Fixed auth, correct model, correct `is_instrumental` parameter.
 
 ### Web Search ✅ WORKS
 

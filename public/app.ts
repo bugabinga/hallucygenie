@@ -7,7 +7,14 @@
 interface HistoryMessage {
     role: "user" | "assistant" | "tool";
     content: string;
-    tool_call_id?: string;
+    tool_call_id?: string | null;
+    tool_calls_json?: string | null;
+    thinking?: string | null;
+}
+
+interface HistoryToolCall {
+    id: string;
+    name: string;
 }
 
 interface ToolResult {
@@ -295,6 +302,79 @@ interface Asset {
     created_at: number;
 }
 
+const ASSET_PROMPT_PREVIEW_CHARS = 30;
+
+function assetUrl(sessionId: string, id: string): string {
+    return `/asset/${id}?s=${encodeURIComponent(sessionId)}`;
+}
+
+function assetPreviewText(asset: Asset): string {
+    const text = asset.prompt?.trim() || asset.tool_name;
+    if (text.length <= ASSET_PROMPT_PREVIEW_CHARS) return text;
+    return `${text.slice(0, ASSET_PROMPT_PREVIEW_CHARS)}…`;
+}
+
+function assetTypeLabel(type: Asset["type"]): string {
+    if (type === "image") return "Image";
+    if (type === "music") return "Music";
+    return "Voice";
+}
+
+function renderAssetPreview(asset: Asset, url: string): HTMLElement {
+    if (asset.type !== "image") {
+        const audio = document.createElement("audio");
+        audio.className = "asset-audio";
+        audio.src = url;
+        audio.controls = true;
+        audio.preload = "metadata";
+        return audio;
+    }
+
+    const button = document.createElement("button");
+    button.className = "asset-preview-button";
+    button.type = "button";
+    button.setAttribute("aria-label", "Preview image");
+    button.addEventListener("click", () => openLightbox(url));
+
+    const img = document.createElement("img");
+    img.className = "asset-thumb";
+    img.src = url;
+    img.alt = asset.prompt ?? "Generated image";
+    img.loading = "lazy";
+    button.appendChild(img);
+    return button;
+}
+
+function renderAssetCard(asset: Asset, sessionId: string): HTMLElement {
+    const url = assetUrl(sessionId, asset.id);
+    const card = document.createElement("div");
+    card.className = "asset-card";
+    card.dataset.type = asset.type;
+    card.dataset.id = asset.id;
+    card.title = asset.prompt ?? asset.tool_name;
+
+    const badge = document.createElement("div");
+    badge.className = "asset-badge";
+    badge.textContent = assetTypeLabel(asset.type);
+    card.appendChild(badge);
+
+    card.appendChild(renderAssetPreview(asset, url));
+
+    const meta = document.createElement("div");
+    meta.className = "asset-meta";
+    meta.textContent = assetPreviewText(asset);
+    card.appendChild(meta);
+
+    const download = document.createElement("a");
+    download.className = "asset-download";
+    download.href = url;
+    download.download = asset.filename;
+    download.textContent = "Download";
+    card.appendChild(download);
+
+    return card;
+}
+
 export function loadAssets(): void {
     const grid = $("#assets-grid") as HTMLElement;
     const empty = $("#assets-empty") as HTMLElement;
@@ -302,53 +382,18 @@ export function loadAssets(): void {
     empty.hidden = true;
 
     const sessionId = getOrCreateSessionId();
-    fetch(`/assets`, { headers: { "X-Session-Id": sessionId } })
+    fetch("/assets", { headers: { "X-Session-Id": sessionId } })
         .then((r) => r.json() as Promise<{ assets: Asset[] }>)
         .then(({ assets }) => {
             if (!assets.length) {
                 empty.hidden = false;
                 return;
             }
-            for (const asset of assets.slice(0, 20)) {
-                const card = document.createElement("div");
-                card.className = "asset-card";
-                (card as any).dataset.type = asset.type;
-                (card as any).dataset.id = asset.id;
-                card.title = asset.prompt ?? asset.tool_name;
-                if (asset.type === "image") {
-                    const img = document.createElement("img");
-                    img.className = "asset-thumb";
-                    img.src = `/asset/${asset.id}`;
-                    img.alt = asset.prompt ?? "Generated image";
-                    img.loading = "lazy";
-                    card.appendChild(img);
-                } else {
-                    const icon = document.createElement("span");
-                    icon.className = "asset-thumb";
-                    icon.textContent = asset.type === "music" ? "🎵" : "🎤";
-                    card.appendChild(icon);
-                }
-                const meta = document.createElement("div");
-                meta.className = "asset-meta";
-                meta.textContent = asset.prompt
-                    ? asset.prompt.slice(0, 30) + (asset.prompt.length > 30 ? "…" : "")
-                    : asset.tool_name;
-                card.appendChild(meta);
-                card.addEventListener("click", () => {
-                    if (asset.type === "image") {
-                        openLightbox(`/asset/${asset.id}`);
-                    } else {
-                        new Audio(`/asset/${asset.id}`)
-                            .play()
-                            .catch(() => showError("Could not play audio"));
-                    }
-                });
-                grid.appendChild(card);
-            }
+            for (const asset of assets) grid.appendChild(renderAssetCard(asset, sessionId));
         })
         .catch(() => {
             empty.hidden = false;
-            (empty as HTMLElement).textContent = "Failed to load assets 😕";
+            empty.textContent = "Failed to load assets 😕";
         });
 }
 
@@ -444,6 +489,16 @@ export async function streamChat(
     }
 }
 
+function ensureAssistantContent(): HTMLElement {
+    if (currentAssistantContent) return currentAssistantContent;
+    const messageList = $("#message-list");
+    const { container, contentEl } = renderAssistantMessage();
+    messageList.appendChild(container);
+    currentAssistantEl = container;
+    currentAssistantContent = contentEl;
+    return contentEl;
+}
+
 function handleSSEEvent(event: SSEEvent): void {
     const { event: eventType, data } = event;
 
@@ -483,9 +538,7 @@ function handleSSEEvent(event: SSEEvent): void {
         try {
             const parsed: ToolStartEvent = JSON.parse(data);
             const card = renderToolCardLoading(parsed.name);
-            if (currentAssistantContent) {
-                currentAssistantContent.appendChild(card);
-            }
+            ensureAssistantContent().appendChild(card);
             activeToolCards.set(parsed.id, card);
             scrollToBottom();
         } catch {
@@ -499,13 +552,19 @@ function handleSSEEvent(event: SSEEvent): void {
         try {
             const parsed: ToolResultEvent = JSON.parse(data);
             const loadingCard = activeToolCards.get(parsed.id);
-            if (loadingCard && currentAssistantContent) {
+            const resultCard = renderToolResult(parsed.name, parsed.result);
+            if (loadingCard?.isConnected) {
                 // Replace loading card with result
-                const resultCard = renderToolResult(parsed.name, parsed.result);
                 loadingCard.replaceWith(resultCard);
-                activeToolCards.delete(parsed.id);
+            } else {
+                // Fallback: render orphan result instead of silently dropping it.
+                ensureAssistantContent().appendChild(resultCard);
             }
+            activeToolCards.delete(parsed.id);
             scrollToBottom();
+            // Refresh quota badge and assets tab after tool execution
+            updateQuotaBadge();
+            if (($("#create-modal") as HTMLElement)?.dataset.tabOpen === "assets") loadAssets();
         } catch {
             // Ignore parse errors
         }
@@ -529,20 +588,34 @@ function handleSSEEvent(event: SSEEvent): void {
     }
 }
 
+function getOrCreateContentRegion(
+    className: string,
+    position: "start" | "end",
+): HTMLElement | null {
+    if (!currentAssistantContent) return null;
+    let region = currentAssistantContent.querySelector<HTMLElement>(`.${className}`);
+    if (region) return region;
+
+    region = createElement("div", { class: className });
+    if (position === "start") {
+        currentAssistantContent.insertBefore(region, currentAssistantContent.firstChild);
+    } else {
+        currentAssistantContent.appendChild(region);
+    }
+    return region;
+}
+
 function appendText(text: string): void {
     if (!currentAssistantContent) return;
 
     rawTextBuffer += text;
+    const textRegion = getOrCreateContentRegion("assistant-text-region", "end");
+    if (!textRegion) return;
 
-    // Re-render the content with markdown
-    let html = "";
-    if (thinkingBuffer) {
-        html += renderThinkingBlock(thinkingBuffer);
-    }
-    if (rawTextBuffer) {
-        html += renderMarkdown(rawTextBuffer);
-    }
-    currentAssistantContent.innerHTML = html;
+    textRegion.classList.add("is-streaming");
+    const chunk = createElement("span", { class: "stream-chunk" });
+    chunk.textContent = text;
+    textRegion.appendChild(chunk);
     scrollToBottom();
 }
 
@@ -550,16 +623,10 @@ function appendThinking(text: string): void {
     if (!currentAssistantContent) return;
 
     thinkingBuffer += text;
+    const thinkingRegion = getOrCreateContentRegion("assistant-thinking-region", "start");
+    if (!thinkingRegion) return;
 
-    // Re-render the content
-    let html = "";
-    if (thinkingBuffer) {
-        html += renderThinkingBlock(thinkingBuffer);
-    }
-    if (rawTextBuffer) {
-        html += renderMarkdown(rawTextBuffer);
-    }
-    currentAssistantContent.innerHTML = html;
+    thinkingRegion.innerHTML = renderThinkingBlock(thinkingBuffer);
     scrollToBottom();
 }
 
@@ -571,6 +638,15 @@ function scrollToBottom(): void {
 }
 
 function finishStreaming(): void {
+    currentAssistantContent
+        ?.querySelectorAll<HTMLElement>(".assistant-text-region.is-streaming")
+        .forEach((el) => {
+            el.innerHTML = renderMarkdown(rawTextBuffer);
+            el.classList.remove("is-streaming");
+        });
+    document
+        .querySelectorAll(".message--steer")
+        .forEach((el) => el.classList.remove("message--steer"));
     isStreaming = false;
     currentAssistantEl = null;
     currentAssistantContent = null;
@@ -593,7 +669,7 @@ function setStreamingUI(streaming: boolean): void {
         input.placeholder = "💡 Type to steer the response...";
         sendBtn.disabled = true;
         typingIndicator.hidden = false;
-        steerHint.hidden = false;
+        steerHint.hidden = true;
     } else {
         input.disabled = false;
         input.placeholder = "Type a message...";
@@ -674,6 +750,65 @@ export async function sendSteerMessage(content: string): Promise<void> {
 
 // ── History Loading ──────────────────────────────────────────────────
 
+function parseHistoryToolCalls(value?: string | null): HistoryToolCall[] {
+    if (!value) return [];
+    try {
+        const parsed = JSON.parse(value) as HistoryToolCall[];
+        if (!Array.isArray(parsed)) return [];
+        return parsed.filter(
+            (call) => typeof call.id === "string" && typeof call.name === "string",
+        );
+    } catch {
+        return [];
+    }
+}
+
+function inferHistoryToolResult(toolName: string, content: string): ToolResult {
+    if (content.startsWith("Error: ")) return { type: "error", content: content.slice(7) };
+
+    if (toolName === "generate_image" && /^(?:\/asset\/|https?:\/\/|data:image\/)/i.test(content)) {
+        return { type: "image", content };
+    }
+
+    if (
+        (toolName === "text_to_speech" || toolName === "generate_music") &&
+        /^(?:\/asset\/|https?:\/\/|data:audio\/)/i.test(content)
+    ) {
+        return { type: "audio", content };
+    }
+
+    return { type: "text", content };
+}
+
+function renderHistoryAssistantMessage(
+    msg: HistoryMessage,
+    toolRows: Map<string, HistoryMessage>,
+): HTMLElement {
+    const { container, contentEl } = renderAssistantMessage();
+
+    if (msg.thinking?.trim()) {
+        const thinkingRegion = createElement("div", { class: "assistant-thinking-region" });
+        thinkingRegion.innerHTML = renderThinkingBlock(msg.thinking);
+        contentEl.appendChild(thinkingRegion);
+    }
+
+    if (msg.content.trim()) {
+        const textRegion = createElement("div", { class: "assistant-text-region" });
+        textRegion.innerHTML = renderMarkdown(msg.content);
+        contentEl.appendChild(textRegion);
+    }
+
+    for (const call of parseHistoryToolCalls(msg.tool_calls_json)) {
+        const toolRow = toolRows.get(call.id);
+        if (!toolRow) continue;
+        contentEl.appendChild(
+            renderToolResult(call.name, inferHistoryToolResult(call.name, toolRow.content)),
+        );
+    }
+
+    return container;
+}
+
 export async function loadHistory(): Promise<void> {
     const sessionId = getOrCreateSessionId();
     const messageList = $("#message-list");
@@ -687,16 +822,17 @@ export async function loadHistory(): Promise<void> {
             if (welcome) welcome.remove();
         }
 
+        const toolRows = new Map<string, HistoryMessage>();
+        for (const msg of messages) {
+            if (msg.role === "tool" && msg.tool_call_id) toolRows.set(msg.tool_call_id, msg);
+        }
+
         for (const msg of messages) {
             if (msg.role === "user") {
                 messageList.appendChild(renderUserMessage(msg.content));
             } else if (msg.role === "assistant") {
-                const { container } = renderAssistantMessage();
-                const contentEl = container.querySelector(".message-content") as HTMLElement;
-                contentEl.innerHTML = renderMarkdown(msg.content);
-                messageList.appendChild(container);
+                messageList.appendChild(renderHistoryAssistantMessage(msg, toolRows));
             }
-            // Tool messages in history are simplified for now
         }
 
         scrollToBottom();
@@ -729,8 +865,8 @@ interface QuotaData {
     music: { used: number; total: number } | null;
 }
 
-async function updateQuotaBadge(): Promise<void> {
-    const badge = $("#quota-badge") as HTMLButtonElement | null;
+export async function updateQuotaBadge(): Promise<void> {
+    const badge = $("#quota-badge") as HTMLElement | null;
     if (!badge) return;
     try {
         const resp = await fetch("/api/quota");
@@ -765,6 +901,12 @@ export function init(): void {
     const lightboxClose = lightbox.querySelector(".lightbox-close") as HTMLElement;
     const lightboxBackdrop = lightbox.querySelector(".lightbox-backdrop") as HTMLElement;
     const steerClose = $("#steer-close") as HTMLElement;
+    const connectionStatus = $("#connection-status") as HTMLElement;
+
+    connectionStatus.setAttribute(
+        "aria-label",
+        `Connection status: ${connectionStatus.title || "Connected"}`,
+    );
 
     // Form submit (handles both send and steer)
     form.addEventListener("submit", (e) => {
@@ -791,7 +933,10 @@ export function init(): void {
     lightboxClose.addEventListener("click", closeLightbox);
     lightboxBackdrop.addEventListener("click", closeLightbox);
     document.addEventListener("keydown", (e) => {
-        if (e.key === "Escape") closeLightbox();
+        if (e.key === "Escape") {
+            closeLightbox();
+            if (!createModal.hidden) closeCreateModal();
+        }
     });
 
     // Steer close
@@ -844,7 +989,7 @@ export function init(): void {
     // Slide 3: Try create button
     $("#onboarding-try-create").addEventListener("click", () => {
         dismissOnboarding();
-        createModal.hidden = false;
+        openCreateModal();
     });
 
     // Done button
@@ -861,16 +1006,47 @@ export function init(): void {
     const createModal = $("#create-modal");
     const createClose = $("#create-close") as HTMLButtonElement;
     const createBackdrop = createModal.querySelector(".create-backdrop") as HTMLElement;
+    let createModalReturnFocus: HTMLElement | null = null;
 
-    createBtn.addEventListener("click", () => {
+    function getCreateModalFocusable(): HTMLElement[] {
+        return Array.from(
+            createModal.querySelectorAll<HTMLElement>(
+                'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])',
+            ),
+        ).filter((el) => !el.hasAttribute("disabled") && !el.closest("[hidden]"));
+    }
+
+    function openCreateModal(): void {
+        createModalReturnFocus = document.activeElement as HTMLElement | null;
         createModal.hidden = false;
-    });
-    createClose.addEventListener("click", () => {
+        createClose.focus();
+    }
+
+    function closeCreateModal(): void {
         createModal.hidden = true;
-    });
-    createBackdrop.addEventListener("click", () => {
-        createModal.hidden = true;
-    });
+        createModalReturnFocus?.focus();
+        createModalReturnFocus = null;
+    }
+
+    function trapCreateModalFocus(e: KeyboardEvent): void {
+        if (e.key !== "Tab" || createModal.hidden) return;
+        const focusable = getCreateModalFocusable();
+        if (focusable.length === 0) return;
+        const first = focusable[0];
+        const last = focusable[focusable.length - 1];
+        if (e.shiftKey && document.activeElement === first) {
+            e.preventDefault();
+            last.focus();
+        } else if (!e.shiftKey && document.activeElement === last) {
+            e.preventDefault();
+            first.focus();
+        }
+    }
+
+    createBtn.addEventListener("click", openCreateModal);
+    createClose.addEventListener("click", closeCreateModal);
+    createBackdrop.addEventListener("click", closeCreateModal);
+    createModal.addEventListener("keydown", trapCreateModalFocus);
 
     // Tab switching
     const tabs = createModal.querySelectorAll<HTMLButtonElement>(".create-tab");
@@ -887,6 +1063,7 @@ export function init(): void {
             );
             if (panel) {
                 panel.hidden = false;
+                createModal.dataset.tabOpen = tab.dataset.tab ?? "";
                 if (tab.dataset.tab === "assets") loadAssets();
             }
         });
@@ -901,7 +1078,6 @@ export function init(): void {
     const imgRatioInput = $("#img-ratio") as HTMLSelectElement;
     const musicPromptInput = $("#music-prompt") as HTMLTextAreaElement;
     const musicLyricsInput = $("#music-lyrics") as HTMLTextAreaElement;
-    const musicInstrumentalInput = $("#music-instrumental") as HTMLInputElement;
     const voiceTextInput = $("#voice-text") as HTMLTextAreaElement;
     const voiceSpeedInput = $("#voice-speed") as HTMLSelectElement;
     const searchQueryInput = $("#search-query") as HTMLTextAreaElement;
@@ -911,8 +1087,10 @@ export function init(): void {
         const prompt = imgPromptInput.value.trim();
         const ratio = imgRatioInput.value;
         if (prompt) {
-            createModal.hidden = true;
-            sendMessage(`Generate an image: ${prompt} (aspect ratio ${ratio})`);
+            closeCreateModal();
+            sendMessage(
+                `Use generate_image with prompt: ${prompt}\nTool params: aspect_ratio=${ratio}`,
+            );
         }
     });
 
@@ -920,12 +1098,10 @@ export function init(): void {
         e.preventDefault();
         const prompt = musicPromptInput.value.trim();
         const lyrics = musicLyricsInput.value.trim();
-        const instrumental = musicInstrumentalInput.checked;
         if (prompt) {
-            createModal.hidden = true;
-            let msg = `Generate music: ${prompt}`;
-            if (lyrics) msg += `. Lyrics: ${lyrics}`;
-            if (instrumental) msg += " (instrumental only)";
+            closeCreateModal();
+            let msg = `Use generate_music with prompt: ${prompt}`;
+            if (lyrics) msg += `\nTool params: lyrics=${lyrics}`;
             sendMessage(msg);
         }
     });
@@ -935,8 +1111,8 @@ export function init(): void {
         const text = voiceTextInput.value.trim();
         const speed = voiceSpeedInput.value;
         if (text) {
-            createModal.hidden = true;
-            sendMessage(`Read this out loud: ${text} (speed: ${speed}x)`);
+            closeCreateModal();
+            sendMessage(`Use text_to_speech with text: ${text}\nTool params: speed=${speed}`);
         }
     });
 
@@ -944,7 +1120,7 @@ export function init(): void {
         e.preventDefault();
         const query = searchQueryInput.value.trim();
         if (query) {
-            createModal.hidden = true;
+            closeCreateModal();
             sendMessage(`Search the web for: ${query}`);
         }
     });

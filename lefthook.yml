@@ -1,0 +1,14 @@
+pre-commit:
+    commands:
+        check:
+            run: just hook-pre-commit
+
+pre-push:
+    commands:
+        test-unit:
+            run: just hook-pre-push
+
+post-merge:
+    commands:
+        ci-main:
+            run: just hook-post-merge

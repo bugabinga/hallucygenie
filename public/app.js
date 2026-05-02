@@ -2124,32 +2124,49 @@ marked.use({
   async: false,
   breaks: false
 });
+function escapeHtml(text) {
+  return text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/\"/g, "&quot;");
+}
+function normalizeMarkdownInput(text) {
+  return text.replace(/\r\n/g, "\n").replace(/[ \t]+\n/g, "\n").replace(/\n{3,}/g, "\n\n").trim();
+}
 marked.use({
   renderer: {
     link({ href, title, text }) {
-      const titleAttr = title ? ` title="${title}"` : "";
-      return `<a href="${href}"${titleAttr} target="_blank" rel="noopener">${text}</a>`;
+      const safeHref = escapeHtml(href);
+      const titleAttr = title ? ` title="${escapeHtml(title)}"` : "";
+      return `<a href="${safeHref}"${titleAttr} target="_blank" rel="noopener">${text}</a>`;
+    },
+    image({ href, title, text }) {
+      const safeHref = escapeHtml(href);
+      const safeAlt = escapeHtml(text || "Generated image");
+      const titleAttr = title ? ` title="${escapeHtml(title)}"` : "";
+      return `<img class="markdown-image" src="${safeHref}" alt="${safeAlt}"${titleAttr} loading="lazy" referrerpolicy="no-referrer">`;
+    },
+    html({ text }) {
+      return escapeHtml(text);
     },
     // Code block: use `lang-` class prefix for CSS compatibility
     code({ text, lang }) {
       const cls = lang ? ` class="lang-${lang}"` : "";
-      const escaped = text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+      const escaped = escapeHtml(text);
       return `<pre><code${cls}>${escaped}</code></pre>`;
     },
     // Preserve task list checkbox class for CSS styling
     listitem({ text, task, checked }) {
+      const rendered = marked.parseInline(text);
       if (task) {
         const cls = checked ? "task-checkbox task-checked" : "task-checkbox";
-        return `<li><input type="checkbox" disabled class="${cls}"${checked ? " checked" : ""}> ${text}</li>
+        return `<li><input type="checkbox" disabled class="${cls}"${checked ? " checked" : ""}> ${rendered}</li>
 `;
       }
-      return `<li>${text}</li>
+      return `<li>${rendered}</li>
 `;
     }
   }
 });
 function renderMarkdown(text) {
-  return marked.parse(text);
+  return marked.parse(normalizeMarkdownInput(text));
 }
 
 // public/app.ts
@@ -2350,49 +2367,78 @@ function closeLightbox() {
   const img = $("#lightbox-img");
   img.src = "";
 }
+var ASSET_PROMPT_PREVIEW_CHARS = 30;
+function assetUrl(sessionId, id) {
+  return `/asset/${id}?s=${encodeURIComponent(sessionId)}`;
+}
+function assetPreviewText(asset) {
+  const text = asset.prompt?.trim() || asset.tool_name;
+  if (text.length <= ASSET_PROMPT_PREVIEW_CHARS) return text;
+  return `${text.slice(0, ASSET_PROMPT_PREVIEW_CHARS)}\u2026`;
+}
+function assetTypeLabel(type) {
+  if (type === "image") return "Image";
+  if (type === "music") return "Music";
+  return "Voice";
+}
+function renderAssetPreview(asset, url) {
+  if (asset.type !== "image") {
+    const audio = document.createElement("audio");
+    audio.className = "asset-audio";
+    audio.src = url;
+    audio.controls = true;
+    audio.preload = "metadata";
+    return audio;
+  }
+  const button = document.createElement("button");
+  button.className = "asset-preview-button";
+  button.type = "button";
+  button.setAttribute("aria-label", "Preview image");
+  button.addEventListener("click", () => openLightbox(url));
+  const img = document.createElement("img");
+  img.className = "asset-thumb";
+  img.src = url;
+  img.alt = asset.prompt ?? "Generated image";
+  img.loading = "lazy";
+  button.appendChild(img);
+  return button;
+}
+function renderAssetCard(asset, sessionId) {
+  const url = assetUrl(sessionId, asset.id);
+  const card = document.createElement("div");
+  card.className = "asset-card";
+  card.dataset.type = asset.type;
+  card.dataset.id = asset.id;
+  card.title = asset.prompt ?? asset.tool_name;
+  const badge = document.createElement("div");
+  badge.className = "asset-badge";
+  badge.textContent = assetTypeLabel(asset.type);
+  card.appendChild(badge);
+  card.appendChild(renderAssetPreview(asset, url));
+  const meta = document.createElement("div");
+  meta.className = "asset-meta";
+  meta.textContent = assetPreviewText(asset);
+  card.appendChild(meta);
+  const download = document.createElement("a");
+  download.className = "asset-download";
+  download.href = url;
+  download.download = asset.filename;
+  download.textContent = "Download";
+  card.appendChild(download);
+  return card;
+}
 function loadAssets() {
   const grid = $("#assets-grid");
   const empty = $("#assets-empty");
   grid.innerHTML = "";
   empty.hidden = true;
   const sessionId = getOrCreateSessionId();
-  fetch(`/assets`, { headers: { "X-Session-Id": sessionId } }).then((r) => r.json()).then(({ assets }) => {
+  fetch("/assets", { headers: { "X-Session-Id": sessionId } }).then((r) => r.json()).then(({ assets }) => {
     if (!assets.length) {
       empty.hidden = false;
       return;
     }
-    for (const asset of assets.slice(0, 20)) {
-      const card = document.createElement("div");
-      card.className = "asset-card";
-      card.dataset.type = asset.type;
-      card.dataset.id = asset.id;
-      card.title = asset.prompt ?? asset.tool_name;
-      if (asset.type === "image") {
-        const img = document.createElement("img");
-        img.className = "asset-thumb";
-        img.src = `/asset/${asset.id}`;
-        img.alt = asset.prompt ?? "Generated image";
-        img.loading = "lazy";
-        card.appendChild(img);
-      } else {
-        const icon = document.createElement("span");
-        icon.className = "asset-thumb";
-        icon.textContent = asset.type === "music" ? "\u{1F3B5}" : "\u{1F3A4}";
-        card.appendChild(icon);
-      }
-      const meta = document.createElement("div");
-      meta.className = "asset-meta";
-      meta.textContent = asset.prompt ? asset.prompt.slice(0, 30) + (asset.prompt.length > 30 ? "\u2026" : "") : asset.tool_name;
-      card.appendChild(meta);
-      card.addEventListener("click", () => {
-        if (asset.type === "image") {
-          openLightbox(`/asset/${asset.id}`);
-        } else {
-          new Audio(`/asset/${asset.id}`).play().catch(() => showError("Could not play audio"));
-        }
-      });
-      grid.appendChild(card);
-    }
+    for (const asset of assets) grid.appendChild(renderAssetCard(asset, sessionId));
   }).catch(() => {
     empty.hidden = false;
     empty.textContent = "Failed to load assets \u{1F615}";
@@ -2462,6 +2508,15 @@ async function streamChat(sessionId, messages, onEvent) {
     }
   }
 }
+function ensureAssistantContent() {
+  if (currentAssistantContent) return currentAssistantContent;
+  const messageList = $("#message-list");
+  const { container, contentEl } = renderAssistantMessage();
+  messageList.appendChild(container);
+  currentAssistantEl = container;
+  currentAssistantContent = contentEl;
+  return contentEl;
+}
 function handleSSEEvent(event) {
   const { event: eventType, data } = event;
   if (data === "[DONE]") {
@@ -2492,9 +2547,7 @@ function handleSSEEvent(event) {
     try {
       const parsed = JSON.parse(data);
       const card = renderToolCardLoading(parsed.name);
-      if (currentAssistantContent) {
-        currentAssistantContent.appendChild(card);
-      }
+      ensureAssistantContent().appendChild(card);
       activeToolCards.set(parsed.id, card);
       scrollToBottom();
     } catch {
@@ -2505,12 +2558,16 @@ function handleSSEEvent(event) {
     try {
       const parsed = JSON.parse(data);
       const loadingCard = activeToolCards.get(parsed.id);
-      if (loadingCard && currentAssistantContent) {
-        const resultCard = renderToolResult(parsed.name, parsed.result);
+      const resultCard = renderToolResult(parsed.name, parsed.result);
+      if (loadingCard?.isConnected) {
         loadingCard.replaceWith(resultCard);
-        activeToolCards.delete(parsed.id);
+      } else {
+        ensureAssistantContent().appendChild(resultCard);
       }
+      activeToolCards.delete(parsed.id);
       scrollToBottom();
+      updateQuotaBadge();
+      if ($("#create-modal")?.dataset.tabOpen === "assets") loadAssets();
     } catch {
     }
     return;
@@ -2527,30 +2584,35 @@ function handleSSEEvent(event) {
     }
   }
 }
+function getOrCreateContentRegion(className, position) {
+  if (!currentAssistantContent) return null;
+  let region = currentAssistantContent.querySelector(`.${className}`);
+  if (region) return region;
+  region = createElement("div", { class: className });
+  if (position === "start") {
+    currentAssistantContent.insertBefore(region, currentAssistantContent.firstChild);
+  } else {
+    currentAssistantContent.appendChild(region);
+  }
+  return region;
+}
 function appendText(text) {
   if (!currentAssistantContent) return;
   rawTextBuffer += text;
-  let html2 = "";
-  if (thinkingBuffer) {
-    html2 += renderThinkingBlock(thinkingBuffer);
-  }
-  if (rawTextBuffer) {
-    html2 += renderMarkdown(rawTextBuffer);
-  }
-  currentAssistantContent.innerHTML = html2;
+  const textRegion = getOrCreateContentRegion("assistant-text-region", "end");
+  if (!textRegion) return;
+  textRegion.classList.add("is-streaming");
+  const chunk = createElement("span", { class: "stream-chunk" });
+  chunk.textContent = text;
+  textRegion.appendChild(chunk);
   scrollToBottom();
 }
 function appendThinking(text) {
   if (!currentAssistantContent) return;
   thinkingBuffer += text;
-  let html2 = "";
-  if (thinkingBuffer) {
-    html2 += renderThinkingBlock(thinkingBuffer);
-  }
-  if (rawTextBuffer) {
-    html2 += renderMarkdown(rawTextBuffer);
-  }
-  currentAssistantContent.innerHTML = html2;
+  const thinkingRegion = getOrCreateContentRegion("assistant-thinking-region", "start");
+  if (!thinkingRegion) return;
+  thinkingRegion.innerHTML = renderThinkingBlock(thinkingBuffer);
   scrollToBottom();
 }
 function scrollToBottom() {
@@ -2560,6 +2622,11 @@ function scrollToBottom() {
   });
 }
 function finishStreaming() {
+  currentAssistantContent?.querySelectorAll(".assistant-text-region.is-streaming").forEach((el) => {
+    el.innerHTML = renderMarkdown(rawTextBuffer);
+    el.classList.remove("is-streaming");
+  });
+  document.querySelectorAll(".message--steer").forEach((el) => el.classList.remove("message--steer"));
   isStreaming = false;
   currentAssistantEl = null;
   currentAssistantContent = null;
@@ -2578,7 +2645,7 @@ function setStreamingUI(streaming) {
     input.placeholder = "\u{1F4A1} Type to steer the response...";
     sendBtn.disabled = true;
     typingIndicator.hidden = false;
-    steerHint.hidden = false;
+    steerHint.hidden = true;
   } else {
     input.disabled = false;
     input.placeholder = "Type a message...";
@@ -2631,6 +2698,49 @@ async function sendSteerMessage(content) {
     showError("Couldn't steer \u2014 try again \u{1F4AB}");
   }
 }
+function parseHistoryToolCalls(value) {
+  if (!value) return [];
+  try {
+    const parsed = JSON.parse(value);
+    if (!Array.isArray(parsed)) return [];
+    return parsed.filter(
+      (call) => typeof call.id === "string" && typeof call.name === "string"
+    );
+  } catch {
+    return [];
+  }
+}
+function inferHistoryToolResult(toolName, content) {
+  if (content.startsWith("Error: ")) return { type: "error", content: content.slice(7) };
+  if (toolName === "generate_image" && /^(?:\/asset\/|https?:\/\/|data:image\/)/i.test(content)) {
+    return { type: "image", content };
+  }
+  if ((toolName === "text_to_speech" || toolName === "generate_music") && /^(?:\/asset\/|https?:\/\/|data:audio\/)/i.test(content)) {
+    return { type: "audio", content };
+  }
+  return { type: "text", content };
+}
+function renderHistoryAssistantMessage(msg, toolRows) {
+  const { container, contentEl } = renderAssistantMessage();
+  if (msg.thinking?.trim()) {
+    const thinkingRegion = createElement("div", { class: "assistant-thinking-region" });
+    thinkingRegion.innerHTML = renderThinkingBlock(msg.thinking);
+    contentEl.appendChild(thinkingRegion);
+  }
+  if (msg.content.trim()) {
+    const textRegion = createElement("div", { class: "assistant-text-region" });
+    textRegion.innerHTML = renderMarkdown(msg.content);
+    contentEl.appendChild(textRegion);
+  }
+  for (const call of parseHistoryToolCalls(msg.tool_calls_json)) {
+    const toolRow = toolRows.get(call.id);
+    if (!toolRow) continue;
+    contentEl.appendChild(
+      renderToolResult(call.name, inferHistoryToolResult(call.name, toolRow.content))
+    );
+  }
+  return container;
+}
 async function loadHistory() {
   const sessionId = getOrCreateSessionId();
   const messageList = $("#message-list");
@@ -2640,14 +2750,15 @@ async function loadHistory() {
       const welcome = messageList.querySelector(".message--welcome");
       if (welcome) welcome.remove();
     }
+    const toolRows = /* @__PURE__ */ new Map();
+    for (const msg of messages) {
+      if (msg.role === "tool" && msg.tool_call_id) toolRows.set(msg.tool_call_id, msg);
+    }
     for (const msg of messages) {
       if (msg.role === "user") {
         messageList.appendChild(renderUserMessage(msg.content));
       } else if (msg.role === "assistant") {
-        const { container } = renderAssistantMessage();
-        const contentEl = container.querySelector(".message-content");
-        contentEl.innerHTML = renderMarkdown(msg.content);
-        messageList.appendChild(container);
+        messageList.appendChild(renderHistoryAssistantMessage(msg, toolRows));
       }
     }
     scrollToBottom();
@@ -2696,6 +2807,11 @@ function init() {
   const lightboxClose = lightbox.querySelector(".lightbox-close");
   const lightboxBackdrop = lightbox.querySelector(".lightbox-backdrop");
   const steerClose = $("#steer-close");
+  const connectionStatus = $("#connection-status");
+  connectionStatus.setAttribute(
+    "aria-label",
+    `Connection status: ${connectionStatus.title || "Connected"}`
+  );
   form.addEventListener("submit", (e) => {
     e.preventDefault();
     if (input.value.trim()) {
@@ -2714,24 +2830,13 @@ function init() {
   lightboxClose.addEventListener("click", closeLightbox);
   lightboxBackdrop.addEventListener("click", closeLightbox);
   document.addEventListener("keydown", (e) => {
-    if (e.key === "Escape") closeLightbox();
+    if (e.key === "Escape") {
+      closeLightbox();
+      if (!createModal.hidden) closeCreateModal();
+    }
   });
   steerClose.addEventListener("click", () => {
     $("#steer-hint").hidden = true;
-  });
-  const personalitySelect = $("#personality-select");
-  personalitySelect.value = localStorage.getItem("personality") ?? "gaming";
-  personalitySelect.addEventListener("change", async () => {
-    const personality = personalitySelect.value;
-    localStorage.setItem("personality", personality);
-    try {
-      await fetch("/api/preferences", {
-        method: "POST",
-        headers: createApiHeaders(getOrCreateSessionId()),
-        body: JSON.stringify({ key: "personality", value: personality })
-      });
-    } catch {
-    }
   });
   const ONBOARDING_KEY = "hg_onboarding_done";
   const onboarding = $("#onboarding");
@@ -2767,7 +2872,7 @@ function init() {
   });
   $("#onboarding-try-create").addEventListener("click", () => {
     dismissOnboarding();
-    createModal.hidden = false;
+    openCreateModal();
   });
   $("#onboarding-done").addEventListener("click", dismissOnboarding);
   loadHistory();
@@ -2776,15 +2881,42 @@ function init() {
   const createModal = $("#create-modal");
   const createClose = $("#create-close");
   const createBackdrop = createModal.querySelector(".create-backdrop");
-  createBtn.addEventListener("click", () => {
+  let createModalReturnFocus = null;
+  function getCreateModalFocusable() {
+    return Array.from(
+      createModal.querySelectorAll(
+        'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
+      )
+    ).filter((el) => !el.hasAttribute("disabled") && !el.closest("[hidden]"));
+  }
+  function openCreateModal() {
+    createModalReturnFocus = document.activeElement;
     createModal.hidden = false;
-  });
-  createClose.addEventListener("click", () => {
+    createClose.focus();
+  }
+  function closeCreateModal() {
     createModal.hidden = true;
-  });
-  createBackdrop.addEventListener("click", () => {
-    createModal.hidden = true;
-  });
+    createModalReturnFocus?.focus();
+    createModalReturnFocus = null;
+  }
+  function trapCreateModalFocus(e) {
+    if (e.key !== "Tab" || createModal.hidden) return;
+    const focusable = getCreateModalFocusable();
+    if (focusable.length === 0) return;
+    const first = focusable[0];
+    const last = focusable[focusable.length - 1];
+    if (e.shiftKey && document.activeElement === first) {
+      e.preventDefault();
+      last.focus();
+    } else if (!e.shiftKey && document.activeElement === last) {
+      e.preventDefault();
+      first.focus();
+    }
+  }
+  createBtn.addEventListener("click", openCreateModal);
+  createClose.addEventListener("click", closeCreateModal);
+  createBackdrop.addEventListener("click", closeCreateModal);
+  createModal.addEventListener("keydown", trapCreateModalFocus);
   const tabs = createModal.querySelectorAll(".create-tab");
   const panels = createModal.querySelectorAll(".create-panel");
   tabs.forEach((tab) => {
@@ -2799,6 +2931,7 @@ function init() {
       );
       if (panel) {
         panel.hidden = false;
+        createModal.dataset.tabOpen = tab.dataset.tab ?? "";
         if (tab.dataset.tab === "assets") loadAssets();
       }
     });
@@ -2811,7 +2944,6 @@ function init() {
   const imgRatioInput = $("#img-ratio");
   const musicPromptInput = $("#music-prompt");
   const musicLyricsInput = $("#music-lyrics");
-  const musicInstrumentalInput = $("#music-instrumental");
   const voiceTextInput = $("#voice-text");
   const voiceSpeedInput = $("#voice-speed");
   const searchQueryInput = $("#search-query");
@@ -2820,20 +2952,22 @@ function init() {
     const prompt = imgPromptInput.value.trim();
     const ratio = imgRatioInput.value;
     if (prompt) {
-      createModal.hidden = true;
-      sendMessage(`Generate an image: ${prompt} (aspect ratio ${ratio})`);
+      closeCreateModal();
+      sendMessage(
+        `Use generate_image with prompt: ${prompt}
+Tool params: aspect_ratio=${ratio}`
+      );
     }
   });
   createMusicForm.addEventListener("submit", (e) => {
     e.preventDefault();
     const prompt = musicPromptInput.value.trim();
     const lyrics = musicLyricsInput.value.trim();
-    const instrumental = musicInstrumentalInput.checked;
     if (prompt) {
-      createModal.hidden = true;
-      let msg = `Generate music: ${prompt}`;
-      if (lyrics) msg += `. Lyrics: ${lyrics}`;
-      if (instrumental) msg += " (instrumental only)";
+      closeCreateModal();
+      let msg = `Use generate_music with prompt: ${prompt}`;
+      if (lyrics) msg += `
+Tool params: lyrics=${lyrics}`;
       sendMessage(msg);
     }
   });
@@ -2842,15 +2976,16 @@ function init() {
     const text = voiceTextInput.value.trim();
     const speed = voiceSpeedInput.value;
     if (text) {
-      createModal.hidden = true;
-      sendMessage(`Read this out loud: ${text} (speed: ${speed}x)`);
+      closeCreateModal();
+      sendMessage(`Use text_to_speech with text: ${text}
+Tool params: speed=${speed}`);
     }
   });
   createSearchForm.addEventListener("submit", (e) => {
     e.preventDefault();
     const query = searchQueryInput.value.trim();
     if (query) {
-      createModal.hidden = true;
+      closeCreateModal();
       sendMessage(`Search the web for: ${query}`);
     }
   });
@@ -2888,5 +3023,6 @@ export {
   sendSteer,
   sendSteerMessage,
   showError,
-  streamChat
+  streamChat,
+  updateQuotaBadge
 };
