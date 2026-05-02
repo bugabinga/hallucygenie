@@ -69,3 +69,14 @@ After replacing it (by hand) the file identifies as `us-ascii` again:
 
 Now the tests work! One hour of my life I won't get back..
 ```
+
+## Git State
+
+```sh
+!{
+    git status --short --branch &&
+    git log --oneline --decorate -5 &&
+    git diff --stat &&
+    git diff --cached --stat
+ }
+```

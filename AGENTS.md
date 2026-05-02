@@ -24,7 +24,7 @@ Agent instructions only. Do not mirror project state here.
 - New spec → `.pi/prompts/spec.md`.
 - Implementation → `.pi/prompts/impl.md`.
 - MiniMax research → `.pi/prompts/minimax-research.md`.
-- Commit → `.pi/prompts/commit.md`.
+- Commit → `.pi/prompts/ci.md`.
 
 ## Source of truth
 

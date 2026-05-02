@@ -322,6 +322,8 @@ describe("constitution health", () => {
         assert.doesNotMatch(agentsMd, /\.pi\/prompts\/issue\.md/);
         assert.match(agentsMd, /\.pi\/prompts\/spec\.md/);
         assert.match(agentsMd, /\.pi\/prompts\/minimax-research\.md/);
+        assert.match(agentsMd, /\.pi\/prompts\/ci\.md/);
+        assert.doesNotMatch(agentsMd, /\.pi\/prompts\/commit\.md/);
         assert.doesNotMatch(agentsMd, /\/home\//);
         assert.doesNotMatch(
             agentsMd,
@@ -514,6 +516,11 @@ describe("prompt health", () => {
         assert.match(minimaxResearchPrompt, /\/skill:minimax/);
         assert.match(minimaxResearchPrompt, /\/skill:research/);
         assert.match(minimaxResearchPrompt, /src\/tools\.ts/);
+    });
+
+    it("uses ci prompt for commit workflow", () => {
+        assert.equal(existsSync(".pi/prompts/commit.md"), false);
+        assert.equal(existsSync(".pi/prompts/ci.md"), true);
     });
 });
 
