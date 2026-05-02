@@ -300,6 +300,11 @@ describe("frontend session identity health", () => {
         assert.equal(appTs.includes("X-Session-Id"), false);
         assert.match(appTs, /localStorage\.removeItem\(LEGACY_SESSION_KEY\)/);
     });
+
+    it("builds active-session asset URLs without session query", () => {
+        assert.match(appTs, /return `\/asset\/\$\{id\}`/);
+        assert.equal(appTs.includes("?s="), false);
+    });
 });
 
 describe("constitution health", () => {

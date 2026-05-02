@@ -610,14 +610,26 @@ function handleExplicitToolDirective(
 
 // ── Session validation ──────────────────────────────────────────────
 
+function normalizeSessionId(sessionId: string | null): string | null {
+    const trimmed = sessionId?.trim() ?? "";
+    return trimmed || null;
+}
+
 export function validateSessionId(req: Request): string | null {
-    const sessionId = req.headers.get("X-Session-Id");
-    if (!sessionId || sessionId.trim() === "") return null;
-    return sessionId;
+    return normalizeSessionId(req.headers.get("X-Session-Id"));
 }
 
 export function resolveSessionId(req: Request, database: Database): string {
     return validateSessionId(req) ?? getOrCreateActiveSessionId(database);
+}
+
+function resolveAssetSessionId(req: Request, url: URL, database: Database): string | null {
+    return (
+        validateSessionId(req) ??
+        (url.searchParams.has("s")
+            ? normalizeSessionId(url.searchParams.get("s"))
+            : getOrCreateActiveSessionId(database))
+    );
 }
 
 // ── Health check ─────────────────────────────────────────────────────
@@ -773,18 +785,19 @@ export async function handleRequest(req: Request): Promise<Response> {
         return jsonResponse({ assets });
     }
 
-    // GET /asset/:id — shareable asset URLs need explicit session (header or ?s=),
-    // not the server-wide active session, so recipients see only the intended asset.
+    // GET /asset/:id — serve a specific asset file for explicit or active session
     if (path.startsWith("/asset/") && method === "GET") {
-        const sessionId = validateSessionId(req) || url.searchParams.get("s");
-        if (!sessionId)
-            return jsonResponse({ error: "X-Session-Id header or ?s= param required" }, 400);
-        const assetId = path.slice("/asset/".length);
         const dbOrErr = requireDb();
         if (dbOrErr instanceof Response) return dbOrErr;
         const database = dbOrErr;
+
+        const sessionId = resolveAssetSessionId(req, url, database);
+        if (!sessionId) return jsonResponse({ error: "Invalid session ID" }, 400);
+
+        const assetId = path.slice("/asset/".length);
         const asset = getAsset(database, assetId);
-        if (!asset) return jsonResponse({ error: "Not found" }, 404);
+        if (!asset || asset.session_id !== sessionId)
+            return jsonResponse({ error: "Not found" }, 404);
         const filePath = `data/assets/${asset.session_id}/${asset.filename}`;
         try {
             const file = await readFile(filePath);
@@ -958,7 +971,7 @@ function saveAssetBuffer(
         size_bytes: buf.byteLength,
     });
 
-    return { type: resultType, content: `/asset/${assetId}?s=${sessionId}` };
+    return { type: resultType, content: `/asset/${assetId}` };
 }
 
 async function downloadImageAsset(url: string): Promise<{ buf: Buffer; mime: string }> {

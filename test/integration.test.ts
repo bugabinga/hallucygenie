@@ -5,7 +5,7 @@
 import { describe, it, after, before } from "node:test";
 import assert from "node:assert/strict";
 import { createServer } from "node:http";
-import { readFileSync } from "node:fs";
+import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { connect } from "node:net";
 import { initDatabase, resetStateForTesting, handleNodeRequest, getDb } from "../src/server.ts";
 import type { IncomingMessage, ServerResponse } from "node:http";
@@ -111,6 +111,30 @@ async function rawHttpGet(path: string): Promise<number> {
 
 function loadFontManifest(): FontManifest {
     return JSON.parse(readFileSync("public/fonts/fonts.manifest.json", "utf-8")) as FontManifest;
+}
+
+function seedActiveAsset(id: string, bytes?: Uint8Array): void {
+    const db = getDb();
+    assert.ok(db);
+    const sessionId = getOrCreateActiveSessionId(db);
+    const filename = `${id}.png`;
+
+    if (bytes) {
+        mkdirSync(`data/assets/${sessionId}`, { recursive: true });
+        writeFileSync(`data/assets/${sessionId}/${filename}`, bytes);
+    }
+
+    saveAsset(db, {
+        id,
+        session_id: sessionId,
+        type: "image",
+        filename,
+        mime_type: "image/png",
+        prompt: id,
+        tool_name: "generate_image",
+        size_bytes: bytes?.byteLength ?? 0,
+        created_at: Date.now(),
+    });
 }
 
 // ── Tests ───────────────────────────────────────────────────────────
@@ -232,29 +256,38 @@ describe("GET /api/quota", () => {
 
 describe("GET /assets (no session)", () => {
     it("uses active session without X-Session-Id", async () => {
-        const db = getDb()!;
-        const sessionId = getOrCreateActiveSessionId(db);
-        saveAsset(db, {
-            id: "active-asset-1",
-            session_id: sessionId,
-            type: "image",
-            filename: "active.png",
-            mime_type: "image/png",
-            prompt: "active asset",
-            tool_name: "generate_image",
-            size_bytes: 12,
-        });
+        seedActiveAsset("integration-active-list");
 
         const r = await api("GET", "/assets");
         assert.equal(r.status, 200);
-        assert.equal((r.body as any).assets.at(-1).id, "active-asset-1");
+        assert.ok(
+            (r.body as any).assets.some(
+                (asset: { id: string }) => asset.id === "integration-active-list",
+            ),
+        );
     });
 });
 
-describe("GET /asset/nonexistent (no session)", () => {
-    it("returns 400 without X-Session-Id or query param", async () => {
+describe("GET /asset (active session)", () => {
+    it("serves active session asset without X-Session-Id or query param", async () => {
+        seedActiveAsset("integration-active-file", new Uint8Array([1, 2, 3]));
+
+        const r = await httpGet("/asset/integration-active-file");
+        assert.equal(r.status, 200);
+        assert.equal(r.headers.get("content-type"), "image/png");
+        assert.deepEqual(Array.from(new Uint8Array(await r.arrayBuffer())), [1, 2, 3]);
+    });
+
+    it("blocks wrong explicit session for active asset", async () => {
+        seedActiveAsset("integration-wrong-session-file", new Uint8Array([4, 5, 6]));
+
+        const r = await api("GET", "/asset/integration-wrong-session-file?s=wrong-session");
+        assert.equal(r.status, 404);
+    });
+
+    it("returns 404 for missing active session asset", async () => {
         const r = await api("GET", "/asset/nonexistent-id");
-        assert.equal(r.status, 400);
+        assert.equal(r.status, 404);
     });
 
     it("returns 404 with ?s= query param (session ok, asset not found)", async () => {

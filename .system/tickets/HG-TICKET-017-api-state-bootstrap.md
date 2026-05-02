@@ -1,8 +1,8 @@
 # HG-TICKET-017 — `/api/state` bootstrap
 
-**Spec:** `.system/specs/HG-SPEC-007-db-first-single-user-state.md`  
-**Status:** Ready  
-**Priority:** Medium  
+**Spec:** `.system/specs/HG-SPEC-007-db-first-single-user-state.md`
+**Status:** Ready
+**Priority:** Medium
 **Size:** M
 
 ## Goal

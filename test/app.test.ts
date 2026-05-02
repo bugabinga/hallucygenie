@@ -2357,29 +2357,31 @@ describe("init accessibility behavior", () => {
     });
 });
 
-// ── HG-ISSUE-007/008/009: Asset URL session param, quota refresh, assets refresh ──
+// ── HG-ISSUE-007/008/009: Asset URL handling, quota refresh, assets refresh ──
 
-describe("renderToolResult asset URLs include session param", () => {
-    it("image result src includes ?s= query param", () => {
+describe("renderToolResult asset URLs", () => {
+    it("image result src omits session query", () => {
         setupDOM();
         const card = renderToolResult("generate_image", {
             type: "image",
-            content: "/asset/abc123?s=test-session",
+            content: "/asset/abc123",
         });
         const img = card.querySelector("img");
         assert.ok(img, "should have img element");
-        assert.ok(img!.src.includes("?s="), "img src should include session param");
+        assert.equal(img!.src.endsWith("/asset/abc123"), true);
+        assert.equal(img!.src.includes("?s="), false);
     });
 
-    it("audio result src includes ?s= query param", () => {
+    it("audio result src omits session query", () => {
         setupDOM();
         const card = renderToolResult("text_to_speech", {
             type: "audio",
-            content: "/asset/def456?s=test-session",
+            content: "/asset/def456",
         });
         const audio = card.querySelector("audio");
         assert.ok(audio, "should have audio element");
-        assert.ok(audio!.src.includes("?s="), "audio src should include session param");
+        assert.equal(audio!.src.endsWith("/asset/def456"), true);
+        assert.equal(audio!.src.includes("?s="), false);
     });
 });
 
@@ -2473,17 +2475,14 @@ describe("loadAssets", () => {
         const img = doc.querySelector(".asset-thumb");
         assert.ok(img, "should have image thumbnail");
         if (img!.tagName === "IMG") {
-            assert.ok(
-                (img as HTMLImageElement).src.includes("?s="),
-                "image src should include session param",
-            );
+            assert.equal((img as HTMLImageElement).src.includes("?s="), false);
         }
 
         const audio = doc.querySelector("audio.asset-audio") as HTMLAudioElement | null;
         assert.ok(audio, "audio assets should use native controls");
         assert.equal(audio!.controls, true);
         assert.equal(audio!.preload, "metadata");
-        assert.ok(audio!.src.includes("?s="), "audio src should include session param");
+        assert.equal(audio!.src.includes("?s="), false);
 
         const downloads = doc.querySelectorAll(".asset-download");
         assert.equal(downloads.length, 2, "every asset should have a download link");

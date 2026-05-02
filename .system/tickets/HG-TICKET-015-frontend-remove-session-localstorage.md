@@ -1,8 +1,8 @@
 # HG-TICKET-015 — Remove frontend session localStorage identity
 
-**Spec:** `.system/specs/HG-SPEC-007-db-first-single-user-state.md`  
-**Status:** Done  
-**Priority:** High  
+**Spec:** `.system/specs/HG-SPEC-007-db-first-single-user-state.md`
+**Status:** Done
+**Priority:** High
 **Size:** M
 
 ## Goal

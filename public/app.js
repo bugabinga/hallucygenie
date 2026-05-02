@@ -2360,8 +2360,8 @@ function closeLightbox() {
   img.src = "";
 }
 var ASSET_PROMPT_PREVIEW_CHARS = 30;
-function assetUrl(sessionId, id) {
-  return `/asset/${id}?s=${encodeURIComponent(sessionId)}`;
+function assetUrl(id) {
+  return `/asset/${id}`;
 }
 function assetPreviewText(asset) {
   const text = asset.prompt?.trim() || asset.tool_name;
@@ -2396,7 +2396,7 @@ function renderAssetPreview(asset, url) {
   return button;
 }
 function renderAssetCard(asset) {
-  const url = assetUrl(asset.session_id, asset.id);
+  const url = assetUrl(asset.id);
   const card = document.createElement("div");
   card.className = "asset-card";
   card.dataset.type = asset.type;
@@ -2979,6 +2979,7 @@ Tool params: speed=${speed}`);
     }
   });
   input.focus();
+  document.documentElement.dataset.hgReady = "1";
 }
 if (typeof document !== "undefined" && document.readyState !== "loading") {
   init();

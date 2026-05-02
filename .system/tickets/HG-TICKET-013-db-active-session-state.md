@@ -1,8 +1,8 @@
 # HG-TICKET-013 — DB active session state
 
-**Spec:** `.system/specs/HG-SPEC-007-db-first-single-user-state.md`  
-**Status:** Done  
-**Priority:** Critical  
+**Spec:** `.system/specs/HG-SPEC-007-db-first-single-user-state.md`
+**Status:** Done
+**Priority:** Critical
 **Size:** M
 
 ## Goal

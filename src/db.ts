@@ -96,8 +96,10 @@ export function initDb(dbPath: string, migrationsDir?: string): Database {
 
 const ACTIVE_SESSION_KEY = "active_session_id";
 
-function requireNonBlankSessionId(sessionId: string, context: string): void {
-    if (!sessionId.trim()) throw new Error(`${context}: session id must not be blank`);
+function normalizeSessionId(sessionId: string, context: string): string {
+    const trimmed = sessionId.trim();
+    if (!trimmed) throw new Error(`${context}: session id must not be blank`);
+    return trimmed;
 }
 
 export function getActiveSessionId(db: Database): string | null {
@@ -105,17 +107,16 @@ export function getActiveSessionId(db: Database): string | null {
         | { value: string }
         | undefined;
     if (!row) return null;
-    requireNonBlankSessionId(row.value, "getActiveSessionId");
-    return row.value;
+    return normalizeSessionId(row.value, "getActiveSessionId");
 }
 
 export function setActiveSessionId(db: Database, sessionId: string): void {
-    requireNonBlankSessionId(sessionId, "setActiveSessionId");
+    const normalized = normalizeSessionId(sessionId, "setActiveSessionId");
     db.prepare(
         `INSERT INTO app_state (key, value, updated_at)
          VALUES (?, ?, datetime('now'))
          ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = datetime('now')`,
-    ).run(ACTIVE_SESSION_KEY, sessionId);
+    ).run(ACTIVE_SESSION_KEY, normalized);
 }
 
 export function getOrCreateActiveSessionId(db: Database): string {

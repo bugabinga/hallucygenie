@@ -206,11 +206,11 @@ describe("Active session state", () => {
         assert.equal(getActiveSessionId(db), first);
     });
 
-    it("setActiveSessionId updates active session", () => {
+    it("setActiveSessionId updates and normalizes active session", () => {
         setActiveSessionId(db, "session-next");
         assert.equal(getActiveSessionId(db), "session-next");
 
-        setActiveSessionId(db, "session-final");
+        setActiveSessionId(db, "  session-final  ");
         assert.equal(getOrCreateActiveSessionId(db), "session-final");
     });
 

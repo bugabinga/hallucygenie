@@ -1,10 +1,9 @@
 # HG-TICKET-044 — Remove post-DB-first compatibility branches
 
-**Spec:** `.system/specs/HG-SPEC-011-constitution-driven-simplification.md`, `.system/specs/HG-SPEC-007-db-first-single-user-state.md`  
-**Status:** Blocked  
-**Priority:** Medium  
-**Size:** M  
-**Depends:** `HG-TICKET-015-frontend-remove-session-localstorage.md`, `HG-TICKET-016-active-asset-serving.md`
+**Spec:** `.system/specs/HG-SPEC-011-constitution-driven-simplification.md`, `.system/specs/HG-SPEC-007-db-first-single-user-state.md`
+**Status:** Ready
+**Priority:** Medium
+**Size:** M
 
 ## Goal
 

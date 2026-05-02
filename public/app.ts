@@ -295,8 +295,8 @@ interface Asset {
 
 const ASSET_PROMPT_PREVIEW_CHARS = 30;
 
-function assetUrl(sessionId: string, id: string): string {
-    return `/asset/${id}?s=${encodeURIComponent(sessionId)}`;
+function assetUrl(id: string): string {
+    return `/asset/${id}`;
 }
 
 function assetPreviewText(asset: Asset): string {
@@ -337,7 +337,7 @@ function renderAssetPreview(asset: Asset, url: string): HTMLElement {
 }
 
 function renderAssetCard(asset: Asset): HTMLElement {
-    const url = assetUrl(asset.session_id, asset.id);
+    const url = assetUrl(asset.id);
     const card = document.createElement("div");
     card.className = "asset-card";
     card.dataset.type = asset.type;
@@ -1115,6 +1115,7 @@ export function init(): void {
 
     // Focus input
     input.focus();
+    document.documentElement.dataset.hgReady = "1";
 }
 
 // ── Bootstrap ────────────────────────────────────────────────────────

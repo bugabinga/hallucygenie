@@ -801,7 +801,7 @@ describe("SSE streaming from Anthropic endpoint", () => {
                 true,
             );
             assert.match(newAsset!.id, /^asset_[0-9a-f-]{36}$/);
-            assert.match(toolRows.at(-1)!.content, /^\/asset\/asset_[0-9a-f-]{36}\?s=/);
+            assert.match(toolRows.at(-1)!.content, /^\/asset\/asset_[0-9a-f-]{36}$/);
             assert.match(lastToolCall.id, /^direct_[0-9a-f-]{36}$/);
         } finally {
             globalThis.fetch = originalFetch;
@@ -1324,6 +1324,13 @@ describe("Session Validation", () => {
     it("validateSessionId returns session ID for valid header", () => {
         const req = new Request("http://localhost/test", {
             headers: { "X-Session-Id": "abc-123" },
+        });
+        assert.equal(validateSessionId(req), "abc-123");
+    });
+
+    it("validateSessionId trims explicit header", () => {
+        const req = new Request("http://localhost/test", {
+            headers: { "X-Session-Id": "  abc-123  " },
         });
         assert.equal(validateSessionId(req), "abc-123");
     });

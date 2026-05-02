@@ -65,19 +65,22 @@ async function expectEnabled(locator: ReturnType<Page["locator"]>): Promise<void
     if (!enabled) throw new Error("Expected element to be enabled");
 }
 
+async function waitForAppReady(page: Page): Promise<void> {
+    await page.waitForSelector("#send-button");
+    await page.waitForFunction(() => document.documentElement.dataset.hgReady === "1");
+}
+
 /**
  * Reliable "app is ready" signal:
  * 1. Navigate to page
- * 2. Wait for #send-button to be in DOM
+ * 2. Wait for init() to finish
  *
  * Optionally dismiss onboarding overlay for tests that need to interact
  * with elements behind it.
  */
 async function waitForApp(page: Page, options?: { dismissOnboarding?: boolean }): Promise<void> {
     await page.goto(BASE_URL);
-
-    // Wait for DOM elements to be ready
-    await page.waitForSelector("#send-button");
+    await waitForAppReady(page);
 
     // Dismiss onboarding overlay if requested (it blocks clicks on elements behind it)
     if (options?.dismissOnboarding) {
@@ -282,7 +285,7 @@ async function runE2ETests(): Promise<void> {
             await page.goto(BASE_URL);
             await page.evaluate(() => localStorage.setItem("hallucygenie_session_id", "legacy"));
             await page.reload();
-            await waitForApp(page);
+            await waitForAppReady(page);
 
             const sessionId = await page.evaluate(() => {
                 return localStorage.getItem("hallucygenie_session_id");
@@ -575,10 +578,11 @@ async function runE2ETests(): Promise<void> {
         "legacy session ID stays removed across reloads",
         async () => {
             const page = await browser!.newPage();
-            await waitForApp(page);
+            await page.goto(BASE_URL);
+            await page.evaluate(() => localStorage.setItem("hallucygenie_session_id", "legacy"));
 
             await page.reload();
-            await waitForApp(page);
+            await waitForAppReady(page);
 
             const sessionId = await page.evaluate(() =>
                 localStorage.getItem("hallucygenie_session_id"),
