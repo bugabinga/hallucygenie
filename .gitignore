@@ -15,7 +15,6 @@ data/
 coverage/
 dist/
 public/app.js
-.pulse.json
 
 # Mutation testing
 .stryker-tmp/
@@ -25,7 +24,6 @@ reports/
 .DS_Store
 
 # Pi/runtime browser cache
-.pi/
 .pi-lens/
 .system/chrome-profile/
 .system/chrome-profile-test/
