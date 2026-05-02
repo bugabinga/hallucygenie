@@ -728,6 +728,25 @@ describe("runAgentLoop", () => {
         assert.ok(result.content.includes("Couldn't generate music"));
     });
 
+    it("maps MiniMax API errors to user-safe text", () => {
+        assert.equal(
+            apiErrorMessageForUser(401),
+            "[Error: MiniMax authentication failed (401). Check the server API key.]",
+        );
+        assert.equal(
+            apiErrorMessageForUser(403),
+            "[Error: MiniMax authentication failed (403). Check the server API key.]",
+        );
+        assert.equal(
+            apiErrorMessageForUser(429),
+            "[Error: MiniMax rate limit reached. Try again later.]",
+        );
+        assert.equal(
+            apiErrorMessageForUser(500),
+            "[Error: MiniMax returned 500. Try again in a bit.]",
+        );
+    });
+
     it("does not surface context window errors as raw assistant text", async () => {
         globalThis.fetch = async () =>
             new Response(
