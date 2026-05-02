@@ -1,10 +1,9 @@
 # HG-TICKET-017 — `/api/state` bootstrap
 
 **Spec:** `.system/specs/HG-SPEC-007-db-first-single-user-state.md`  
-**Status:** Blocked  
+**Status:** Ready  
 **Priority:** Medium  
-**Size:** M  
-**Depends:** `HG-TICKET-013-db-active-session-state.md`
+**Size:** M
 
 ## Goal
 

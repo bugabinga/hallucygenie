@@ -1,6 +1,6 @@
 // HallucyGenie -- Server tests
 
-import { describe, it, after, before } from "node:test";
+import { describe, it, after, before, beforeEach } from "node:test";
 import assert from "node:assert/strict";
 import {
     handleRequest,
@@ -11,6 +11,7 @@ import {
     isShuttingDown,
     resetStateForTesting,
     validateSessionId,
+    resolveSessionId,
     parseExplicitToolDirective,
     sanitizeAssistantMediaMarkup,
 } from "../src/server.ts";
@@ -19,7 +20,7 @@ import { existsSync, rmSync, mkdirSync } from "node:fs";
 import { join } from "node:path";
 import http from "node:http";
 import { getMessages, getAssets } from "../src/db.ts";
-import { trackUsage, saveMessage, saveAsset } from "../src/db.ts";
+import { trackUsage, saveMessage, saveAsset, setActiveSessionId } from "../src/db.ts";
 
 // -- Test helpers -----------------------------------------------------
 
@@ -71,6 +72,10 @@ before(() => {
     // Initialize test database
     initDatabase(testDbPath);
 });
+
+function ensureTestDb(): void {
+    if (!getDb()) initDatabase(testDbPath);
+}
 
 after(() => {
     // Cleanup
@@ -1250,6 +1255,10 @@ describe("Database Initialization", () => {
 // -- Step 2: Session Validation Middleware ----------------------------
 
 describe("Session Validation", () => {
+    beforeEach(() => {
+        ensureTestDb();
+    });
+
     it("allows valid session ID on /api/chat", async () => {
         const req = makeRequest("POST", "/api/chat", {
             messages: [{ role: "user", content: "hi" }],
@@ -1259,7 +1268,7 @@ describe("Session Validation", () => {
         assert.notEqual(resp.status, 400, "should not return 400 with valid session");
     });
 
-    it("rejects missing X-Session-Id on /api/chat", async () => {
+    it("uses active session when X-Session-Id is missing on /api/chat", async () => {
         const init: RequestInit = {
             method: "POST",
             headers: { "Content-Type": "application/json" },
@@ -1267,41 +1276,25 @@ describe("Session Validation", () => {
         };
         const req = new Request("http://localhost/api/chat", init);
         const resp = await handleRequest(req);
-        assert.equal(resp.status, 400);
-        const body = JSON.parse(await resp.text());
-        assert.equal(body.error, "X-Session-Id header required");
+        assert.notEqual(resp.status, 400);
     });
 
-    it("rejects empty X-Session-Id on /api/chat", async () => {
-        const init: RequestInit = {
-            method: "POST",
-            headers: {
-                "Content-Type": "application/json",
-                "X-Session-Id": "",
-            },
-            body: JSON.stringify({ messages: [{ role: "user", content: "hi" }] }),
-        };
-        const req = new Request("http://localhost/api/chat", init);
-        const resp = await handleRequest(req);
-        assert.equal(resp.status, 400);
-        const body = JSON.parse(await resp.text());
-        assert.equal(body.error, "X-Session-Id header required");
+    it("resolveSessionId prefers explicit session over active session", () => {
+        const database = getDb();
+        assert.ok(database);
+        setActiveSessionId(database, "active-session");
+        const req = new Request("http://localhost/test", {
+            headers: { "X-Session-Id": "explicit-session" },
+        });
+        assert.equal(resolveSessionId(req, database), "explicit-session");
     });
 
-    it("rejects whitespace-only X-Session-Id on /api/chat", async () => {
-        const init: RequestInit = {
-            method: "POST",
-            headers: {
-                "Content-Type": "application/json",
-                "X-Session-Id": "   ",
-            },
-            body: JSON.stringify({ messages: [{ role: "user", content: "hi" }] }),
-        };
-        const req = new Request("http://localhost/api/chat", init);
-        const resp = await handleRequest(req);
-        assert.equal(resp.status, 400);
-        const body = JSON.parse(await resp.text());
-        assert.equal(body.error, "X-Session-Id header required");
+    it("resolveSessionId falls back to active session", () => {
+        const database = getDb();
+        assert.ok(database);
+        setActiveSessionId(database, "active-fallback-session");
+        const req = new Request("http://localhost/test");
+        assert.equal(resolveSessionId(req, database), "active-fallback-session");
     });
 
     it("health endpoint does not require session ID", async () => {
@@ -1312,7 +1305,7 @@ describe("Session Validation", () => {
         assert.equal(body.status, "ok");
     });
 
-    it("steer endpoint requires session ID", async () => {
+    it("steer endpoint uses active session without session ID", async () => {
         const init: RequestInit = {
             method: "POST",
             headers: { "Content-Type": "application/json" },
@@ -1320,9 +1313,7 @@ describe("Session Validation", () => {
         };
         const req = new Request("http://localhost/api/steer", init);
         const resp = await handleRequest(req);
-        assert.equal(resp.status, 400);
-        const body = JSON.parse(await resp.text());
-        assert.equal(body.error, "X-Session-Id header required");
+        assert.equal(resp.status, 200);
     });
 
     it("validateSessionId returns null for missing header", () => {
@@ -1635,12 +1626,17 @@ describe("GET /api/history", () => {
         assert.equal(body.messages[1].content, "hi there");
     });
 
-    it("requires session ID", async () => {
-        const req = new Request("http://localhost/api/history", {
-            method: "GET",
-        });
+    it("uses active session when session ID is missing", async () => {
+        const database = getDb();
+        assert.ok(database);
+        setActiveSessionId(database, "history-active-session");
+        saveMessage(database, "history-active-session", "user", "active hello");
+
+        const req = new Request("http://localhost/api/history", { method: "GET" });
         const resp = await handleRequest(req);
-        assert.equal(resp.status, 400);
+        assert.equal(resp.status, 200);
+        const body = (await readJson(resp)) as { messages: Array<{ content: string }> };
+        assert.equal(body.messages.at(-1)?.content, "active hello");
     });
 
     it("snapshot: history response structure", async () => {
@@ -1700,12 +1696,10 @@ describe("GET /api/usage", () => {
         assert.equal(body.usage.speech, 1);
     });
 
-    it("requires session ID", async () => {
-        const req = new Request("http://localhost/api/usage", {
-            method: "GET",
-        });
+    it("uses active session when session ID is missing", async () => {
+        const req = new Request("http://localhost/api/usage", { method: "GET" });
         const resp = await handleRequest(req);
-        assert.equal(resp.status, 400);
+        assert.equal(resp.status, 200);
     });
 
     it("snapshot: usage response structure", async () => {
@@ -1996,6 +1990,10 @@ describe("Node HTTP adapter and server lifecycle", () => {
 // -- Coverage: steer endpoint edge cases -------------------------------
 
 describe("Coverage: steer edge cases", () => {
+    beforeEach(() => {
+        ensureTestDb();
+    });
+
     it("steer with invalid JSON returns 400", async () => {
         const req = new Request("http://localhost/api/steer", {
             method: "POST",

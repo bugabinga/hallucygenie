@@ -1,10 +1,9 @@
 # HG-TICKET-018 — Sessions DB model
 
 **Spec:** `.system/specs/HG-SPEC-009-multi-session-support.md`  
-**Status:** Blocked  
+**Status:** Ready  
 **Priority:** High  
-**Size:** M  
-**Depends:** `HG-TICKET-013-db-active-session-state.md`
+**Size:** M
 
 ## Goal
 

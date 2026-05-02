@@ -31,6 +31,16 @@ Covers: HG-ISSUE-011, 017, 022.
 
 Covers: HG-ISSUE-012, 015, 016, 019.
 
+## Active session state
+
+- Start app with a fresh `data/` directory.
+- Load `/` in Chrome; app should start normally.
+- Inspect SQLite: `app_state.active_session_id` exists and is stable across restart.
+- Without `X-Session-Id`, `/api/history`, `/api/chat`, `/api/steer`, and `/assets` should use the active DB session.
+- With explicit `X-Session-Id`, old debug/test session partitioning should still work.
+
+Covers: HG-TICKET-013, HG-TICKET-014, HG-SPEC-007.
+
 ## Dev/test health
 
 - Run `just dev`: bundle is rebuilt first.

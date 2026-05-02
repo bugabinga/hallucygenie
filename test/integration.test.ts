@@ -7,8 +7,9 @@ import assert from "node:assert/strict";
 import { createServer } from "node:http";
 import { readFileSync } from "node:fs";
 import { connect } from "node:net";
-import { initDatabase, resetStateForTesting, handleNodeRequest } from "../src/server.ts";
+import { initDatabase, resetStateForTesting, handleNodeRequest, getDb } from "../src/server.ts";
 import type { IncomingMessage, ServerResponse } from "node:http";
+import { getMessages, getOrCreateActiveSessionId, saveAsset } from "../src/db.ts";
 
 let server: ReturnType<typeof createServer>;
 let baseUrl: string;
@@ -69,6 +70,24 @@ async function httpGet(path: string): Promise<Response> {
 
 async function httpHead(path: string): Promise<Response> {
     return await fetch(`${baseUrl}${path}`, { method: "HEAD" });
+}
+
+function anthropicTextStream(text: string): ReadableStream<Uint8Array> {
+    const encoder = new TextEncoder();
+    const chunks = [
+        'event: message_start\ndata: {"type":"message_start","message":{}}\n\n',
+        'event: content_block_start\ndata: {"type":"content_block_start","index":0,"content_block":{"type":"text","text":""}}\n\n',
+        `event: content_block_delta\ndata: ${JSON.stringify({ type: "content_block_delta", index: 0, delta: { type: "text_delta", text } })}\n\n`,
+        'event: content_block_stop\ndata: {"type":"content_block_stop","index":0}\n\n',
+        'event: message_delta\ndata: {"type":"message_delta","delta":{"stop_reason":"end_turn"}}\n\n',
+        'event: message_stop\ndata: {"type":"message_stop"}\n\n',
+    ];
+    return new ReadableStream({
+        start(controller) {
+            for (const chunk of chunks) controller.enqueue(encoder.encode(chunk));
+            controller.close();
+        },
+    });
 }
 
 async function rawHttpGet(path: string): Promise<number> {
@@ -212,9 +231,23 @@ describe("GET /api/quota", () => {
 });
 
 describe("GET /assets (no session)", () => {
-    it("returns 400 without X-Session-Id", async () => {
+    it("uses active session without X-Session-Id", async () => {
+        const db = getDb()!;
+        const sessionId = getOrCreateActiveSessionId(db);
+        saveAsset(db, {
+            id: "active-asset-1",
+            session_id: sessionId,
+            type: "image",
+            filename: "active.png",
+            mime_type: "image/png",
+            prompt: "active asset",
+            tool_name: "generate_image",
+            size_bytes: 12,
+        });
+
         const r = await api("GET", "/assets");
-        assert.equal(r.status, 400);
+        assert.equal(r.status, 200);
+        assert.equal((r.body as any).assets.at(-1).id, "active-asset-1");
     });
 });
 
@@ -236,22 +269,49 @@ describe("GET /asset/nonexistent (no session)", () => {
 });
 
 describe("POST /api/chat (no session)", () => {
-    it("returns 400 without X-Session-Id", async () => {
-        const r = await api("POST", "/api/chat", JSON.stringify({ messages: [] }));
-        assert.equal(r.status, 400);
+    it("persists to active session without X-Session-Id", async () => {
+        const oldKey = process.env.MINIMAX_API_KEY;
+        const oldFetch = globalThis.fetch;
+        process.env.MINIMAX_API_KEY = "test-key";
+        globalThis.fetch = async (input: RequestInfo | URL, init?: RequestInit) => {
+            if (String(input).startsWith(baseUrl)) return oldFetch(input, init);
+            return new Response(anthropicTextStream("active reply"), { status: 200 });
+        };
+
+        try {
+            const resp = await oldFetch(`${baseUrl}/api/chat`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ messages: [{ role: "user", content: "active chat" }] }),
+            });
+            assert.equal(resp.status, 200);
+            assert.match(await resp.text(), /active reply/);
+
+            const db = getDb()!;
+            const rows = getMessages(db, getOrCreateActiveSessionId(db));
+            assert.ok(rows.some((row) => row.role === "user" && row.content === "active chat"));
+            assert.ok(
+                rows.some((row) => row.role === "assistant" && row.content === "active reply"),
+            );
+        } finally {
+            globalThis.fetch = oldFetch;
+            if (oldKey) process.env.MINIMAX_API_KEY = oldKey;
+            else delete process.env.MINIMAX_API_KEY;
+        }
     });
 });
 
 describe("POST /api/steer (no session)", () => {
-    it("returns 400 without X-Session-Id", async () => {
+    it("uses active session without X-Session-Id", async () => {
         const r = await api("POST", "/api/steer", JSON.stringify({ message: "steer" }));
-        assert.equal(r.status, 400);
+        assert.equal(r.status, 200);
     });
 });
 
 describe("GET /api/history (no session)", () => {
-    it("returns 400 without X-Session-Id", async () => {
+    it("uses active session without X-Session-Id", async () => {
         const r = await api("GET", "/api/history");
-        assert.equal(r.status, 400);
+        assert.equal(r.status, 200);
+        assert.ok(Array.isArray((r.body as any).messages));
     });
 });

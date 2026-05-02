@@ -96,8 +96,8 @@ export function initDb(dbPath: string, migrationsDir?: string): Database {
 
 const ACTIVE_SESSION_KEY = "active_session_id";
 
-function assertSessionId(sessionId: string): void {
-    if (sessionId.trim().length === 0) throw new Error("session id is required");
+function requireNonBlankSessionId(sessionId: string, context: string): void {
+    if (!sessionId.trim()) throw new Error(`${context}: session id must not be blank`);
 }
 
 export function getActiveSessionId(db: Database): string | null {
@@ -105,12 +105,12 @@ export function getActiveSessionId(db: Database): string | null {
         | { value: string }
         | undefined;
     if (!row) return null;
-    assertSessionId(row.value);
+    requireNonBlankSessionId(row.value, "getActiveSessionId");
     return row.value;
 }
 
 export function setActiveSessionId(db: Database, sessionId: string): void {
-    assertSessionId(sessionId);
+    requireNonBlankSessionId(sessionId, "setActiveSessionId");
     db.prepare(
         `INSERT INTO app_state (key, value, updated_at)
          VALUES (?, ?, datetime('now'))
@@ -122,9 +122,9 @@ export function getOrCreateActiveSessionId(db: Database): string {
     const sessionId = getActiveSessionId(db);
     if (sessionId) return sessionId;
 
-    const nextSessionId = randomUUID();
-    setActiveSessionId(db, nextSessionId);
-    return nextSessionId;
+    const newSessionId = randomUUID();
+    setActiveSessionId(db, newSessionId);
+    return newSessionId;
 }
 
 // ── Message CRUD ────────────────────────────────────────────────────

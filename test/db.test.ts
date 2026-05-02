@@ -234,9 +234,9 @@ describe("Active session state", () => {
         const recreated = getOrCreateActiveSessionId(db);
 
         assert.notEqual(recreated, created);
-        assert.throws(() => setActiveSessionId(db, "  "), /session id is required/);
+        assert.throws(() => setActiveSessionId(db, "  "), /session id must not be blank/);
         db.prepare("UPDATE app_state SET value = '' WHERE key = 'active_session_id'").run();
-        assert.throws(() => getActiveSessionId(db), /session id is required/);
+        assert.throws(() => getActiveSessionId(db), /session id must not be blank/);
     });
 });
 

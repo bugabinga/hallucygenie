@@ -34,6 +34,7 @@ import {
     trackUsage,
     checkQuota,
     getUsageToday,
+    getOrCreateActiveSessionId,
     QUOTAS,
 } from "./db.ts";
 
@@ -615,6 +616,10 @@ export function validateSessionId(req: Request): string | null {
     return sessionId;
 }
 
+export function resolveSessionId(req: Request, database: Database): string {
+    return validateSessionId(req) ?? getOrCreateActiveSessionId(database);
+}
+
 // ── Health check ─────────────────────────────────────────────────────
 
 const startTime = Date.now();
@@ -707,14 +712,11 @@ export async function handleRequest(req: Request): Promise<Response> {
         }
     }
 
-    // Session validation for all /api/* routes except health
     if (path.startsWith("/api/")) {
-        const sessionId = validateSessionId(req);
-        if (!sessionId) {
-            return jsonResponse({ error: "X-Session-Id header required" }, 400);
-        }
+        const dbOrErr = requireDb();
+        if (dbOrErr instanceof Response) return dbOrErr;
+        const database = dbOrErr;
 
-        // Route to handler with validated session ID
         if (path === "/api/chat" && method === "POST") {
             const apiKey = process.env.MINIMAX_API_KEY;
             if (!apiKey) {
@@ -725,7 +727,7 @@ export async function handleRequest(req: Request): Promise<Response> {
                     503,
                 );
             }
-            return handleChat(req, apiKey, sessionId);
+            return handleChat(req, apiKey, resolveSessionId(req, database));
         }
 
         if (path === "/api/steer" && method === "POST") {
@@ -743,25 +745,17 @@ export async function handleRequest(req: Request): Promise<Response> {
             ) {
                 return jsonResponse({ error: "Missing required field: message" }, 400);
             }
-            const queue = getOrCreateSteerQueue(sessionId);
+            const queue = getOrCreateSteerQueue(resolveSessionId(req, database));
             queueSteer(queue, (parsed as { message: string }).message);
             return jsonResponse({ ok: true });
         }
 
         if (path === "/api/history" && method === "GET") {
-            const database = getDb();
-            if (!database) {
-                return jsonResponse({ error: "Database not initialized" }, 500);
-            }
-            const messages = getMessages(database, sessionId!);
+            const messages = getMessages(database, resolveSessionId(req, database));
             return jsonResponse({ messages });
         }
 
         if (path === "/api/usage" && method === "GET") {
-            const database = getDb();
-            if (!database) {
-                return jsonResponse({ error: "Database not initialized" }, 500);
-            }
             const usage = getUsageToday(database);
             return jsonResponse({ usage, limits: QUOTAS });
         }
@@ -771,24 +765,24 @@ export async function handleRequest(req: Request): Promise<Response> {
 
     // ── Non-API routes ───────────────────────────────────────────────
 
-    // GET /assets — list assets for session (requires session, outside /api/ block)
+    // GET /assets — list assets for explicit or active session
     if (path === "/assets" && method === "GET") {
-        const sessionId = validateSessionId(req);
-        if (!sessionId) return jsonResponse({ error: "X-Session-Id header required" }, 400);
-        const database = getDb();
-        if (!database) return jsonResponse({ error: "Database not initialized" }, 500);
-        const assets = getAssets(database, sessionId);
+        const dbOrErr = requireDb();
+        if (dbOrErr instanceof Response) return dbOrErr;
+        const assets = getAssets(dbOrErr, resolveSessionId(req, dbOrErr));
         return jsonResponse({ assets });
     }
 
-    // GET /asset/:id — serve a specific asset file (session via header or ?s= query param)
+    // GET /asset/:id — shareable asset URLs need explicit session (header or ?s=),
+    // not the server-wide active session, so recipients see only the intended asset.
     if (path.startsWith("/asset/") && method === "GET") {
         const sessionId = validateSessionId(req) || url.searchParams.get("s");
         if (!sessionId)
             return jsonResponse({ error: "X-Session-Id header or ?s= param required" }, 400);
         const assetId = path.slice("/asset/".length);
-        const database = getDb();
-        if (!database) return jsonResponse({ error: "Database not initialized" }, 500);
+        const dbOrErr = requireDb();
+        if (dbOrErr instanceof Response) return dbOrErr;
+        const database = dbOrErr;
         const asset = getAsset(database, assetId);
         if (!asset) return jsonResponse({ error: "Not found" }, 404);
         const filePath = `data/assets/${asset.session_id}/${asset.filename}`;
@@ -911,6 +905,12 @@ let db: Database | null = null;
  */
 export function getDb(): Database | null {
     return db;
+}
+
+/** Get db or return 500 immediately. For use inside request handler only. */
+function requireDb(): Database | Response {
+    const database = db;
+    return database ?? jsonResponse({ error: "Database not initialized" }, 500);
 }
 
 /**
