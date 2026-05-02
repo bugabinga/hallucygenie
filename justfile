@@ -206,11 +206,11 @@ ci-act-container: ci-act-image container-build
 ci-act-updates: ci-act-image
     act workflow_dispatch {{ ACT_FLAGS }} -W .github/workflows/updates.yml
 
-# run CI after merging into main/master locally
+# run CI after merging into trunk locally
 [group('test')]
 hook-post-merge:
     branch="$(git branch --show-current)"; \
-    if [ "$branch" != "master" ] && [ "$branch" != "main" ]; then exit 0; fi; \
+    if [ "$branch" != "trunk" ]; then exit 0; fi; \
     just ci-act
 
 # build production container image locally

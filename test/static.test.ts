@@ -472,6 +472,7 @@ describe("lefthook health", () => {
         assert.match(lefthookYml, /run: just hook-post-merge/);
         assert.match(justfile, /hook-post-merge:/);
         assert.match(justfile, /git branch --show-current/);
+        assert.match(justfile, /\$branch" != "trunk"/);
         assert.match(justfile, /just ci-act/);
     });
 });
