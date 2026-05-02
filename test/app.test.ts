@@ -1,5 +1,5 @@
 // HallucyGenie — Unit tests for app.ts
-// Tests: SSE parsing, message rendering, session UUID, input state, DOM helpers
+// Tests: SSE parsing, message rendering, API helpers, input state, DOM helpers
 // Uses happy-dom for DOM environment
 
 import { describe, it, before, after } from "node:test";
@@ -68,28 +68,14 @@ function* parseSSEChunk(chunk: string): Generator<SSEEvent> {
     }
 }
 
-// Session UUID
-function getOrCreateSessionId(
-    localStorage: {
-        getItem: (k: string) => string | null;
-        setItem: (k: string, v: string) => void;
-    },
-    crypto: { randomUUID: () => string },
-): string {
-    const KEY = "hallucygenie_session_id";
-    let id = localStorage.getItem(KEY);
-    if (!id) {
-        id = crypto.randomUUID();
-        localStorage.setItem(KEY, id);
-    }
-    return id;
+// API helpers
+function clearLegacySessionId(localStorage: { removeItem: (k: string) => void }): void {
+    localStorage.removeItem("hallucygenie_session_id");
 }
 
-// API headers
-function createApiHeaders(sessionId: string): Record<string, string> {
+function createApiHeaders(): Record<string, string> {
     return {
         "Content-Type": "application/json",
-        "X-Session-Id": sessionId,
     };
 }
 
@@ -227,53 +213,20 @@ describe("SSE Parsing", () => {
     });
 });
 
-// ── Session UUID ───────────────────────────────────────────────────────
-
-describe("Session UUID", () => {
-    it("generates a valid UUID v4 format", () => {
-        const ls = new LocalStorageMock();
-        const crypto = { randomUUID: () => "550e8400-e29b-41d4-a716-446655440000" };
-        const id = getOrCreateSessionId(ls, crypto);
-        const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
-        assert.match(id, uuidRegex);
-    });
-
-    it("returns same value on subsequent calls", () => {
-        const ls = new LocalStorageMock();
-        const crypto = { randomUUID: () => "550e8400-e29b-41d4-a716-446655440000" };
-        const id1 = getOrCreateSessionId(ls, crypto);
-        const id2 = getOrCreateSessionId(ls, crypto);
-        assert.equal(id1, id2);
-    });
-
-    it("stores in localStorage", () => {
-        const ls = new LocalStorageMock();
-        const crypto = { randomUUID: () => "550e8400-e29b-41d4-a716-446655440000" };
-        const id = getOrCreateSessionId(ls, crypto);
-        assert.equal(ls.getItem("hallucygenie_session_id"), id);
-    });
-
-    it("reuses existing session ID from localStorage", () => {
-        const ls = new LocalStorageMock();
-        ls.setItem("hallucygenie_session_id", "existing-id-123");
-        const crypto = { randomUUID: () => "should-not-be-called" };
-        const id = getOrCreateSessionId(ls, crypto);
-        assert.equal(id, "existing-id-123");
-    });
-});
-
 // ── API Headers ────────────────────────────────────────────────────────
 
 describe("API Headers", () => {
-    it("includes session ID and content type", () => {
-        const headers = createApiHeaders("test-session-123");
+    it("includes content type only", () => {
+        const headers = createApiHeaders();
         assert.equal(headers["Content-Type"], "application/json");
-        assert.equal(headers["X-Session-Id"], "test-session-123");
+        assert.equal("X-Session-Id" in headers, false);
     });
 
-    it("works with empty string session ID", () => {
-        const headers = createApiHeaders("");
-        assert.equal(headers["X-Session-Id"], "");
+    it("removes legacy browser-owned session ID", () => {
+        const ls = new LocalStorageMock();
+        ls.setItem("hallucygenie_session_id", "existing-id-123");
+        clearLegacySessionId(ls);
+        assert.equal(ls.getItem("hallucygenie_session_id"), null);
     });
 });
 
@@ -1288,7 +1241,7 @@ describe("streamChat error paths", () => {
                 }),
             );
 
-        await streamChat("session-1", [{ role: "user", content: "hi" }]);
+        await streamChat([{ role: "user", content: "hi" }]);
         const msg = doc.querySelector("#error-toast-message").textContent;
         assert.equal(msg, "Bad request");
     });
@@ -1297,7 +1250,7 @@ describe("streamChat error paths", () => {
         (globalThis as any).fetch = () =>
             Promise.resolve(new Response("not json", { status: 400 }));
 
-        await streamChat("session-1", [{ role: "user", content: "hi" }]);
+        await streamChat([{ role: "user", content: "hi" }]);
         const msg = doc.querySelector("#error-toast-message").textContent;
         assert.equal(msg, "Session expired — please reload the page 🔄");
     });
@@ -1311,7 +1264,7 @@ describe("streamChat error paths", () => {
                 }),
             );
 
-        await streamChat("session-1", [{ role: "user", content: "hi" }]);
+        await streamChat([{ role: "user", content: "hi" }]);
         const msg = doc.querySelector("#error-toast-message").textContent;
         assert.equal(msg, "Service unavailable");
     });
@@ -1320,7 +1273,7 @@ describe("streamChat error paths", () => {
         (globalThis as any).fetch = () =>
             Promise.resolve(new Response("not json", { status: 503 }));
 
-        await streamChat("session-1", [{ role: "user", content: "hi" }]);
+        await streamChat([{ role: "user", content: "hi" }]);
         const msg = doc.querySelector("#error-toast-message").textContent;
         assert.equal(msg, "Something went wrong (503). Try again! 🤷");
     });
@@ -1328,7 +1281,7 @@ describe("streamChat error paths", () => {
     it("200 with null body → showError 'No response'", async () => {
         (globalThis as any).fetch = () => Promise.resolve(new Response(null, { status: 200 }));
 
-        await streamChat("session-1", [{ role: "user", content: "hi" }]);
+        await streamChat([{ role: "user", content: "hi" }]);
         const msg = doc.querySelector("#error-toast-message").textContent;
         assert.equal(msg, "No response from server 😴");
     });
@@ -1337,10 +1290,7 @@ describe("streamChat error paths", () => {
         (globalThis as any).fetch = () => Promise.reject(new Error("Network error"));
 
         // streamChat doesn't catch — it propagates. sendMessage catches.
-        await assert.rejects(
-            () => streamChat("session-1", [{ role: "user", content: "hi" }]),
-            /Network error/,
-        );
+        await assert.rejects(() => streamChat([{ role: "user", content: "hi" }]), /Network error/);
     });
 
     it("onEvent callback receives events", async () => {
@@ -1348,9 +1298,20 @@ describe("streamChat error paths", () => {
         (globalThis as any).fetch = () =>
             Promise.resolve(createSSEResponse([sseText("hello"), sseDone()]));
 
-        await streamChat("session-1", [{ role: "user", content: "hi" }], (e) => events.push(e));
+        await streamChat([{ role: "user", content: "hi" }], (e) => events.push(e));
         assert.ok(events.length > 0);
         assert.equal(events[0].event, "message");
+    });
+
+    it("posts chat without X-Session-Id header", async () => {
+        let request: RequestInit | undefined;
+        (globalThis as any).fetch = (_url: string, init?: RequestInit) => {
+            request = init;
+            return Promise.resolve(createSSEResponse([sseDone()]));
+        };
+
+        await streamChat([{ role: "user", content: "hi" }]);
+        assert.equal((request!.headers as Record<string, string>)["X-Session-Id"], undefined);
     });
 });
 
@@ -1377,7 +1338,7 @@ describe("streamChat SSE processing", () => {
         const { container, contentEl } = renderAssistantMessage();
         messageList.appendChild(container);
 
-        await streamChat("session-1", [{ role: "user", content: "hi" }], (e) => events.push(e));
+        await streamChat([{ role: "user", content: "hi" }], (e) => events.push(e));
 
         // The content element should have the rendered text
         // Note: since module state isn't reset, currentAssistantContent might be null
@@ -1517,7 +1478,7 @@ describe("streamChat SSE processing", () => {
         const { container, contentEl } = renderAssistantMessage();
         messageList.appendChild(container);
 
-        await streamChat("session-1", [{ role: "user", content: "hi" }], (e) => events.push(e));
+        await streamChat([{ role: "user", content: "hi" }], (e) => events.push(e));
         assert.ok(events.some((e) => e.event === "tool_start"));
     });
 
@@ -1540,7 +1501,7 @@ describe("streamChat SSE processing", () => {
         const { container, contentEl } = renderAssistantMessage();
         messageList.appendChild(container);
 
-        await streamChat("session-1", [{ role: "user", content: "draw" }], (e) => events.push(e));
+        await streamChat([{ role: "user", content: "draw" }], (e) => events.push(e));
         assert.ok(events.some((e) => e.event === "tool_start"));
         assert.ok(events.some((e) => e.event === "tool_result"));
     });
@@ -1550,7 +1511,7 @@ describe("streamChat SSE processing", () => {
         const chunks = [sseText("hi"), sseEvent("message", "[DONE]")];
         (globalThis as any).fetch = () => Promise.resolve(createSSEResponse(chunks));
 
-        await streamChat("session-1", [{ role: "user", content: "hi" }], (e) => events.push(e));
+        await streamChat([{ role: "user", content: "hi" }], (e) => events.push(e));
         // Stream should complete without error
         assert.ok(true);
     });
@@ -1562,7 +1523,7 @@ describe("streamChat SSE processing", () => {
         messageList.appendChild(renderSteerMessage("late steer"));
         (globalThis as any).fetch = () => Promise.resolve(createSSEResponse([sseDone()]));
 
-        await streamChat("session-1", [{ role: "user", content: "hi" }]);
+        await streamChat([{ role: "user", content: "hi" }]);
 
         assert.equal(doc.querySelectorAll(".message--steer").length, 0);
         assert.equal(doc.querySelectorAll(".message--user").length, 1);
@@ -1572,7 +1533,7 @@ describe("streamChat SSE processing", () => {
         const chunks = [sseEvent("error", JSON.stringify({ error: "Server error" }))];
         (globalThis as any).fetch = () => Promise.resolve(createSSEResponse(chunks));
 
-        await streamChat("session-1", [{ role: "user", content: "hi" }]);
+        await streamChat([{ role: "user", content: "hi" }]);
         const msg = doc.querySelector("#error-toast-message").textContent;
         assert.equal(msg, "Server error");
     });
@@ -1581,7 +1542,7 @@ describe("streamChat SSE processing", () => {
         const chunks = [sseEvent("error", "not json")];
         (globalThis as any).fetch = () => Promise.resolve(createSSEResponse(chunks));
 
-        await streamChat("session-1", [{ role: "user", content: "hi" }]);
+        await streamChat([{ role: "user", content: "hi" }]);
         const msg = doc.querySelector("#error-toast-message").textContent;
         assert.equal(msg, "Something went wrong 😕");
     });
@@ -2267,31 +2228,39 @@ describe("renderToolResult", () => {
 });
 
 describe("sendSteer", () => {
-    it("sends steer request", async () => {
-        (globalThis as any).fetch = () => Promise.resolve(new Response(null, { status: 200 }));
+    it("sends steer request without X-Session-Id header", async () => {
+        let request: RequestInit | undefined;
+        (globalThis as any).fetch = (_url: string, init?: RequestInit) => {
+            request = init;
+            return Promise.resolve(new Response(null, { status: 200 }));
+        };
 
-        await sendSteer("session-1", "steer message");
-        assert.ok(true, "should not throw");
+        await sendSteer("steer message");
+        assert.equal((request!.headers as Record<string, string>)["X-Session-Id"], undefined);
     });
 
     it("throws on non-OK response", async () => {
         (globalThis as any).fetch = () => Promise.resolve(new Response(null, { status: 500 }));
 
-        await assert.rejects(() => sendSteer("session-1", "steer"), /Steer failed/);
+        await assert.rejects(() => sendSteer("steer"), /Steer failed/);
     });
 });
 
 describe("fetchHistory", () => {
-    it("returns messages from API", async () => {
-        (globalThis as any).fetch = () =>
-            Promise.resolve(
+    it("returns messages from API without request headers", async () => {
+        let request: RequestInit | undefined;
+        (globalThis as any).fetch = (_url: string, init?: RequestInit) => {
+            request = init;
+            return Promise.resolve(
                 new Response(JSON.stringify({ messages: [{ role: "user", content: "hi" }] }), {
                     status: 200,
                     headers: { "Content-Type": "application/json" },
                 }),
             );
+        };
 
-        const msgs = await fetchHistory("session-1");
+        const msgs = await fetchHistory();
+        assert.equal(request, undefined);
         assert.equal(msgs.length, 1);
         assert.equal(msgs[0].role, "user");
         assert.equal(msgs[0].content, "hi");
@@ -2300,7 +2269,7 @@ describe("fetchHistory", () => {
     it("throws on non-OK response", async () => {
         (globalThis as any).fetch = () => Promise.resolve(new Response(null, { status: 500 }));
 
-        await assert.rejects(() => fetchHistory("session-1"), /Failed to load history/);
+        await assert.rejects(() => fetchHistory(), /Failed to load history/);
     });
 });
 
@@ -2322,6 +2291,15 @@ describe("renderSteerMessage", () => {
 // ── Init accessibility regressions ──────────────────────────────────
 
 describe("init accessibility behavior", () => {
+    it("removes legacy browser-owned session ID", () => {
+        const { doc } = setupDOM();
+        (globalThis as any).localStorage.setItem("hallucygenie_session_id", "legacy-session");
+        init();
+
+        assert.equal((globalThis as any).localStorage.getItem("hallucygenie_session_id"), null);
+        assert.ok(doc.querySelector("#message-list"));
+    });
+
     it("shows onboarding on first visit and updates exactly one dot", () => {
         const { doc } = setupDOM();
         init();
@@ -2441,15 +2419,13 @@ describe("updateQuotaBadge", () => {
     });
 });
 
-describe("loadAssets includes session param in URLs", () => {
-    it("fetches /assets and builds URLs with ?s= param", async () => {
+describe("loadAssets", () => {
+    it("fetches /assets without session header and builds asset URLs", async () => {
         const { doc } = setupDOM();
-        const sessionId = "test-sess-123";
+        let requestOpts: RequestInit | undefined;
 
-        // Seed localStorage with known session ID
-        (globalThis as any).localStorage.setItem("hallucygenie-session", sessionId);
-
-        (globalThis as any).fetch = (url: string, opts: any) => {
+        (globalThis as any).fetch = (url: string, opts?: RequestInit) => {
+            requestOpts = opts;
             if (url.includes("/assets")) {
                 return Promise.resolve(
                     new Response(
@@ -2457,6 +2433,7 @@ describe("loadAssets includes session param in URLs", () => {
                             assets: [
                                 {
                                     id: "img-1",
+                                    session_id: "active-session",
                                     type: "image",
                                     filename: "img-1.png",
                                     prompt: "cat",
@@ -2466,6 +2443,7 @@ describe("loadAssets includes session param in URLs", () => {
                                 },
                                 {
                                     id: "aud-1",
+                                    session_id: "active-session",
                                     type: "music",
                                     filename: "aud-1.mp3",
                                     prompt: "song",
@@ -2486,6 +2464,8 @@ describe("loadAssets includes session param in URLs", () => {
 
         // Wait for async fetch + render
         await new Promise((r) => setTimeout(r, 50));
+
+        assert.equal(requestOpts, undefined);
 
         const cards = doc.querySelectorAll(".asset-card");
         assert.equal(cards.length, 2, "should render both asset cards");
@@ -2527,6 +2507,7 @@ describe("loadAssets includes session param in URLs", () => {
                         assets: [
                             {
                                 id: "aud-1",
+                                session_id: "active-session",
                                 type: "music",
                                 filename: "aud-1.mp3",
                                 prompt: "song",

@@ -141,20 +141,19 @@ test("page reload restores chat history", async ({ page }) => {
     expect(hasHistory).toBeGreaterThanOrEqual(1);
 });
 
-// ── Test: Session UUID is stored in localStorage ─────────────────────
+// ── Test: Browser session UUID is not stored ─────────────────────────
 
-test("session UUID is created and stored in localStorage", async ({ page }) => {
+test("session UUID is not created in localStorage", async ({ page }) => {
+    await page.goto("/");
+    await page.evaluate(() => localStorage.setItem("hallucygenie_session_id", "legacy"));
+    await page.reload();
     await waitForApp(page);
 
     const sessionId = await page.evaluate(() => {
         return localStorage.getItem("hallucygenie_session_id");
     });
 
-    expect(sessionId).toBeTruthy();
-    // UUID v4 format
-    expect(sessionId).toMatch(
-        /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i,
-    );
+    expect(sessionId).toBeNull();
 });
 
 // ── Test: Error state displays correctly ──────────────────────────────
@@ -253,17 +252,10 @@ test("steer hint appears during streaming", async ({ page }) => {
 test("usage endpoint returns quota info", async ({ page }) => {
     await waitForApp(page);
 
-    // Check that the session ID is set
-    const sessionId = await page.evaluate(() => {
-        return localStorage.getItem("hallucygenie_session_id");
-    });
-
-    // Try to fetch usage data (this tests the API endpoint)
-    const response = await page.evaluate(async (sid) => {
+    // Try to fetch usage data without browser-owned session header
+    const response = await page.evaluate(async () => {
         try {
-            const resp = await fetch("/api/usage", {
-                headers: { "X-Session-Id": sid! },
-            });
+            const resp = await fetch("/api/usage");
             if (resp.ok) {
                 return await resp.json();
             }
@@ -271,7 +263,7 @@ test("usage endpoint returns quota info", async ({ page }) => {
         } catch {
             return { error: "fetch failed" };
         }
-    }, sessionId);
+    });
 
     // If server is running, we should get usage data
     if (response.usage !== undefined) {

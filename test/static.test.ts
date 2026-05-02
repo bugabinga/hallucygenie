@@ -293,6 +293,15 @@ describe("font vendoring health", () => {
     });
 });
 
+describe("frontend session identity health", () => {
+    it("does not create browser-owned session IDs or send X-Session-Id", () => {
+        assert.equal(appTs.includes("crypto.randomUUID()"), false);
+        assert.equal(appTs.includes('localStorage.setItem("hallucygenie_session_id"'), false);
+        assert.equal(appTs.includes("X-Session-Id"), false);
+        assert.match(appTs, /localStorage\.removeItem\(LEGACY_SESSION_KEY\)/);
+    });
+});
+
 describe("constitution health", () => {
     it("AGENTS.md points to the constitution and Tiger style", () => {
         assert.match(agentsMd, /\.system\/CONSTITUTION\.md/);
@@ -589,9 +598,9 @@ describe("layout health", () => {
         assert.equal(existsSync("deploy/hallucygenie.container"), true);
     });
 
-    it("ignores generated frontend bundle and local tool artifacts", () => {
+    it("ignores generated frontend bundle and local test artifacts", () => {
         assert.match(gitignore, /public\/app\.js/);
-        assert.match(gitignore, /\.pulse\.json/);
+        assert.doesNotMatch(gitignore, /\.pulse\.json/);
         assert.match(gitignore, /test-data\*\//);
     });
 });

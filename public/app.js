@@ -2175,35 +2175,27 @@ function renderThinkingBlock(text) {
   const preview = text.trim().split("\n")[0]?.slice(0, 60) ?? "";
   return `<details class="thinking-block"><summary>\u{1F4AD} Thinking${lines > 1 ? ` (${lines} lines)` : ""}\u2026</summary><div class="thinking-content">${renderMarkdown(text)}</div></details>`;
 }
-function getOrCreateSessionId() {
-  const KEY = "hallucygenie_session_id";
-  let id = localStorage.getItem(KEY);
-  if (!id) {
-    id = crypto.randomUUID();
-    localStorage.setItem(KEY, id);
-  }
-  return id;
+var LEGACY_SESSION_KEY = "hallucygenie_session_id";
+function clearLegacySessionId() {
+  localStorage.removeItem(LEGACY_SESSION_KEY);
 }
-function createApiHeaders(sessionId) {
+function createApiHeaders() {
   return {
-    "Content-Type": "application/json",
-    "X-Session-Id": sessionId
+    "Content-Type": "application/json"
   };
 }
-async function fetchHistory(sessionId) {
-  const resp = await fetch("/api/history", {
-    headers: createApiHeaders(sessionId)
-  });
+async function fetchHistory() {
+  const resp = await fetch("/api/history");
   if (!resp.ok) {
     throw new Error(`Failed to load history: ${resp.status}`);
   }
   const data = await resp.json();
   return data.messages ?? [];
 }
-async function sendSteer(sessionId, message) {
+async function sendSteer(message) {
   const resp = await fetch("/api/steer", {
     method: "POST",
-    headers: createApiHeaders(sessionId),
+    headers: createApiHeaders(),
     body: JSON.stringify({ message })
   });
   if (!resp.ok) {
@@ -2403,8 +2395,8 @@ function renderAssetPreview(asset, url) {
   button.appendChild(img);
   return button;
 }
-function renderAssetCard(asset, sessionId) {
-  const url = assetUrl(sessionId, asset.id);
+function renderAssetCard(asset) {
+  const url = assetUrl(asset.session_id, asset.id);
   const card = document.createElement("div");
   card.className = "asset-card";
   card.dataset.type = asset.type;
@@ -2432,13 +2424,12 @@ function loadAssets() {
   const empty = $("#assets-empty");
   grid.innerHTML = "";
   empty.hidden = true;
-  const sessionId = getOrCreateSessionId();
-  fetch("/assets", { headers: { "X-Session-Id": sessionId } }).then((r) => r.json()).then(({ assets }) => {
+  fetch("/assets").then((r) => r.json()).then(({ assets }) => {
     if (!assets.length) {
       empty.hidden = false;
       return;
     }
-    for (const asset of assets) grid.appendChild(renderAssetCard(asset, sessionId));
+    for (const asset of assets) grid.appendChild(renderAssetCard(asset));
   }).catch(() => {
     empty.hidden = false;
     empty.textContent = "Failed to load assets \u{1F615}";
@@ -2462,10 +2453,10 @@ var currentAssistantContent = null;
 var activeToolCards = /* @__PURE__ */ new Map();
 var rawTextBuffer = "";
 var thinkingBuffer = "";
-async function streamChat(sessionId, messages, onEvent) {
+async function streamChat(messages, onEvent) {
   const resp = await fetch("/api/chat", {
     method: "POST",
-    headers: createApiHeaders(sessionId),
+    headers: createApiHeaders(),
     body: JSON.stringify({ messages })
   });
   if (resp.status === 400) {
@@ -2661,7 +2652,6 @@ async function sendMessage(content) {
     await sendSteerMessage(content);
     return;
   }
-  const sessionId = getOrCreateSessionId();
   const messageList = $("#message-list");
   const userMsg = renderUserMessage(content);
   messageList.appendChild(userMsg);
@@ -2676,7 +2666,7 @@ async function sendMessage(content) {
   isStreaming = true;
   setStreamingUI(true);
   try {
-    await streamChat(sessionId, [{ role: "user", content }]);
+    await streamChat([{ role: "user", content }]);
   } catch (err) {
     showError("Connection lost. Check your internet? \u{1F4E1}");
     finishStreaming();
@@ -2684,7 +2674,6 @@ async function sendMessage(content) {
 }
 async function sendSteerMessage(content) {
   if (!content.trim() || !isStreaming) return;
-  const sessionId = getOrCreateSessionId();
   const messageList = $("#message-list");
   const steerMsg = renderSteerMessage(content);
   messageList.appendChild(steerMsg);
@@ -2693,7 +2682,7 @@ async function sendSteerMessage(content) {
   input.value = "";
   autoResizeInput();
   try {
-    await sendSteer(sessionId, content);
+    await sendSteer(content);
   } catch {
     showError("Couldn't steer \u2014 try again \u{1F4AB}");
   }
@@ -2742,10 +2731,9 @@ function renderHistoryAssistantMessage(msg, toolRows) {
   return container;
 }
 async function loadHistory() {
-  const sessionId = getOrCreateSessionId();
   const messageList = $("#message-list");
   try {
-    const messages = await fetchHistory(sessionId);
+    const messages = await fetchHistory();
     if (messages.length > 0) {
       const welcome = messageList.querySelector(".message--welcome");
       if (welcome) welcome.remove();
@@ -2800,6 +2788,7 @@ async function updateQuotaBadge() {
   }
 }
 function init() {
+  clearLegacySessionId();
   const form = $("#chat-form");
   const input = $("#chat-input");
   const sendBtn = $("#send-button");
@@ -2999,11 +2988,11 @@ if (typeof document !== "undefined" && document.readyState !== "loading") {
 export {
   $,
   autoResizeInput,
+  clearLegacySessionId,
   closeLightbox,
   createApiHeaders,
   createElement,
   fetchHistory,
-  getOrCreateSessionId,
   getToolEmoji,
   handleInputChange,
   init,

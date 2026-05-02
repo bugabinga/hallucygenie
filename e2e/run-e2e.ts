@@ -68,19 +68,13 @@ async function expectEnabled(locator: ReturnType<Page["locator"]>): Promise<void
 /**
  * Reliable "app is ready" signal:
  * 1. Navigate to page
- * 2. Wait for init() to complete (session UUID in localStorage)
- * 3. Wait for #send-button to be in DOM
+ * 2. Wait for #send-button to be in DOM
  *
  * Optionally dismiss onboarding overlay for tests that need to interact
  * with elements behind it.
  */
 async function waitForApp(page: Page, options?: { dismissOnboarding?: boolean }): Promise<void> {
     await page.goto(BASE_URL);
-
-    // Wait for init() to run — it sets session UUID in localStorage synchronously
-    await page.waitForFunction(() => localStorage.getItem("hallucygenie_session_id") !== null, {
-        timeout: 10000,
-    });
 
     // Wait for DOM elements to be ready
     await page.waitForSelector("#send-button");
@@ -280,25 +274,21 @@ async function runE2ETests(): Promise<void> {
         results,
     );
 
-    // Test 4: Session UUID stored in localStorage
+    // Test 4: Browser does not store session UUID
     await runTest(
-        "session UUID stored in localStorage",
+        "session UUID is not stored in localStorage",
         async () => {
             const page = await browser!.newPage();
+            await page.goto(BASE_URL);
+            await page.evaluate(() => localStorage.setItem("hallucygenie_session_id", "legacy"));
+            await page.reload();
             await waitForApp(page);
 
             const sessionId = await page.evaluate(() => {
                 return localStorage.getItem("hallucygenie_session_id");
             });
 
-            if (!sessionId) throw new Error("No session ID in localStorage");
-            if (
-                !/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
-                    sessionId,
-                )
-            ) {
-                throw new Error(`Invalid UUID format: ${sessionId}`);
-            }
+            if (sessionId !== null) throw new Error(`Unexpected session ID: ${sessionId}`);
 
             await page.close();
         },
@@ -580,24 +570,20 @@ async function runE2ETests(): Promise<void> {
         results,
     );
 
-    // Test 17: Session persists across page reloads
+    // Test 17: Legacy session ID stays removed across reloads
     await runTest(
-        "session persists across page reloads",
+        "legacy session ID stays removed across reloads",
         async () => {
             const page = await browser!.newPage();
+            await waitForApp(page);
+
+            await page.reload();
             await waitForApp(page);
 
             const sessionId = await page.evaluate(() =>
                 localStorage.getItem("hallucygenie_session_id"),
             );
-
-            await page.reload();
-            await waitForApp(page);
-
-            const sessionId2 = await page.evaluate(() =>
-                localStorage.getItem("hallucygenie_session_id"),
-            );
-            assertEqual(sessionId, sessionId2, "Session ID persistence");
+            assertEqual(sessionId, null, "Legacy session ID removed");
 
             await page.close();
         },

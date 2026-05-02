@@ -1,6 +1,6 @@
 // HallucyGenie — Frontend Chat Logic
 // Vanilla TypeScript, no framework, no OOP.
-// Session UUID, SSE streaming, message rendering, tool cards, steering.
+// SSE streaming, message rendering, tool cards, steering.
 
 // ── Types ────────────────────────────────────────────────────────────
 
@@ -45,31 +45,22 @@ export function renderThinkingBlock(text: string): string {
     return `<details class="thinking-block"><summary>💭 Thinking${lines > 1 ? ` (${lines} lines)` : ""}…</summary><div class="thinking-content">${renderMarkdown(text)}</div></details>`;
 }
 
-// ── Session UUID ─────────────────────────────────────────────────────
-
-export function getOrCreateSessionId(): string {
-    const KEY = "hallucygenie_session_id";
-    let id = localStorage.getItem(KEY);
-    if (!id) {
-        id = crypto.randomUUID();
-        localStorage.setItem(KEY, id);
-    }
-    return id;
-}
-
 // ── API helpers ──────────────────────────────────────────────────────
 
-export function createApiHeaders(sessionId: string): Record<string, string> {
+const LEGACY_SESSION_KEY = "hallucygenie_session_id";
+
+export function clearLegacySessionId(): void {
+    localStorage.removeItem(LEGACY_SESSION_KEY);
+}
+
+export function createApiHeaders(): Record<string, string> {
     return {
         "Content-Type": "application/json",
-        "X-Session-Id": sessionId,
     };
 }
 
-export async function fetchHistory(sessionId: string): Promise<HistoryMessage[]> {
-    const resp = await fetch("/api/history", {
-        headers: createApiHeaders(sessionId),
-    });
+export async function fetchHistory(): Promise<HistoryMessage[]> {
+    const resp = await fetch("/api/history");
     if (!resp.ok) {
         throw new Error(`Failed to load history: ${resp.status}`);
     }
@@ -77,10 +68,10 @@ export async function fetchHistory(sessionId: string): Promise<HistoryMessage[]>
     return data.messages ?? [];
 }
 
-export async function sendSteer(sessionId: string, message: string): Promise<void> {
+export async function sendSteer(message: string): Promise<void> {
     const resp = await fetch("/api/steer", {
         method: "POST",
-        headers: createApiHeaders(sessionId),
+        headers: createApiHeaders(),
         body: JSON.stringify({ message }),
     });
     if (!resp.ok) {
@@ -345,8 +336,8 @@ function renderAssetPreview(asset: Asset, url: string): HTMLElement {
     return button;
 }
 
-function renderAssetCard(asset: Asset, sessionId: string): HTMLElement {
-    const url = assetUrl(sessionId, asset.id);
+function renderAssetCard(asset: Asset): HTMLElement {
+    const url = assetUrl(asset.session_id, asset.id);
     const card = document.createElement("div");
     card.className = "asset-card";
     card.dataset.type = asset.type;
@@ -381,15 +372,14 @@ export function loadAssets(): void {
     grid.innerHTML = "";
     empty.hidden = true;
 
-    const sessionId = getOrCreateSessionId();
-    fetch("/assets", { headers: { "X-Session-Id": sessionId } })
+    fetch("/assets")
         .then((r) => r.json() as Promise<{ assets: Asset[] }>)
         .then(({ assets }) => {
             if (!assets.length) {
                 empty.hidden = false;
                 return;
             }
-            for (const asset of assets) grid.appendChild(renderAssetCard(asset, sessionId));
+            for (const asset of assets) grid.appendChild(renderAssetCard(asset));
         })
         .catch(() => {
             empty.hidden = false;
@@ -426,13 +416,12 @@ let thinkingBuffer = ""; // accumulated thinking text from thinking events
 // ── SSE Stream Processing ────────────────────────────────────────────
 
 export async function streamChat(
-    sessionId: string,
     messages: Array<{ role: string; content: string }>,
     onEvent?: (event: SSEEvent) => void,
 ): Promise<void> {
     const resp = await fetch("/api/chat", {
         method: "POST",
-        headers: createApiHeaders(sessionId),
+        headers: createApiHeaders(),
         body: JSON.stringify({ messages }),
     });
 
@@ -691,7 +680,6 @@ export async function sendMessage(content: string): Promise<void> {
         return;
     }
 
-    const sessionId = getOrCreateSessionId();
     const messageList = $("#message-list");
 
     // Render user message
@@ -715,7 +703,7 @@ export async function sendMessage(content: string): Promise<void> {
     setStreamingUI(true);
 
     try {
-        await streamChat(sessionId, [{ role: "user", content }]);
+        await streamChat([{ role: "user", content }]);
     } catch (err) {
         showError("Connection lost. Check your internet? 📡");
         finishStreaming();
@@ -727,7 +715,6 @@ export async function sendMessage(content: string): Promise<void> {
 export async function sendSteerMessage(content: string): Promise<void> {
     if (!content.trim() || !isStreaming) return;
 
-    const sessionId = getOrCreateSessionId();
     const messageList = $("#message-list");
 
     // Render steer message (visually distinct)
@@ -742,7 +729,7 @@ export async function sendSteerMessage(content: string): Promise<void> {
 
     // Send steer to server
     try {
-        await sendSteer(sessionId, content);
+        await sendSteer(content);
     } catch {
         showError("Couldn't steer — try again 💫");
     }
@@ -810,11 +797,10 @@ function renderHistoryAssistantMessage(
 }
 
 export async function loadHistory(): Promise<void> {
-    const sessionId = getOrCreateSessionId();
     const messageList = $("#message-list");
 
     try {
-        const messages = await fetchHistory(sessionId);
+        const messages = await fetchHistory();
 
         // Remove welcome message if we have history
         if (messages.length > 0) {
@@ -894,6 +880,8 @@ export async function updateQuotaBadge(): Promise<void> {
 // ── Event Binding ────────────────────────────────────────────────────
 
 export function init(): void {
+    clearLegacySessionId();
+
     const form = $("#chat-form") as HTMLFormElement;
     const input = $("#chat-input") as HTMLTextAreaElement;
     const sendBtn = $("#send-button") as HTMLButtonElement;

@@ -88,7 +88,7 @@ Browser → src/server.ts → src/agent.ts → MiniMax API
                   src/log.ts
 ```
 
-- Browser: `POST /api/chat` + `X-Session-Id` header
+- Browser: `POST /api/chat` (server uses DB active session by default)
 - Server: validate session, load history, run agent loop
 - Agent: stream SSE to browser (text, tool_start, tool_result, done)
 - Tools: call MiniMax, return results as events
@@ -109,9 +109,9 @@ Browser → src/server.ts → src/agent.ts → MiniMax API
 
 ## Session
 
-- UUID in `X-Session-Id` header, client-owned, localStorage
-- Server partitions all data by session_id
-- No server-side session creation
+- Active session ID lives in DB app_state, server-owned
+- `X-Session-Id` is optional for tests/debug explicit session partitioning
+- Browser does not create or store session UUIDs in normal flow
 
 ## SSE (server → browser)
 

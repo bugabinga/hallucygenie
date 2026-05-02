@@ -38,8 +38,10 @@ Covers: HG-ISSUE-012, 015, 016, 019.
 - Inspect SQLite: `app_state.active_session_id` exists and is stable across restart.
 - Without `X-Session-Id`, `/api/history`, `/api/chat`, `/api/steer`, and `/assets` should use the active DB session.
 - With explicit `X-Session-Id`, old debug/test session partitioning should still work.
+- In browser devtools, `localStorage.hallucygenie_session_id` should be absent after reload; `hg_onboarding_done` may remain.
+- Network tab: frontend `/api/chat`, `/api/history`, `/api/steer`, `/assets` requests should not send `X-Session-Id`.
 
-Covers: HG-TICKET-013, HG-TICKET-014, HG-SPEC-007.
+Covers: HG-TICKET-013, HG-TICKET-014, HG-TICKET-015, HG-SPEC-007.
 
 ## Dev/test health
 
