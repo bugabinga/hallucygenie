@@ -10,6 +10,9 @@ import { tmpdir } from "node:os";
 import {
     runMigrations,
     initDb,
+    getActiveSessionId,
+    getOrCreateActiveSessionId,
+    setActiveSessionId,
     saveMessage,
     assertNoRawAssetDataInMessage,
     getMessages,
@@ -56,13 +59,14 @@ describe("runMigrations", () => {
         assert.ok(tables.includes("messages"));
         assert.ok(tables.includes("preferences"));
         assert.ok(tables.includes("daily_usage"));
+        assert.ok(tables.includes("app_state"));
 
         // Verify all migrations recorded
         const versions = db
             .prepare("SELECT version FROM schema_migrations ORDER BY version")
             .all()
             .map((r: any) => r.version);
-        assert.deepEqual(versions, [1, 2, 3, 4, 5, 6]);
+        assert.deepEqual(versions, [1, 2, 3, 4, 5, 6, 7]);
 
         db.close();
     });
@@ -149,6 +153,11 @@ describe("initDb", () => {
     it("opens database and applies migrations", () => {
         const dir = tempMigrationsDir({
             "001-test.sql": "CREATE TABLE test_init (id INTEGER PRIMARY KEY);",
+            "002-app-state.sql": `CREATE TABLE app_state (
+                key TEXT PRIMARY KEY,
+                value TEXT NOT NULL,
+                updated_at INTEGER NOT NULL
+            );`,
         });
 
         const db = initDb(":memory:", dir);
@@ -171,7 +180,63 @@ describe("initDb", () => {
         assert.ok(tables.includes("messages"));
         assert.ok(tables.includes("preferences"));
         assert.ok(tables.includes("daily_usage"));
+        assert.ok(tables.includes("app_state"));
+        assert.match(getOrCreateActiveSessionId(db), /^[0-9a-f-]{36}$/);
         db.close();
+    });
+});
+
+// ── App State Tests ─────────────────────────────────────────────────
+
+describe("Active session state", () => {
+    let db: Database;
+
+    beforeEach(() => {
+        db = freshDb();
+    });
+
+    it("creates active session once and reuses it", () => {
+        assert.equal(getActiveSessionId(db), null);
+
+        const first = getOrCreateActiveSessionId(db);
+        const second = getOrCreateActiveSessionId(db);
+
+        assert.match(first, /^[0-9a-f-]{36}$/);
+        assert.equal(second, first);
+        assert.equal(getActiveSessionId(db), first);
+    });
+
+    it("setActiveSessionId updates active session", () => {
+        setActiveSessionId(db, "session-next");
+        assert.equal(getActiveSessionId(db), "session-next");
+
+        setActiveSessionId(db, "session-final");
+        assert.equal(getOrCreateActiveSessionId(db), "session-final");
+    });
+
+    it("initDb creates active session if missing", () => {
+        const dir = mkdtempSync(join(tmpdir(), "hg-active-session-"));
+        const path = join(dir, "app.db");
+
+        const db1 = initDb(path);
+        const first = getActiveSessionId(db1);
+        db1.close();
+
+        const db2 = initDb(path);
+        assert.equal(getActiveSessionId(db2), first);
+        db2.close();
+        rmSync(dir, { recursive: true });
+    });
+
+    it("recreates missing active session and fails loud on blank ids", () => {
+        const created = getOrCreateActiveSessionId(db);
+        db.prepare("DELETE FROM app_state WHERE key = 'active_session_id'").run();
+        const recreated = getOrCreateActiveSessionId(db);
+
+        assert.notEqual(recreated, created);
+        assert.throws(() => setActiveSessionId(db, "  "), /session id is required/);
+        db.prepare("UPDATE app_state SET value = '' WHERE key = 'active_session_id'").run();
+        assert.throws(() => getActiveSessionId(db), /session id is required/);
     });
 });
 

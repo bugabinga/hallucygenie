@@ -2,6 +2,7 @@
 // Uses bun:sqlite
 
 import { Database } from "bun:sqlite";
+import { randomUUID } from "node:crypto";
 import { readFileSync, readdirSync } from "node:fs";
 import { join, basename } from "node:path";
 
@@ -86,8 +87,44 @@ export function initDb(dbPath: string, migrationsDir?: string): Database {
 
     const mDir = migrationsDir ?? join(import.meta.dirname ?? ".", "..", "migrations");
     runMigrations(db, mDir);
+    getOrCreateActiveSessionId(db);
 
     return db;
+}
+
+// ── App State ───────────────────────────────────────────────────────
+
+const ACTIVE_SESSION_KEY = "active_session_id";
+
+function assertSessionId(sessionId: string): void {
+    if (sessionId.trim().length === 0) throw new Error("session id is required");
+}
+
+export function getActiveSessionId(db: Database): string | null {
+    const row = db.prepare("SELECT value FROM app_state WHERE key = ?").get(ACTIVE_SESSION_KEY) as
+        | { value: string }
+        | undefined;
+    if (!row) return null;
+    assertSessionId(row.value);
+    return row.value;
+}
+
+export function setActiveSessionId(db: Database, sessionId: string): void {
+    assertSessionId(sessionId);
+    db.prepare(
+        `INSERT INTO app_state (key, value, updated_at)
+         VALUES (?, ?, datetime('now'))
+         ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = datetime('now')`,
+    ).run(ACTIVE_SESSION_KEY, sessionId);
+}
+
+export function getOrCreateActiveSessionId(db: Database): string {
+    const sessionId = getActiveSessionId(db);
+    if (sessionId) return sessionId;
+
+    const nextSessionId = randomUUID();
+    setActiveSessionId(db, nextSessionId);
+    return nextSessionId;
 }
 
 // ── Message CRUD ────────────────────────────────────────────────────
