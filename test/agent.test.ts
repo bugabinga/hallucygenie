@@ -23,6 +23,7 @@ import {
     compactToolResultForModel,
     stripModelControlPlaceholders,
     safeToolResultForUser,
+    apiErrorMessageForUser,
     executeToolSafely,
     DEFAULT_MAX_CONTEXT_TOKENS,
 } from "../src/agent.ts";
@@ -742,6 +743,21 @@ describe("runAgentLoop", () => {
             false,
         );
         assert.equal(events.at(-1)?.type, "done");
+    });
+
+    it("does not surface raw provider error bodies as assistant text", async () => {
+        globalThis.fetch = async () =>
+            new Response('{"base_resp":{"status_code":1004,"status_msg":"bad key"}}', {
+                status: 500,
+            });
+
+        const { events, onEvent } = collectEvents();
+        await runAgentLoop([{ role: "user", content: "hi" }], "test-key", onEvent);
+
+        const text = events.find((e) => e.type === "text")?.content ?? "";
+        assert.equal(text.includes("base_resp"), false);
+        assert.equal(text.includes("status_msg"), false);
+        assert.equal(text, apiErrorMessageForUser(500));
     });
 
     it("handles network failure", async () => {

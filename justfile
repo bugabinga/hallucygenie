@@ -98,13 +98,15 @@ hook-pre-push: test-unit
 # backend unit tests
 [group('test')]
 test:
-    bun test {{ BACKEND_TESTS }}
+    for file in {{ BACKEND_TESTS }}; do \
+      bun test "$file" || exit "$?"; \
+    done
 
 # all unit tests
 [group('test')]
 test-unit:
     status=0; \
-    bun test {{ BACKEND_TESTS }} & backend=$!; \
+    just test & backend=$!; \
     bun test {{ FRONTEND_TESTS }} & frontend=$!; \
     wait "$backend" || status=$?; \
     wait "$frontend" || status=$?; \
@@ -156,7 +158,7 @@ test-coverage:
 [group('test')]
 test-all: check build
     status=0; \
-    bun test {{ BACKEND_TESTS }} & backend=$!; \
+    just test & backend=$!; \
     bun test {{ FRONTEND_TESTS }} & frontend=$!; \
     wait "$backend" || status=$?; \
     wait "$frontend" || status=$?; \
@@ -167,7 +169,7 @@ test-all: check build
 [group('test')]
 ci-test-all: ci-check build
     status=0; \
-    bun test {{ BACKEND_TESTS }} & backend=$!; \
+    just test & backend=$!; \
     bun test {{ FRONTEND_TESTS }} & frontend=$!; \
     wait "$backend" || status=$?; \
     wait "$frontend" || status=$?; \

@@ -578,10 +578,11 @@ describe("SSE streaming from Anthropic endpoint", () => {
                 messages: [{ role: "user", content: "hi" }],
             });
             const resp = await handleChat(req, "test-key");
-            // New flow returns 200 SSE with error message
+            // New flow returns 200 SSE with safe error message
             assert.equal(resp.status, 200);
             const body = await readBody(resp);
-            assert.ok(body.includes("API returned 500"));
+            assert.ok(body.includes("MiniMax returned 500"));
+            assert.equal(body.includes("Internal Server Error"), false);
         } finally {
             globalThis.fetch = originalFetch;
         }

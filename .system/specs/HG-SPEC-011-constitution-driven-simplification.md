@@ -177,4 +177,20 @@ User-facing errors:
 - Unit: context-window errors are logged and not streamed as raw `[Error: API returned ...]`.
 - Integration: media tool turn persists asset + compact tool message only.
 - Integration: second model call after media tool lacks `data:audio`/`data:image`.
-- Static: constitution prompt exists and is reachable via `just constitution`.
+- Static: constitution prompt exists and `AGENTS.md` points to it.
+
+## HG-043 acceptance audit — 2026-05-02
+
+Status: passed with follow-up work split into existing tickets.
+
+Checked:
+
+- Raw asset invariant: `src/db.ts` rejects `data:image`, `data:audio`, `data:video`, and large base64 in messages/thinking. Covered by `test/db.test.ts` and media integration tests.
+- Compact model context: `runAgentLoop()` rebuilds context each iteration and sends compact media tool summaries, not raw bytes. Covered by `test/agent.test.ts` and `test/server.test.ts`.
+- Provider error user safety: tool errors and generic MiniMax API errors stream concise user-safe text while logs keep raw provider details.
+- Strong prompt: `.system/CONSTITUTION.md` exists, and `AGENTS.md` points to constitution + Tiger style. Covered by static tests.
+
+Remaining accepted follow-ups:
+
+- `HG-TICKET-044`: remove remaining compatibility branches after DB-first state work.
+- `HG-TICKET-045`: wider provider-error copy audit beyond the MiniMax chat API error path.

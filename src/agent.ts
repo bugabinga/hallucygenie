@@ -355,6 +355,16 @@ export function isContextWindowError(status: number, errorText: string): boolean
     return status === 400 && /context window exceeds limit/i.test(errorText);
 }
 
+export function apiErrorMessageForUser(status: number): string {
+    if (status === 401 || status === 403) {
+        return `[Error: MiniMax authentication failed (${status}). Check the server API key.]`;
+    }
+    if (status === 429) {
+        return "[Error: MiniMax rate limit reached. Try again later.]";
+    }
+    return `[Error: MiniMax returned ${status}. Try again in a bit.]`;
+}
+
 export function stripModelControlPlaceholders(text: string): string {
     return text
         .split("\n")
@@ -527,7 +537,7 @@ export async function runAgentLoop(
             });
             await onEvent({
                 type: "text",
-                content: `[Error: API returned ${resp.status}: ${errorText}]`,
+                content: apiErrorMessageForUser(resp.status),
             });
             await onEvent({ type: "done" });
             return localMessages;
