@@ -1,7 +1,7 @@
 # HG-TICKET-017 — `/api/state` bootstrap
 
 **Spec:** `.system/specs/HG-SPEC-007-db-first-single-user-state.md`
-**Status:** Ready
+**Status:** Done
 **Priority:** Medium
 **Size:** M
 
@@ -19,6 +19,17 @@ Expose a tiny app bootstrap endpoint for active session metadata and lightweight
 
 - Integration: `/api/state` returns active session metadata.
 - Unit: endpoint creates active session if missing.
+
+## Implementation
+
+- Added `GET /api/state` returning active session id/name/nameSource plus tiny UI metadata.
+- Endpoint uses DB active session creation path; no history payload.
+
+## Validation
+
+- `bun test test/server.test.ts test/integration.test.ts --timeout 30000`
+- `just check`
+- `just test-all`
 
 ## Devil check
 

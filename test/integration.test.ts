@@ -254,6 +254,17 @@ describe("GET /api/quota", () => {
     });
 });
 
+describe("GET /api/state", () => {
+    it("returns active session metadata", async () => {
+        const r = await api("GET", "/api/state");
+        assert.equal(r.status, 200);
+        assert.match((r.body as any).activeSession.id, /^[0-9a-f-]{36}$/);
+        assert.equal((r.body as any).activeSession.name, "New Chat");
+        assert.equal((r.body as any).activeSession.nameSource, "default");
+        assert.equal((r.body as any).ui.maxMessageLength, 2000);
+    });
+});
+
 describe("GET /assets (no session)", () => {
     it("uses active session without X-Session-Id", async () => {
         seedActiveAsset("integration-active-list");
@@ -278,10 +289,12 @@ describe("GET /asset (active session)", () => {
         assert.deepEqual(Array.from(new Uint8Array(await r.arrayBuffer())), [1, 2, 3]);
     });
 
-    it("blocks wrong explicit session for active asset", async () => {
+    it("blocks wrong explicit session header for active asset", async () => {
         seedActiveAsset("integration-wrong-session-file", new Uint8Array([4, 5, 6]));
 
-        const r = await api("GET", "/asset/integration-wrong-session-file?s=wrong-session");
+        const r = await api("GET", "/asset/integration-wrong-session-file", undefined, {
+            "X-Session-Id": "wrong-session",
+        });
         assert.equal(r.status, 404);
     });
 
@@ -290,14 +303,11 @@ describe("GET /asset (active session)", () => {
         assert.equal(r.status, 404);
     });
 
-    it("returns 404 with ?s= query param (session ok, asset not found)", async () => {
-        const r = await api("GET", "/asset/nonexistent-id?s=test-session");
-        assert.equal(r.status, 404);
-    });
+    it("ignores legacy asset session query param", async () => {
+        seedActiveAsset("integration-query-ignored", new Uint8Array([7, 8, 9]));
 
-    it("returns 400 with ?s= empty query param", async () => {
-        const r = await api("GET", "/asset/nonexistent-id?s=");
-        assert.equal(r.status, 400);
+        const r = await httpGet("/asset/integration-query-ignored?s=wrong-session");
+        assert.equal(r.status, 200);
     });
 });
 

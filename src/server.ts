@@ -35,6 +35,7 @@ import {
     checkQuota,
     getUsageToday,
     getOrCreateActiveSessionId,
+    getOrCreateActiveSession,
     QUOTAS,
 } from "./db.ts";
 
@@ -353,6 +354,7 @@ export async function handleChat(
                                       sessionId,
                                       event.name ?? "",
                                       event.prompt ?? null,
+                                      event.args,
                                   )
                                 : event.result;
                             if (event.id) savedToolResults.set(event.id, saved);
@@ -565,7 +567,13 @@ function handleExplicitToolDirective(
                     : await executeToolSafely(directive.name, directive.args, apiKey),
             );
             const saved = sessionId
-                ? await saveAssetFile(result, sessionId, directive.name, directive.prompt)
+                ? await saveAssetFile(
+                      result,
+                      sessionId,
+                      directive.name,
+                      directive.prompt,
+                      directive.args,
+                  )
                 : result;
 
             await writeSse("tool_result", {
@@ -623,13 +631,8 @@ export function resolveSessionId(req: Request, database: Database): string {
     return validateSessionId(req) ?? getOrCreateActiveSessionId(database);
 }
 
-function resolveAssetSessionId(req: Request, url: URL, database: Database): string | null {
-    return (
-        validateSessionId(req) ??
-        (url.searchParams.has("s")
-            ? normalizeSessionId(url.searchParams.get("s"))
-            : getOrCreateActiveSessionId(database))
-    );
+function resolveAssetSessionId(req: Request, database: Database): string {
+    return validateSessionId(req) ?? getOrCreateActiveSessionId(database);
 }
 
 // ── Health check ─────────────────────────────────────────────────────
@@ -646,8 +649,7 @@ function handleHealth(): Response {
 // ── Main request handler ─────────────────────────────────────────────
 
 export async function handleRequest(req: Request): Promise<Response> {
-    const url = new URL(req.url);
-    const path = url.pathname;
+    const path = new URL(req.url).pathname;
     const method = req.method;
 
     // CORS preflight
@@ -729,6 +731,18 @@ export async function handleRequest(req: Request): Promise<Response> {
         if (dbOrErr instanceof Response) return dbOrErr;
         const database = dbOrErr;
 
+        if (path === "/api/state" && method === "GET") {
+            const activeSession = getOrCreateActiveSession(database);
+            return jsonResponse({
+                activeSession: {
+                    id: activeSession.id,
+                    name: activeSession.name,
+                    nameSource: activeSession.name_source,
+                },
+                ui: { maxMessageLength: 2000 },
+            });
+        }
+
         if (path === "/api/chat" && method === "POST") {
             const apiKey = process.env.MINIMAX_API_KEY;
             if (!apiKey) {
@@ -791,8 +805,7 @@ export async function handleRequest(req: Request): Promise<Response> {
         if (dbOrErr instanceof Response) return dbOrErr;
         const database = dbOrErr;
 
-        const sessionId = resolveAssetSessionId(req, url, database);
-        if (!sessionId) return jsonResponse({ error: "Invalid session ID" }, 400);
+        const sessionId = resolveAssetSessionId(req, database);
 
         const assetId = path.slice("/asset/".length);
         const asset = getAsset(database, assetId);
@@ -945,6 +958,51 @@ function extensionForMime(mime: string): string {
     return mime.split("/")[1]?.replace(/jpeg/, "jpg") ?? "bin";
 }
 
+function stringParam(args: Record<string, unknown> | undefined, key: string): string | undefined {
+    const value = args?.[key];
+    return typeof value === "string" && value.trim() ? value.trim() : undefined;
+}
+
+function numberParam(args: Record<string, unknown> | undefined, key: string): number | undefined {
+    const value = args?.[key];
+    return typeof value === "number" && Number.isFinite(value) ? value : undefined;
+}
+
+function assetParamsJson(
+    toolName: string,
+    prompt: string | null,
+    args?: Record<string, unknown>,
+): string | null {
+    if (toolName === "generate_image") {
+        return JSON.stringify({
+            model: "image-01",
+            prompt: prompt ?? stringParam(args, "prompt") ?? null,
+            aspect_ratio: stringParam(args, "aspect_ratio") ?? null,
+        });
+    }
+    if (toolName === "text_to_speech") {
+        return JSON.stringify({
+            model: "speech-2.8-hd",
+            text: prompt ?? stringParam(args, "text") ?? null,
+            voice_id: stringParam(args, "voice_id") ?? null,
+            speed: numberParam(args, "speed") ?? null,
+            volume: numberParam(args, "volume") ?? null,
+            pitch: numberParam(args, "pitch") ?? null,
+        });
+    }
+    if (toolName === "generate_music") {
+        const lyrics = stringParam(args, "lyrics") ?? "";
+        return JSON.stringify({
+            model: "music-2.6",
+            prompt: prompt ?? stringParam(args, "prompt") ?? null,
+            lyrics_present: lyrics.length > 0,
+            lyrics_excerpt: lyrics ? lyrics.slice(0, 200) : null,
+            is_instrumental: lyrics.length === 0,
+        });
+    }
+    return null;
+}
+
 function saveAssetBuffer(
     resultType: ToolResult["type"],
     buf: Buffer,
@@ -952,6 +1010,7 @@ function saveAssetBuffer(
     sessionId: string,
     toolName: string,
     prompt: string | null,
+    args?: Record<string, unknown>,
 ): ToolResult {
     const assetId = `asset_${randomUUID()}`;
     const filename = `${assetId}.${extensionForMime(mime)}`;
@@ -969,6 +1028,7 @@ function saveAssetBuffer(
         prompt,
         tool_name: toolName,
         size_bytes: buf.byteLength,
+        params_json: assetParamsJson(toolName, prompt, args),
     });
 
     return { type: resultType, content: `/asset/${assetId}` };
@@ -998,6 +1058,7 @@ async function saveAssetFile(
     sessionId: string,
     toolName: string,
     prompt: string | null,
+    args?: Record<string, unknown>,
 ): Promise<ToolResult> {
     try {
         if (result.type === "image" && /^https?:\/\//i.test(result.content)) {
@@ -1009,6 +1070,7 @@ async function saveAssetFile(
                 sessionId,
                 toolName,
                 prompt,
+                args,
             );
         }
 
@@ -1017,7 +1079,7 @@ async function saveAssetFile(
 
         const mime = match[1]!;
         const buf = Buffer.from(match[2]!, "base64");
-        return saveAssetBuffer(result.type, buf, mime, sessionId, toolName, prompt);
+        return saveAssetBuffer(result.type, buf, mime, sessionId, toolName, prompt, args);
     } catch (err) {
         log.warn("asset save failed", { toolName, error: String(err) });
         return { type: "error", content: `Couldn't save generated ${result.type}. Try again.` };

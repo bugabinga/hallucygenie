@@ -729,7 +729,13 @@ describe("SSE streaming from Anthropic endpoint", () => {
             assert.equal(rows.at(-2)?.tool_calls_json?.includes("generate_image"), true);
             assert.equal(rows.at(-1)?.role, "tool");
             assert.ok(rows.at(-1)?.content.includes("/asset/"));
-            assert.equal(getAssets(db, "explicit-direct-session").at(-1)?.type, "image");
+            const asset = getAssets(db, "explicit-direct-session").at(-1)!;
+            assert.equal(asset.type, "image");
+            assert.deepEqual(JSON.parse(asset.params_json!), {
+                model: "image-01",
+                prompt: "cat",
+                aspect_ratio: "16:9",
+            });
         } finally {
             globalThis.fetch = originalFetch;
         }
@@ -2060,6 +2066,20 @@ describe("Coverage: GET /api/history and /api/usage without DB", () => {
         assert.equal(resp.status, 500);
         // Re-init
         initDatabase(join(import.meta.dirname ?? ".", "test-data", "test.db"));
+    });
+});
+
+describe("GET /api/state", () => {
+    it("returns active session bootstrap state", async () => {
+        const resp = await handleRequest(new Request("http://localhost/api/state"));
+        assert.equal(resp.status, 200);
+        const body = (await resp.json()) as {
+            activeSession: { id: string; name: string; nameSource: string };
+            ui: { maxMessageLength: number };
+        };
+        assert.equal(body.activeSession.name, "New Chat");
+        assert.equal(body.activeSession.nameSource, "default");
+        assert.equal(body.ui.maxMessageLength, 2000);
     });
 });
 

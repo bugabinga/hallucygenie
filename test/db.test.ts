@@ -12,6 +12,11 @@ import {
     initDb,
     getActiveSessionId,
     getOrCreateActiveSessionId,
+    getOrCreateActiveSession,
+    createSession,
+    listSessions,
+    renameSession,
+    archiveSession,
     setActiveSessionId,
     saveMessage,
     assertNoRawAssetDataInMessage,
@@ -60,13 +65,20 @@ describe("runMigrations", () => {
         assert.ok(tables.includes("preferences"));
         assert.ok(tables.includes("daily_usage"));
         assert.ok(tables.includes("app_state"));
+        assert.ok(tables.includes("sessions"));
+
+        const assetColumns = db
+            .prepare("PRAGMA table_info(assets)")
+            .all()
+            .map((r: any) => r.name);
+        assert.ok(assetColumns.includes("params_json"));
 
         // Verify all migrations recorded
         const versions = db
             .prepare("SELECT version FROM schema_migrations ORDER BY version")
             .all()
             .map((r: any) => r.version);
-        assert.deepEqual(versions, [1, 2, 3, 4, 5, 6, 7]);
+        assert.deepEqual(versions, [1, 2, 3, 4, 5, 6, 7, 8, 9]);
 
         db.close();
     });
@@ -237,6 +249,45 @@ describe("Active session state", () => {
         assert.throws(() => setActiveSessionId(db, "  "), /session id must not be blank/);
         db.prepare("UPDATE app_state SET value = '' WHERE key = 'active_session_id'").run();
         assert.throws(() => getActiveSessionId(db), /session id must not be blank/);
+    });
+});
+
+describe("Sessions", () => {
+    let db: Database;
+
+    beforeEach(() => {
+        db = freshDb();
+    });
+
+    it("creates active New Chat session on demand", () => {
+        const session = getOrCreateActiveSession(db);
+        assert.equal(session.id, getActiveSessionId(db));
+        assert.equal(session.name, "New Chat");
+        assert.equal(session.name_source, "default");
+    });
+
+    it("lists active sessions ordered by updated time", () => {
+        createSession(db, "session-a", "Alpha");
+        createSession(db, "session-b", "Beta");
+        const names = listSessions(db).map((row) => row.name);
+        assert.deepEqual(names.slice(0, 2), ["Beta", "Alpha"]);
+    });
+
+    it("rename sets name_source manual", () => {
+        createSession(db, "session-rename", "Draft");
+        const renamed = renameSession(db, "session-rename", "Boss Fight Ideas");
+        assert.equal(renamed.name, "Boss Fight Ideas");
+        assert.equal(renamed.name_source, "manual");
+        assert.throws(() => renameSession(db, "session-rename", " "), /session name/);
+    });
+
+    it("archive hides sessions from list", () => {
+        createSession(db, "session-archive", "Hide Me");
+        archiveSession(db, "session-archive");
+        assert.equal(
+            listSessions(db).some((row) => row.id === "session-archive"),
+            false,
+        );
     });
 });
 
@@ -617,6 +668,47 @@ describe("saveAsset + getAssets + getAsset", () => {
         assert.equal(assets[0].id, id);
         assert.equal(assets[0].filename, "img.png");
         assert.equal(assets[0].tool_name, "generate_image");
+        assert.equal(assets[0].params_json, null);
+    });
+
+    it("saves generation params JSON", () => {
+        const id = crypto.randomUUID();
+        saveAsset(db, {
+            id,
+            session_id: "session-params",
+            type: "music",
+            filename: "song.mp3",
+            mime_type: "audio/mpeg",
+            prompt: "boss fight",
+            tool_name: "generate_music",
+            size_bytes: 999,
+            params_json: JSON.stringify({
+                model: "music-2.6",
+                prompt: "boss fight",
+                lyrics_present: false,
+                is_instrumental: true,
+            }),
+        });
+        const asset = getAsset(db, id)!;
+        assert.equal(JSON.parse(asset.params_json!).model, "music-2.6");
+    });
+
+    it("rejects raw media bytes in asset params", () => {
+        assert.throws(
+            () =>
+                saveAsset(db, {
+                    id: crypto.randomUUID(),
+                    session_id: "session-params",
+                    type: "audio",
+                    filename: "voice.mp3",
+                    mime_type: "audio/mpeg",
+                    prompt: "hello",
+                    tool_name: "text_to_speech",
+                    size_bytes: 999,
+                    params_json: JSON.stringify({ raw: "data:audio/mp3;base64,aaaa" }),
+                }),
+            /raw asset data/,
+        );
     });
 
     it("saveAsset then getAsset returns the asset", () => {

@@ -87,7 +87,11 @@ export function initDb(dbPath: string, migrationsDir?: string): Database {
 
     const mDir = migrationsDir ?? join(import.meta.dirname ?? ".", "..", "migrations");
     runMigrations(db, mDir);
-    getOrCreateActiveSessionId(db);
+    if (tableExists(db, "sessions")) {
+        getOrCreateActiveSession(db);
+    } else {
+        getOrCreateActiveSessionId(db);
+    }
 
     return db;
 }
@@ -95,6 +99,15 @@ export function initDb(dbPath: string, migrationsDir?: string): Database {
 // ── App State ───────────────────────────────────────────────────────
 
 const ACTIVE_SESSION_KEY = "active_session_id";
+const DEFAULT_SESSION_NAME = "New Chat";
+const DEFAULT_SESSION_NAME_SOURCE = "default";
+
+function tableExists(db: Database, name: string): boolean {
+    const row = db
+        .prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?")
+        .get(name);
+    return row !== null && row !== undefined;
+}
 
 function normalizeSessionId(sessionId: string, context: string): string {
     const trimmed = sessionId.trim();
@@ -121,11 +134,101 @@ export function setActiveSessionId(db: Database, sessionId: string): void {
 
 export function getOrCreateActiveSessionId(db: Database): string {
     const sessionId = getActiveSessionId(db);
-    if (sessionId) return sessionId;
+    if (sessionId) {
+        if (tableExists(db, "sessions")) ensureSession(db, sessionId);
+        return sessionId;
+    }
 
     const newSessionId = randomUUID();
+    if (tableExists(db, "sessions")) createSession(db, newSessionId, DEFAULT_SESSION_NAME);
     setActiveSessionId(db, newSessionId);
     return newSessionId;
+}
+
+// ── Sessions ────────────────────────────────────────────────────────
+
+export interface SessionRow {
+    id: string;
+    name: string;
+    name_source: "default" | "manual" | "auto";
+    created_at: string;
+    updated_at: string;
+    archived_at: string | null;
+}
+
+function normalizeSessionName(name: string): string {
+    const trimmed = name.trim();
+    if (!trimmed) throw new Error("session name must not be blank");
+    return trimmed;
+}
+
+export function createSession(
+    db: Database,
+    id: string = randomUUID(),
+    name = DEFAULT_SESSION_NAME,
+): SessionRow {
+    const normalized = normalizeSessionName(name);
+    db.prepare(
+        `INSERT INTO sessions (id, name, name_source, created_at, updated_at)
+         VALUES (?, ?, ?, datetime('now'), datetime('now'))`,
+    ).run(id, normalized, DEFAULT_SESSION_NAME_SOURCE);
+    return getSession(db, id)!;
+}
+
+function ensureSession(db: Database, id: string): SessionRow {
+    const existing = getSession(db, id);
+    if (existing) return existing;
+    return createSession(db, id, DEFAULT_SESSION_NAME);
+}
+
+export function getOrCreateActiveSession(db: Database): SessionRow {
+    const sessionId = getOrCreateActiveSessionId(db);
+    return ensureSession(db, sessionId);
+}
+
+export function getSession(db: Database, id: string): SessionRow | null {
+    return db
+        .prepare(
+            `SELECT id, name, name_source, created_at, updated_at, archived_at
+             FROM sessions
+             WHERE id = ?`,
+        )
+        .get(id) as SessionRow | null;
+}
+
+export function listSessions(db: Database): SessionRow[] {
+    return db
+        .prepare(
+            `SELECT id, name, name_source, created_at, updated_at, archived_at
+             FROM sessions
+             WHERE archived_at IS NULL
+             ORDER BY updated_at DESC, created_at DESC, id DESC`,
+        )
+        .all() as SessionRow[];
+}
+
+export function renameSession(db: Database, id: string, name: string): SessionRow {
+    const normalized = normalizeSessionName(name);
+    const result = db
+        .prepare(
+            `UPDATE sessions
+             SET name = ?, name_source = 'manual', updated_at = datetime('now')
+             WHERE id = ? AND archived_at IS NULL`,
+        )
+        .run(normalized, id);
+    if (result.changes !== 1) throw new Error(`session not found: ${id}`);
+    return getSession(db, id)!;
+}
+
+export function archiveSession(db: Database, id: string): void {
+    const result = db
+        .prepare(
+            `UPDATE sessions
+             SET archived_at = datetime('now'), updated_at = datetime('now')
+             WHERE id = ? AND archived_at IS NULL`,
+        )
+        .run(id);
+    if (result.changes !== 1) throw new Error(`session not found: ${id}`);
 }
 
 // ── Message CRUD ────────────────────────────────────────────────────
@@ -289,14 +392,25 @@ export interface AssetRow {
     tool_name: string;
     size_bytes: number;
     created_at: number;
+    params_json: string | null;
+}
+
+function assertAssetParamsAreSafe(paramsJson?: string | null): void {
+    if (!paramsJson) return;
+    JSON.parse(paramsJson);
+    assertNoRawAssetDataInMessage(paramsJson);
 }
 
 export function saveAsset(
     db: Database,
-    asset: Omit<AssetRow, "created_at"> & { created_at?: number },
+    asset: Omit<AssetRow, "created_at" | "params_json"> & {
+        created_at?: number;
+        params_json?: string | null;
+    },
 ): void {
+    assertAssetParamsAreSafe(asset.params_json);
     db.prepare(
-        "INSERT INTO assets (id, session_id, type, filename, mime_type, prompt, tool_name, size_bytes, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        "INSERT INTO assets (id, session_id, type, filename, mime_type, prompt, tool_name, size_bytes, created_at, params_json) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
     ).run(
         asset.id,
         asset.session_id,
@@ -307,6 +421,7 @@ export function saveAsset(
         asset.tool_name,
         asset.size_bytes,
         asset.created_at ?? Date.now(),
+        asset.params_json ?? null,
     );
 }
 

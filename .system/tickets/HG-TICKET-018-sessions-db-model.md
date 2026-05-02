@@ -1,7 +1,7 @@
 # HG-TICKET-018 — Sessions DB model
 
 **Spec:** `.system/specs/HG-SPEC-009-multi-session-support.md`
-**Status:** Ready
+**Status:** Done
 **Priority:** High
 **Size:** M
 
@@ -21,6 +21,17 @@ Add first-class sessions table and DB helpers.
 - DB unit: create/list ordered by updated time.
 - DB unit: rename sets `name_source=manual`.
 - DB unit: archive hides from list.
+
+## Implementation
+
+- Added `sessions` migration with active listing indexes for sessions/messages/assets.
+- Added DB helpers: create/get/list/rename/archive plus active `New Chat` creation.
+
+## Validation
+
+- `bun test test/db.test.ts --timeout 30000`
+- `just check`
+- `just test-all`
 
 ## Devil check
 

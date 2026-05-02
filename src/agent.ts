@@ -61,6 +61,7 @@ export interface AgentEvent {
     name?: string;
     result?: ToolResult;
     prompt?: string; // for tool_result: the main prompt field used
+    args?: Record<string, unknown>;
 }
 
 export function safeToolResultForUser(toolName: string, result: ToolResult): ToolResult {
@@ -704,6 +705,7 @@ export async function runAgentLoop(
                         (args.prompt as string | undefined) ??
                         (args.text as string | undefined) ??
                         (args.topic as string | undefined),
+                    args,
                 });
 
                 // Append compact tool result to model context. Never feed raw media bytes back.
