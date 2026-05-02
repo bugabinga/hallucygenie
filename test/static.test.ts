@@ -22,6 +22,8 @@ const strykerDb = readFileSync("test/stryker-db.mjs", "utf-8");
 const deployDockerfile = readFileSync("deploy/Dockerfile", "utf-8");
 const actDockerfile = readFileSync("deploy/act/Dockerfile", "utf-8");
 const agentsMd = readFileSync("AGENTS.md", "utf-8");
+const issuePrompt = readFileSync(".pi/prompts/issue.md", "utf-8");
+const minimaxResearchPrompt = readFileSync(".pi/prompts/minimax-research.md", "utf-8");
 const readmeMd = readFileSync("README.md", "utf-8");
 const licenseMd = readFileSync("LICENSE", "utf-8");
 const constitutionMd = readFileSync(".system/CONSTITUTION.md", "utf-8");
@@ -310,11 +312,24 @@ describe("frontend session identity health", () => {
 });
 
 describe("constitution health", () => {
-    it("AGENTS.md points to the constitution and Tiger style", () => {
+    it("AGENTS.md stays instruction-only and points at source docs", () => {
+        assert.match(agentsMd, /Agent instructions only/);
+        assert.match(agentsMd, /Do not mirror project state here/);
         assert.match(agentsMd, /\.system\/CONSTITUTION\.md/);
-        assert.match(agentsMd, /Tiger skill/);
-        assert.match(agentsMd, /No "backwards compat"/);
-        assert.match(agentsMd, /fail fast and hard/i);
+        assert.match(agentsMd, /\/skill:tiger/);
+        assert.match(agentsMd, /\/skill:minimax/);
+        assert.match(agentsMd, /just --list/);
+        assert.doesNotMatch(agentsMd, /\.pi\/prompts\/issue\.md/);
+        assert.match(agentsMd, /\.pi\/prompts\/spec\.md/);
+        assert.match(agentsMd, /\.pi\/prompts\/minimax-research\.md/);
+        assert.doesNotMatch(agentsMd, /\/home\//);
+        assert.doesNotMatch(
+            agentsMd,
+            /^## (Stack|Commands|Files|Architecture|MiniMax API|Session|SSE|Quotas|Testing|Logger|Don't)$/m,
+        );
+        assert.doesNotMatch(agentsMd, /No frameworks/);
+        assert.doesNotMatch(agentsMd, /No "backwards compat"/);
+        assert.doesNotMatch(agentsMd, /logs\/dev\.log/);
     });
 
     it("music creator specs split lyrics/song generation from cover research", () => {
@@ -424,6 +439,7 @@ describe("justfile health", () => {
     it("uses clear MiniMax smoke test script", () => {
         assert.match(justfile, /\nminimax-test:\n\s+bun scripts\/minimax-test\.ts/);
         assert.match(justfile, /consumes TTS\/image\/music quota/);
+        assert.equal(/^minimax-research:/m.test(justfile), false);
     });
 
     it("can update vendored fonts", () => {
@@ -453,6 +469,9 @@ describe("justfile health", () => {
     it("defines hook recipes for lefthook", () => {
         assert.match(justfile, /hook-pre-commit: fmt-check lint/);
         assert.match(justfile, /hook-pre-push: test-unit/);
+        assert.match(justfile, /test-backend:/);
+        assert.match(justfile, /just test-backend & backend=\$!/);
+        assert.equal(/^test:/m.test(justfile), false);
         assert.match(
             justfile,
             /fmt-check:\n\s+just -f \.\/justfile --fmt --check\n\s+bunx prettier --check \./,
@@ -474,6 +493,27 @@ describe("lefthook health", () => {
         assert.match(justfile, /git branch --show-current/);
         assert.match(justfile, /\$branch" != "trunk"/);
         assert.match(justfile, /just ci-act/);
+    });
+});
+
+describe("prompt health", () => {
+    it("uses issue prompt as the single issue-triage workflow", () => {
+        assert.equal(existsSync(".pi/prompts/check-issue.md"), false);
+        assert.equal(existsSync(".pi/prompts/issue.md"), true);
+        assert.match(issuePrompt, /logs\/dev\.log.*if present/);
+        assert.match(issuePrompt, /Quote relevant excerpts only/);
+        assert.match(issuePrompt, /Never paste raw asset bytes/);
+        assert.match(issuePrompt, /Search `.system\/issues\/`/);
+        assert.match(issuePrompt, /Cross-reference related specs, tickets, and issues/);
+        assert.match(issuePrompt, /Do not fix unless user asks/);
+    });
+
+    it("moves MiniMax research workflow out of justfile", () => {
+        assert.equal(existsSync(".pi/prompts/minimax-research.md"), true);
+        assert.match(minimaxResearchPrompt, /Research MiniMax API capabilities/);
+        assert.match(minimaxResearchPrompt, /\/skill:minimax/);
+        assert.match(minimaxResearchPrompt, /\/skill:research/);
+        assert.match(minimaxResearchPrompt, /src\/tools\.ts/);
     });
 });
 
@@ -508,7 +548,8 @@ describe("GitHub Actions health", () => {
         assert.match(ciYml, /install-dependencies: true/);
         assert.doesNotMatch(ciYml, /flaky apt source/);
         assert.match(ciYml, /CHROMIUM_PATH=/);
-        assert.match(justfile, /ci-test-all: ci-check build/);
+        assert.match(justfile, /ci-test-all: ci-check build test-unit test-integration/);
+        assert.match(justfile, /test-all: check build test-unit test-integration/);
         assert.match(justfile, /ci-check: fmt-check lint/);
     });
 
@@ -564,12 +605,11 @@ describe("GitHub Actions health", () => {
 
     it("prepare installs hooks only inside a git repo", () => {
         const pkg = JSON.parse(readFileSync("package.json", "utf-8")) as {
+            packageManager: string;
             scripts: Record<string, string>;
         };
-        assert.equal(
-            JSON.parse(readFileSync("package.json", "utf-8")).packageManager,
-            "bun@1.3.13",
-        );
+        assert.equal(pkg.packageManager, "bun@1.3.13");
+        assert.deepEqual(Object.keys(pkg.scripts), ["prepare"]);
         assert.match(pkg.scripts.prepare, /git rev-parse --git-dir/);
         assert.match(pkg.scripts.prepare, /lefthook install/);
     });

@@ -3,7 +3,6 @@
 set dotenv-load
 set unstable
 
-SRC := "src/server.ts src/agent.ts src/tools.ts src/db.ts src/log.ts public/app.ts public/markdown.ts"
 BACKEND_TESTS := "test/server.test.ts test/agent.test.ts test/tools.test.ts test/db.test.ts"
 FRONTEND_TESTS := "test/app.test.ts test/static.test.ts test/e2e-mock.test.ts test/minimax-test-script.test.ts"
 ACT_IMAGE := "localhost/hallucygenie-act:local"
@@ -97,7 +96,7 @@ hook-pre-push: test-unit
 
 # backend unit tests
 [group('test')]
-test:
+test-backend:
     for file in {{ BACKEND_TESTS }}; do \
       bun test "$file" || exit "$?"; \
     done
@@ -106,7 +105,7 @@ test:
 [group('test')]
 test-unit:
     status=0; \
-    just test & backend=$!; \
+    just test-backend & backend=$!; \
     bun test {{ FRONTEND_TESTS }} & frontend=$!; \
     wait "$backend" || status=$?; \
     wait "$frontend" || status=$?; \
@@ -156,25 +155,11 @@ test-coverage:
 
 # check + unit + integration
 [group('test')]
-test-all: check build
-    status=0; \
-    just test & backend=$!; \
-    bun test {{ FRONTEND_TESTS }} & frontend=$!; \
-    wait "$backend" || status=$?; \
-    wait "$frontend" || status=$?; \
-    if [ "$status" -ne 0 ]; then exit "$status"; fi; \
-    bun test test/integration.test.ts
+test-all: check build test-unit test-integration
 
 # CI: check + unit + integration without formatting writes
 [group('test')]
-ci-test-all: ci-check build
-    status=0; \
-    just test & backend=$!; \
-    bun test {{ FRONTEND_TESTS }} & frontend=$!; \
-    wait "$backend" || status=$?; \
-    wait "$frontend" || status=$?; \
-    if [ "$status" -ne 0 ]; then exit "$status"; fi; \
-    bun test test/integration.test.ts
+ci-test-all: ci-check build test-unit test-integration
 
 # build local act runner image with stable apt sources
 [group('test')]
@@ -229,22 +214,16 @@ test-e2e: build
     PLAYWRIGHT_ALLOW_ANDROID=1 bun e2e/run-e2e.ts
 
 alias t := test-unit
+alias tb := test-backend
 alias ti := test-integration
 alias ta := test-all
 alias e2e := test-e2e
 alias verify := test-all
 
-HOME_DIR := env("HOME")
-
 # test MiniMax API endpoints + check quota (real API; consumes TTS/image/music quota)
 [group('pi')]
 minimax-test:
     bun scripts/minimax-test.ts
-
-# research MiniMax APIs: update skill + report code changes
-[group('pi')]
-minimax-research:
-    pi --skill {{ HOME_DIR }}/.pi/agent/skills/minimax --skill {{ HOME_DIR }}/.pi/agent/skills/research --tools read,bash,edit,write,grep,find,ls -p "You are researching MiniMax API capabilities for HallucyGenie. Check the current skill at {{ HOME_DIR }}/.pi/agent/skills/minimax/SKILL.md and the project docs at AGENTS.md. Use the research skill to crawl MiniMax docs. Research any new models, endpoints, or changes. Update the skill file if you find improvements. Report any code changes needed in the project (src/tools.ts, src/db.ts, src/agent.ts, src/server.ts, etc.). If no changes needed, say so."
 
 # rm generated files and caches
 [group('util')]

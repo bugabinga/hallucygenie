@@ -5,13 +5,7 @@
     "type": "module",
     "packageManager": "bun@1.3.13",
     "scripts": {
-        "build": "bunx esbuild public/app.ts --outfile=public/app.js --bundle --format=esm --target=esnext",
-        "dev": "bun run build && bun src/server.ts",
-        "hooks:install": "lefthook install",
-        "prepare": "git rev-parse --git-dir >/dev/null 2>&1 || exit 0; lefthook install",
-        "test": "bun test test/*.test.ts",
-        "test:coverage": "bun test --coverage test/*.test.ts",
-        "test:mutation": "stryker run test/stryker.config.mjs"
+        "prepare": "git rev-parse --git-dir >/dev/null 2>&1 || exit 0; lefthook install"
     },
     "devDependencies": {
         "@stryker-mutator/core": "^9.6.1",
