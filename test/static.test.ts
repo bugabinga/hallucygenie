@@ -590,6 +590,7 @@ describe("GitHub Actions health", () => {
         assert.match(ciYml, /path: ~\/\.bun\/install\/cache/);
         assert.match(ciYml, /hashFiles\('bun\.lock'\)/);
         assert.match(ciYml, /actions\/upload-artifact@v7\.0\.1/);
+        assert.match(ciYml, /if: \$\{\{ always\(\) && !env\.ACT \}\}/);
         assert.match(ciYml, /name: mutation-reports/);
         assert.match(ciYml, /path: reports\/mutation\//);
         assert.match(strykerAgent, /reporters: \["clear-text", "progress", "html"\]/);

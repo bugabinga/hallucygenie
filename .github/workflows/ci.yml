@@ -58,7 +58,7 @@ jobs:
             - name: Mutation tests
               run: just test-mutation
             - name: Upload mutation reports
-              if: always()
+              if: ${{ always() && !env.ACT }}
               uses: actions/upload-artifact@v7.0.1
               with:
                   name: mutation-reports

@@ -2,7 +2,7 @@
 
 **Severity:** Medium  
 **Area:** Local merge hook / CI act compatibility  
-**Status:** Open
+**Status:** Fixed
 
 ## Report
 
@@ -52,3 +52,18 @@ The post-merge hook exits non-zero after a successful local validation run, whic
 3. Change post-merge hook to run local recipes directly instead of full `ci-act`.
 
 Preferred: option 1. Keep GitHub artifact uploads; avoid incompatible local act upload.
+
+## Fix
+
+Implemented 2026-05-03:
+
+- Changed mutation report upload to `if: ${{ always() && !env.ACT }}`.
+- Added static regression coverage so local act keeps skipping artifact uploads.
+
+## Validation
+
+- Reproduced before fix with `just ci-act-mutation`: mutation passed, upload failed on `unknown field "mime_type"`.
+- Verified after fix with `just ci-act-mutation`: mutation job succeeded under local `act`.
+- Verified full merge hook with `just hook-post-merge`: check/e2e/mutation jobs succeeded under local `act`.
+- `just check`
+- `bun test test/static.test.ts`
