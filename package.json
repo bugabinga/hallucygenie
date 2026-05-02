@@ -1,6 +1,7 @@
 {
     "name": "hallucygenie",
     "version": "0.1.0",
+    "license": "MIT",
     "type": "module",
     "packageManager": "bun@1.3.13",
     "scripts": {

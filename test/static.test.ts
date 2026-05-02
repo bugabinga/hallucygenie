@@ -22,6 +22,8 @@ const strykerDb = readFileSync("test/stryker-db.mjs", "utf-8");
 const deployDockerfile = readFileSync("deploy/Dockerfile", "utf-8");
 const actDockerfile = readFileSync("deploy/act/Dockerfile", "utf-8");
 const agentsMd = readFileSync("AGENTS.md", "utf-8");
+const readmeMd = readFileSync("README.md", "utf-8");
+const licenseMd = readFileSync("LICENSE", "utf-8");
 const constitutionMd = readFileSync(".system/CONSTITUTION.md", "utf-8");
 const musicCreatorSpec = readFileSync(
     ".system/specs/HG-SPEC-012-minimax-music-creator-tools.md",
@@ -459,9 +461,11 @@ describe("justfile health", () => {
 });
 
 describe("lefthook health", () => {
-    it("runs pre-commit checks, pre-push unit tests, and post-merge main CI", () => {
+    it("runs pre-commit checks, gitleaks, pre-push unit tests, and post-merge main CI", () => {
         assert.match(lefthookYml, /pre-commit:/);
         assert.match(lefthookYml, /run: just hook-pre-commit/);
+        assert.match(lefthookYml, /gitleaks:/);
+        assert.match(lefthookYml, /gitleaks protect --staged --redact --verbose/);
         assert.match(lefthookYml, /pre-push:/);
         assert.match(lefthookYml, /run: just hook-pre-push/);
         assert.match(lefthookYml, /post-merge:/);
@@ -469,6 +473,25 @@ describe("lefthook health", () => {
         assert.match(justfile, /hook-post-merge:/);
         assert.match(justfile, /git branch --show-current/);
         assert.match(justfile, /just ci-act/);
+    });
+});
+
+describe("project metadata health", () => {
+    it("ships a minimal README with badges and footer", () => {
+        assert.match(readmeMd, /^# HallucyGenie\n/);
+        assert.match(readmeMd, /actions\/workflows\/ci\.yml\/badge\.svg/);
+        assert.match(readmeMd, /License-MIT/);
+        assert.match(readmeMd, /Dark little genie/);
+        assert.match(readmeMd, /chat, image, voice, and song/);
+        assert.match(readmeMd, /Made with love, hand-vibing AI, and bugabinga\./);
+    });
+
+    it("uses MIT license metadata", () => {
+        const pkg = JSON.parse(readFileSync("package.json", "utf-8")) as { license: string };
+        assert.equal(pkg.license, "MIT");
+        assert.match(licenseMd, /^MIT License/);
+        assert.match(licenseMd, /Copyright \(c\) 2026 bugabinga/);
+        assert.match(licenseMd, /THE SOFTWARE IS PROVIDED "AS IS"/);
     });
 });
 
