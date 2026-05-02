@@ -2176,6 +2176,9 @@ function renderThinkingBlock(text) {
   return `<details class="thinking-block"><summary>\u{1F4AD} Thinking${lines > 1 ? ` (${lines} lines)` : ""}\u2026</summary><div class="thinking-content">${renderMarkdown(text)}</div></details>`;
 }
 var LEGACY_SESSION_KEY = "hallucygenie_session_id";
+var RECENT_ERROR_KEY = "hallucygenie_recent_error";
+var RECENT_ERROR_TTL_MS = 10 * 60 * 1e3;
+var USER_AVATAR = "\u{1F3AE}";
 function clearLegacySessionId() {
   localStorage.removeItem(LEGACY_SESSION_KEY);
 }
@@ -2260,7 +2263,7 @@ function createElement(tag2, attrs, children) {
 }
 function renderUserMessage(content) {
   const msg = createElement("div", { class: "message message--user" });
-  const avatar = createElement("div", { class: "message-avatar" }, ["\u{1F464}"]);
+  const avatar = createElement("div", { class: "message-avatar" }, [USER_AVATAR]);
   const bubble = createElement("div", { class: "message-bubble" });
   const contentEl = createElement("div", { class: "message-content" });
   contentEl.innerHTML = renderMarkdown(content);
@@ -2436,11 +2439,47 @@ function loadAssets() {
   });
 }
 var toastTimeout = null;
+function safeErrorMessage(message) {
+  if (/\{.*(?:base_resp|status_code|status_msg|error).*\}/is.test(message)) {
+    return "Something went wrong. Try again! \u{1F937}";
+  }
+  if (/stack trace|authorization:|bearer\s+[a-z0-9._-]+/i.test(message)) {
+    return "Something went wrong. Try again! \u{1F937}";
+  }
+  return message;
+}
+function saveRecentError(message) {
+  localStorage.setItem(RECENT_ERROR_KEY, JSON.stringify({ message, createdAt: Date.now() }));
+}
+function clearRecentError() {
+  localStorage.removeItem(RECENT_ERROR_KEY);
+}
+function restoreRecentError(now = Date.now()) {
+  try {
+    const raw = localStorage.getItem(RECENT_ERROR_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    if (typeof parsed.message !== "string" || typeof parsed.createdAt !== "number") {
+      clearRecentError();
+      return null;
+    }
+    if (now - parsed.createdAt > RECENT_ERROR_TTL_MS) {
+      clearRecentError();
+      return null;
+    }
+    return parsed.message;
+  } catch {
+    clearRecentError();
+    return null;
+  }
+}
 function showError(message, duration = 4e3) {
+  const safeMessage = safeErrorMessage(message);
   const toast = $("#error-toast");
   const msgEl = $("#error-toast-message");
-  msgEl.textContent = message;
+  msgEl.textContent = safeMessage;
   toast.hidden = false;
+  saveRecentError(safeMessage);
   if (toastTimeout) clearTimeout(toastTimeout);
   toastTimeout = setTimeout(() => {
     toast.hidden = true;
@@ -2511,6 +2550,7 @@ function ensureAssistantContent() {
 function handleSSEEvent(event) {
   const { event: eventType, data } = event;
   if (data === "[DONE]") {
+    clearRecentError();
     finishStreaming();
     return;
   }
@@ -2755,8 +2795,12 @@ async function loadHistory() {
 }
 function autoResizeInput() {
   const input = $("#chat-input");
+  const maxHeight = 120;
   input.style.height = "auto";
-  input.style.height = Math.min(input.scrollHeight, 120) + "px";
+  const clamped = input.scrollHeight > maxHeight;
+  input.style.height = Math.min(input.scrollHeight, maxHeight) + "px";
+  input.classList.toggle("is-overflowing", clamped);
+  input.setAttribute("aria-multiline", "true");
 }
 function handleInputChange() {
   const input = $("#chat-input");
@@ -2789,6 +2833,8 @@ async function updateQuotaBadge() {
 }
 function init() {
   clearLegacySessionId();
+  const restoredError = restoreRecentError();
+  if (restoredError) showError(restoredError);
   const form = $("#chat-form");
   const input = $("#chat-input");
   const sendBtn = $("#send-button");
@@ -3009,6 +3055,7 @@ export {
   renderToolCardLoading,
   renderToolResult,
   renderUserMessage,
+  restoreRecentError,
   sendMessage,
   sendSteer,
   sendSteerMessage,

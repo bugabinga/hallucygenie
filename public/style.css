@@ -98,6 +98,7 @@
     --font-user: "HG Playwrite DE SAS", cursive, system-ui, sans-serif;
     --font-sans: var(--font-ui);
     --font-mono: "SF Mono", "Fira Code", "Cascadia Code", ui-monospace, monospace;
+    --content-max-width: 720px;
 }
 
 /* ── Reset + Base ───────────────────────────────────────────────────── */
@@ -162,8 +163,7 @@ textarea,
     display: flex;
     flex-direction: column;
     height: 100dvh;
-    max-width: 720px;
-    margin: 0 auto;
+    min-width: 0;
     position: relative;
     background: var(--color-bg);
 }
@@ -174,7 +174,11 @@ textarea,
     display: flex;
     align-items: center;
     justify-content: space-between;
-    padding: var(--space-md) var(--space-lg);
+    padding-block: var(--space-md);
+    padding-inline: max(
+        var(--space-lg),
+        calc((100vw - var(--content-max-width)) / 2 + var(--space-lg))
+    );
     background: linear-gradient(135deg, var(--color-surface) 0%, var(--color-surface-raised) 100%);
     border-bottom: 1px solid rgba(255, 255, 255, 0.04);
     z-index: 10;
@@ -206,6 +210,7 @@ textarea,
     display: flex;
     align-items: center;
     gap: var(--space-sm);
+    min-width: 0;
 }
 
 .header-emoji {
@@ -239,6 +244,7 @@ textarea,
     display: flex;
     align-items: center;
     gap: var(--space-sm);
+    min-width: 0;
 }
 
 .status-dot {
@@ -392,7 +398,11 @@ textarea,
     flex: 1;
     overflow-y: auto;
     overflow-x: hidden;
-    padding: var(--space-lg) var(--space-lg) var(--space-md);
+    padding-block: var(--space-lg) var(--space-md);
+    padding-inline: max(
+        var(--space-lg),
+        calc((100vw - var(--content-max-width)) / 2 + var(--space-lg))
+    );
     scroll-behavior: smooth;
     -webkit-overflow-scrolling: touch;
     /* Subtle gradient overlay at top */
@@ -771,7 +781,11 @@ textarea,
 
 #input-area {
     position: relative;
-    padding: var(--space-md) var(--space-lg) max(var(--space-lg), env(safe-area-inset-bottom));
+    padding-block: var(--space-md) max(var(--space-lg), env(safe-area-inset-bottom));
+    padding-inline: max(
+        var(--space-lg),
+        calc((100vw - var(--content-max-width)) / 2 + var(--space-lg))
+    );
     background: var(--color-surface);
     border-top: 1px solid rgba(255, 255, 255, 0.04);
     flex-shrink: 0;
@@ -782,6 +796,8 @@ textarea,
     display: flex;
     align-items: flex-end;
     gap: var(--space-sm);
+    max-width: var(--content-max-width);
+    margin-inline: auto;
 }
 
 .input-wrapper {
@@ -817,6 +833,12 @@ textarea,
     max-height: 120px;
     padding: var(--space-sm) 0;
     min-height: 40px;
+    min-width: 0;
+    overflow-y: hidden;
+}
+
+#chat-input.is-overflowing {
+    overflow-y: auto;
 }
 
 #chat-input::placeholder {
@@ -1506,18 +1528,27 @@ textarea,
     }
 
     #input-area {
-        padding: var(--space-sm) var(--space-md) var(--space-md);
+        padding-block: var(--space-sm) var(--space-md);
+        padding-inline: var(--space-md);
     }
 }
 
 /* Tablets and desktop */
 @media (min-width: 768px) {
     #message-list {
-        padding: var(--space-xl) var(--space-2xl);
+        padding-block: var(--space-xl);
+        padding-inline: max(
+            var(--space-2xl),
+            calc((100vw - var(--content-max-width)) / 2 + var(--space-2xl))
+        );
     }
 
     #input-area {
-        padding: var(--space-lg) var(--space-2xl) var(--space-xl);
+        padding-block: var(--space-lg) var(--space-xl);
+        padding-inline: max(
+            var(--space-2xl),
+            calc((100vw - var(--content-max-width)) / 2 + var(--space-2xl))
+        );
     }
 
     .message--user .message-bubble {
@@ -1532,7 +1563,8 @@ textarea,
 /* Landscape on mobile */
 @media (max-height: 500px) and (orientation: landscape) {
     #header {
-        padding: var(--space-xs) var(--space-md);
+        padding-block: var(--space-xs);
+        padding-inline: var(--space-md);
     }
 
     .header-emoji {
@@ -1544,7 +1576,8 @@ textarea,
     }
 
     #input-area {
-        padding: var(--space-xs) var(--space-md) var(--space-sm);
+        padding-block: var(--space-xs) var(--space-sm);
+        padding-inline: var(--space-md);
     }
 }
 

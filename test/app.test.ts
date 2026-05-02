@@ -298,7 +298,7 @@ describe("DOM Rendering", () => {
 
     function renderUserMessage(content: string): HTMLElement {
         const msg = createElement("div", { class: "message message--user" });
-        const avatar = createElement("div", { class: "message-avatar" }, ["👤"]);
+        const avatar = createElement("div", { class: "message-avatar" }, ["🎮"]);
         const bubble = createElement("div", { class: "message-bubble" });
         const contentEl = createElement("div", { class: "message-content" }, [content]);
         bubble.appendChild(contentEl);
@@ -383,7 +383,7 @@ describe("DOM Rendering", () => {
         const msg = renderUserMessage("Hello!");
         assert.equal(msg.classList.contains("message"), true);
         assert.equal(msg.classList.contains("message--user"), true);
-        assert.ok(msg.querySelector(".message-avatar"));
+        assert.equal(msg.querySelector(".message-avatar")!.textContent, "🎮");
         assert.ok(msg.querySelector(".message-bubble"));
         assert.equal(msg.querySelector(".message-content")!.textContent, "Hello!");
     });
@@ -507,7 +507,7 @@ describe("Snapshot Tests - Message Bubbles", () => {
 
     function renderUserMessage(content: string): HTMLElement {
         const msg = createElement("div", { class: "message message--user" });
-        msg.appendChild(createElement("div", { class: "message-avatar" }, ["👤"]));
+        msg.appendChild(createElement("div", { class: "message-avatar" }, ["🎮"]));
         const bubble = createElement("div", { class: "message-bubble" });
         bubble.appendChild(createElement("div", { class: "message-content" }, [content]));
         msg.appendChild(bubble);
@@ -953,6 +953,7 @@ import {
     openLightbox,
     closeLightbox,
     showError,
+    restoreRecentError,
     streamChat,
     sendMessage,
     sendSteerMessage,
@@ -1095,10 +1096,11 @@ function setupDOM(): { win: any; doc: any; errors: string[] } {
     // Set globals
     globalThis.document = doc;
     globalThis.window = win;
+    const localStore = new Map<string, string>();
     (globalThis as any).localStorage = {
-        getItem: () => null,
-        setItem: () => {},
-        removeItem: () => {},
+        getItem: (key: string) => localStore.get(key) ?? null,
+        setItem: (key: string, value: string) => localStore.set(key, value),
+        removeItem: (key: string) => localStore.delete(key),
     };
     (globalThis as any).requestAnimationFrame = (cb: () => void) => {
         cb();
@@ -2088,6 +2090,38 @@ describe("showError", () => {
         const toast = doc.querySelector("#error-toast");
         assert.ok(toast.hidden, "toast should be hidden after duration");
     });
+
+    it("persists and restores a fresh recent error", () => {
+        setupDOM();
+        showError("Fresh error");
+        assert.equal(restoreRecentError(Date.now()), "Fresh error");
+    });
+
+    it("ignores expired recent errors", () => {
+        setupDOM();
+        const now = Date.now();
+        localStorage.setItem(
+            "hallucygenie_recent_error",
+            JSON.stringify({ message: "Old error", createdAt: now - 11 * 60 * 1000 }),
+        );
+        assert.equal(restoreRecentError(now), null);
+    });
+
+    it("ignores invalid recent error JSON", () => {
+        setupDOM();
+        localStorage.setItem("hallucygenie_recent_error", "not json");
+        assert.equal(restoreRecentError(Date.now()), null);
+    });
+
+    it("does not show raw provider JSON in toast", () => {
+        setupDOM();
+        doc = globalThis.document;
+        showError('{"base_resp":{"status_code":1004,"status_msg":"login fail"}}');
+        assert.equal(
+            doc.querySelector("#error-toast-message").textContent,
+            "Something went wrong. Try again! 🤷",
+        );
+    });
 });
 
 describe("setStreamingUI (via sendMessage)", () => {
@@ -2165,12 +2199,35 @@ describe("autoResizeInput", () => {
         doc = d;
     });
 
-    it("resizes input based on content", () => {
-        const input = doc.querySelector("#chat-input");
+    function setScrollHeight(input: HTMLTextAreaElement, value: number): void {
+        Object.defineProperty(input, "scrollHeight", { value, configurable: true });
+    }
+
+    it("one-line input has no overflow class", () => {
+        const input = doc.querySelector("#chat-input") as HTMLTextAreaElement;
         input.value = "some text content";
+        setScrollHeight(input, 40);
         autoResizeInput();
-        // Just verify it doesn't crash and sets some height
-        assert.ok(true, "autoResizeInput completed without error");
+        assert.equal(input.classList.contains("is-overflowing"), false);
+        assert.equal(input.style.height, "40px");
+    });
+
+    it("short multiline input has no overflow class", () => {
+        const input = doc.querySelector("#chat-input") as HTMLTextAreaElement;
+        input.value = "one\ntwo";
+        setScrollHeight(input, 80);
+        autoResizeInput();
+        assert.equal(input.classList.contains("is-overflowing"), false);
+        assert.equal(input.style.height, "80px");
+    });
+
+    it("long input gets overflow class and clamped height", () => {
+        const input = doc.querySelector("#chat-input") as HTMLTextAreaElement;
+        input.value = "x\n".repeat(50);
+        setScrollHeight(input, 240);
+        autoResizeInput();
+        assert.equal(input.classList.contains("is-overflowing"), true);
+        assert.equal(input.style.height, "120px");
     });
 });
 

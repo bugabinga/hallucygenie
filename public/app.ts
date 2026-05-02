@@ -48,6 +48,9 @@ export function renderThinkingBlock(text: string): string {
 // ── API helpers ──────────────────────────────────────────────────────
 
 const LEGACY_SESSION_KEY = "hallucygenie_session_id";
+const RECENT_ERROR_KEY = "hallucygenie_recent_error";
+const RECENT_ERROR_TTL_MS = 10 * 60 * 1000;
+const USER_AVATAR = "🎮";
 
 export function clearLegacySessionId(): void {
     localStorage.removeItem(LEGACY_SESSION_KEY);
@@ -161,7 +164,7 @@ export function createElement(
 
 export function renderUserMessage(content: string): HTMLElement {
     const msg = createElement("div", { class: "message message--user" });
-    const avatar = createElement("div", { class: "message-avatar" }, ["👤"]);
+    const avatar = createElement("div", { class: "message-avatar" }, [USER_AVATAR]);
     const bubble = createElement("div", { class: "message-bubble" });
     const contentEl = createElement("div", { class: "message-content" });
     contentEl.innerHTML = renderMarkdown(content);
@@ -391,11 +394,51 @@ export function loadAssets(): void {
 
 let toastTimeout: ReturnType<typeof setTimeout> | null = null;
 
+function safeErrorMessage(message: string): string {
+    if (/\{.*(?:base_resp|status_code|status_msg|error).*\}/is.test(message)) {
+        return "Something went wrong. Try again! 🤷";
+    }
+    if (/stack trace|authorization:|bearer\s+[a-z0-9._-]+/i.test(message)) {
+        return "Something went wrong. Try again! 🤷";
+    }
+    return message;
+}
+
+function saveRecentError(message: string): void {
+    localStorage.setItem(RECENT_ERROR_KEY, JSON.stringify({ message, createdAt: Date.now() }));
+}
+
+function clearRecentError(): void {
+    localStorage.removeItem(RECENT_ERROR_KEY);
+}
+
+export function restoreRecentError(now = Date.now()): string | null {
+    try {
+        const raw = localStorage.getItem(RECENT_ERROR_KEY);
+        if (!raw) return null;
+        const parsed = JSON.parse(raw) as { message?: unknown; createdAt?: unknown };
+        if (typeof parsed.message !== "string" || typeof parsed.createdAt !== "number") {
+            clearRecentError();
+            return null;
+        }
+        if (now - parsed.createdAt > RECENT_ERROR_TTL_MS) {
+            clearRecentError();
+            return null;
+        }
+        return parsed.message;
+    } catch {
+        clearRecentError();
+        return null;
+    }
+}
+
 export function showError(message: string, duration = 4000): void {
+    const safeMessage = safeErrorMessage(message);
     const toast = $("#error-toast");
     const msgEl = $("#error-toast-message");
-    msgEl.textContent = message;
+    msgEl.textContent = safeMessage;
     toast.hidden = false;
+    saveRecentError(safeMessage);
 
     if (toastTimeout) clearTimeout(toastTimeout);
     toastTimeout = setTimeout(() => {
@@ -493,6 +536,7 @@ function handleSSEEvent(event: SSEEvent): void {
 
     // Done signal
     if (data === "[DONE]") {
+        clearRecentError();
         finishStreaming();
         return;
     }
@@ -831,8 +875,12 @@ export async function loadHistory(): Promise<void> {
 
 export function autoResizeInput(): void {
     const input = $("#chat-input") as HTMLTextAreaElement;
+    const maxHeight = 120;
     input.style.height = "auto";
-    input.style.height = Math.min(input.scrollHeight, 120) + "px";
+    const clamped = input.scrollHeight > maxHeight;
+    input.style.height = Math.min(input.scrollHeight, maxHeight) + "px";
+    input.classList.toggle("is-overflowing", clamped);
+    input.setAttribute("aria-multiline", "true");
 }
 
 export function handleInputChange(): void {
@@ -881,6 +929,8 @@ export async function updateQuotaBadge(): Promise<void> {
 
 export function init(): void {
     clearLegacySessionId();
+    const restoredError = restoreRecentError();
+    if (restoredError) showError(restoredError);
 
     const form = $("#chat-form") as HTMLFormElement;
     const input = $("#chat-input") as HTMLTextAreaElement;

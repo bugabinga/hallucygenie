@@ -1,10 +1,9 @@
 # HG-TICKET-056 — Shell scroll ownership
 
-**Spec:** `.system/specs/HG-SPEC-014-viewport-shell-layout-and-scrollbars.md`  
-**Status:** Blocked  
-**Priority:** High  
-**Size:** M  
-**Depends:** `HG-TICKET-055-viewport-zoom-and-shell-width.md`
+**Spec:** `.system/specs/HG-SPEC-014-viewport-shell-layout-and-scrollbars.md`
+**Status:** Ready
+**Priority:** High
+**Size:** M
 
 ## Goal
 

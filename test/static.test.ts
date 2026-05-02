@@ -110,6 +110,15 @@ describe("index.html health", () => {
         assert.deepEqual(offenders, []);
     });
 
+    it("viewport permits browser zoom", () => {
+        const doc = parseIndex();
+        const viewport = doc.querySelector('meta[name="viewport"]')?.getAttribute("content") ?? "";
+        assert.match(viewport, /width=device-width/);
+        assert.match(viewport, /initial-scale=1\.0/);
+        assert.doesNotMatch(viewport, /maximum-scale/);
+        assert.doesNotMatch(viewport, /user-scalable=no/);
+    });
+
     it("has one onboarding dots group with four dots", () => {
         const doc = parseIndex();
         assert.equal(doc.querySelectorAll("#onboarding .onboarding-dots").length, 1);
@@ -209,6 +218,17 @@ describe("index.html health", () => {
         assert.match(appTs, /audio\.controls = true;/);
         assert.match(appTs, /audio\.preload = "metadata";/);
         assert.doesNotMatch(appTs, /new Audio\(/);
+    });
+
+    it("shell is full-width with constrained content and useful input overflow", () => {
+        assert.doesNotMatch(styleCss, /#app \{[^}]*max-width:/);
+        assert.match(styleCss, /--content-max-width: 720px/);
+        assert.match(styleCss, /#header \{[^}]*padding-inline: max/);
+        assert.match(styleCss, /#message-list \{[^}]*padding-inline: max/);
+        assert.match(styleCss, /#chat-form \{[^}]*max-width: var\(--content-max-width\)/);
+        assert.match(styleCss, /#chat-input \{[^}]*overflow-y: hidden/);
+        assert.match(styleCss, /#chat-input\.is-overflowing \{[^}]*overflow-y: auto/);
+        assert.match(appTs, /classList\.toggle\("is-overflowing", clamped\)/);
     });
 });
 
