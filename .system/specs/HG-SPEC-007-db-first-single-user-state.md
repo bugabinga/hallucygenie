@@ -4,6 +4,17 @@
 **Created:** 2026-05-01
 **Scope:** `src/server.ts`, `src/db.ts`, `public/app.ts`, migrations, tests
 
+## Tickets
+
+- `HG-TICKET-013-db-active-session-state.md`
+- `HG-TICKET-014-server-active-session-fallback.md`
+- `HG-TICKET-015-frontend-remove-session-localstorage.md`
+- `HG-TICKET-016-active-asset-serving.md`
+- `HG-TICKET-017-api-state-bootstrap.md`
+- `HG-TICKET-024-chat-draft-db-state.md`
+- `HG-TICKET-025-create-draft-db-state.md`
+- `HG-TICKET-044-remove-post-db-first-compat.md`
+
 ## Problem
 
 State management is too split-brained for a single-user local app.

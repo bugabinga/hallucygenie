@@ -1,6 +1,6 @@
 # HG-SPEC-014 — Viewport zoom, full-width shell, and clean input scrolling
 
-**Status:** Draft
+**Status:** Open
 **Idea:** correct zoom behaviour and header/footer full widths; no useless scrollbars in main input element.
 
 ## Goal
@@ -74,6 +74,13 @@ Issues:
   - main chat input draft restoration must not create layout shift or useless scrollbars
 - `HG-SPEC-009-multi-session-support.md`
   - future header session selector must fit inside full-width header with constrained inner content
+
+### Implementation tickets
+
+- `HG-TICKET-055-viewport-zoom-and-shell-width.md`
+- `HG-TICKET-056-shell-scroll-ownership.md`
+- `HG-TICKET-057-chat-input-overflow-scrollbar.md`
+- `HG-TICKET-058-viewport-manual-e2e-matrix.md`
 
 ### Existing issues
 

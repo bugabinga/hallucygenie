@@ -2,6 +2,10 @@
 
 **Status:** Done
 
+## Tickets
+
+- `HG-TICKET-003-animated-llm-streaming-text.md`
+
 ## Goal
 
 Make assistant streaming feel magical, fast, and on-theme without hurting readability, markdown correctness, accessibility, or performance.

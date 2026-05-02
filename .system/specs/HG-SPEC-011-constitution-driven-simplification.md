@@ -4,6 +4,12 @@
 **Created:** 2026-05-01
 **Scope:** `src/agent.ts`, `src/server.ts`, `src/tools.ts`, `src/db.ts`, `public/app.ts`, tests, `.system/CONSTITUTION.md`, `AGENTS.md`
 
+## Tickets
+
+- `HG-TICKET-043-constitution-acceptance-audit.md`
+- `HG-TICKET-044-remove-post-db-first-compat.md`
+- `HG-TICKET-045-provider-error-safety-audit.md`
+
 ## Problem
 
 Recent media-tool bugs came from constitution violations:

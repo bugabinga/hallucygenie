@@ -4,6 +4,16 @@
 **Created:** 2026-05-01
 **Scope:** `public/app.ts`, `public/style.css`, `src/server.ts`, `src/db.ts`, migrations, tests
 
+## Tickets
+
+- `HG-TICKET-012-generated-profile-avatar-asset.md`
+- `HG-TICKET-033-asset-params-db.md`
+- `HG-TICKET-034-assets-api-details.md`
+- `HG-TICKET-035-assets-image-card-download.md`
+- `HG-TICKET-036-assets-audio-controls.md`
+- `HG-TICKET-037-assets-card-polish.md`
+- `HG-TICKET-050-music-asset-params-lyrics.md`
+
 ## Problem
 
 Create→Assets is currently too thin to be useful.

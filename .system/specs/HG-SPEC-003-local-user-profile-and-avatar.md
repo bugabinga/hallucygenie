@@ -2,13 +2,22 @@
 
 **Status:** Open
 
+## Tickets
+
+- `HG-TICKET-004-local-user-profile-and-avatar.md` (superseded)
+- `HG-TICKET-008-default-gaming-avatar.md`
+- `HG-TICKET-009-profile-modal-local-storage.md`
+- `HG-TICKET-010-profile-avatar-in-user-bubbles.md`
+- `HG-TICKET-011-profile-data-in-chat-prompt.md`
+- `HG-TICKET-012-generated-profile-avatar-asset.md`
+
 ## Goal
 
 Make user bubbles feel as fun as assistant bubbles, and let the child set a small local profile that can personalize chat/content creation safely.
 
 ## Verdict status
 
-**Revised after devil review.** Profile is local UI state, but selected fields are sent as quoted preference data for system prompt construction. Generated avatar path is blocked until media tool-call bug is fixed.
+**Revised after devil review.** Profile is local UI state, but selected fields are sent as quoted preference data for system prompt construction. Generated avatar path is blocked until profile modal and asset UI foundations land.
 
 ## Requirements
 
@@ -112,7 +121,7 @@ If avatar type is `asset`, render small circular image with fallback to `🎮` o
 
 ## Generate avatar option
 
-Status: **blocked until tool-result id bug is fixed** (`HG-ISSUE-001`, `HG-ISSUE-005`, `HG-ISSUE-006`).
+Status: **blocked until profile modal and asset UI foundations land** (`HG-TICKET-009`, `HG-SPEC-008`). Historical tool-id blockers are fixed (`HG-ISSUE-001`, `HG-ISSUE-005`, `HG-ISSUE-006`).
 
 When unblocked:
 

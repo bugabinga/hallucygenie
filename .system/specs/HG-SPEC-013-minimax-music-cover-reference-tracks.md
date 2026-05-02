@@ -4,6 +4,13 @@
 **Created:** 2026-05-01
 **Scope:** Research/product first. Future: YouTube ingestion, `src/tools.ts`, `src/server.ts`, `src/db.ts`, `public/app.ts`, tests
 
+## Tickets
+
+- `HG-TICKET-051-music-cover-minimax-research.md`
+- `HG-TICKET-052-cover-product-boundary-decision.md`
+- `HG-TICKET-053-cover-rights-gate-ui.md`
+- `HG-TICKET-054-cover-smallest-safe-implementation.md`
+
 ## Problem
 
 MiniMax quota now includes:

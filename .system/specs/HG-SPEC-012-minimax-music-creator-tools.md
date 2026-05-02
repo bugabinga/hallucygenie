@@ -4,6 +4,14 @@
 **Created:** 2026-05-01
 **Scope:** Product/design first. Future: `src/tools.ts`, `src/agent.ts`, `src/server.ts`, `src/db.ts`, `public/app.ts`, tests
 
+## Tickets
+
+- `HG-TICKET-046-minimax-lyrics-api-research.md`
+- `HG-TICKET-047-generate-lyrics-tool.md`
+- `HG-TICKET-048-create-write-lyrics-button.md`
+- `HG-TICKET-049-agent-song-sequence.md`
+- `HG-TICKET-050-music-asset-params-lyrics.md`
+
 ## Problem
 
 Fresh MiniMax quota shows a new lyrics helper capability:

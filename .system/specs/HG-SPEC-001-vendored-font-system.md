@@ -2,6 +2,11 @@
 
 **Status:** Done
 
+## Tickets
+
+- `HG-TICKET-001-vendored-font-system.md`
+- `HG-TICKET-002-smart-font-asset-caching.md`
+
 ## Verdict status
 
 **Revise incorporated.** This spec now includes reproducible font artifacts, real selector targets, server/deploy/CSP requirements, HTTP/browser/container verification, and a `just fonts-update` workflow.

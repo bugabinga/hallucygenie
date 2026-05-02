@@ -1,7 +1,7 @@
 # HG-TICKET-014 — Server active-session fallback
 
 **Spec:** `.system/specs/HG-SPEC-007-db-first-single-user-state.md`  
-**Status:** Ready  
+**Status:** Blocked
 **Priority:** Critical  
 **Size:** M  
 **Depends:** `HG-TICKET-013-db-active-session-state.md`

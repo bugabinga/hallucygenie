@@ -1,10 +1,10 @@
 # HG-TICKET-012 — Generated profile avatar asset
 
-**Spec:** `.system/specs/HG-SPEC-003-local-user-profile-and-avatar.md`  
+**Spec:** `.system/specs/HG-SPEC-003-local-user-profile-and-avatar.md`, `.system/specs/HG-SPEC-008-useful-create-assets-ui.md`
 **Status:** Blocked  
 **Priority:** Low  
 **Size:** M  
-**Depends:** `HG-TICKET-009-profile-modal-local-storage.md`, `HG-SPEC-008-useful-create-assets-ui.md`
+**Depends:** `HG-TICKET-009-profile-modal-local-storage.md`, `HG-TICKET-034-assets-api-details.md`
 
 ## Goal
 

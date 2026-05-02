@@ -4,6 +4,15 @@
 **Created:** 2026-05-01
 **Scope:** `src/db.ts`, `src/server.ts`, `src/agent.ts`, `public/app.ts`, `public/style.css`, migrations, tests
 
+## Tickets
+
+- `HG-TICKET-018-sessions-db-model.md`
+- `HG-TICKET-019-sessions-api.md`
+- `HG-TICKET-020-session-header-switcher.md`
+- `HG-TICKET-021-session-rename-archive-ui.md`
+- `HG-TICKET-022-session-auto-name.md`
+- `HG-TICKET-023-session-stream-switch-guard.md`
+
 ## Problem
 
 The app needs multiple saved conversations/sessions so the kid can separate ideas, projects, chats, images, music, and voice generations.

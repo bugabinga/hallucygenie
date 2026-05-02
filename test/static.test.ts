@@ -3,7 +3,7 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { Window } from "happy-dom";
 
 const indexHtml = readFileSync("public/index.html", "utf-8");
@@ -334,6 +334,67 @@ describe("constitution health", () => {
 
     it("justfile has no constitution wrapper ceremony", () => {
         assert.equal(/^constitution:/m.test(justfile), false);
+    });
+});
+
+describe("system metadata health", () => {
+    function mdFiles(dir: string): string[] {
+        return readdirSync(dir)
+            .filter((name) => name.endsWith(".md"))
+            .map((name) => `${dir}/${name}`);
+    }
+
+    function uniqueIds(text: string, prefix: string): string[] {
+        return [...new Set(text.match(new RegExp(`${prefix}-\\d{3}`, "g")) ?? [])];
+    }
+
+    it("keeps spec and ticket cross references in sync", () => {
+        const specs = new Map(
+            mdFiles(".system/specs").map((path) => [
+                path.match(/HG-SPEC-\d{3}/)?.[0] ?? "",
+                { path, text: readFileSync(path, "utf-8") },
+            ]),
+        );
+        const tickets = new Map(
+            mdFiles(".system/tickets").map((path) => [
+                path.match(/HG-TICKET-\d{3}/)?.[0] ?? "",
+                { path, text: readFileSync(path, "utf-8") },
+            ]),
+        );
+
+        for (const [ticketId, ticket] of tickets) {
+            const specLine = ticket.text.match(/^\*\*Spec:\*\*([^\n]+)/m)?.[1] ?? "";
+            assert.notEqual(specLine, "", `${ticket.path} missing Spec metadata`);
+            for (const specId of uniqueIds(specLine, "HG-SPEC")) {
+                const spec = specs.get(specId);
+                assert.ok(spec, `${ticket.path} references missing ${specId}`);
+                assert.match(
+                    spec.text,
+                    new RegExp(`${ticketId}`),
+                    `${spec.path} missing ${ticketId}`,
+                );
+            }
+        }
+
+        for (const [specId, spec] of specs) {
+            for (const ticketId of uniqueIds(spec.text, "HG-TICKET")) {
+                const ticket = tickets.get(ticketId);
+                assert.ok(ticket, `${spec.path} references missing ${ticketId}`);
+                const specLine = ticket.text.match(/^\*\*Spec:\*\*([^\n]+)/m)?.[1] ?? "";
+                assert.match(specLine, new RegExp(`${specId}`), `${ticket.path} missing ${specId}`);
+            }
+        }
+    });
+
+    it("keeps dependency metadata actionable", () => {
+        for (const path of mdFiles(".system/tickets")) {
+            const text = readFileSync(path, "utf-8");
+            const depends = text.match(/^\*\*Depends:\*\*([^\n]+)/m)?.[1] ?? "";
+            assert.doesNotMatch(depends, /HG-SPEC|HG-ISSUE/, `${path} depends on non-ticket ref`);
+            if (text.includes("**Status:** Ready")) {
+                assert.equal(depends, "", `${path} is Ready but still has Depends`);
+            }
+        }
     });
 });
 

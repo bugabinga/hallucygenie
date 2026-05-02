@@ -1,7 +1,7 @@
 # HG-TICKET-011 — Profile data in chat prompt
 
 **Spec:** `.system/specs/HG-SPEC-003-local-user-profile-and-avatar.md`  
-**Status:** Ready  
+**Status:** Blocked
 **Priority:** Medium  
 **Size:** M  
 **Depends:** `HG-TICKET-009-profile-modal-local-storage.md`

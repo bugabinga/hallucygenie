@@ -2,6 +2,14 @@
 
 **Status:** Open
 
+## Tickets
+
+- `HG-TICKET-006-local-draft-ui-state-persistence.md` (superseded)
+- `HG-TICKET-024-chat-draft-db-state.md`
+- `HG-TICKET-025-create-draft-db-state.md`
+- `HG-TICKET-026-recent-error-toast-ttl.md`
+- `HG-TICKET-027-streaming-scratch-recovery.md`
+
 ## Goal
 
 Treat user input as precious. Preserve drafts and useful UI state across reloads/crashes while keeping canonical conversation/tool state on the server.
@@ -18,7 +26,7 @@ Treat user input as precious. Preserve drafts and useful UI state across reloads
 
 - Create draft clearing after tool success depends on `HG-SPEC-006` tool input history IDs.
 - Server-side thinking persistence requires DB/history changes.
-- Existing media tool-result id bug should be fixed before relying on tool success signals.
+- Historical media tool-result id bugs are fixed; keep regression coverage around tool success signals.
 
 ## State ownership
 

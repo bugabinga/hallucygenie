@@ -1,5 +1,6 @@
 # HG-TICKET-002: Smart caching for vendored fonts
 
+**Spec:** `.system/specs/HG-SPEC-001-vendored-font-system.md`
 **Status:** Done  
 **Priority:** Medium  
 **Size:** M

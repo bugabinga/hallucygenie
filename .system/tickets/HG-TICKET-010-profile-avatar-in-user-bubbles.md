@@ -1,7 +1,7 @@
 # HG-TICKET-010 — Profile avatar in user bubbles
 
 **Spec:** `.system/specs/HG-SPEC-003-local-user-profile-and-avatar.md`  
-**Status:** Ready  
+**Status:** Blocked
 **Priority:** Medium  
 **Size:** S  
 **Depends:** `HG-TICKET-009-profile-modal-local-storage.md`

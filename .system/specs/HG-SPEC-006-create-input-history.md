@@ -2,6 +2,15 @@
 
 **Status:** Open
 
+## Tickets
+
+- `HG-TICKET-007-create-input-history.md` (superseded)
+- `HG-TICKET-028-create-history-db.md`
+- `HG-TICKET-029-create-history-api.md`
+- `HG-TICKET-030-record-tool-input-history.md`
+- `HG-TICKET-031-create-recent-ui.md`
+- `HG-TICKET-032-create-history-e2e.md`
+
 ## Goal
 
 Let the child easily reuse previous image/music/voice/search tool inputs.
@@ -16,7 +25,7 @@ Create tools currently forget previous prompts/inputs from the UI perspective. A
 
 ## Dependencies
 
-- General tool-result id bug must be fixed first or in same work: `HG-ISSUE-001`, `HG-ISSUE-005`, `HG-ISSUE-006`.
+- Historical tool-result id bugs are fixed (`HG-ISSUE-001`, `HG-ISSUE-005`, `HG-ISSUE-006`); keep regression coverage.
 - Create UI should send structured metadata, not only natural-language prompts.
 - Draft clearing in `HG-SPEC-005` depends on history ids/status.
 

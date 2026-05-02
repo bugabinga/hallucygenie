@@ -2,6 +2,10 @@
 
 **Status:** Done
 
+## Tickets
+
+- `HG-TICKET-005-stable-create-modal-layout.md`
+
 ## Goal
 
 Improve Create modal polish by preventing layout jumps between tabs and making popup background more readable while keeping the cool blur effect.

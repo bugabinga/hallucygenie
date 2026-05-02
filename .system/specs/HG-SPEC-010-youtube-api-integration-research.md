@@ -4,6 +4,15 @@
 **Created:** 2026-05-01
 **Scope:** Research first. Possible future: `src/tools.ts`, `src/agent.ts`, `src/server.ts`, `public/app.ts`, DB migrations, tests
 
+## Tickets
+
+- `HG-TICKET-038-youtube-api-research.md`
+- `HG-TICKET-039-youtube-url-parsers.md`
+- `HG-TICKET-040-youtube-video-info-tool.md`
+- `HG-TICKET-041-youtube-channel-recent-tool.md`
+- `HG-TICKET-042-youtube-result-card-ui.md`
+- `HG-TICKET-052-cover-product-boundary-decision.md`
+
 ## Problem
 
 HallucyGenie is for an 11-year-old gaming YouTuber. YouTube integration could help with creator inspiration, titles, thumbnails, and asset planning.
