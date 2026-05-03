@@ -2,4 +2,4 @@
 description: Manual testing
 ---
 
-Manually test $ARGUMENTS in chrome. Report issues to user.
+Manually test $ARGUMENTS with `just dev-chrome`. Report issues to user.

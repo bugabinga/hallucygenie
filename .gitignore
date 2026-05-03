@@ -25,8 +25,7 @@ reports/
 
 # Pi/runtime browser cache
 .pi-lens/
-.system/chrome-profile/
-.system/chrome-profile-test/
+
 
 # Test artifacts
 test-data*/

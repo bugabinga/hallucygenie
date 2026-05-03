@@ -50,11 +50,11 @@ kill:
 # open app in Chrome with remote debugging
 [group('dev')]
 dev-chrome:
-    mkdir -p .system/chrome-profile
+    mkdir -p ${HOME}/.cache/hallucygenie/chrome-profile
     google-chrome-stable \
       --remote-debugging-port=9222 \
       --remote-allow-origins=* \
-      --user-data-dir={{ justfile_directory() }}/.system/chrome-profile \
+      --user-data-dir=${HOME}/.cache/hallucygenie/chrome-profile \
       --no-first-run \
       --no-default-browser-check \
       --disable-search-engine-choice-screen \
