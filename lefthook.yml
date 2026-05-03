@@ -20,6 +20,16 @@ post-checkout:
                   mise run setup
                 fi
 
+post-checkout:
+    commands:
+        install-deps:
+            run: |
+                is_branch="$3"
+                if [ "$is_branch" = "1" ] && [ -f package.json ] && [ ! -d node_modules ]; then
+                  echo "post-checkout: running bun install for new worktree/branch"
+                  bun install
+                fi
+
 post-merge:
     commands:
         check:
