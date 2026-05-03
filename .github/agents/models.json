@@ -1,0 +1,18 @@
+{
+    "providers": {
+        "minimax": {
+            "baseUrl": "https://api.minimax.io/anthropic",
+            "api": "anthropic-messages",
+            "models": [
+                {
+                    "id": "MiniMax-M2.5-highspeed",
+                    "name": "MiniMax M2.5 (coder)",
+                    "reasoning": true,
+                    "input": ["text"],
+                    "contextWindow": 204800,
+                    "maxTokens": 32768
+                }
+            ]
+        }
+    }
+}

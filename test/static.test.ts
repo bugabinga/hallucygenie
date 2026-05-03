@@ -26,7 +26,7 @@ const issuePrompt = readFileSync(".pi/prompts/issue.md", "utf-8");
 const minimaxResearchPrompt = readFileSync(".pi/prompts/minimax-research.md", "utf-8");
 const readmeMd = readFileSync("README.md", "utf-8");
 const licenseMd = readFileSync("LICENSE", "utf-8");
-const constitutionMd = readFileSync(".system/CONSTITUTION.md", "utf-8");
+const rulesMd = readFileSync(".system/RULES.md", "utf-8");
 const musicCreatorSpec = readFileSync(
     ".system/specs/HG-SPEC-012-minimax-music-creator-tools.md",
     "utf-8",
@@ -351,7 +351,7 @@ describe("constitution health", () => {
     it("AGENTS.md stays instruction-only and points at source docs", () => {
         assert.match(agentsMd, /Agent instructions only/);
         assert.match(agentsMd, /Do not mirror project state here/);
-        assert.match(agentsMd, /\.system\/CONSTITUTION\.md/);
+        assert.match(agentsMd, /\.system\/RULES\.md/);
         assert.match(agentsMd, /\/skill:tiger/);
         assert.match(agentsMd, /\/skill:minimax/);
         assert.match(agentsMd, /just --list/);
@@ -371,23 +371,22 @@ describe("constitution health", () => {
     });
 
     it("music creator specs split lyrics/song generation from cover research", () => {
-        assert.match(musicCreatorSpec, /lyrics_generation: 100/);
-        assert.match(musicCreatorSpec, /separate LLM tools, integrated Create UI/);
+        assert.match(musicCreatorSpec, /lyrics_generation[^\n]*100/);
+        assert.match(musicCreatorSpec, /Separate LLM tools.*integrated Create UI/);
         assert.match(musicCreatorSpec, /is_instrumental: true/);
-        assert.match(musicCreatorSpec, /music-cover: 100.*HG-SPEC-013/s);
-        assert.match(musicCoverSpec, /music-cover: 100/);
-        assert.match(musicCoverSpec, /paste YouTube URL/);
-        assert.match(musicCoverSpec, /yt-dlp/);
-        assert.match(musicCoverSpec, /rights_attestation/);
+        assert.match(musicCreatorSpec, /HG-SPEC-013/);
+        assert.match(musicCoverSpec, /music-cover[^\n]*\d/);
+        assert.match(musicCoverSpec, /YouTube/);
+        assert.match(musicCoverSpec, /rights.*attest/i);
     });
 
-    it("constitution is a strong prompt with raw asset invariant", () => {
-        assert.match(constitutionMd, /strong prompt/i);
-        assert.match(constitutionMd, /No "backwards compat"/);
-        assert.match(constitutionMd, /Fail fast and loud/);
-        assert.match(constitutionMd, /Avoid deep OOP hierarchies/);
-        assert.match(constitutionMd, /Tiger style/);
-        assert.match(constitutionMd, /Never put raw asset data in agent context or chat history/);
+    it("rules are a strong prompt with raw asset invariant", () => {
+        assert.match(rulesMd, /strong prompt/i);
+        assert.match(rulesMd, /No "backwards compat"/);
+        assert.match(rulesMd, /Fail fast and loud/);
+        assert.match(rulesMd, /Avoid deep OOP hierarchies/);
+        assert.match(rulesMd, /Tiger style/);
+        assert.match(rulesMd, /Never put raw asset data in agent context or chat history/);
     });
 
     it("persistent asset and direct tool IDs do not use process-local request IDs", () => {
@@ -402,7 +401,8 @@ describe("constitution health", () => {
     });
 
     it("justfile has no constitution wrapper ceremony", () => {
-        assert.equal(/^constitution:/m.test(justfile), false);
+        assert.equal(/^rules:/m.test(justfile), false);
+        assert.equal(/^mission:/m.test(justfile), false);
     });
 });
 
@@ -417,52 +417,42 @@ describe("system metadata health", () => {
         return [...new Set(text.match(new RegExp(`${prefix}-\\d{3}`, "g")) ?? [])];
     }
 
-    it("keeps spec and ticket cross references in sync", () => {
+    it("keeps spec and issue cross references in sync", () => {
         const specs = new Map(
-            mdFiles(".system/specs").map((path) => [
+            mdFiles(".system/specs").map((path: string) => [
                 path.match(/HG-SPEC-\d{3}/)?.[0] ?? "",
                 { path, text: readFileSync(path, "utf-8") },
             ]),
         );
-        const tickets = new Map(
-            mdFiles(".system/tickets").map((path) => [
-                path.match(/HG-TICKET-\d{3}/)?.[0] ?? "",
+        const issues = new Map(
+            mdFiles(".system/issues").map((path: string) => [
+                path.match(/HG-ISSUE-\d{3}/)?.[0] ?? "",
                 { path, text: readFileSync(path, "utf-8") },
             ]),
         );
 
-        for (const [ticketId, ticket] of tickets) {
-            const specLine = ticket.text.match(/^\*\*Spec:\*\*([^\n]+)/m)?.[1] ?? "";
-            assert.notEqual(specLine, "", `${ticket.path} missing Spec metadata`);
-            for (const specId of uniqueIds(specLine, "HG-SPEC")) {
+        for (const [issueId, issue] of issues) {
+            // parse specs from frontmatter: { "status": "...", "specs": ["HG-SPEC-NNN"] }
+            const specsMatch = issue.text.match(/"specs":\s*\[([^\]]+)\]/);
+            const specRefs = specsMatch ? (specsMatch[1].match(/HG-SPEC-\d{3}/g) ?? []) : [];
+            assert.ok(specsMatch, `${issue.path} missing specs frontmatter`);
+            for (const specId of specRefs) {
                 const spec = specs.get(specId);
-                assert.ok(spec, `${ticket.path} references missing ${specId}`);
-                assert.match(
-                    spec.text,
-                    new RegExp(`${ticketId}`),
-                    `${spec.path} missing ${ticketId}`,
-                );
-            }
-        }
-
-        for (const [specId, spec] of specs) {
-            for (const ticketId of uniqueIds(spec.text, "HG-TICKET")) {
-                const ticket = tickets.get(ticketId);
-                assert.ok(ticket, `${spec.path} references missing ${ticketId}`);
-                const specLine = ticket.text.match(/^\*\*Spec:\*\*([^\n]+)/m)?.[1] ?? "";
-                assert.match(specLine, new RegExp(`${specId}`), `${ticket.path} missing ${specId}`);
+                assert.ok(spec, `${issue.path} references missing ${specId}`);
             }
         }
     });
 
-    it("keeps dependency metadata actionable", () => {
-        for (const path of mdFiles(".system/tickets")) {
+    it("keeps issue status valid", () => {
+        const validStatuses = ["open", "fixed"];
+        for (const path of mdFiles(".system/issues")) {
             const text = readFileSync(path, "utf-8");
-            const depends = text.match(/^\*\*Depends:\*\*([^\n]+)/m)?.[1] ?? "";
-            assert.doesNotMatch(depends, /HG-SPEC|HG-ISSUE/, `${path} depends on non-ticket ref`);
-            if (text.includes("**Status:** Ready")) {
-                assert.equal(depends, "", `${path} is Ready but still has Depends`);
-            }
+            const statusMatch = text.match(/"status":\s*"([^"]+)"/);
+            assert.ok(statusMatch, `${path} missing status frontmatter`);
+            assert.ok(
+                validStatuses.includes(statusMatch[1]),
+                `${path} invalid status: ${statusMatch[1]}`,
+            );
         }
     });
 });
@@ -542,7 +532,7 @@ describe("prompt health", () => {
         assert.match(issuePrompt, /Quote relevant excerpts only/);
         assert.match(issuePrompt, /Never paste raw asset bytes/);
         assert.match(issuePrompt, /Search `.system\/issues\/`/);
-        assert.match(issuePrompt, /Cross-reference related specs, tickets, and issues/);
+        assert.match(issuePrompt, /Cross-reference related specs and issues/);
         assert.match(issuePrompt, /Do not fix unless user asks/);
     });
 

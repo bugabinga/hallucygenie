@@ -6,7 +6,9 @@ set unstable
 BACKEND_TESTS := "test/server.test.ts test/agent.test.ts test/tools.test.ts test/db.test.ts"
 FRONTEND_TESTS := "test/app.test.ts test/static.test.ts test/e2e-mock.test.ts test/minimax-test-script.test.ts"
 ACT_IMAGE := "localhost/hallucygenie-act:local"
-ACT_FLAGS := "-W .github/workflows/ci.yml -P ubuntu-latest=" + ACT_IMAGE + " --container-architecture linux/amd64 --pull=false --action-offline-mode --artifact-server-path .artifacts --cache-server-path .act-cache"
+ACT_BASE := "-P ubuntu-latest=" + ACT_IMAGE + " --container-architecture linux/amd64 --pull=false --action-offline-mode --artifact-server-path .artifacts --cache-server-path .act-cache"
+ACT_FLAGS := "-W .github/workflows/ci.yml " + ACT_BASE
+ACT_AGENT_FLAGS := "-W .github/workflows/agents.yml " + ACT_BASE + " --secret ZAI_API_KEY=${ZAI_API_KEY} --secret MINIMAX_API_KEY=${MINIMAX_API_KEY} --secret GH_TOKEN=${GITHUB_PAT_TOKEN_LLM}"
 
 # install dependencies
 [group('setup')]
@@ -190,6 +192,26 @@ ci-act-container: ci-act-image container-build
 [group('test')]
 ci-act-updates: ci-act-image
     act workflow_dispatch {{ ACT_FLAGS }} -W .github/workflows/updates.yml
+
+# run speck-ferkel agent locally via act
+[group('agent')]
+agent-spec: ci-act-image
+    act workflow_dispatch {{ ACT_AGENT_FLAGS }} -j speck-ferkel --input agent=speck-ferkel
+
+# run trouble-maker agent locally via act
+[group('agent')]
+agent-bugs: ci-act-image
+    act workflow_dispatch {{ ACT_AGENT_FLAGS }} -j trouble-maker --input agent=trouble-maker
+
+# run slop-chopper agent locally via act
+[group('agent')]
+agent-deslop: ci-act-image
+    act workflow_dispatch {{ ACT_AGENT_FLAGS }} -j slop-chopper --input agent=slop-chopper
+
+# run all agent patrol jobs locally via act
+[group('agent')]
+agent-all: ci-act-image
+    act workflow_dispatch {{ ACT_AGENT_FLAGS }} --input agent=all
 
 # run CI after merging into trunk locally
 [group('test')]

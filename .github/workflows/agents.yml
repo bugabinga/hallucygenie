@@ -1,0 +1,157 @@
+name: Agent Patrol
+
+on:
+    schedule:
+        - cron: "17 6 * * 2,5"
+    workflow_dispatch:
+        inputs:
+            agent:
+                description: "Which agent to run"
+                required: true
+                type: choice
+                options:
+                    - speck-ferkel
+                    - trouble-maker
+                    - slop-chopper
+                    - all
+
+permissions:
+    contents: write
+    pull-requests: write
+
+env:
+    PI_OFFLINE: "1"
+
+jobs:
+    speck-ferkel:
+        if: ${{ inputs.agent == 'speck-ferkel' || inputs.agent == 'all' || github.event_name == 'schedule' }}
+        name: 🐖 speck ferkel
+        runs-on: ubuntu-latest
+        timeout-minutes: 15
+        steps:
+            - uses: actions/checkout@v6.0.2
+            - uses: oven-sh/setup-bun@v2.2.0
+              with:
+                  bun-version: 1.3.13
+            - uses: actions/cache@v5.0.5
+              with:
+                  path: ~/.bun/install/cache
+                  key: ${{ runner.os }}-bun-${{ hashFiles('bun.lock') }}
+                  restore-keys: ${{ runner.os }}-bun-
+            - run: npm install -g @mariozechner/pi-coding-agent
+            - run: bun install --frozen-lockfile
+            - run: bun run --bun .github/agents/speck-ferkel.ts
+              env:
+                  ZAI_API_KEY: ${{ secrets.ZAI_API_KEY }}
+                  MINIMAX_API_KEY: ${{ secrets.MINIMAX_API_KEY }}
+            - name: Create PR if changes
+              run: |
+                  if ! git rev-parse --git-dir >/dev/null 2>&1; then
+                      echo "No git repo (act local run) — skipping PR"
+                      exit 0
+                  fi
+                  if git diff --quiet; then
+                      echo "No drift — spec matches code"
+                      exit 0
+                  fi
+                  SPEC_NAME=$(cat /tmp/pi-agent-spec-name 2>/dev/null || echo "unknown-spec")
+                  BRANCH="agent/speck-ferkel-${SPEC_NAME}"
+                  git checkout -b "${BRANCH}"
+                  git add -A
+                  git commit -m "🐖 speck-ferkel: fix code to match spec ${SPEC_NAME}"
+                  git push origin "${BRANCH}"
+                  gh pr create \
+                      --base trunk \
+                      --head "${BRANCH}" \
+                      --title "🐖 speck-ferkel: ${SPEC_NAME}" \
+                      --body-file /tmp/pi-agent-pr-body.md
+              env:
+                  GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+    trouble-maker:
+        if: ${{ inputs.agent == 'trouble-maker' || inputs.agent == 'all' || github.event_name == 'schedule' }}
+        name: 🔥 trouble maker
+        runs-on: ubuntu-latest
+        timeout-minutes: 25
+        steps:
+            - uses: actions/checkout@v6.0.2
+            - uses: oven-sh/setup-bun@v2.2.0
+              with:
+                  bun-version: 1.3.13
+            - uses: actions/cache@v5.0.5
+              with:
+                  path: ~/.bun/install/cache
+                  key: ${{ runner.os }}-bun-${{ hashFiles('bun.lock') }}
+                  restore-keys: ${{ runner.os }}-bun-
+            - run: npm install -g @mariozechner/pi-coding-agent
+            - run: bun install --frozen-lockfile
+            - run: bun run --bun .github/agents/trouble-maker.ts
+              env:
+                  ZAI_API_KEY: ${{ secrets.ZAI_API_KEY }}
+                  MINIMAX_API_KEY: ${{ secrets.MINIMAX_API_KEY }}
+            - name: Create PR if changes
+              run: |
+                  if ! git rev-parse --git-dir >/dev/null 2>&1; then
+                      echo "No git repo (act local run) — skipping PR"
+                      exit 0
+                  fi
+                  if git diff --quiet; then
+                      echo "No bugs found"
+                      exit 0
+                  fi
+                  BRANCH="agent/trouble-maker-$(date +%Y%m%d-%H%M%S)"
+                  git checkout -b "${BRANCH}"
+                  git add -A
+                  git commit -m "🔥 trouble-maker: fix bugs"
+                  git push origin "${BRANCH}"
+                  gh pr create \
+                      --base trunk \
+                      --head "${BRANCH}" \
+                      --title "🔥 trouble-maker: bugfixes" \
+                      --body-file /tmp/pi-agent-pr-body.md
+              env:
+                  GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+    slop-chopper:
+        if: ${{ inputs.agent == 'slop-chopper' || inputs.agent == 'all' || github.event_name == 'schedule' }}
+        name: 🪓 slop chopper
+        runs-on: ubuntu-latest
+        timeout-minutes: 15
+        steps:
+            - uses: actions/checkout@v6.0.2
+            - uses: oven-sh/setup-bun@v2.2.0
+              with:
+                  bun-version: 1.3.13
+            - uses: actions/cache@v5.0.5
+              with:
+                  path: ~/.bun/install/cache
+                  key: ${{ runner.os }}-bun-${{ hashFiles('bun.lock') }}
+                  restore-keys: ${{ runner.os }}-bun-
+            - run: npm install -g @mariozechner/pi-coding-agent
+            - run: bun install --frozen-lockfile
+            - run: bun run --bun .github/agents/slop-chopper.ts
+              env:
+                  ZAI_API_KEY: ${{ secrets.ZAI_API_KEY }}
+                  MINIMAX_API_KEY: ${{ secrets.MINIMAX_API_KEY }}
+            - name: Create PR if changes
+              run: |
+                  if ! git rev-parse --git-dir >/dev/null 2>&1; then
+                      echo "No git repo (act local run) — skipping PR"
+                      exit 0
+                  fi
+                  if git diff --quiet; then
+                      echo "No slop found"
+                      exit 0
+                  fi
+                  BRANCH="agent/slop-chopper-$(date +%Y%m%d-%H%M%S)"
+                  git checkout -b "${BRANCH}"
+                  git add -A
+                  git commit -m "🪓 slop-chopper: remove slop"
+                  git push origin "${BRANCH}"
+                  gh pr create \
+                      --base trunk \
+                      --head "${BRANCH}" \
+                      --title "🪓 slop-chopper: cleanup" \
+                      --body-file /tmp/pi-agent-pr-body.md
+              env:
+                  GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
