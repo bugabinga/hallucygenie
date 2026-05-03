@@ -30,6 +30,8 @@
                     <!-- prettier-ignore -->
                     <span id="quota-badge" class="quota-badge" title="Images, voice, and music remaining today" role="status" aria-label="Images, voice, and music remaining today"><span class="quota-item" data-type="image" title="Images">🎨 <span class="quota-used">—</span></span><span class="quota-item" data-type="speech" title="Voice">🎙️ <span class="quota-used">—</span></span><span class="quota-item" data-type="music" title="Music">🎵 <span class="quota-used">—</span></span></span>
                     <!-- prettier-ignore -->
+                    <button id="profile-btn" class="profile-btn" title="Profile" aria-label="Open profile" data-avatar="🎮">🎮 Profile</button>
+                    <!-- prettier-ignore -->
                     <button id="create-btn" class="create-btn" title="Create something" aria-label="Create media">✨ Create</button>
                 </div>
             </header>
@@ -140,6 +142,73 @@
             <div id="error-toast" class="error-toast" hidden>
                 <span id="error-toast-icon" aria-hidden="true">😕</span>
                 <span id="error-toast-message"></span>
+            </div>
+
+            <div
+                id="profile-modal"
+                class="modal"
+                role="dialog"
+                aria-modal="true"
+                aria-labelledby="profile-title"
+                hidden
+            >
+                <div class="modal-backdrop profile-backdrop"></div>
+                <div class="modal-content profile-modal-content">
+                    <div class="modal-header">
+                        <h2 id="profile-title">🎮 Profile</h2>
+                        <button id="profile-close" class="modal-close" aria-label="Close">✕</button>
+                    </div>
+                    <form id="profile-form" class="profile-form">
+                        <div class="form-group">
+                            <label for="profile-username">Name</label>
+                            <input
+                                id="profile-username"
+                                maxlength="40"
+                                placeholder="Gamer name"
+                                autocomplete="off"
+                            />
+                        </div>
+                        <div class="form-group">
+                            <label for="profile-interests">Interests</label>
+                            <textarea
+                                id="profile-interests"
+                                rows="2"
+                                maxlength="300"
+                                placeholder="Roblox, Minecraft, editing..."
+                            ></textarea>
+                        </div>
+                        <div class="form-group">
+                            <label for="profile-hates">Dislikes</label>
+                            <textarea
+                                id="profile-hates"
+                                rows="2"
+                                maxlength="300"
+                                placeholder="Stuff you do not like"
+                            ></textarea>
+                        </div>
+                        <div class="form-group">
+                            <label for="profile-favorites">Favorites</label>
+                            <textarea
+                                id="profile-favorites"
+                                rows="2"
+                                maxlength="300"
+                                placeholder="Favorite games, colors, characters..."
+                            ></textarea>
+                        </div>
+                        <div class="form-group">
+                            <label for="profile-avatar">Avatar emoji</label>
+                            <input id="profile-avatar" maxlength="8" placeholder="🎮" />
+                        </div>
+                        <p class="profile-note">Saved in this app on this device.</p>
+                        <div class="profile-actions">
+                            <button type="submit" class="btn-primary">Save</button>
+                            <!-- prettier-ignore -->
+                            <button id="profile-reset" type="button" class="btn-secondary">Reset</button>
+                            <!-- prettier-ignore -->
+                            <button id="profile-generate" type="button" class="btn-secondary" disabled title="Avatar generation unlocks after profile assets are ready">Generate avatar 🎨</button>
+                        </div>
+                    </form>
+                </div>
             </div>
 
             <div

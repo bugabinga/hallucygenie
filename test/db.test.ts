@@ -18,6 +18,9 @@ import {
     renameSession,
     archiveSession,
     setActiveSessionId,
+    getUserProfile,
+    saveUserProfile,
+    deleteUserProfile,
     saveMessage,
     assertNoRawAssetDataInMessage,
     getMessages,
@@ -249,6 +252,70 @@ describe("Active session state", () => {
         assert.throws(() => setActiveSessionId(db, "  "), /session id must not be blank/);
         db.prepare("UPDATE app_state SET value = '' WHERE key = 'active_session_id'").run();
         assert.throws(() => getActiveSessionId(db), /session id must not be blank/);
+    });
+});
+
+describe("User profile state", () => {
+    let db: Database;
+
+    beforeEach(() => {
+        db = freshDb();
+    });
+
+    it("stores normalized DB profile", () => {
+        const saved = saveUserProfile(db, {
+            username: "  GamerKid  ",
+            interests: " Minecraft ",
+            hates: " spam ",
+            favorites: "redstone",
+            avatar: { type: "emoji", value: "🦊" },
+        });
+
+        assert.equal(saved.username, "GamerKid");
+        assert.equal(saved.interests, "Minecraft");
+        assert.deepEqual(getUserProfile(db).avatar, { type: "emoji", value: "🦊" });
+    });
+
+    it("trims oversized fields and emoji avatar", () => {
+        const saved = saveUserProfile(db, {
+            username: "x".repeat(50),
+            interests: "i".repeat(350),
+            hates: "h".repeat(350),
+            favorites: "f".repeat(350),
+            avatar: { type: "emoji", value: "🎮🔥✨🧞🚀" },
+        });
+
+        assert.equal(saved.username.length, 40);
+        assert.equal(saved.interests.length, 300);
+        assert.equal(saved.hates.length, 300);
+        assert.equal(saved.favorites.length, 300);
+        assert.equal(Array.from(saved.avatar.value).length, 4);
+    });
+
+    it("rejects raw asset data and invalid asset avatar refs", () => {
+        assert.throws(
+            () =>
+                saveUserProfile(db, {
+                    username: "x",
+                    avatar: { type: "emoji", value: "data:image/png;base64,abc" },
+                }),
+            /data URL not allowed/,
+        );
+        assert.throws(
+            () =>
+                saveUserProfile(db, {
+                    username: "x",
+                    avatar: { type: "asset", value: "/asset/123" },
+                }),
+            /avatar asset id invalid/,
+        );
+    });
+
+    it("delete resets profile to default", () => {
+        saveUserProfile(db, { username: "GamerKid", avatar: { type: "emoji", value: "🦊" } });
+        const reset = deleteUserProfile(db);
+        assert.equal(reset.avatar.value, "🎮");
+        assert.equal(getUserProfile(db).username, "");
     });
 });
 

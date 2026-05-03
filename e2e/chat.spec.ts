@@ -143,6 +143,29 @@ test("page reload restores chat history", async ({ page }) => {
 
 // ── Test: Browser session UUID is not stored ─────────────────────────
 
+test("profile saves through DB and survives reload/localStorage clearing", async ({ page }) => {
+    await waitForApp(page);
+
+    await page.locator("#profile-btn").click();
+    await expect(page.locator("#profile-modal")).toBeVisible();
+    await page.locator("#profile-username").fill("GamerKid");
+    await page.locator("#profile-interests").fill("Minecraft");
+    await page.locator("#profile-avatar").fill("🦊");
+    await page.locator("#profile-form button[type='submit']").click();
+    await expect(page.locator("#profile-modal")).toBeHidden();
+
+    await page.evaluate(() => localStorage.clear());
+    await page.reload();
+    await waitForApp(page);
+    await page.locator("#profile-btn").click();
+    await expect(page.locator("#profile-username")).toHaveValue("GamerKid");
+    await expect(page.locator("#profile-interests")).toHaveValue("Minecraft");
+    await expect(page.locator("#profile-avatar")).toHaveValue("🦊");
+
+    await page.locator("#profile-reset").click();
+    await expect(page.locator("#profile-modal")).toBeHidden();
+});
+
 test("session UUID is not created in localStorage", async ({ page }) => {
     await page.goto("/");
     await page.evaluate(() => localStorage.setItem("hallucygenie_session_id", "legacy"));

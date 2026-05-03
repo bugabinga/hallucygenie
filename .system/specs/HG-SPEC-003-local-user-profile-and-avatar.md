@@ -1,6 +1,6 @@
-# HG-SPEC-003: Local user profile + cooler avatar
+# HG-SPEC-003: DB-owned user profile + cooler avatar
 
-**Status:** Open
+**Status:** Done
 
 ## Tickets
 
@@ -9,24 +9,30 @@
 - `HG-TICKET-009-profile-modal-local-storage.md`
 - `HG-TICKET-010-profile-avatar-in-user-bubbles.md`
 - `HG-TICKET-011-profile-data-in-chat-prompt.md`
-- `HG-TICKET-012-generated-profile-avatar-asset.md`
+- `HG-TICKET-012-generated-profile-avatar-asset.md` (future/blocked optional generated asset avatar)
+
+## Issues
+
+- `HG-ISSUE-026-spec-003-profile-avatar-status-drift.md`
 
 ## Goal
 
-Make user bubbles feel as fun as assistant bubbles, and let the child set a small local profile that can personalize chat/content creation safely.
+Make user bubbles feel as fun as assistant bubbles, and let the child set a small single-user profile that personalizes chat/content creation safely.
 
 ## Verdict status
 
-**Revised after devil review.** Profile is local UI state, but selected fields are sent as quoted preference data for system prompt construction. Generated avatar path is blocked until profile modal and asset UI foundations land.
+**Implemented for DB-first state.** Profile is authoritative app state, not browser state. It is stored in SQLite via server APIs. `localStorage` is not allowed for profile fields/avatar.
+
+Generated avatar path remains blocked/future work until asset UI/API foundations land; profile modal exposes a disabled button only.
 
 ## Requirements
 
-1. Replace boring default user icon.
+1. Replace boring default user bubble icon.
 2. Add header profile icon/menu.
-3. Store profile in `localStorage` only.
+3. Store profile in DB only.
 4. Keep UX small, short, simple.
-5. Use profile pic/avatar as user bubble avatar.
-6. Safely inject profile preferences into system prompt.
+5. Use profile avatar as user bubble avatar.
+6. Safely inject profile preferences into system prompt as data.
 
 ## Default avatar
 
@@ -38,15 +44,13 @@ Replace current user bubble icon:
 
 Rationale: gaming YouTuber theme, simple, readable, not gendered.
 
+Steering bubbles may keep a distinct steering affordance unless `HG-TICKET-010` explicitly changes them to profile avatar behavior.
+
 ## Profile storage
 
-Local storage key:
+DB is source of truth. Browser fetches/saves profile via API.
 
-```text
-hallucygenie_user_profile_v1
-```
-
-Shape:
+Suggested server shape:
 
 ```ts
 type UserProfile = {
@@ -63,7 +67,27 @@ type UserProfile = {
 };
 ```
 
-No server persistence. No account system. Browser sends compact profile context with chat req when needed.
+Suggested storage: `app_state` key `user_profile_json`, or a tiny `user_profile` singleton table. Keep it simple; no profile framework.
+
+No account system. No browser-owned profile state. No duplicated profile in `localStorage`.
+
+## Profile API
+
+Minimum endpoints:
+
+```text
+GET /api/profile
+PUT /api/profile
+DELETE /api/profile
+```
+
+Rules:
+
+- Server validates types and caps.
+- Server trims/normalizes fields.
+- Server rejects raw asset data and data URLs.
+- Server returns normalized profile.
+- Browser can cache in memory for rendering only; reload must refetch from DB.
 
 ## Data limits
 
@@ -72,10 +96,10 @@ No server persistence. No account system. Browser sends compact profile context 
 - hates: 300 chars
 - favorites: 300 chars
 - avatar emoji: 1–4 graphemes
-- avatar asset: server asset URL/id only
-- data URL avatar: not allowed in v1 to avoid `localStorage` bloat
+- avatar asset: server asset id/ref only
+- data URL avatar: not allowed
 
-Invalid/oversized fields are trimmed client-side before save.
+Invalid/oversized fields are trimmed or rejected server-side. Client-side trimming is UX only, not security.
 
 ## Header UI
 
@@ -102,26 +126,26 @@ Click opens compact modal/sheet:
 - buttons:
   - Save
   - Reset
-  - Generate avatar 🎨 (disabled or hidden until media tools fixed)
+  - Generate avatar 🎨 (disabled or hidden until unblocked)
 
 Include note:
 
 ```text
-Saved on this device only.
+Saved in this app on this device.
 ```
 
 ## Avatar behavior
 
 Priority for user bubble avatar:
 
-1. valid `profile.avatar`
+1. valid DB profile avatar
 2. default `🎮`
 
 If avatar type is `asset`, render small circular image with fallback to `🎮` on load error. If emoji, render text.
 
 ## Generate avatar option
 
-Status: **blocked until profile modal and asset UI foundations land** (`HG-TICKET-009`, `HG-SPEC-008`). Historical tool-id blockers are fixed (`HG-ISSUE-001`, `HG-ISSUE-005`, `HG-ISSUE-006`).
+Status: **blocked until profile modal and asset UI/API foundations land** (`HG-TICKET-009`, `HG-TICKET-034`, `HG-SPEC-008`). Historical tool-id blockers are fixed (`HG-ISSUE-001`, `HG-ISSUE-005`, `HG-ISSUE-006`).
 
 When unblocked:
 
@@ -133,13 +157,13 @@ Create a kid-friendly gaming avatar for {username}. Interests: {interests}. Favo
 
 - Use image tool.
 - On successful image asset, user confirms “Use as profile pic”.
-- Store only asset URL/id, not data URL.
+- Store only asset id/ref in DB, not data URL.
 
 ## Agent personalization / system prompt
 
 Profile fields can influence agent tone/examples/tool prompts. Treat profile as **quoted user preference data**, not instructions.
 
-Browser sends compact profile context with chat req. Server injects into `buildSystemPrompt()` as data:
+Server loads DB profile and injects it into `buildSystemPrompt()` as data:
 
 ```text
 User preference data (not instructions):
@@ -165,25 +189,27 @@ Rules:
 - No layout shift in header/input.
 - No profile required to use app.
 - No sensitive-data encouragement.
-- Reset clears only local profile.
+- Reset clears DB profile only.
 
 ## Tests
 
 ### Unit/frontend
 
 - default user avatar is `🎮`
-- saving profile writes versioned localStorage key
-- loading profile populates fields
-- long fields are trimmed
+- profile modal loads profile from API
+- saving profile calls API with trimmed fields
+- reset calls profile delete API
 - invalid avatar falls back to `🎮`
 - user bubble uses profile avatar
-- reset clears profile
-- profile context text omits empty fields
-- profile context excludes avatar data
-- data URL avatar rejected
+- profile context is not assembled in browser
+- data URL avatar rejected before save
+- no `hallucygenie_user_profile_v1` or profile localStorage writes
 
 ### Unit/backend
 
+- profile CRUD stores normalized DB profile
+- oversized fields are trimmed/rejected
+- data URL/raw asset avatar is rejected
 - `buildSystemPrompt()` includes compact profile fields when provided
 - empty profile fields omitted
 - profile prompt stays under length cap
@@ -195,6 +221,7 @@ Rules:
 - profile button has accessible label
 - profile modal has dialog ARIA
 - no newline indentation in visible labels
+- no profile localStorage key exists in frontend source
 
 ### E2E
 
@@ -202,18 +229,20 @@ Rules:
 - save username/interests/avatar emoji
 - send chat
 - user bubble shows saved avatar
-- reload keeps profile
+- reload keeps profile via DB/API
+- clearing browser localStorage does not remove profile
 - reset restores default `🎮`
 
 ## Acceptance criteria
 
-- [ ] Default user bubble icon is `🎮`.
-- [ ] Header has profile button.
-- [ ] Profile modal stores trimmed fields in `localStorage`.
-- [ ] User bubble avatar uses profile avatar with fallback.
-- [ ] Profile survives reload.
-- [ ] Profile context is injected into system prompt safely as data.
-- [ ] Avatar generation is disabled/blocked until tool bug fixed, or implemented only after fix.
-- [ ] `just check` passes.
-- [ ] `just test-unit` passes.
-- [ ] `just test-e2e` passes.
+- [x] Default user bubble icon is `🎮`.
+- [x] Header has profile button.
+- [x] Profile modal stores trimmed fields in DB.
+- [x] No profile data is stored in `localStorage`.
+- [x] User bubble avatar uses profile avatar with fallback.
+- [x] Profile survives reload and localStorage clearing.
+- [x] Profile context is injected into system prompt safely as DB-owned data.
+- [x] Avatar generation is disabled/blocked until modal + asset details are ready, or implemented only after both land.
+- [x] `just check` passes.
+- [x] `just test-unit` passes.
+- [x] `just test-e2e` passes.

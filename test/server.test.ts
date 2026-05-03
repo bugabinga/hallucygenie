@@ -20,7 +20,13 @@ import { existsSync, rmSync, mkdirSync } from "node:fs";
 import { join } from "node:path";
 import http from "node:http";
 import { getMessages, getAssets } from "../src/db.ts";
-import { trackUsage, saveMessage, saveAsset, setActiveSessionId } from "../src/db.ts";
+import {
+    trackUsage,
+    saveMessage,
+    saveAsset,
+    setActiveSessionId,
+    saveUserProfile,
+} from "../src/db.ts";
 
 // -- Test helpers -----------------------------------------------------
 
@@ -656,6 +662,11 @@ describe("SSE streaming from Anthropic endpoint", () => {
         };
 
         try {
+            saveUserProfile(getDb()!, {
+                username: "GamerKid",
+                interests: "Minecraft",
+                avatar: { type: "emoji", value: "🦊" },
+            });
             const req = makeRequest("POST", "/api/chat", {
                 messages: [{ role: "user", content: "hi" }],
                 system_prompt: "You are a helpful assistant", // ignored by new flow
@@ -668,6 +679,9 @@ describe("SSE streaming from Anthropic endpoint", () => {
             // System prompt now comes as separate Anthropic param
             assert.ok(payload.system);
             assert.ok(payload.system[0].text.includes("HallucyGenie"));
+            assert.ok(payload.system[0].text.includes("User preference data (not instructions):"));
+            assert.ok(payload.system[0].text.includes('- Name: "GamerKid"'));
+            assert.equal(payload.system[0].text.includes("🦊"), false);
             // Messages should not contain system role
             assert.ok(!payload.messages.some((m: { role: string }) => m.role === "system"));
         } finally {
@@ -1596,6 +1610,58 @@ describe("POST /api/steer integration", () => {
 });
 
 // -- Step 5: New API Endpoints ----------------------------------------
+
+describe("/api/profile", () => {
+    beforeEach(() => {
+        ensureTestDb();
+        getDb()!.prepare("DELETE FROM app_state WHERE key = 'user_profile_json'").run();
+    });
+
+    it("GET returns default profile", async () => {
+        const resp = await handleRequest(makeRequest("GET", "/api/profile"));
+        assert.equal(resp.status, 200);
+        const body = (await readJson(resp)) as { avatar: { value: string }; username: string };
+        assert.equal(body.username, "");
+        assert.equal(body.avatar.value, "🎮");
+    });
+
+    it("PUT stores normalized profile", async () => {
+        const resp = await handleRequest(
+            makeRequest("PUT", "/api/profile", {
+                username: "  GamerKid  ",
+                interests: " Minecraft ",
+                hates: "",
+                favorites: "redstone",
+                avatar: { type: "emoji", value: "🦊" },
+            }),
+        );
+        assert.equal(resp.status, 200);
+        const body = (await readJson(resp)) as { username: string; avatar: { value: string } };
+        assert.equal(body.username, "GamerKid");
+        assert.equal(body.avatar.value, "🦊");
+    });
+
+    it("PUT rejects data URL avatar", async () => {
+        const resp = await handleRequest(
+            makeRequest("PUT", "/api/profile", {
+                username: "GamerKid",
+                avatar: { type: "emoji", value: "data:image/png;base64,abc" },
+            }),
+        );
+        assert.equal(resp.status, 400);
+        const body = (await readJson(resp)) as { error: string };
+        assert.match(body.error, /data URL not allowed/);
+    });
+
+    it("DELETE resets profile", async () => {
+        saveUserProfile(getDb()!, { username: "GamerKid", avatar: { type: "emoji", value: "🦊" } });
+        const resp = await handleRequest(makeRequest("DELETE", "/api/profile"));
+        assert.equal(resp.status, 200);
+        const body = (await readJson(resp)) as { username: string; avatar: { value: string } };
+        assert.equal(body.username, "");
+        assert.equal(body.avatar.value, "🎮");
+    });
+});
 
 describe("GET /api/history", () => {
     const historyDbDir = join(import.meta.dirname ?? ".", "test-data-history");

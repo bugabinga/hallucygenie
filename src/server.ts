@@ -3,7 +3,15 @@
 
 import { randomUUID } from "node:crypto";
 import { mkdirSync, writeFileSync } from "node:fs";
-import { initDb, saveAsset, getAssets, getAsset } from "./db.ts";
+import {
+    initDb,
+    saveAsset,
+    getAssets,
+    getAsset,
+    getUserProfile,
+    saveUserProfile,
+    deleteUserProfile,
+} from "./db.ts";
 import { dirname } from "node:path";
 import { createServer, type IncomingMessage, type ServerResponse, type Server } from "node:http";
 import { Readable } from "node:stream";
@@ -79,7 +87,7 @@ export const PORT = Number(process.env.PORT) || 3000;
 const CORS_HEADERS: Record<string, string> = {
     "Access-Control-Allow-Origin": "*",
     "Access-Control-Allow-Headers": "Content-Type, X-Session-Id",
-    "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+    "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
 };
 
 function corsHeaders(): Record<string, string> {
@@ -250,7 +258,10 @@ export async function handleChat(
     }
 
     // Build message history: load from DB, append new user message
-    const systemPrompt = buildSystemPrompt(sessionId ? getPreferences(database) : undefined);
+    const systemPrompt = buildSystemPrompt(
+        sessionId ? getPreferences(database) : undefined,
+        getUserProfile(database),
+    );
 
     const messages: ChatMessage[] = [];
     messages.push({ role: "system", content: systemPrompt });
@@ -741,6 +752,27 @@ export async function handleRequest(req: Request): Promise<Response> {
                 },
                 ui: { maxMessageLength: 2000 },
             });
+        }
+
+        if (path === "/api/profile" && method === "GET") {
+            return jsonResponse(getUserProfile(database));
+        }
+
+        if (path === "/api/profile" && method === "PUT") {
+            let parsed: unknown;
+            try {
+                parsed = await req.json();
+                return jsonResponse(saveUserProfile(database, parsed));
+            } catch (err) {
+                return jsonResponse(
+                    { error: String(err instanceof Error ? err.message : err) },
+                    400,
+                );
+            }
+        }
+
+        if (path === "/api/profile" && method === "DELETE") {
+            return jsonResponse(deleteUserProfile(database));
         }
 
         if (path === "/api/chat" && method === "POST") {

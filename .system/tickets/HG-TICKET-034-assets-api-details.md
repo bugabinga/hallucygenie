@@ -1,10 +1,9 @@
 # HG-TICKET-034 — Assets API details and download URL
 
-**Spec:** `.system/specs/HG-SPEC-008-useful-create-assets-ui.md`  
-**Status:** Blocked  
+**Spec:** `.system/specs/HG-SPEC-008-useful-create-assets-ui.md`, `.system/specs/HG-SPEC-003-local-user-profile-and-avatar.md`
+**Status:** Ready
 **Priority:** High  
-**Size:** M  
-**Depends:** `HG-TICKET-033-asset-params-db.md`
+**Size:** M
 
 ## Goal
 

@@ -33,6 +33,16 @@ interface ToolResultEvent {
     result: ToolResult;
 }
 
+export interface UserProfile {
+    version: 1;
+    username: string;
+    interests: string;
+    hates: string;
+    favorites: string;
+    avatar: { type: "emoji" | "asset"; value: string };
+    updatedAt: number;
+}
+
 import { renderMarkdown } from "./markdown.ts";
 export { renderMarkdown };
 
@@ -50,7 +60,17 @@ export function renderThinkingBlock(text: string): string {
 const LEGACY_SESSION_KEY = "hallucygenie_session_id";
 const RECENT_ERROR_KEY = "hallucygenie_recent_error";
 const RECENT_ERROR_TTL_MS = 10 * 60 * 1000;
-const USER_AVATAR = "🎮";
+export const DEFAULT_USER_AVATAR = "🎮";
+
+let currentProfile: UserProfile = {
+    version: 1,
+    username: "",
+    interests: "",
+    hates: "",
+    favorites: "",
+    avatar: { type: "emoji", value: DEFAULT_USER_AVATAR },
+    updatedAt: 0,
+};
 
 export function clearLegacySessionId(): void {
     localStorage.removeItem(LEGACY_SESSION_KEY);
@@ -80,6 +100,62 @@ export async function sendSteer(message: string): Promise<void> {
     if (!resp.ok) {
         throw new Error(`Steer failed: ${resp.status}`);
     }
+}
+
+export async function fetchProfile(): Promise<UserProfile> {
+    const resp = await fetch("/api/profile");
+    if (!resp.ok) throw new Error(`Failed to load profile: ${resp.status}`);
+    return (await resp.json()) as UserProfile;
+}
+
+export async function putProfile(profile: UserProfile): Promise<UserProfile> {
+    const resp = await fetch("/api/profile", {
+        method: "PUT",
+        headers: createApiHeaders(),
+        body: JSON.stringify(profile),
+    });
+    if (!resp.ok) throw new Error(`Failed to save profile: ${resp.status}`);
+    return (await resp.json()) as UserProfile;
+}
+
+export async function deleteProfile(): Promise<UserProfile> {
+    const resp = await fetch("/api/profile", { method: "DELETE", headers: createApiHeaders() });
+    if (!resp.ok) throw new Error(`Failed to reset profile: ${resp.status}`);
+    return (await resp.json()) as UserProfile;
+}
+
+function avatarEmoji(value: string): string {
+    const trimmed = Array.from(value.trim()).slice(0, 4).join("");
+    if (!trimmed || /^data:/i.test(trimmed)) return DEFAULT_USER_AVATAR;
+    return trimmed;
+}
+
+export function normalizedProfileFromForm(form: {
+    username: string;
+    interests: string;
+    hates: string;
+    favorites: string;
+    avatar: string;
+}): UserProfile {
+    if (/^data:/i.test(form.avatar.trim())) throw new Error("Avatar data URLs are not allowed");
+    return {
+        version: 1,
+        username: Array.from(form.username.trim()).slice(0, 40).join(""),
+        interests: Array.from(form.interests.trim()).slice(0, 300).join(""),
+        hates: Array.from(form.hates.trim()).slice(0, 300).join(""),
+        favorites: Array.from(form.favorites.trim()).slice(0, 300).join(""),
+        avatar: { type: "emoji", value: avatarEmoji(form.avatar) },
+        updatedAt: Date.now(),
+    };
+}
+
+function setCurrentProfile(profile: UserProfile): void {
+    currentProfile = profile;
+    const btn = document.querySelector<HTMLElement>("#profile-btn");
+    if (!btn) return;
+    const label = profile.avatar.type === "emoji" ? profile.avatar.value : "🖼️";
+    btn.dataset.avatar = label;
+    btn.textContent = `${label} Profile`;
 }
 
 // ── SSE Parsing ──────────────────────────────────────────────────────
@@ -162,9 +238,28 @@ export function createElement(
 
 // ── Message Rendering ────────────────────────────────────────────────
 
+export function renderProfileAvatar(profile = currentProfile): HTMLElement {
+    const avatar = createElement("div", { class: "message-avatar" });
+    if (profile.avatar.type === "asset" && /^asset_[0-9a-f-]+$/i.test(profile.avatar.value)) {
+        const img = createElement("img", {
+            class: "profile-avatar-img",
+            src: `/asset/${profile.avatar.value}`,
+            alt: "",
+            loading: "lazy",
+        }) as HTMLImageElement;
+        img.addEventListener("error", () => {
+            avatar.textContent = DEFAULT_USER_AVATAR;
+        });
+        avatar.appendChild(img);
+        return avatar;
+    }
+    avatar.textContent = avatarEmoji(profile.avatar.value);
+    return avatar;
+}
+
 export function renderUserMessage(content: string): HTMLElement {
     const msg = createElement("div", { class: "message message--user" });
-    const avatar = createElement("div", { class: "message-avatar" }, [USER_AVATAR]);
+    const avatar = renderProfileAvatar();
     const bubble = createElement("div", { class: "message-bubble" });
     const contentEl = createElement("div", { class: "message-content" });
     contentEl.innerHTML = renderMarkdown(content);
@@ -946,6 +1041,107 @@ export function init(): void {
         `Connection status: ${connectionStatus.title || "Connected"}`,
     );
 
+    const profileBtn = $("#profile-btn") as HTMLButtonElement;
+    const profileModal = $("#profile-modal");
+    const profileClose = $("#profile-close") as HTMLButtonElement;
+    const profileBackdrop = profileModal.querySelector(".profile-backdrop") as HTMLElement;
+    const profileForm = $("#profile-form") as HTMLFormElement;
+    const profileReset = $("#profile-reset") as HTMLButtonElement;
+    const profileUsername = $("#profile-username") as HTMLInputElement;
+    const profileInterests = $("#profile-interests") as HTMLTextAreaElement;
+    const profileHates = $("#profile-hates") as HTMLTextAreaElement;
+    const profileFavorites = $("#profile-favorites") as HTMLTextAreaElement;
+    const profileAvatar = $("#profile-avatar") as HTMLInputElement;
+    let profileModalReturnFocus: HTMLElement | null = null;
+
+    function fillProfileForm(profile: UserProfile): void {
+        profileUsername.value = profile.username;
+        profileInterests.value = profile.interests;
+        profileHates.value = profile.hates;
+        profileFavorites.value = profile.favorites;
+        profileAvatar.value =
+            profile.avatar.type === "emoji" ? profile.avatar.value : DEFAULT_USER_AVATAR;
+    }
+
+    async function loadProfileIntoForm(): Promise<void> {
+        const profile = await fetchProfile();
+        setCurrentProfile(profile);
+        fillProfileForm(profile);
+    }
+
+    function getProfileModalFocusable(): HTMLElement[] {
+        return Array.from(
+            profileModal.querySelectorAll<HTMLElement>(
+                'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])',
+            ),
+        ).filter((el) => !el.hasAttribute("disabled") && !el.closest("[hidden]"));
+    }
+
+    function openProfileModal(): void {
+        profileModalReturnFocus = document.activeElement as HTMLElement | null;
+        profileModal.hidden = false;
+        profileClose.focus();
+        void loadProfileIntoForm().catch(() => showError("Failed to load profile 😕"));
+    }
+
+    function closeProfileModal(): void {
+        profileModal.hidden = true;
+        profileModalReturnFocus?.focus();
+        profileModalReturnFocus = null;
+    }
+
+    function trapProfileModalFocus(e: KeyboardEvent): void {
+        if (e.key !== "Tab" || profileModal.hidden) return;
+        const focusable = getProfileModalFocusable();
+        if (focusable.length === 0) return;
+        const first = focusable[0];
+        const last = focusable[focusable.length - 1];
+        if (e.shiftKey && document.activeElement === first) {
+            e.preventDefault();
+            last.focus();
+        } else if (!e.shiftKey && document.activeElement === last) {
+            e.preventDefault();
+            first.focus();
+        }
+    }
+
+    profileBtn.addEventListener("click", openProfileModal);
+    profileClose.addEventListener("click", closeProfileModal);
+    profileBackdrop.addEventListener("click", closeProfileModal);
+    profileModal.addEventListener("keydown", trapProfileModalFocus);
+    profileForm.addEventListener("submit", (e) => {
+        e.preventDefault();
+        let profile: UserProfile;
+        try {
+            profile = normalizedProfileFromForm({
+                username: profileUsername.value,
+                interests: profileInterests.value,
+                hates: profileHates.value,
+                favorites: profileFavorites.value,
+                avatar: profileAvatar.value,
+            });
+        } catch (err) {
+            showError(err instanceof Error ? err.message : "Invalid profile");
+            return;
+        }
+        void putProfile(profile)
+            .then((saved) => {
+                setCurrentProfile(saved);
+                fillProfileForm(saved);
+                closeProfileModal();
+            })
+            .catch(() => showError("Failed to save profile 😕"));
+    });
+    profileReset.addEventListener("click", () => {
+        void deleteProfile()
+            .then((profile) => {
+                setCurrentProfile(profile);
+                fillProfileForm(profile);
+                closeProfileModal();
+            })
+            .catch(() => showError("Failed to reset profile 😕"));
+    });
+
     // Form submit (handles both send and steer)
     form.addEventListener("submit", (e) => {
         e.preventDefault();
@@ -973,6 +1169,7 @@ export function init(): void {
     document.addEventListener("keydown", (e) => {
         if (e.key === "Escape") {
             closeLightbox();
+            if (!profileModal.hidden) closeProfileModal();
             if (!createModal.hidden) closeCreateModal();
         }
     });
@@ -1033,8 +1230,11 @@ export function init(): void {
     // Done button
     $("#onboarding-done").addEventListener("click", dismissOnboarding);
 
-    // ── Load history ────────────────────────────────────────────────
-    loadHistory();
+    // ── Load profile, then history so user bubbles use saved avatar ──
+    void fetchProfile()
+        .then(setCurrentProfile)
+        .catch(() => undefined)
+        .finally(() => void loadHistory());
 
     // Fetch and display quota badge (once on init — no polling interval)
     updateQuotaBadge();

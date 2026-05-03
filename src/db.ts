@@ -99,8 +99,29 @@ export function initDb(dbPath: string, migrationsDir?: string): Database {
 // ── App State ───────────────────────────────────────────────────────
 
 const ACTIVE_SESSION_KEY = "active_session_id";
+const USER_PROFILE_KEY = "user_profile_json";
 const DEFAULT_SESSION_NAME = "New Chat";
 const DEFAULT_SESSION_NAME_SOURCE = "default";
+
+export interface UserProfile {
+    version: 1;
+    username: string;
+    interests: string;
+    hates: string;
+    favorites: string;
+    avatar: { type: "emoji" | "asset"; value: string };
+    updatedAt: number;
+}
+
+export const DEFAULT_USER_PROFILE: UserProfile = {
+    version: 1,
+    username: "",
+    interests: "",
+    hates: "",
+    favorites: "",
+    avatar: { type: "emoji", value: "🎮" },
+    updatedAt: 0,
+};
 
 function tableExists(db: Database, name: string): boolean {
     const row = db
@@ -143,6 +164,80 @@ export function getOrCreateActiveSessionId(db: Database): string {
     if (tableExists(db, "sessions")) createSession(db, newSessionId, DEFAULT_SESSION_NAME);
     setActiveSessionId(db, newSessionId);
     return newSessionId;
+}
+
+function truncateCodepoints(value: string, max: number): string {
+    return Array.from(value.trim()).slice(0, max).join("");
+}
+
+function rejectRawProfileText(value: string): void {
+    assertNoRawAssetDataInMessage(value);
+    if (/data:(?:image|audio|video)\//i.test(value)) {
+        throw new Error("profile must not contain raw asset data");
+    }
+}
+
+function normalizeProfileText(value: unknown, field: string, max: number): string {
+    if (typeof value !== "string") throw new Error(`${field} must be a string`);
+    rejectRawProfileText(value);
+    return truncateCodepoints(value, max);
+}
+
+function normalizeProfileAvatar(value: unknown): UserProfile["avatar"] {
+    if (!value || typeof value !== "object") return DEFAULT_USER_PROFILE.avatar;
+    const avatar = value as Record<string, unknown>;
+    if (avatar.type !== "emoji" && avatar.type !== "asset") throw new Error("avatar type invalid");
+    if (typeof avatar.value !== "string") throw new Error("avatar value must be a string");
+    const trimmed = avatar.value.trim();
+    if (/^data:/i.test(trimmed)) throw new Error("avatar data URL not allowed");
+    assertNoRawAssetDataInMessage(trimmed);
+    if (avatar.type === "emoji") {
+        if (!trimmed) return DEFAULT_USER_PROFILE.avatar;
+        const emoji = truncateCodepoints(trimmed, 4);
+        if (!emoji) return DEFAULT_USER_PROFILE.avatar;
+        return { type: "emoji", value: emoji };
+    }
+    if (!/^asset_[0-9a-f-]+$/i.test(trimmed)) throw new Error("avatar asset id invalid");
+    return { type: "asset", value: trimmed };
+}
+
+export function normalizeUserProfile(input: unknown, now = Date.now()): UserProfile {
+    if (!input || typeof input !== "object") throw new Error("profile must be an object");
+    const obj = input as Record<string, unknown>;
+    return {
+        version: 1,
+        username: normalizeProfileText(obj.username ?? "", "username", 40),
+        interests: normalizeProfileText(obj.interests ?? "", "interests", 300),
+        hates: normalizeProfileText(obj.hates ?? "", "hates", 300),
+        favorites: normalizeProfileText(obj.favorites ?? "", "favorites", 300),
+        avatar: normalizeProfileAvatar(obj.avatar),
+        updatedAt: now,
+    };
+}
+
+export function getUserProfile(db: Database): UserProfile {
+    const row = db.prepare("SELECT value FROM app_state WHERE key = ?").get(USER_PROFILE_KEY) as
+        | { value: string }
+        | undefined;
+    if (!row) return { ...DEFAULT_USER_PROFILE, avatar: { ...DEFAULT_USER_PROFILE.avatar } };
+    const parsed = JSON.parse(row.value) as Record<string, unknown>;
+    const updatedAt = typeof parsed.updatedAt === "number" ? parsed.updatedAt : Date.now();
+    return normalizeUserProfile(parsed, updatedAt);
+}
+
+export function saveUserProfile(db: Database, input: unknown): UserProfile {
+    const profile = normalizeUserProfile(input);
+    db.prepare(
+        `INSERT INTO app_state (key, value, updated_at)
+         VALUES (?, ?, datetime('now'))
+         ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = datetime('now')`,
+    ).run(USER_PROFILE_KEY, JSON.stringify(profile));
+    return profile;
+}
+
+export function deleteUserProfile(db: Database): UserProfile {
+    db.prepare("DELETE FROM app_state WHERE key = ?").run(USER_PROFILE_KEY);
+    return { ...DEFAULT_USER_PROFILE, avatar: { ...DEFAULT_USER_PROFILE.avatar } };
 }
 
 // ── Sessions ────────────────────────────────────────────────────────

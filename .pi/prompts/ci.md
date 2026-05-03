@@ -3,11 +3,16 @@ description: Commit to git
 argument-hint: "[instructions]"
 ---
 
-Commit code to git. Follow extra instructions: $ARGUMENTS
+Commit code to git.
+Follow extra instructions:
+$ARGUMENTS
 
-Cross reference tickets/specs/issues in .system. Format as simple markdown. No
-fluff. Search pi session history to determine what happened. Adjust .gitignore
-if needed. Try to leave no files untracked/modified.
+Cross reference tickets/specs/issues in .system.
+Format as simple markdown.
+No fluff.
+Search pi session history to determine what happened.
+Adjust .gitignore if needed.
+Try to leave no files untracked/modified.
 
 Rules for commit messages:
 
@@ -72,11 +77,5 @@ Now the tests work! One hour of my life I won't get back..
 
 ## Git State
 
-```sh
-!{
-    git status --short --branch &&
-    git log --oneline --decorate -5 &&
-    git diff --stat &&
-    git diff --cached --stat
- }
-```
+!{ git status --short --branch && git log --oneline --decorate -5 && git diff
+--stat && git diff --cached --stat }

@@ -1,4 +1,4 @@
-# HG-SPEC-005: Local draft + UI state persistence
+# HG-SPEC-005: DB-first draft + UI state persistence
 
 **Status:** Open
 
@@ -12,11 +12,11 @@
 
 ## Goal
 
-Treat user input as precious. Preserve drafts and useful UI state across reloads/crashes while keeping canonical conversation/tool state on the server.
+Treat user input as precious. Preserve drafts and useful UI state across reloads/crashes while keeping canonical state in SQLite.
 
 ## Verdict status
 
-**Revised after devil review.** State ownership, server/client merge, draft IDs, and Create-history dependency are now explicit.
+**Revised for DB-first state.** Durable app state belongs in DB. `localStorage` is allowed only for exceptional client-only hints that are not app truth.
 
 ## User principle
 
@@ -26,28 +26,20 @@ Treat user input as precious. Preserve drafts and useful UI state across reloads
 
 - Create draft clearing after tool success depends on `HG-SPEC-006` tool input history IDs.
 - Server-side thinking persistence requires DB/history changes.
-- Historical media tool-result id bugs are fixed; keep regression coverage around tool success signals.
+- Profile fields/avatar are DB-owned by `HG-SPEC-003`.
+- Active session/bootstrap state is DB-owned by `HG-SPEC-007`.
 
 ## State ownership
 
-### Client-owned state (`localStorage`)
+### DB-owned state
 
-State that exists before server acceptance or only affects local UI:
+State that should survive reload, browser localStorage clearing, or normal single-user use:
 
-- unsent chat draft
-- unsent Create form drafts
+- chat draft
+- Create form drafts
 - selected Create tab
-- active modal/tab UI preferences
-- in-progress stream scratch before server confirms/persists it
-- recent client-visible error toast with TTL
+- active modal/tab UI preferences that matter after reload
 - profile fields/avatar from `HG-SPEC-003`
-
-Client-owned state must not be required for server correctness.
-
-### Server-owned state (SQLite/history)
-
-State that is part of conversation truth or generated content:
-
 - accepted user messages
 - assistant text
 - assistant thinking blocks after emitted/accepted
@@ -56,80 +48,97 @@ State that is part of conversation truth or generated content:
 - tool input history from `HG-SPEC-006`
 - usage/quota counters
 
-Server-owned state is restored via `/api/history`, `/assets`, and `/api/create-history`, not permanently duplicated in `localStorage`.
+Restore DB-owned state via `/api/state`, `/api/history`, `/assets`, and future draft/profile/create-history routes.
 
-### Shared/bridged state
+### Allowed localStorage exceptions
 
-Some state starts client-owned and becomes server-owned after handoff:
+LocalStorage may be used only for harmless client-only hints:
 
-- Chat draft → accepted user message after request completes successfully
-- Create draft → tool history item → asset/tool result success
-- In-progress thinking → server history after stream chunk/message persisted
-- Error from failed stream → client toast + server log
+- `hg_onboarding_done`
+- recent client-visible error toast with short TTL (`HG-TICKET-026`)
+- temporary in-progress stream scratch only if no DB write point exists yet (`HG-TICKET-027`)
 
-Rule: never delete client draft until server-owned successor exists and operation succeeds.
+LocalStorage must not store:
 
-## Storage key
+- session id
+- conversation id
+- active user/profile
+- assets/history identity
+- durable drafts
+- Create form history
+- generated media bytes or data URLs
 
-Namespace by session to avoid cross-session draft leaks:
+## DB draft model
+
+Keep it simple. Either use `app_state` keys or a tiny singleton table.
+
+Suggested `app_state` keys:
 
 ```text
-hallucygenie_ui_state_v1:${sessionId}
+chat_draft_json
+create_draft_json
+active_create_tab
 ```
 
-## Local state shape
+Suggested chat draft shape:
 
 ```ts
-type LocalUiState = {
+type ChatDraft = {
   version: 1;
-  sessionId: string;
+  text: string;
   updatedAt: number;
-  chatDraft: {
-    draftId: string;
-    text: string;
-    submittedAt?: number;
-    requestId?: string;
-    status: "editing" | "submitted" | "failed";
-  };
-  createDraft: {
-    draftId: string;
-    tab: "image" | "music" | "voice" | "search";
-    imagePrompt: string;
-    imageRatio: string;
-    musicPrompt: string;
-    musicLyrics: string;
-    musicInstrumental: boolean;
-    voiceText: string;
-    voiceSpeed: string;
-    searchQuery: string;
-    submittedHistoryId?: string;
-  };
-  inProgressThinking: Array<{
-    clientMessageId: string;
-    content: string;
-    open: boolean;
-    updatedAt: number;
-  }>;
-  error: {
-    message: string;
-    shownAt: number;
-    dismissed: boolean;
-  } | null;
+  status: "editing" | "submitted" | "failed";
+  requestId?: string;
 };
 ```
 
-## Persisted client state
+Suggested Create draft shape:
+
+```ts
+type CreateDraft = {
+  version: 1;
+  tab: "image" | "music" | "voice" | "search";
+  imagePrompt: string;
+  imageRatio: string;
+  musicPrompt: string;
+  musicLyrics: string;
+  musicInstrumental: boolean;
+  voiceText: string;
+  voiceSpeed: string;
+  searchQuery: string;
+  submittedHistoryId?: string;
+  updatedAt: number;
+};
+```
+
+## APIs
+
+Minimum routes:
+
+```text
+GET /api/state          → active session metadata + small UI state
+GET /api/draft/chat     → chat draft
+PUT /api/draft/chat     → save chat draft
+DELETE /api/draft/chat  → clear chat draft
+GET /api/draft/create   → create draft
+PUT /api/draft/create   → save create draft
+DELETE /api/draft/create→ clear create draft
+```
+
+Use direct DB helpers. No state manager.
+
+## Persisted state
 
 ### 1. Main chat input
 
 Persist:
 
 - `#chat-input` value
-- draft id/status
+- status/request id where useful
 
 Restore on page load before user starts typing.
 
-Clear only after stream completes with `done` and no error. If stream starts then fails, restore/keep draft as failed/submitted retryable text.
+Clear only after stream completes with `done` and no error. If stream starts then fails, keep draft as failed/submitted retryable text.
 
 ### 2. Create popup inputs
 
@@ -144,7 +153,7 @@ Persist all Create modal fields:
 - voice text
 - speed
 - search query
-- any future Create params
+- future Create params
 
 Clear only the submitted form after matching tool history item is `succeeded`.
 
@@ -152,19 +161,15 @@ Clear only the submitted form after matching tool history item is `succeeded`.
 
 Durable completed thinking belongs to server history.
 
-Local state stores only in-progress thinking as crash/reload protection:
-
-- thinking text emitted during active stream
-- `<details>` open/closed state
-- client message id
+Temporary in-progress thinking can use a client scratch only until server persistence exists. If kept locally, it must be capped and short-lived.
 
 ### 4. Error messages
 
-Persist latest user-visible error:
+Persist latest user-visible error as local client hint:
 
 - message
 - timestamp
-- dismissed flag
+- dismissed flag if implemented
 
 On reload:
 
@@ -177,30 +182,23 @@ TTL: 10 minutes.
 
 On page load:
 
-1. Load server-owned state:
-   - `/api/history`
-   - `/assets`
-   - `/api/create-history`
-2. Load client-owned state from session-scoped `localStorage`.
-3. Merge carefully:
-   - never duplicate a draft already accepted in server history
-   - never overwrite non-empty DOM input
-   - keep failed/unsent drafts
-   - keep recent client errors within TTL
-   - clear Create form only if matching history/tool success exists
+1. Load DB-owned state: `/api/state`, `/api/history`, `/assets`, draft APIs.
+2. Restore allowed client-only hints.
+3. Never duplicate a draft already accepted in server history.
+4. Never overwrite non-empty DOM input after user has typed.
+5. Clear Create form only if matching history/tool success exists.
 
-String matching alone is not enough. Use `draftId`, request id, message id, or `createHistoryId` where possible.
+String matching alone is not enough. Use request id, message id, or `createHistoryId` where possible.
 
 ## Multi-tab behavior
 
-Multiple tabs can edit same session.
+Multiple tabs can edit same active session.
 
 Simple v1 strategy:
 
-- local state has `updatedAt`
-- last write wins for empty DOM fields only
-- if current tab has dirty non-empty field, do not overwrite from storage event
-- listen to `storage` event only to update history/error indicators, not active text fields
+- DB row has `updatedAt`
+- last write wins only if current field is not dirty
+- current tab does not overwrite dirty non-empty input with stale loaded data
 
 ## Write strategy
 
@@ -220,26 +218,27 @@ Flush immediately on:
 
 ## Versioning and corruption
 
-If parse fails or version/session mismatch:
+If parse fails or version mismatch:
 
-- ignore invalid state
-- do not throw
-- optionally back up raw bad value under `hallucygenie_ui_state_bad_<timestamp>`
+- DB draft read returns explicit safe empty state or 500 per boundary decision
+- UI does not crash on safe empty state
+- invalid local hint JSON is ignored and cleared
 
 ## Size control
 
+- Cap draft text per field through UI/server validation.
 - Cap in-progress thinking per message: 20KB.
 - Cap client-side in-progress thinking messages: last 3.
 - Server history owns durable thinking retention/trimming.
 - Cap error string: 2KB.
-- Cap text drafts per field through UI validation where practical.
 
 ## Privacy
 
-- Drafts/profile are local to browser+session.
-- No cross-session sync.
+- State is local to this single-user app instance and SQLite DB.
+- Clearing browser localStorage must not delete DB profile, drafts, history, or assets.
+- No cross-device sync.
 - No visible “Clear drafts” button for this feature.
-- Removing history belongs to `HG-SPEC-006`, not draft persistence.
+- Removing history belongs to session/history specs, not draft persistence.
 
 ## UX requirements
 
@@ -255,62 +254,50 @@ If parse fails or version/session mismatch:
 
 ### Unit/frontend
 
-Add/update `test/app.test.ts`:
-
-- typing chat input saves state under session key
-- reload/init restores chat input
+- typing chat input saves draft via API
+- reload/init restores chat input from API
 - chat draft survives stream error
 - chat draft clears only on done/no-error
-- create form fields save/restore
-- selected create tab saves/restores
+- create form fields save/restore via API
+- selected create tab saves/restores via API
 - create draft clears only when matching history success exists
-- state parse failure does not crash
-- non-empty DOM value is not overwritten by restore
+- API failure does not crash
+- non-empty DOM value is not overwritten by stale restore
 - error toast saves/restores within TTL
 - expired/dismissed error ignored
-- in-progress thinking saves/restores with open state
-- caps/truncation apply
+- in-progress thinking scratch caps/truncation apply if local scratch remains
+- no durable draft/profile/session localStorage keys exist
 
 ### Backend/unit
 
+- chat draft CRUD stores normalized DB state
+- create draft CRUD stores normalized DB state
+- corrupted/oversized draft state fails loud or returns explicit safe empty per API contract
 - server history can store/return thinking blocks
 - completed thinking restored via `/api/history`
 
 ### Static
 
-- localStorage key centralized
-- no scattered ad-hoc state keys except session/profile keys
+- no `hallucygenie_session_id` writes
+- no durable draft/profile localStorage keys
+- allowed localStorage keys are documented exceptions
 
 ### E2E
 
-- fill chat input → reload → value remains
-- failed chat stream → draft remains
-- successful chat stream → draft clears
-- fill Create modal → reload → open modal → values remain
-- mocked tool success with history id → corresponding Create form clears
-- trigger/show error → reload → recent error visible
-- server history restores completed thinking blocks with mocked SSE
+- type chat draft → reload → draft remains
+- fill Create form → reload → form remains
+- clear localStorage → DB-backed draft/profile state remains
+- send message successfully → chat draft clears after server success
+- failed stream keeps retryable draft
 
 ## Acceptance criteria
 
-- [ ] Main chat draft survives reload.
-- [ ] Chat draft clears only after successful stream completion.
-- [ ] Create modal drafts survive reload.
-- [ ] Selected Create tab survives reload.
-- [ ] Create form draft clears only after corresponding asset/tool success.
-- [ ] Completed thinking blocks persist in server history.
-- [ ] In-progress thinking has local crash protection.
-- [ ] Recent error survives reload with TTL.
-- [ ] Dismissed/expired error does not reappear.
-- [ ] Invalid stored state does not crash app.
-- [ ] Storage writes are debounced/flushed on unload.
-- [ ] Session-scoped keys prevent cross-session draft leaks.
+- [ ] Chat draft is DB-backed.
+- [ ] Create draft is DB-backed.
+- [ ] Durable profile/draft/session state is not in localStorage.
+- [ ] Allowed localStorage exceptions are documented and tested.
+- [ ] Reload restores DB-backed state.
+- [ ] Clearing localStorage does not delete DB-backed state.
 - [ ] `just check` passes.
 - [ ] `just test-unit` passes.
 - [ ] `just test-e2e` passes.
-
-## Decisions
-
-1. Successful Create submit clears only that form after asset/tool generation succeeds.
-2. Thinking blocks persist in server message history; frontend local state only protects in-progress edge cases.
-3. No visible “Clear drafts” button.

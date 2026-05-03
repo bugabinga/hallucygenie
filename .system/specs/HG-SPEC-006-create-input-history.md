@@ -67,11 +67,11 @@ Reason:
 - includes chat/agent tool calls that never touched Create UI
 - avoids localStorage becoming canonical archive
 
-### Client-owned draft cache
+### Draft cache
 
-`localStorage` may keep unsent or recently submitted draft fallback before server confirms.
+Unsent Create drafts are DB-owned by `HG-SPEC-005`. Do not use localStorage as a durable fallback.
 
-Server wins during merge.
+Server state wins during merge.
 
 ## Data model
 

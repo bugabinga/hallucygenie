@@ -594,6 +594,53 @@ async function runE2ETests(): Promise<void> {
         results,
     );
 
+    // Test 18: Profile saves via DB and survives localStorage clearing
+    await runTest(
+        "profile saves via DB and survives localStorage clearing",
+        async () => {
+            const page = await browser!.newPage();
+            await waitForApp(page, { dismissOnboarding: true });
+
+            const initialProfileLoad = page.waitForResponse(
+                (res) => res.url().includes("/api/profile") && res.request().method() === "GET",
+            );
+            await page.click("#profile-btn");
+            await expectVisible(page, "#profile-modal");
+            await initialProfileLoad;
+            await page.fill("#profile-username", "GamerKid");
+            await page.fill("#profile-interests", "Minecraft");
+            await page.fill("#profile-avatar", "🦊");
+            await page.click("#profile-form button[type='submit']");
+            await expectHidden(page, "#profile-modal");
+
+            await page.evaluate(() => localStorage.clear());
+            await page.reload();
+            await waitForAppReady(page);
+            await page.evaluate(() => {
+                localStorage.setItem("hg_onboarding_done", "1");
+                const onboarding = document.getElementById("onboarding");
+                if (onboarding) onboarding.hidden = true;
+            });
+            const reloadedProfileLoad = page.waitForResponse(
+                (res) => res.url().includes("/api/profile") && res.request().method() === "GET",
+            );
+            await page.click("#profile-btn");
+            await expectVisible(page, "#profile-modal");
+            await reloadedProfileLoad;
+            const username = await page.locator("#profile-username").inputValue();
+            const interests = await page.locator("#profile-interests").inputValue();
+            const avatar = await page.locator("#profile-avatar").inputValue();
+            assertEqual(username, "GamerKid", "Profile username persisted");
+            assertEqual(interests, "Minecraft", "Profile interests persisted");
+            assertEqual(avatar, "🦊", "Profile avatar persisted");
+
+            await page.click("#profile-reset");
+            await expectHidden(page, "#profile-modal");
+            await page.close();
+        },
+        results,
+    );
+
     // ── Report ────────────────────────────────────────────────────────
 
     console.log();

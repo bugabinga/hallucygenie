@@ -946,6 +946,11 @@ import {
     $,
     createElement,
     renderUserMessage,
+    renderProfileAvatar,
+    normalizedProfileFromForm,
+    fetchProfile,
+    putProfile,
+    deleteProfile,
     renderAssistantMessage,
     renderSteerMessage,
     renderToolCardLoading,
@@ -988,6 +993,7 @@ function setupDOM(): { win: any; doc: any; errors: string[] } {
           <span class="quota-item" data-type="speech">🎙️ <span class="quota-used">—</span></span>
           <span class="quota-item" data-type="music">🎵 <span class="quota-used">—</span></span>
         </button>
+        <button id="profile-btn" data-avatar="🎮">🎮 Profile</button>
         <button id="create-btn">✨ Create</button>
       </div>
     </header>
@@ -1036,6 +1042,23 @@ function setupDOM(): { win: any; doc: any; errors: string[] } {
       <span id="error-toast-message"></span>
     </div>
     <button id="steer-close">×</button>
+    <div id="profile-modal" role="dialog" aria-modal="true" aria-labelledby="profile-title" hidden>
+      <div class="profile-backdrop"></div>
+      <div class="profile-modal-content">
+        <h2 id="profile-title">🎮 Profile</h2>
+        <button id="profile-close">✕</button>
+        <form id="profile-form">
+          <input id="profile-username" />
+          <textarea id="profile-interests"></textarea>
+          <textarea id="profile-hates"></textarea>
+          <textarea id="profile-favorites"></textarea>
+          <input id="profile-avatar" />
+          <button type="submit">Save</button>
+          <button id="profile-reset" type="button">Reset</button>
+          <button id="profile-generate" type="button" disabled>Generate avatar 🎨</button>
+        </form>
+      </div>
+    </div>
     <div id="create-modal" role="dialog" aria-modal="true" aria-labelledby="create-title" hidden>
       <div class="create-backdrop"></div>
       <div class="create-modal-content">
@@ -1605,6 +1628,105 @@ describe("appendText with thinking blocks (via sendMessage)", () => {
         // Should also have regular content
         const assistantContent = doc.querySelectorAll(".message-content");
         assert.ok(assistantContent.length > 0);
+    });
+});
+
+describe("profile frontend helpers", () => {
+    it("normalizes profile form without localStorage", () => {
+        setupDOM();
+        const before = (globalThis as any).localStorage.length;
+        const profile = normalizedProfileFromForm({
+            username: "  GamerKid  ",
+            interests: " Minecraft ",
+            hates: " spam ",
+            favorites: "redstone",
+            avatar: "🦊",
+        });
+
+        assert.equal(profile.username, "GamerKid");
+        assert.equal(profile.interests, "Minecraft");
+        assert.equal(profile.avatar.value, "🦊");
+        assert.equal((globalThis as any).localStorage.length, before);
+    });
+
+    it("rejects data URL avatar before save", () => {
+        setupDOM();
+        assert.throws(
+            () =>
+                normalizedProfileFromForm({
+                    username: "GamerKid",
+                    interests: "",
+                    hates: "",
+                    favorites: "",
+                    avatar: "data:image/png;base64,abc",
+                }),
+            /Avatar data URLs are not allowed/,
+        );
+    });
+
+    it("renders emoji and asset avatars with fallback", () => {
+        setupDOM();
+        const emoji = renderProfileAvatar({
+            version: 1,
+            username: "",
+            interests: "",
+            hates: "",
+            favorites: "",
+            avatar: { type: "emoji", value: "🦊" },
+            updatedAt: 1,
+        });
+        assert.equal(emoji.textContent, "🦊");
+
+        const asset = renderProfileAvatar({
+            version: 1,
+            username: "",
+            interests: "",
+            hates: "",
+            favorites: "",
+            avatar: { type: "asset", value: "asset_123abc" },
+            updatedAt: 1,
+        });
+        assert.equal(asset.querySelector("img")?.getAttribute("src"), "/asset/asset_123abc");
+    });
+
+    it("profile API helpers use DB routes", async () => {
+        setupDOM();
+        const calls: Array<{ url: string; method: string }> = [];
+        (globalThis as any).fetch = (url: string, init?: RequestInit) => {
+            calls.push({ url, method: init?.method ?? "GET" });
+            return Promise.resolve(
+                new Response(
+                    JSON.stringify({
+                        version: 1,
+                        username: "GamerKid",
+                        interests: "",
+                        hates: "",
+                        favorites: "",
+                        avatar: { type: "emoji", value: "🎮" },
+                        updatedAt: 1,
+                    }),
+                    { status: 200, headers: { "Content-Type": "application/json" } },
+                ),
+            );
+        };
+
+        await fetchProfile();
+        await putProfile(
+            normalizedProfileFromForm({
+                username: "x",
+                interests: "",
+                hates: "",
+                favorites: "",
+                avatar: "🎮",
+            }),
+        );
+        await deleteProfile();
+
+        assert.deepEqual(calls, [
+            { url: "/api/profile", method: "GET" },
+            { url: "/api/profile", method: "PUT" },
+            { url: "/api/profile", method: "DELETE" },
+        ]);
     });
 });
 

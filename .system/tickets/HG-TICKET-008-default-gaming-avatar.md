@@ -7,12 +7,12 @@
 
 ## Goal
 
-Replace default user avatar `👤` with `🎮` everywhere user/steer bubbles render without a profile avatar.
+Replace default normal user avatar `👤` with `🎮`.
 
 ## Scope
 
-- Update frontend default avatar constant/rendering.
-- Keep assistant avatar unchanged.
+- Update frontend default user avatar constant/rendering.
+- Keep assistant and steering avatars unchanged.
 - No profile modal in this ticket.
 
 ## Tests
@@ -23,7 +23,7 @@ Replace default user avatar `👤` with `🎮` everywhere user/steer bubbles ren
 ## Implementation
 
 - Added a frontend `USER_AVATAR` default.
-- User bubble rendering now uses `🎮`; assistant/steer unchanged.
+- User bubble rendering now uses `🎮`; assistant and steering bubbles unchanged.
 
 ## Validation
 

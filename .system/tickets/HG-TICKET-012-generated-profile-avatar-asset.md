@@ -14,13 +14,13 @@ Optional: generate a profile avatar image and store only a server asset ref.
 
 - Button in profile modal: generate avatar.
 - Uses existing image tool/asset path.
-- Profile stores asset id/ref only.
+- DB profile stores asset id/ref only.
 - Bubble can render small local asset image.
-- No data URLs in localStorage or prompt.
+- No data URLs in DB profile, localStorage, or prompt.
 
 ## Tests
 
-- Frontend unit: profile stores asset ref only.
+- Frontend unit: profile API stores asset ref only.
 - Integration: generated avatar asset is saved in assets.
 - DB invariant: no raw image bytes in messages/profile state.
 

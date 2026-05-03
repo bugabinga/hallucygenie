@@ -2178,7 +2178,16 @@ function renderThinkingBlock(text) {
 var LEGACY_SESSION_KEY = "hallucygenie_session_id";
 var RECENT_ERROR_KEY = "hallucygenie_recent_error";
 var RECENT_ERROR_TTL_MS = 10 * 60 * 1e3;
-var USER_AVATAR = "\u{1F3AE}";
+var DEFAULT_USER_AVATAR = "\u{1F3AE}";
+var currentProfile = {
+  version: 1,
+  username: "",
+  interests: "",
+  hates: "",
+  favorites: "",
+  avatar: { type: "emoji", value: DEFAULT_USER_AVATAR },
+  updatedAt: 0
+};
 function clearLegacySessionId() {
   localStorage.removeItem(LEGACY_SESSION_KEY);
 }
@@ -2204,6 +2213,50 @@ async function sendSteer(message) {
   if (!resp.ok) {
     throw new Error(`Steer failed: ${resp.status}`);
   }
+}
+async function fetchProfile() {
+  const resp = await fetch("/api/profile");
+  if (!resp.ok) throw new Error(`Failed to load profile: ${resp.status}`);
+  return await resp.json();
+}
+async function putProfile(profile) {
+  const resp = await fetch("/api/profile", {
+    method: "PUT",
+    headers: createApiHeaders(),
+    body: JSON.stringify(profile)
+  });
+  if (!resp.ok) throw new Error(`Failed to save profile: ${resp.status}`);
+  return await resp.json();
+}
+async function deleteProfile() {
+  const resp = await fetch("/api/profile", { method: "DELETE", headers: createApiHeaders() });
+  if (!resp.ok) throw new Error(`Failed to reset profile: ${resp.status}`);
+  return await resp.json();
+}
+function avatarEmoji(value) {
+  const trimmed = Array.from(value.trim()).slice(0, 4).join("");
+  if (!trimmed || /^data:/i.test(trimmed)) return DEFAULT_USER_AVATAR;
+  return trimmed;
+}
+function normalizedProfileFromForm(form) {
+  if (/^data:/i.test(form.avatar.trim())) throw new Error("Avatar data URLs are not allowed");
+  return {
+    version: 1,
+    username: Array.from(form.username.trim()).slice(0, 40).join(""),
+    interests: Array.from(form.interests.trim()).slice(0, 300).join(""),
+    hates: Array.from(form.hates.trim()).slice(0, 300).join(""),
+    favorites: Array.from(form.favorites.trim()).slice(0, 300).join(""),
+    avatar: { type: "emoji", value: avatarEmoji(form.avatar) },
+    updatedAt: Date.now()
+  };
+}
+function setCurrentProfile(profile) {
+  currentProfile = profile;
+  const btn = document.querySelector("#profile-btn");
+  if (!btn) return;
+  const label = profile.avatar.type === "emoji" ? profile.avatar.value : "\u{1F5BC}\uFE0F";
+  btn.dataset.avatar = label;
+  btn.textContent = `${label} Profile`;
 }
 function parseSSELine(line) {
   if (line.startsWith("event:")) {
@@ -2261,9 +2314,27 @@ function createElement(tag2, attrs, children) {
   }
   return el;
 }
+function renderProfileAvatar(profile = currentProfile) {
+  const avatar = createElement("div", { class: "message-avatar" });
+  if (profile.avatar.type === "asset" && /^asset_[0-9a-f-]+$/i.test(profile.avatar.value)) {
+    const img = createElement("img", {
+      class: "profile-avatar-img",
+      src: `/asset/${profile.avatar.value}`,
+      alt: "",
+      loading: "lazy"
+    });
+    img.addEventListener("error", () => {
+      avatar.textContent = DEFAULT_USER_AVATAR;
+    });
+    avatar.appendChild(img);
+    return avatar;
+  }
+  avatar.textContent = avatarEmoji(profile.avatar.value);
+  return avatar;
+}
 function renderUserMessage(content) {
   const msg = createElement("div", { class: "message message--user" });
-  const avatar = createElement("div", { class: "message-avatar" }, [USER_AVATAR]);
+  const avatar = renderProfileAvatar();
   const bubble = createElement("div", { class: "message-bubble" });
   const contentEl = createElement("div", { class: "message-content" });
   contentEl.innerHTML = renderMarkdown(content);
@@ -2847,6 +2918,94 @@ function init() {
     "aria-label",
     `Connection status: ${connectionStatus.title || "Connected"}`
   );
+  const profileBtn = $("#profile-btn");
+  const profileModal = $("#profile-modal");
+  const profileClose = $("#profile-close");
+  const profileBackdrop = profileModal.querySelector(".profile-backdrop");
+  const profileForm = $("#profile-form");
+  const profileReset = $("#profile-reset");
+  const profileUsername = $("#profile-username");
+  const profileInterests = $("#profile-interests");
+  const profileHates = $("#profile-hates");
+  const profileFavorites = $("#profile-favorites");
+  const profileAvatar = $("#profile-avatar");
+  let profileModalReturnFocus = null;
+  function fillProfileForm(profile) {
+    profileUsername.value = profile.username;
+    profileInterests.value = profile.interests;
+    profileHates.value = profile.hates;
+    profileFavorites.value = profile.favorites;
+    profileAvatar.value = profile.avatar.type === "emoji" ? profile.avatar.value : DEFAULT_USER_AVATAR;
+  }
+  async function loadProfileIntoForm() {
+    const profile = await fetchProfile();
+    setCurrentProfile(profile);
+    fillProfileForm(profile);
+  }
+  function getProfileModalFocusable() {
+    return Array.from(
+      profileModal.querySelectorAll(
+        'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
+      )
+    ).filter((el) => !el.hasAttribute("disabled") && !el.closest("[hidden]"));
+  }
+  function openProfileModal() {
+    profileModalReturnFocus = document.activeElement;
+    profileModal.hidden = false;
+    profileClose.focus();
+    void loadProfileIntoForm().catch(() => showError("Failed to load profile \u{1F615}"));
+  }
+  function closeProfileModal() {
+    profileModal.hidden = true;
+    profileModalReturnFocus?.focus();
+    profileModalReturnFocus = null;
+  }
+  function trapProfileModalFocus(e) {
+    if (e.key !== "Tab" || profileModal.hidden) return;
+    const focusable = getProfileModalFocusable();
+    if (focusable.length === 0) return;
+    const first = focusable[0];
+    const last = focusable[focusable.length - 1];
+    if (e.shiftKey && document.activeElement === first) {
+      e.preventDefault();
+      last.focus();
+    } else if (!e.shiftKey && document.activeElement === last) {
+      e.preventDefault();
+      first.focus();
+    }
+  }
+  profileBtn.addEventListener("click", openProfileModal);
+  profileClose.addEventListener("click", closeProfileModal);
+  profileBackdrop.addEventListener("click", closeProfileModal);
+  profileModal.addEventListener("keydown", trapProfileModalFocus);
+  profileForm.addEventListener("submit", (e) => {
+    e.preventDefault();
+    let profile;
+    try {
+      profile = normalizedProfileFromForm({
+        username: profileUsername.value,
+        interests: profileInterests.value,
+        hates: profileHates.value,
+        favorites: profileFavorites.value,
+        avatar: profileAvatar.value
+      });
+    } catch (err) {
+      showError(err instanceof Error ? err.message : "Invalid profile");
+      return;
+    }
+    void putProfile(profile).then((saved) => {
+      setCurrentProfile(saved);
+      fillProfileForm(saved);
+      closeProfileModal();
+    }).catch(() => showError("Failed to save profile \u{1F615}"));
+  });
+  profileReset.addEventListener("click", () => {
+    void deleteProfile().then((profile) => {
+      setCurrentProfile(profile);
+      fillProfileForm(profile);
+      closeProfileModal();
+    }).catch(() => showError("Failed to reset profile \u{1F615}"));
+  });
   form.addEventListener("submit", (e) => {
     e.preventDefault();
     if (input.value.trim()) {
@@ -2867,6 +3026,7 @@ function init() {
   document.addEventListener("keydown", (e) => {
     if (e.key === "Escape") {
       closeLightbox();
+      if (!profileModal.hidden) closeProfileModal();
       if (!createModal.hidden) closeCreateModal();
     }
   });
@@ -2910,7 +3070,7 @@ function init() {
     openCreateModal();
   });
   $("#onboarding-done").addEventListener("click", dismissOnboarding);
-  loadHistory();
+  void fetchProfile().then(setCurrentProfile).catch(() => void 0).finally(() => void loadHistory());
   updateQuotaBadge();
   const createBtn = $("#create-btn");
   const createModal = $("#create-modal");
@@ -3034,22 +3194,28 @@ if (typeof document !== "undefined" && document.readyState !== "loading") {
 }
 export {
   $,
+  DEFAULT_USER_AVATAR,
   autoResizeInput,
   clearLegacySessionId,
   closeLightbox,
   createApiHeaders,
   createElement,
+  deleteProfile,
   fetchHistory,
+  fetchProfile,
   getToolEmoji,
   handleInputChange,
   init,
   loadAssets,
   loadHistory,
+  normalizedProfileFromForm,
   openLightbox,
   parseSSEChunk,
   parseSSELine,
+  putProfile,
   renderAssistantMessage,
   renderMarkdown,
+  renderProfileAvatar,
   renderSteerMessage,
   renderThinkingBlock,
   renderToolCardLoading,

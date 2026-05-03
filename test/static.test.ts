@@ -141,6 +141,16 @@ describe("index.html health", () => {
         assert.equal(modal?.getAttribute("aria-labelledby"), "create-title");
     });
 
+    it("profile button and modal have accessible labels", () => {
+        const doc = parseIndex();
+        assert.equal(doc.querySelector("#profile-btn")?.getAttribute("aria-label"), "Open profile");
+        const modal = doc.querySelector("#profile-modal") as HTMLElement | null;
+        assert.equal(modal?.getAttribute("role"), "dialog");
+        assert.equal(modal?.getAttribute("aria-modal"), "true");
+        assert.equal(modal?.getAttribute("aria-labelledby"), "profile-title");
+        assert.ok(doc.querySelector("#profile-generate")?.hasAttribute("disabled"));
+    });
+
     it("connection status exposes accessible status", () => {
         const doc = parseIndex();
         const status = doc.querySelector("#connection-status") as HTMLElement | null;
@@ -328,6 +338,12 @@ describe("frontend session identity health", () => {
     it("builds active-session asset URLs without session query", () => {
         assert.match(appTs, /return `\/asset\/\$\{id\}`/);
         assert.equal(appTs.includes("?s="), false);
+    });
+
+    it("does not write profile state to localStorage", () => {
+        assert.equal(appTs.includes("hallucygenie_user_profile_v1"), false);
+        assert.doesNotMatch(appTs, /localStorage\.setItem\([^\)]*profile/i);
+        assert.match(appTs, /\/api\/profile/);
     });
 });
 
