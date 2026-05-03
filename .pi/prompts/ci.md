@@ -7,7 +7,7 @@ Commit code to git.
 Follow extra instructions:
 $ARGUMENTS
 
-Cross reference tickets/specs/issues in .system.
+Cross reference specs/issues in .system.
 Format as simple markdown.
 No fluff.
 Search pi session history to determine what happened.
