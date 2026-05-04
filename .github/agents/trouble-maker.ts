@@ -30,9 +30,6 @@ try {
 }
 
 const piFlags = ["--no-session", "--no-prompt-templates"];
-// No per-pass timeout — rely on job-level timeout-minutes (25m)
-// Per-pass timeout was killing analyze before the model finished.
-const timeout = 0;
 
 // --- Pass 1: analyze ---
 console.log("\n=== Pass 1: Analyze (zai/glm-5.1) ===\n");
@@ -50,26 +47,18 @@ runPi(
         "high",
         "--tools",
         "read,write,grep,find,ls",
-        `Analyst. Write tool only. Target: /tmp/pi-agent-findings.md
+        `Read src/. Find bugs only (crashes, wrong behavior, null derefs, races).
 
-KNOWN (skip)
-${existingIssues || "none"}
+SKIP these known issues: ${existingIssues || "none"}
 
-JOB
-Read all src/. Hunt real bugs:
-- null/undefined deref, unhandled rejections
-- wrong logic, race conditions, missing error handling
-- off-by-one, wrong data shape assumptions
+Write /tmp/pi-agent-findings.md NOW using the write tool.
 
-Write findings to /tmp/pi-agent-findings.md.
+If no bugs: write exactly "NO_ISSUES_FOUND" and nothing else.
+If bugs: write one line per bug: "FILE:LINE — DESCRIPTION — FIX"
 
-NO BUGS -> one word: NO_ISSUES_FOUND
-BUGS -> per bug: file, line, wrong, fix. No intro. No summary.
-
-Not style. Not naming. Not "could be better". Only crashes and wrong behavior.
-No talk. No modify. Read. Write file. Done.`,
+Do not explain. Do not summarize. Just write the file.`,
     ],
-    timeout,
+    0,
 );
 
 const findings = readFindings("trouble-maker");
@@ -96,19 +85,14 @@ runPi(
         "off",
         "--tools",
         "read,edit,write,bash,grep,find",
-        `Coder. Fix bugs.
+        `Fix these bugs:
 
-BUGS
 ${findings}
 
-JOB
-Fix every bug. Add tests for fixes.
-Only touch src/ and test/. Never touch .system/.
-Write PR body to /tmp/pi-agent-pr-body.md.
-
-No talk. Read bugs. Fix code. Run tests. Write PR body. Done.`,
+Fix each one. Add tests. Only touch src/ and test/. Never touch .system/.
+Write PR body to /tmp/pi-agent-pr-body.md.`,
     ],
-    timeout,
+    0,
 );
 
 try {
