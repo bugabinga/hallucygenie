@@ -47,6 +47,8 @@ jobs:
                   MINIMAX_API_KEY: ${{ secrets.MINIMAX_API_KEY }}
             - name: Create PR if changes
               run: |
+                  git config user.name "speck-ferkel"
+                  git config user.email "speck-ferkel@bugabinga.net"
                   if ! git rev-parse --git-dir >/dev/null 2>&1; then
                       echo "No git repo (act local run) — skipping PR"
                       exit 0
@@ -93,6 +95,8 @@ jobs:
                   MINIMAX_API_KEY: ${{ secrets.MINIMAX_API_KEY }}
             - name: Create PR if changes
               run: |
+                  git config user.name "trouble-maker"
+                  git config user.email "trouble-maker@bugabinga.net"
                   if ! git rev-parse --git-dir >/dev/null 2>&1; then
                       echo "No git repo (act local run) — skipping PR"
                       exit 0
@@ -138,6 +142,8 @@ jobs:
                   MINIMAX_API_KEY: ${{ secrets.MINIMAX_API_KEY }}
             - name: Create PR if changes
               run: |
+                  git config user.name "slop-chopper"
+                  git config user.email "slop-chopper@bugabinga.net"
                   if ! git rev-parse --git-dir >/dev/null 2>&1; then
                       echo "No git repo (act local run) — skipping PR"
                       exit 0

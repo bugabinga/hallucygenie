@@ -30,7 +30,9 @@ try {
 }
 
 const piFlags = ["--no-session", "--no-prompt-templates"];
-const timeout = 10 * 60 * 1000;
+// No per-pass timeout — rely on job-level timeout-minutes (25m)
+// Per-pass timeout was killing analyze before the model finished.
+const timeout = 0;
 
 // --- Pass 1: analyze ---
 console.log("\n=== Pass 1: Analyze (zai/glm-5.1) ===\n");
