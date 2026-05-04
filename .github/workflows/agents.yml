@@ -28,6 +28,7 @@ jobs:
         name: 🐖 speck ferkel
         runs-on: ubuntu-latest
         timeout-minutes: 15
+        environment: AI api keys
         steps:
             - uses: actions/checkout@v6.0.2
             - uses: oven-sh/setup-bun@v2.2.0
@@ -73,6 +74,7 @@ jobs:
         name: 🔥 trouble maker
         runs-on: ubuntu-latest
         timeout-minutes: 25
+        environment: AI api keys
         steps:
             - uses: actions/checkout@v6.0.2
             - uses: oven-sh/setup-bun@v2.2.0
@@ -117,6 +119,7 @@ jobs:
         name: 🪓 slop chopper
         runs-on: ubuntu-latest
         timeout-minutes: 15
+        environment: AI api keys
         steps:
             - uses: actions/checkout@v6.0.2
             - uses: oven-sh/setup-bun@v2.2.0
