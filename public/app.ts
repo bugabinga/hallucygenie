@@ -298,6 +298,7 @@ const TOOL_EMOJIS: Record<string, string> = {
     generate_image: "🎨",
     text_to_speech: "🎙️",
     generate_music: "🎵",
+    generate_lyrics: "📝",
 };
 
 export function getToolEmoji(name: string): string {
@@ -550,6 +551,8 @@ let currentAssistantContent: HTMLElement | null = null;
 let activeToolCards = new Map<string, HTMLElement>();
 let rawTextBuffer = ""; // raw text for markdown re-rendering
 let thinkingBuffer = ""; // accumulated thinking text from thinking events
+let lyricsWriteResolve: ((value: string) => void) | null = null; // set when "Write lyrics" is active
+let capturedLyricsText: string | null = null; // lyrics result from generate_lyrics tool
 
 // ── SSE Stream Processing ────────────────────────────────────────────
 
@@ -679,6 +682,14 @@ function handleSSEEvent(event: SSEEvent): void {
     if (eventType === "tool_result") {
         try {
             const parsed: ToolResultEvent = JSON.parse(data);
+            // Capture lyrics text for "Write lyrics for me" button flow
+            if (
+                parsed.name === "generate_lyrics" &&
+                parsed.result.type === "text" &&
+                lyricsWriteResolve
+            ) {
+                capturedLyricsText = parsed.result.content;
+            }
             const loadingCard = activeToolCards.get(parsed.id);
             const resultCard = renderToolResult(parsed.name, parsed.result);
             if (loadingCard?.isConnected) {
@@ -766,6 +777,11 @@ function scrollToBottom(): void {
 }
 
 function finishStreaming(): void {
+    // If "Write lyrics for me" was active, populate the textarea and skip chat display
+    if (lyricsWriteResolve && capturedLyricsText !== null) {
+        lyricsWriteResolve(capturedLyricsText);
+    }
+    capturedLyricsText = null;
     currentAssistantContent
         ?.querySelectorAll<HTMLElement>(".assistant-text-region.is-streaming")
         .forEach((el) => {
@@ -782,6 +798,11 @@ function finishStreaming(): void {
     rawTextBuffer = "";
     thinkingBuffer = "";
     setStreamingUI(false);
+}
+
+// Exported so init() can set/unset lyricsWriteResolve
+function setLyricsWriteResolve(fn: ((value: string) => void) | null): void {
+    lyricsWriteResolve = fn;
 }
 
 // ── UI State ─────────────────────────────────────────────────────────
@@ -992,6 +1013,7 @@ interface QuotaData {
     speech: { used: number; total: number } | null;
     image: { used: number; total: number } | null;
     music: { used: number; total: number } | null;
+    lyrics: { used: number; total: number } | null;
 }
 
 export async function updateQuotaBadge(): Promise<void> {
@@ -1342,6 +1364,27 @@ export function init(): void {
             if (lyrics) msg += `\nTool params: lyrics=${lyrics}`;
             sendMessage(msg);
         }
+    });
+
+    // "Write lyrics for me" button — calls generate_lyrics and fills the textarea
+    const writeLyricsBtn = $("#write-lyrics-btn") as HTMLButtonElement;
+    writeLyricsBtn.addEventListener("click", () => {
+        const prompt = musicPromptInput.value.trim();
+        if (!prompt) {
+            showError("Describe the music first so I can write matching lyrics! ✍️");
+            musicPromptInput.focus();
+            return;
+        }
+        writeLyricsBtn.disabled = true;
+        writeLyricsBtn.textContent = "Writing... ✨";
+        setLyricsWriteResolve((lyricsText: string) => {
+            musicLyricsInput.value = lyricsText;
+        });
+        sendMessage(`Use generate_lyrics with prompt: ${prompt}`).finally(() => {
+            writeLyricsBtn.disabled = false;
+            writeLyricsBtn.textContent = "Write lyrics for me ✨";
+            setLyricsWriteResolve(null);
+        });
     });
 
     createVoiceForm.addEventListener("submit", (e) => {

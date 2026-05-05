@@ -27,6 +27,12 @@ export interface TextToSpeechOptions {
     pitch?: number;
 }
 
+export interface GenerateLyricsOptions {
+    prompt: string;
+    genre?: string;
+    theme?: string;
+}
+
 export interface GenerateMusicOptions {
     prompt: string;
     lyrics?: string;
@@ -107,6 +113,31 @@ export function getToolDefinitions(): ToolDefinition[] {
             },
         },
         {
+            name: "generate_lyrics",
+            description:
+                "Generate kid-friendly song lyrics from a music prompt. Returns plain text lyrics ready for editing or use in music generation.",
+            input_schema: {
+                type: "object",
+                properties: {
+                    prompt: {
+                        type: "string",
+                        description:
+                            "Description or topic for the lyrics (e.g., 'a happy birthday song', 'an adventure theme').",
+                    },
+                    genre: {
+                        type: "string",
+                        description:
+                            "Optional music genre hint (e.g., 'pop', 'hip-hop', 'EDM', 'ballad').",
+                    },
+                    theme: {
+                        type: "string",
+                        description: "Optional theme hint (e.g., 'friendship', 'fun', 'courage').",
+                    },
+                },
+                required: ["prompt"],
+            },
+        },
+        {
             name: "generate_music",
             description:
                 "Generate music from a prompt. If lyrics are omitted or empty, the song is instrumental. Returns a base64-encoded MP3 audio data URL.",
@@ -184,6 +215,15 @@ export async function executeTool(
                     speed: clampNumber(args.speed, 0.5, 2),
                     volume: clampNumber(args.volume, 0, 10),
                     pitch: clampNumber(args.pitch, -12, 12),
+                },
+                apiKey,
+            );
+        case "generate_lyrics":
+            return generateLyrics(
+                {
+                    prompt: args.prompt as string,
+                    genre: args.genre as string | undefined,
+                    theme: args.theme as string | undefined,
                 },
                 apiKey,
             );
@@ -353,6 +393,63 @@ export async function textToSpeech(
             type: "error",
             content: `TTS failed: ${String(err)}`,
         };
+    }
+}
+
+/**
+ * Generate kid-friendly song lyrics from a music prompt.
+ * Calls POST /v1/lyrics_generation.
+ * Returns plain text lyrics.
+ */
+export async function generateLyrics(
+    input: string | GenerateLyricsOptions,
+    apiKey: string,
+): Promise<ToolResult> {
+    const options = typeof input === "string" ? { prompt: input } : input;
+    try {
+        const payload: Record<string, unknown> = {
+            model: "lyrics-01",
+            prompt: options.prompt,
+        };
+        if (options.genre) payload.genre = options.genre;
+        if (options.theme) payload.theme = options.theme;
+
+        const resp = await fetch(`${MINIMAX_BASE}/v1/lyrics_generation`, {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json",
+                Authorization: `Bearer ${apiKey}`,
+            },
+            body: JSON.stringify(payload),
+        });
+
+        if (!resp.ok) {
+            const errorText = await resp.text();
+            return {
+                type: "error",
+                content: `Lyrics generation API error: ${resp.status} — ${errorText}`,
+            };
+        }
+
+        const data = (await resp.json()) as {
+            data?: { lyrics?: string } | null;
+            base_resp?: { status_code?: number; status_msg?: string };
+        };
+        if (data.base_resp && data.base_resp.status_code !== 0) {
+            return {
+                type: "error",
+                content: `Lyrics generation failed: ${data.base_resp.status_msg ?? "unknown error"}`,
+            };
+        }
+
+        const lyrics = data.data?.lyrics;
+        if (!lyrics) {
+            return { type: "error", content: "Lyrics generation returned no lyrics text" };
+        }
+
+        return { type: "text", content: lyrics };
+    } catch (err) {
+        return { type: "error", content: `Lyrics generation failed: ${String(err)}` };
     }
 }
 
