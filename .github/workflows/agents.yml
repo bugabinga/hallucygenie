@@ -41,7 +41,10 @@ jobs:
                   restore-keys: ${{ runner.os }}-bun-
             - uses: taiki-e/install-action@v2.75.28
               with:
-                  tool: just,gitleaks
+                  tool: just
+            - uses: gitleaks/gitleaks-action@v2
+              env:
+                  GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
             - run: npm install -g @mariozechner/pi-coding-agent
             - run: bun install --frozen-lockfile
             - run: bun run --bun .github/agents/speck-ferkel.ts
@@ -92,7 +95,10 @@ jobs:
                   restore-keys: ${{ runner.os }}-bun-
             - uses: taiki-e/install-action@v2.75.28
               with:
-                  tool: just,gitleaks
+                  tool: just
+            - uses: gitleaks/gitleaks-action@v2
+              env:
+                  GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
             - run: npm install -g @mariozechner/pi-coding-agent
             - run: bun install --frozen-lockfile
             - run: bun run --bun .github/agents/trouble-maker.ts
@@ -142,7 +148,10 @@ jobs:
                   restore-keys: ${{ runner.os }}-bun-
             - uses: taiki-e/install-action@v2.75.28
               with:
-                  tool: just,gitleaks
+                  tool: just
+            - uses: gitleaks/gitleaks-action@v2
+              env:
+                  GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
             - run: npm install -g @mariozechner/pi-coding-agent
             - run: bun install --frozen-lockfile
             - run: bun run --bun .github/agents/slop-chopper.ts
