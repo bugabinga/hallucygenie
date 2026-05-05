@@ -2631,4 +2631,103 @@ describe("SSE parser error paths", () => {
         assert.equal(toolStartEvents[0].id, "tu_mal");
         assert.equal(ev10[ev10.length - 1].type, "done");
     });
+
+    // --- Mutation kill targets ---
+
+    it("assistant content is empty string when tool_use has no text", async () => {
+        // Kills: content: textContent || "" → content: textContent || "Stryker was here!"
+        const first = anthropicResponse(
+            toolUseResponse("tu_notxt", "web_search", '{"query":"cats"}'),
+        );
+        const second = anthropicResponse(textResponse(["Done"]));
+        let n = 0;
+        globalThis.fetch = async (url: string | URL | Request) => {
+            if (url.toString().includes("/anthropic/v1/messages"))
+                return ++n === 1 ? first : second;
+            return new Response(JSON.stringify({ data: [{ title: "result" }] }), {
+                status: 200,
+                headers: { "Content-Type": "application/json" },
+            });
+        };
+        const { events: evK1, onEvent: onK1 } = collectEvents();
+        const msgs = await runAgentLoop([{ role: "user", content: "search" }], "test-key", onK1);
+        const assistant = msgs.find((m) => m.role === "assistant");
+        assert.ok(assistant);
+        assert.equal(assistant!.content as string, "");
+    });
+
+    it("tool_result event prompt field uses first defined arg (prompt > text > topic)", async () => {
+        // Kills: (args.prompt ?? args.text ?? args.topic) → (args.prompt && args.text && args.topic)
+        const first = anthropicResponse(
+            toolUseResponse("tu_prompt", "generate_image", '{"prompt":"a cat"}'),
+        );
+        const second = anthropicResponse(textResponse(["Done"]));
+        let n = 0;
+        globalThis.fetch = async (url: string | URL | Request) => {
+            if (url.toString().includes("/anthropic/v1/messages"))
+                return ++n === 1 ? first : second;
+            return new Response(
+                JSON.stringify({ data: { image_urls: ["https://example.com/cat.png"] } }),
+                { status: 200, headers: { "Content-Type": "application/json" } },
+            );
+        };
+        const { events: evK2, onEvent: onK2 } = collectEvents();
+        await runAgentLoop([{ role: "user", content: "draw" }], "test-key", onK2);
+        const toolResult = evK2.find((e) => e.type === "tool_result") as {
+            type: "tool_result";
+            prompt?: string;
+        };
+        assert.ok(toolResult);
+        assert.equal(toolResult.prompt, "a cat");
+    });
+
+    it("tool_result prompt falls back to text arg when prompt is absent", async () => {
+        // Kills: (args.prompt ?? args.text) → (args.prompt && args.text)
+        const first = anthropicResponse(
+            toolUseResponse("tu_text", "text_to_speech", '{"text":"hello world"}'),
+        );
+        const second = anthropicResponse(textResponse(["Done"]));
+        let n = 0;
+        globalThis.fetch = async (url: string | URL | Request) => {
+            if (url.toString().includes("/anthropic/v1/messages"))
+                return ++n === 1 ? first : second;
+            return new Response(JSON.stringify({ data: { audio: "base64data" } }), {
+                status: 200,
+                headers: { "Content-Type": "application/json" },
+            });
+        };
+        const { events: evK3, onEvent: onK3 } = collectEvents();
+        await runAgentLoop([{ role: "user", content: "speak" }], "test-key", onK3);
+        const toolResult = evK3.find((e) => e.type === "tool_result") as {
+            type: "tool_result";
+            prompt?: string;
+        };
+        assert.ok(toolResult);
+        assert.equal(toolResult.prompt, "hello world");
+    });
+
+    it("tool_result prompt falls back to topic arg when prompt and text are absent", async () => {
+        // Kills: (args.prompt ?? args.text ?? args.topic) → && chains
+        const first = anthropicResponse(
+            toolUseResponse("tu_topic", "generate_music", '{"topic":"space jazz"}'),
+        );
+        const second = anthropicResponse(textResponse(["Done"]));
+        let n = 0;
+        globalThis.fetch = async (url: string | URL | Request) => {
+            if (url.toString().includes("/anthropic/v1/messages"))
+                return ++n === 1 ? first : second;
+            return new Response(JSON.stringify({ data: { audio: "base64music" } }), {
+                status: 200,
+                headers: { "Content-Type": "application/json" },
+            });
+        };
+        const { events: evK4, onEvent: onK4 } = collectEvents();
+        await runAgentLoop([{ role: "user", content: "music" }], "test-key", onK4);
+        const toolResult = evK4.find((e) => e.type === "tool_result") as {
+            type: "tool_result";
+            prompt?: string;
+        };
+        assert.ok(toolResult);
+        assert.equal(toolResult.prompt, "space jazz");
+    });
 });
