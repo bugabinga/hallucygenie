@@ -1451,6 +1451,66 @@ describe("Integration: chat with agent loop + persistence", () => {
         }
     });
 
+    it("saves new assistant response to DB when session has existing history", async () => {
+        // Regression test: when session has existing messages, existingCount must be
+        // based on contextMessages.length (trimmed), not messages.length (full).
+        // If based on messages.length and trimming occurred, the save loop would have
+        // existingCount > finalMessages.length and never execute.
+        const sessionId = "context-trim-session-" + Date.now();
+
+        // First request: establish session with user + assistant messages
+        const firstSse = anthropicTextSse(["First response."]);
+        const originalFetch = globalThis.fetch;
+        globalThis.fetch = async () => anthropicResponse(firstSse);
+
+        try {
+            const req1 = makeRequest(
+                "POST",
+                "/api/chat",
+                { messages: [{ role: "user", content: "first message" }] },
+                { "X-Session-Id": sessionId },
+            );
+            const resp1 = await handleChat(req1, "test-key", sessionId);
+            await readBody(resp1); // Must read stream for async DB writes to complete
+            await new Promise((r) => setTimeout(r, 100));
+
+            // Verify first response was saved
+            const msgsAfterFirst = getMessages(getDb()!, sessionId);
+            assert.ok(
+                msgsAfterFirst.some(
+                    (m) => m.role === "assistant" && m.content.includes("First response"),
+                ),
+                "First assistant response should be saved",
+            );
+
+            // Second request: should save new assistant response
+            const secondSse = anthropicTextSse(["Second response."]);
+            globalThis.fetch = async () => anthropicResponse(secondSse);
+
+            const req2 = makeRequest(
+                "POST",
+                "/api/chat",
+                { messages: [{ role: "user", content: "second message" }] },
+                { "X-Session-Id": sessionId },
+            );
+            const resp2 = await handleChat(req2, "test-key", sessionId);
+            await readBody(resp2); // Must read stream for async DB writes to complete
+            await new Promise((r) => setTimeout(r, 100));
+
+            // Verify second response was saved — this catches the bug where
+            // existingCount=messages.length instead of contextMessages.length
+            const msgsAfterSecond = getMessages(getDb()!, sessionId);
+            assert.ok(
+                msgsAfterSecond.some(
+                    (m) => m.role === "assistant" && m.content.includes("Second response"),
+                ),
+                "Second assistant response should be saved (tests existingCount logic)",
+            );
+        } finally {
+            globalThis.fetch = originalFetch;
+        }
+    });
+
     it("tool call: SSE stream with tool events + usage tracked", async () => {
         const toolCallSse = anthropicToolUseSse(
             "tc_1",
