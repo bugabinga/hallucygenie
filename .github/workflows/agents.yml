@@ -66,6 +66,7 @@ jobs:
                   SPEC_NAME=$(cat /tmp/pi-agent-spec-name 2>/dev/null || echo "unknown-spec")
                   BRANCH="agent/speck-ferkel-${SPEC_NAME}"
                   git checkout -b "${BRANCH}"
+                  just fmt
                   git add -A
                   git commit -m "🐖 speck-ferkel: fix code to match spec ${SPEC_NAME}"
                   git push origin "${BRANCH}"
@@ -119,6 +120,7 @@ jobs:
                   fi
                   BRANCH="agent/trouble-maker-$(date +%Y%m%d-%H%M%S)"
                   git checkout -b "${BRANCH}"
+                  just fmt
                   git add -A
                   git commit -m "🔥 trouble-maker: fix bugs"
                   git push origin "${BRANCH}"
@@ -172,6 +174,7 @@ jobs:
                   fi
                   BRANCH="agent/slop-chopper-$(date +%Y%m%d-%H%M%S)"
                   git checkout -b "${BRANCH}"
+                  just fmt
                   git add -A
                   git commit -m "🪓 slop-chopper: remove slop"
                   git push origin "${BRANCH}"
