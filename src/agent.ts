@@ -5,8 +5,47 @@
 import type { ChatMessage } from "./server.ts";
 import type { UserProfile } from "./db.ts";
 import { createLogger } from "./log.ts";
-import { executeTool, getToolDefinitions } from "./tools.ts";
+import { executeTool, getToolDefinitions, MINIMAX_BASE } from "./tools.ts";
 import type { ToolResult } from "./tools.ts";
+// Re-export for backward compatibility — consumers (e.g. tests) import from agent.ts
+export { MINIMAX_BASE } from "./tools.ts";
+
+// ── Deprecated state helpers (kept for test compatibility) ───────────
+
+interface ToolCallAccumulated {
+    id: string;
+    name: string;
+    arguments: string;
+}
+
+interface AgentState {
+    messages: ChatMessage[];
+    pendingToolCalls: ToolCallAccumulated[];
+}
+
+export function createAgentState(systemPrompt?: string): AgentState {
+    const messages: ChatMessage[] = [];
+    if (systemPrompt) {
+        messages.push({ role: "system", content: systemPrompt });
+    }
+    return { messages, pendingToolCalls: [] };
+}
+
+export function addUserMessage(state: AgentState, content: string): void {
+    state.messages.push({ role: "user", content });
+}
+
+export function addAssistantMessage(state: AgentState, content: string): void {
+    state.messages.push({ role: "assistant", content });
+}
+
+export function addToolResult(state: AgentState, toolCallId: string, content: string): void {
+    state.messages.push({ role: "tool", content, tool_call_id: toolCallId });
+}
+
+export function needsToolExecution(toolCalls: ToolCallAccumulated[]): boolean {
+    return toolCalls.length > 0;
+}
 
 const log = createLogger({ service: "agent" });
 
@@ -80,7 +119,6 @@ export function buildSystemPrompt(
 
 // ── Configuration ────────────────────────────────────────────────────
 
-export const MINIMAX_BASE = "https://api.minimax.io";
 export const MINIMAX_MODEL = "MiniMax-M2.7-highspeed";
 
 // ── Types ────────────────────────────────────────────────────────────
@@ -136,17 +174,6 @@ export function drainSteer(steerQueue: SteerQueue): string[] {
     return messages;
 }
 
-export interface ToolCallAccumulated {
-    id: string;
-    name: string;
-    arguments: string;
-}
-
-export interface AgentState {
-    messages: ChatMessage[];
-    pendingToolCalls: ToolCallAccumulated[];
-}
-
 export async function executeToolSafely(
     name: string,
     args: Record<string, unknown>,
@@ -162,51 +189,6 @@ export async function executeToolSafely(
             content: `Tool execution failed: ${String(err)}`,
         };
     }
-}
-
-// ── State management (from previous HG-003) ──────────────────────────
-
-/**
- * Create a new agent state with optional system prompt.
- */
-export function createAgentState(systemPrompt?: string): AgentState {
-    const messages: ChatMessage[] = [];
-    if (systemPrompt) {
-        messages.push({ role: "system", content: systemPrompt });
-    }
-    return { messages, pendingToolCalls: [] };
-}
-
-/**
- * Add a user message to the agent state.
- */
-export function addUserMessage(state: AgentState, content: string): void {
-    state.messages.push({ role: "user", content });
-}
-
-/**
- * Add an assistant message to the agent state.
- */
-export function addAssistantMessage(state: AgentState, content: string): void {
-    state.messages.push({ role: "assistant", content });
-}
-
-/**
- * Add a tool result to the agent state.
- */
-export function addToolResult(state: AgentState, toolCallId: string, content: string): void {
-    state.messages.push({
-        role: "tool",
-        content,
-        tool_call_id: toolCallId,
-    });
-}
-
-/**
- * Check if the agent needs to execute tools (finish_reason was "tool_calls").
- */
-export function needsToolExecution(toolCalls: ToolCallAccumulated[]): boolean {
-    return toolCalls.length > 0;
 }
 
 /**
