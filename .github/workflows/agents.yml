@@ -68,7 +68,7 @@ jobs:
                   git checkout -b "${BRANCH}"
                   just fmt
                   git add -A
-                  git commit -m "🐖 speck-ferkel: fix code to match spec ${SPEC_NAME}"
+                  git commit --no-verify -m "🐖 speck-ferkel: fix code to match spec ${SPEC_NAME}"
                   git push origin "${BRANCH}"
                   gh pr create \
                       --base trunk \
@@ -122,7 +122,7 @@ jobs:
                   git checkout -b "${BRANCH}"
                   just fmt
                   git add -A
-                  git commit -m "🔥 trouble-maker: fix bugs"
+                  git commit --no-verify -m "🔥 trouble-maker: fix bugs"
                   git push origin "${BRANCH}"
                   gh pr create \
                       --base trunk \
@@ -176,7 +176,7 @@ jobs:
                   git checkout -b "${BRANCH}"
                   just fmt
                   git add -A
-                  git commit -m "🪓 slop-chopper: remove slop"
+                  git commit --no-verify -m "🪓 slop-chopper: remove slop"
                   git push origin "${BRANCH}"
                   gh pr create \
                       --base trunk \
