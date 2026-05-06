@@ -642,10 +642,6 @@ export function resolveSessionId(req: Request, database: Database): string {
     return validateSessionId(req) ?? getOrCreateActiveSessionId(database);
 }
 
-function resolveAssetSessionId(req: Request, database: Database): string {
-    return validateSessionId(req) ?? getOrCreateActiveSessionId(database);
-}
-
 // ── Health check ─────────────────────────────────────────────────────
 
 const startTime = Date.now();
@@ -837,7 +833,7 @@ export async function handleRequest(req: Request): Promise<Response> {
         if (dbOrErr instanceof Response) return dbOrErr;
         const database = dbOrErr;
 
-        const sessionId = resolveAssetSessionId(req, database);
+        const sessionId = resolveSessionId(req, database);
 
         const assetId = path.slice("/asset/".length);
         const asset = getAsset(database, assetId);

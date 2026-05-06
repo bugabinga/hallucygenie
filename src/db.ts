@@ -4,7 +4,7 @@
 import { Database } from "bun:sqlite";
 import { randomUUID } from "node:crypto";
 import { readFileSync, readdirSync } from "node:fs";
-import { join, basename } from "node:path";
+import { join } from "node:path";
 
 // ── Quota Limits (MiniMax Plus-Highspeed plan) ──────────────────────
 
@@ -127,7 +127,7 @@ function tableExists(db: Database, name: string): boolean {
     const row = db
         .prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?")
         .get(name);
-    return row !== null && row !== undefined;
+    return row != null;
 }
 
 function normalizeSessionId(sessionId: string, context: string): string {
