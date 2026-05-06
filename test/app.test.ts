@@ -2617,20 +2617,24 @@ describe("loadAssets", () => {
                                     session_id: "active-session",
                                     type: "image",
                                     filename: "img-1.png",
+                                    mime_type: "image/png",
                                     prompt: "cat",
                                     tool_name: "generate_image",
                                     size_bytes: 1024,
                                     created_at: Date.now(),
+                                    params_json: null,
                                 },
                                 {
                                     id: "aud-1",
                                     session_id: "active-session",
                                     type: "music",
                                     filename: "aud-1.mp3",
+                                    mime_type: "audio/mpeg",
                                     prompt: "song",
                                     tool_name: "generate_music",
                                     size_bytes: 2048,
                                     created_at: Date.now(),
+                                    params_json: null,
                                 },
                             ],
                         }),
@@ -2671,6 +2675,241 @@ describe("loadAssets", () => {
         assert.equal(grid!.children.length, 2, "no slice cap");
     });
 
+    it("renders tool name, model, and date on asset cards", async () => {
+        const { doc } = setupDOM();
+        const timestamp = new Date("2025-03-15").getTime();
+
+        (globalThis as any).fetch = () =>
+            Promise.resolve(
+                new Response(
+                    JSON.stringify({
+                        assets: [
+                            {
+                                id: "img-1",
+                                session_id: "active-session",
+                                type: "image",
+                                filename: "img-1.png",
+                                mime_type: "image/png",
+                                prompt: "cool cat",
+                                tool_name: "generate_image",
+                                size_bytes: 1024,
+                                created_at: timestamp,
+                                params_json: JSON.stringify({ model: "MiniMax/Image-01" }),
+                            },
+                        ],
+                    }),
+                    { headers: { "Content-Type": "application/json" } },
+                ),
+            );
+
+        loadAssets();
+        await new Promise((r) => setTimeout(r, 50));
+
+        const header = doc.querySelector(".asset-header");
+        assert.ok(header, "should have asset header with tool/model/date");
+
+        const toolEl = doc.querySelector(".asset-tool");
+        assert.ok(toolEl, "should have tool name element");
+        assert.equal(toolEl!.textContent, "generate image");
+
+        const modelEl = doc.querySelector(".asset-model");
+        assert.ok(modelEl, "should have model name element");
+        assert.equal(modelEl!.textContent, "Image-01");
+
+        const dateEl = doc.querySelector(".asset-date");
+        assert.ok(dateEl, "should have date element");
+        assert.equal(dateEl!.textContent, "Mar 15");
+    });
+
+    it("renders generation params from params_json", async () => {
+        const { doc } = setupDOM();
+
+        (globalThis as any).fetch = () =>
+            Promise.resolve(
+                new Response(
+                    JSON.stringify({
+                        assets: [
+                            {
+                                id: "img-1",
+                                session_id: "active-session",
+                                type: "image",
+                                filename: "img-1.png",
+                                mime_type: "image/png",
+                                prompt: "cat",
+                                tool_name: "generate_image",
+                                size_bytes: 1024,
+                                created_at: Date.now(),
+                                params_json: JSON.stringify({
+                                    aspect_ratio: "16:9",
+                                    model: "MiniMax/Image-01",
+                                }),
+                            },
+                        ],
+                    }),
+                    { headers: { "Content-Type": "application/json" } },
+                ),
+            );
+
+        loadAssets();
+        await new Promise((r) => setTimeout(r, 50));
+
+        const paramsEl = doc.querySelector(".asset-params");
+        assert.ok(paramsEl, "should have params element");
+        assert.equal(paramsEl!.textContent, "16:9");
+    });
+
+    it("renders music params including lyrics excerpt", async () => {
+        const { doc } = setupDOM();
+
+        (globalThis as any).fetch = () =>
+            Promise.resolve(
+                new Response(
+                    JSON.stringify({
+                        assets: [
+                            {
+                                id: "music-1",
+                                session_id: "active-session",
+                                type: "music",
+                                filename: "song.mp3",
+                                mime_type: "audio/mpeg",
+                                prompt: "fun song",
+                                tool_name: "generate_music",
+                                size_bytes: 2048,
+                                created_at: Date.now(),
+                                params_json: JSON.stringify({
+                                    lyrics: "This is a long lyrics preview",
+                                }),
+                            },
+                        ],
+                    }),
+                    { headers: { "Content-Type": "application/json" } },
+                ),
+            );
+
+        loadAssets();
+        await new Promise((r) => setTimeout(r, 50));
+
+        const paramsEl = doc.querySelector(".asset-params");
+        assert.ok(paramsEl, "should have params element with lyrics excerpt");
+        assert.equal(paramsEl!.textContent, "This is a long lyric…");
+    });
+
+    it("renders collapsible prompt for long prompts", async () => {
+        const { doc } = setupDOM();
+        const longPrompt = "A".repeat(50);
+
+        (globalThis as any).fetch = () =>
+            Promise.resolve(
+                new Response(
+                    JSON.stringify({
+                        assets: [
+                            {
+                                id: "img-1",
+                                session_id: "active-session",
+                                type: "image",
+                                filename: "img-1.png",
+                                mime_type: "image/png",
+                                prompt: longPrompt,
+                                tool_name: "generate_image",
+                                size_bytes: 1024,
+                                created_at: Date.now(),
+                                params_json: null,
+                            },
+                        ],
+                    }),
+                    { headers: { "Content-Type": "application/json" } },
+                ),
+            );
+
+        loadAssets();
+        await new Promise((r) => setTimeout(r, 50));
+
+        const details = doc.querySelector(".asset-prompt-details");
+        assert.ok(details, "should have collapsible prompt element for long prompts");
+
+        const summary = doc.querySelector(".asset-prompt-summary");
+        assert.ok(summary, "should have prompt summary");
+        assert.equal(summary!.textContent, "A".repeat(30) + "…");
+
+        const fullPrompt = doc.querySelector(".asset-prompt-full");
+        assert.ok(fullPrompt, "should have full prompt content");
+        assert.equal(fullPrompt!.textContent, longPrompt);
+    });
+
+    it("renders short prompt without collapse mechanism", async () => {
+        const { doc } = setupDOM();
+
+        (globalThis as any).fetch = () =>
+            Promise.resolve(
+                new Response(
+                    JSON.stringify({
+                        assets: [
+                            {
+                                id: "img-1",
+                                session_id: "active-session",
+                                type: "image",
+                                filename: "img-1.png",
+                                mime_type: "image/png",
+                                prompt: "short prompt",
+                                tool_name: "generate_image",
+                                size_bytes: 1024,
+                                created_at: Date.now(),
+                                params_json: null,
+                            },
+                        ],
+                    }),
+                    { headers: { "Content-Type": "application/json" } },
+                ),
+            );
+
+        loadAssets();
+        await new Promise((r) => setTimeout(r, 50));
+
+        const details = doc.querySelector(".asset-prompt-details");
+        assert.equal(details, null, "short prompts should not have collapsible element");
+
+        const meta = doc.querySelector(".asset-meta");
+        assert.ok(meta, "short prompts should render in asset-meta");
+        assert.equal(meta!.textContent, "short prompt");
+    });
+
+    it("handles voice params with speed", async () => {
+        const { doc } = setupDOM();
+
+        (globalThis as any).fetch = () =>
+            Promise.resolve(
+                new Response(
+                    JSON.stringify({
+                        assets: [
+                            {
+                                id: "voice-1",
+                                session_id: "active-session",
+                                type: "audio",
+                                filename: "voice.mp3",
+                                mime_type: "audio/mpeg",
+                                prompt: "hello",
+                                tool_name: "text_to_speech",
+                                size_bytes: 1024,
+                                created_at: Date.now(),
+                                params_json: JSON.stringify({
+                                    speed: "1.5",
+                                    voice_id: "hunter",
+                                }),
+                            },
+                        ],
+                    }),
+                    { headers: { "Content-Type": "application/json" } },
+                ),
+            );
+
+        loadAssets();
+        await new Promise((r) => setTimeout(r, 50));
+
+        const paramsEl = doc.querySelector(".asset-params");
+        assert.ok(paramsEl, "should have params element");
+        assert.equal(paramsEl!.textContent, "1.5x · hunter…");
+    });
+
     it("audio asset card click does not create hidden autoplay", async () => {
         const { doc } = setupDOM();
         let hiddenAudioCreated = false;
@@ -2688,10 +2927,12 @@ describe("loadAssets", () => {
                                 session_id: "active-session",
                                 type: "music",
                                 filename: "aud-1.mp3",
+                                mime_type: "audio/mpeg",
                                 prompt: "song",
                                 tool_name: "generate_music",
                                 size_bytes: 2048,
                                 created_at: Date.now(),
+                                params_json: null,
                             },
                         ],
                     }),
