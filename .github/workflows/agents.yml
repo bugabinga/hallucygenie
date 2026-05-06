@@ -42,8 +42,12 @@ jobs:
             - uses: taiki-e/install-action@v2.75.28
               with:
                   tool: just
-            - run: |
-                  curl -sSfL https://github.com/gitleaks/gitleaks/releases/latest/download/gitleaks_8.24.3_linux_x64.tar.gz | sudo tar xz -C /usr/local/bin gitleaks
+            - name: Install gitleaks
+              env:
+                  PI_OFFLINE: ""
+              run: |
+                  VERSION=$(curl -sL https://api.github.com/repos/gitleaks/gitleaks/releases/latest | jq -r '.tag_name' | tr -d 'v')
+                  curl -sSfL "https://github.com/gitleaks/gitleaks/releases/download/v${VERSION}/gitleaks_${VERSION}_linux_x64.tar.gz" | sudo tar xz -C /usr/local/bin gitleaks
             - run: npm install -g @mariozechner/pi-coding-agent
             - run: bun install --frozen-lockfile
             - run: bun run --bun .github/agents/speck-ferkel.ts
@@ -96,8 +100,12 @@ jobs:
             - uses: taiki-e/install-action@v2.75.28
               with:
                   tool: just
-            - run: |
-                  curl -sSfL https://github.com/gitleaks/gitleaks/releases/latest/download/gitleaks_8.24.3_linux_x64.tar.gz | sudo tar xz -C /usr/local/bin gitleaks
+            - name: Install gitleaks
+              env:
+                  PI_OFFLINE: ""
+              run: |
+                  VERSION=$(curl -sL https://api.github.com/repos/gitleaks/gitleaks/releases/latest | jq -r '.tag_name' | tr -d 'v')
+                  curl -sSfL "https://github.com/gitleaks/gitleaks/releases/download/v${VERSION}/gitleaks_${VERSION}_linux_x64.tar.gz" | sudo tar xz -C /usr/local/bin gitleaks
             - run: npm install -g @mariozechner/pi-coding-agent
             - run: bun install --frozen-lockfile
             - run: bun run --bun .github/agents/trouble-maker.ts
@@ -149,8 +157,12 @@ jobs:
             - uses: taiki-e/install-action@v2.75.28
               with:
                   tool: just
-            - run: |
-                  curl -sSfL https://github.com/gitleaks/gitleaks/releases/latest/download/gitleaks_8.24.3_linux_x64.tar.gz | sudo tar xz -C /usr/local/bin gitleaks
+            - name: Install gitleaks
+              env:
+                  PI_OFFLINE: ""
+              run: |
+                  VERSION=$(curl -sL https://api.github.com/repos/gitleaks/gitleaks/releases/latest | jq -r '.tag_name' | tr -d 'v')
+                  curl -sSfL "https://github.com/gitleaks/gitleaks/releases/download/v${VERSION}/gitleaks_${VERSION}_linux_x64.tar.gz" | sudo tar xz -C /usr/local/bin gitleaks
             - run: npm install -g @mariozechner/pi-coding-agent
             - run: bun install --frozen-lockfile
             - run: bun run --bun .github/agents/slop-chopper.ts
