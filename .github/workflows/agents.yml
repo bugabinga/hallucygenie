@@ -43,8 +43,6 @@ jobs:
               with:
                   tool: just
             - name: Install gitleaks
-              env:
-                  PI_OFFLINE: ""
               run: |
                   VERSION=$(curl -sL https://api.github.com/repos/gitleaks/gitleaks/releases/latest | jq -r '.tag_name' | tr -d 'v')
                   curl -sSfL "https://github.com/gitleaks/gitleaks/releases/download/v${VERSION}/gitleaks_${VERSION}_linux_x64.tar.gz" | sudo tar xz -C /usr/local/bin gitleaks
@@ -54,6 +52,17 @@ jobs:
               env:
                   ZAI_API_KEY: ${{ secrets.ZAI_API_KEY }}
                   MINIMAX_API_KEY: ${{ secrets.MINIMAX_API_KEY }}
+            - name: Agent report
+              if: always()
+              run: |
+                  for f in /tmp/pi-agent-findings.md /tmp/pi-agent-pr-body.md; do
+                      if [ -f "$f" ]; then
+                          echo "## $(basename "$f")" >> "$GITHUB_STEP_SUMMARY"
+                          echo >> "$GITHUB_STEP_SUMMARY"
+                          cat "$f" >> "$GITHUB_STEP_SUMMARY"
+                          echo >> "$GITHUB_STEP_SUMMARY"
+                      fi
+                  done
             - name: Create PR if changes
               run: |
                   git config user.name "speck-ferkel"
@@ -101,8 +110,6 @@ jobs:
               with:
                   tool: just
             - name: Install gitleaks
-              env:
-                  PI_OFFLINE: ""
               run: |
                   VERSION=$(curl -sL https://api.github.com/repos/gitleaks/gitleaks/releases/latest | jq -r '.tag_name' | tr -d 'v')
                   curl -sSfL "https://github.com/gitleaks/gitleaks/releases/download/v${VERSION}/gitleaks_${VERSION}_linux_x64.tar.gz" | sudo tar xz -C /usr/local/bin gitleaks
@@ -112,6 +119,17 @@ jobs:
               env:
                   ZAI_API_KEY: ${{ secrets.ZAI_API_KEY }}
                   MINIMAX_API_KEY: ${{ secrets.MINIMAX_API_KEY }}
+            - name: Agent report
+              if: always()
+              run: |
+                  for f in /tmp/pi-agent-findings.md /tmp/pi-agent-pr-body.md; do
+                      if [ -f "$f" ]; then
+                          echo "## $(basename "$f")" >> "$GITHUB_STEP_SUMMARY"
+                          echo >> "$GITHUB_STEP_SUMMARY"
+                          cat "$f" >> "$GITHUB_STEP_SUMMARY"
+                          echo >> "$GITHUB_STEP_SUMMARY"
+                      fi
+                  done
             - name: Create PR if changes
               run: |
                   git config user.name "trouble-maker"
@@ -158,8 +176,6 @@ jobs:
               with:
                   tool: just
             - name: Install gitleaks
-              env:
-                  PI_OFFLINE: ""
               run: |
                   VERSION=$(curl -sL https://api.github.com/repos/gitleaks/gitleaks/releases/latest | jq -r '.tag_name' | tr -d 'v')
                   curl -sSfL "https://github.com/gitleaks/gitleaks/releases/download/v${VERSION}/gitleaks_${VERSION}_linux_x64.tar.gz" | sudo tar xz -C /usr/local/bin gitleaks
@@ -169,6 +185,17 @@ jobs:
               env:
                   ZAI_API_KEY: ${{ secrets.ZAI_API_KEY }}
                   MINIMAX_API_KEY: ${{ secrets.MINIMAX_API_KEY }}
+            - name: Agent report
+              if: always()
+              run: |
+                  for f in /tmp/pi-agent-findings.md /tmp/pi-agent-pr-body.md; do
+                      if [ -f "$f" ]; then
+                          echo "## $(basename "$f")" >> "$GITHUB_STEP_SUMMARY"
+                          echo >> "$GITHUB_STEP_SUMMARY"
+                          cat "$f" >> "$GITHUB_STEP_SUMMARY"
+                          echo >> "$GITHUB_STEP_SUMMARY"
+                      fi
+                  done
             - name: Create PR if changes
               run: |
                   git config user.name "slop-chopper"
