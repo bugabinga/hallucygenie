@@ -7,7 +7,7 @@
  *      .  *  .
  *
  * ╔═════════════════════════════════════════╗
- * ║ Pass 1: zai/glm-5.1  -> analyze (smart) ║
+ * ║ Pass 1: minimax/M2.7 -> analyze (smart) ║
  * ║ Pass 2: minimax/M2.5 -> fix (coder)     ║
  * ╚═════════════════════════════════════════╝
  */
@@ -32,7 +32,7 @@ try {
 const piFlags = ["--no-session", "--no-prompt-templates"];
 
 // --- Pass 1: analyze ---
-console.log("\n=== Pass 1: Analyze (zai/glm-5.1) ===\n");
+console.log("\n=== Pass 1: Analyze (minimax/MiniMax-M2.7-highspeed) ===\n");
 
 runPi(
     "analyze",
@@ -40,9 +40,9 @@ runPi(
         "-p",
         ...piFlags,
         "--provider",
-        "zai",
+        "minimax",
         "--model",
-        "glm-5.1",
+        "MiniMax-M2.7-highspeed",
         "--thinking",
         "high",
         "--tools",

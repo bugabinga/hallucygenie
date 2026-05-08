@@ -5,6 +5,14 @@
             "api": "anthropic-messages",
             "models": [
                 {
+                    "id": "MiniMax-M2.7-highspeed",
+                    "name": "MiniMax M2.7 (analyzer)",
+                    "reasoning": true,
+                    "input": ["text"],
+                    "contextWindow": 204800,
+                    "maxTokens": 32768
+                },
+                {
                     "id": "MiniMax-M2.5-highspeed",
                     "name": "MiniMax M2.5 (coder)",
                     "reasoning": true,
