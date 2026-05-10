@@ -390,6 +390,7 @@ interface Asset {
     tool_name: string;
     size_bytes: number;
     created_at: number;
+    params_json: string | null;
 }
 
 const ASSET_PROMPT_PREVIEW_CHARS = 30;
@@ -398,10 +399,56 @@ function assetUrl(id: string): string {
     return `/asset/${id}`;
 }
 
-function assetPreviewText(asset: Asset): string {
-    const text = asset.prompt?.trim() || asset.tool_name;
-    if (text.length <= ASSET_PROMPT_PREVIEW_CHARS) return text;
-    return `${text.slice(0, ASSET_PROMPT_PREVIEW_CHARS)}…`;
+function parseParamsJson(paramsJson: string | null): Record<string, unknown> {
+    if (!paramsJson) return {};
+    try {
+        return JSON.parse(paramsJson) as Record<string, unknown>;
+    } catch {
+        return {};
+    }
+}
+
+function formatAssetDate(timestamp: number): string {
+    const date = new Date(timestamp);
+    return date.toLocaleDateString(undefined, { month: "short", day: "numeric" });
+}
+
+function getModelName(params: Record<string, unknown>): string {
+    const model = params["model"];
+    if (typeof model === "string" && model) {
+        // Strip MiniMax prefix if present
+        return model.replace(/^MiniMax\//i, "");
+    }
+    return "";
+}
+
+function renderAssetParams(paramsJson: string | null): string {
+    const params = parseParamsJson(paramsJson);
+    const parts: string[] = [];
+
+    const aspectRatio = params["aspect_ratio"];
+    if (typeof aspectRatio === "string" && aspectRatio) {
+        parts.push(aspectRatio);
+    }
+
+    const speed = params["speed"];
+    if (typeof speed === "string" && speed) {
+        parts.push(`${speed}x`);
+    } else if (typeof speed === "number" && speed !== 1) {
+        parts.push(`${speed}x`);
+    }
+
+    const lyrics = params["lyrics"];
+    if (typeof lyrics === "string" && lyrics) {
+        parts.push(lyrics.slice(0, 20) + (lyrics.length > 20 ? "…" : ""));
+    }
+
+    const voiceId = params["voice_id"];
+    if (typeof voiceId === "string" && voiceId) {
+        parts.push(voiceId.slice(0, 8) + "…");
+    }
+
+    return parts.join(" · ");
 }
 
 function assetTypeLabel(type: Asset["type"]): string {
@@ -441,7 +488,6 @@ function renderAssetCard(asset: Asset): HTMLElement {
     card.className = "asset-card";
     card.dataset.type = asset.type;
     card.dataset.id = asset.id;
-    card.title = asset.prompt ?? asset.tool_name;
 
     const badge = document.createElement("div");
     badge.className = "asset-badge";
@@ -450,10 +496,57 @@ function renderAssetCard(asset: Asset): HTMLElement {
 
     card.appendChild(renderAssetPreview(asset, url));
 
-    const meta = document.createElement("div");
-    meta.className = "asset-meta";
-    meta.textContent = assetPreviewText(asset);
-    card.appendChild(meta);
+    const params = parseParamsJson(asset.params_json);
+    const modelName = getModelName(params);
+
+    // Tool/model/date header
+    const header = document.createElement("div");
+    header.className = "asset-header";
+    const toolSpan = document.createElement("span");
+    toolSpan.className = "asset-tool";
+    toolSpan.textContent = asset.tool_name.replace(/_/g, " ");
+    header.appendChild(toolSpan);
+    if (modelName) {
+        const modelSpan = document.createElement("span");
+        modelSpan.className = "asset-model";
+        modelSpan.textContent = modelName;
+        header.appendChild(modelSpan);
+    }
+    const dateSpan = document.createElement("span");
+    dateSpan.className = "asset-date";
+    dateSpan.textContent = formatAssetDate(asset.created_at);
+    header.appendChild(dateSpan);
+    card.appendChild(header);
+
+    // Prompt (collapsible if long)
+    const prompt = asset.prompt?.trim();
+    if (prompt && prompt.length > ASSET_PROMPT_PREVIEW_CHARS) {
+        const details = document.createElement("details");
+        details.className = "asset-prompt-details";
+        const summary = document.createElement("summary");
+        summary.className = "asset-prompt-summary";
+        summary.textContent = prompt.slice(0, ASSET_PROMPT_PREVIEW_CHARS) + "…";
+        const fullPrompt = document.createElement("div");
+        fullPrompt.className = "asset-prompt-full";
+        fullPrompt.textContent = prompt;
+        details.appendChild(summary);
+        details.appendChild(fullPrompt);
+        card.appendChild(details);
+    } else if (prompt) {
+        const meta = document.createElement("div");
+        meta.className = "asset-meta";
+        meta.textContent = prompt;
+        card.appendChild(meta);
+    }
+
+    // Params
+    const paramsStr = renderAssetParams(asset.params_json);
+    if (paramsStr) {
+        const paramsEl = document.createElement("div");
+        paramsEl.className = "asset-params";
+        paramsEl.textContent = paramsStr;
+        card.appendChild(paramsEl);
+    }
 
     const download = document.createElement("a");
     download.className = "asset-download";

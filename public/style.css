@@ -1242,13 +1242,63 @@ textarea,
     width: calc(100% - 12px);
     margin: 6px;
 }
+.asset-header {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    padding: 4px 6px 2px;
+    font-size: 0.6rem;
+}
+.asset-tool {
+    color: var(--color-text);
+    font-weight: 700;
+    text-transform: capitalize;
+}
+.asset-model {
+    color: var(--color-tertiary);
+    font-size: 0.55rem;
+}
+.asset-date {
+    color: var(--color-text-dim);
+    margin-left: auto;
+    font-size: 0.55rem;
+}
 .asset-meta {
-    padding: 4px 6px;
+    padding: 2px 6px;
     font-size: 0.65rem;
     color: var(--color-text-dim);
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
+}
+.asset-prompt-details {
+    padding: 2px 6px;
+}
+.asset-prompt-summary {
+    font-size: 0.65rem;
+    color: var(--color-text-dim);
+    cursor: pointer;
+    list-style: none;
+}
+.asset-prompt-summary::-webkit-details-marker {
+    display: none;
+}
+.asset-prompt-summary::before {
+    content: "▶ ";
+    font-size: 0.5rem;
+}
+.asset-prompt-details[open] .asset-prompt-summary::before {
+    content: "▼ ";
+}
+.asset-prompt-full {
+    font-size: 0.65rem;
+    color: var(--color-text-dim);
+    padding-top: 2px;
+}
+.asset-params {
+    padding: 0 6px 2px;
+    font-size: 0.55rem;
+    color: var(--color-secondary);
 }
 .asset-download {
     display: block;
