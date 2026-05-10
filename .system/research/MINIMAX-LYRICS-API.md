@@ -2,7 +2,7 @@
 
 **Ticket:** `HG-TICKET-046-minimax-lyrics-api-research.md`  
 **Spec:** `.system/specs/HG-SPEC-012-minimax-music-creator-tools.md`  
-**Status:** docs research; no live quota spent
+**Status:** docs + live smoke verified on 2026-05-10
 
 ## Known endpoint
 
@@ -15,26 +15,45 @@ Content-Type: application/json
 MiniMax docs list this as the lyrics helper for music generation. It belongs
 next to `music-2.6`; it should not create an asset by itself.
 
-## Expected request shape
+## Verified request shape
 
-Use a small prompt-first schema for HallucyGenie:
+MiniMax requires an explicit mode. HallucyGenie should default to
+`write_full_song` for new lyrics, and use `edit` only when existing lyrics are
+provided.
 
 ```json
 {
-  "prompt": "spooky Minecraft boss fight song",
-  "style": "8-bit rock",
-  "mood": "excited"
+  "mode": "write_full_song",
+  "prompt": "spooky Minecraft boss fight song"
 }
 ```
 
-Exact optional fields still need live confirmation before `generate_lyrics` is
-implemented.
+Optional fields:
 
-## Expected response handling
+```json
+{
+  "mode": "edit",
+  "prompt": "make the chorus stronger",
+  "lyrics": "[Chorus]\nWe win today",
+  "title": "Victory Song"
+}
+```
 
-Treat response as text-first. If MiniMax returns structured sections, convert to
-plain markdown/text before showing it to the user. Do not persist raw provider
-JSON in chat unless a debug spec explicitly asks for it.
+## Verified response handling
+
+MiniMax returns top-level lyrics fields, not `data.lyrics`:
+
+```json
+{
+  "song_title": "...",
+  "style_tags": "...",
+  "lyrics": "[Verse]\n...",
+  "base_resp": { "status_code": 0, "status_msg": "success" }
+}
+```
+
+Treat `lyrics` as text-first. Do not persist raw provider JSON in chat unless a
+debug spec explicitly asks for it.
 
 ## Product decision
 
@@ -47,7 +66,16 @@ Keep `lyrics_optimizer` internal for now. The kid-facing flow should be:
 `lyrics_optimizer: true` can remain a later shortcut for agent-only one-turn
 flows, but UI v1 should favor preview/edit control.
 
-## No live smoke
+## Live smoke
 
-No live request was run in this ticket. Existing instructions require explicit
-approval before spending quota. Add script tests first if a smoke path is added.
+A live request was run on 2026-05-10 with:
+
+```json
+{
+  "mode": "write_full_song",
+  "prompt": "short kid-friendly four-line song about a brave robot"
+}
+```
+
+Result: HTTP success, `base_resp.status_code = 0`, top-level `lyrics` length 900,
+first non-empty line `[Verse]`. No secret or full provider payload is stored here.

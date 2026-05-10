@@ -1719,33 +1719,20 @@ describe("Prompt Caching", () => {
 
         const parsed = JSON.parse(capturedBody);
         assert.ok(parsed.tools, "should have tools");
-        assert.equal(parsed.tools.length, 5, "should have 5 tools");
+        assert.equal(parsed.tools.length, 6, "should have 6 tools");
 
-        // First four tools should NOT have cache_control
-        assert.equal(
-            parsed.tools[0].cache_control,
-            undefined,
-            "first tool should not have cache_control",
-        );
-        assert.equal(
-            parsed.tools[1].cache_control,
-            undefined,
-            "second tool should not have cache_control",
-        );
-        assert.equal(
-            parsed.tools[2].cache_control,
-            undefined,
-            "third tool should not have cache_control",
-        );
-        assert.equal(
-            parsed.tools[3].cache_control,
-            undefined,
-            "fourth tool should not have cache_control",
-        );
+        // All but the last tool should NOT have cache_control
+        for (const tool of parsed.tools.slice(0, -1)) {
+            assert.equal(
+                tool.cache_control,
+                undefined,
+                `${tool.name} should not have cache_control`,
+            );
+        }
 
         // Last tool should have cache_control
         assert.equal(
-            parsed.tools[4].cache_control?.type,
+            parsed.tools.at(-1)?.cache_control?.type,
             "ephemeral",
             "last tool should have cache_control",
         );

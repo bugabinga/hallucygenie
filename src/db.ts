@@ -12,6 +12,7 @@ export const QUOTAS: Record<string, number> = {
     speech: 9000,
     image: 100,
     music: 100,
+    lyrics: 100,
 };
 
 const QUOTA_WARNING_THRESHOLD = 0.8;

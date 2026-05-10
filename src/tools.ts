@@ -1,5 +1,5 @@
 // HallucyGenie — Tool definitions and execution
-// Implements generate_image, text_to_speech, generate_music
+// Implements generate_image, text_to_speech, generate_lyrics, generate_music
 
 // ── Types ────────────────────────────────────────────────────────────
 
@@ -25,6 +25,13 @@ export interface TextToSpeechOptions {
     speed?: number;
     volume?: number;
     pitch?: number;
+}
+
+export interface GenerateLyricsOptions {
+    prompt: string;
+    mode?: "write_full_song" | "edit";
+    lyrics?: string;
+    title?: string;
 }
 
 export interface GenerateMusicOptions {
@@ -104,6 +111,36 @@ export function getToolDefinitions(): ToolDefinition[] {
                     },
                 },
                 required: ["text"],
+            },
+        },
+        {
+            name: "generate_lyrics",
+            description:
+                "Generate kid-friendly song lyrics from a music prompt. Returns plain text lyrics ready for editing or use in music generation.",
+            input_schema: {
+                type: "object",
+                properties: {
+                    prompt: {
+                        type: "string",
+                        description:
+                            "Description or topic for the lyrics (e.g., 'a happy birthday song', 'an adventure theme').",
+                    },
+                    mode: {
+                        type: "string",
+                        enum: ["write_full_song", "edit"],
+                        description:
+                            "Generation mode. Defaults to write_full_song unless existing lyrics are provided.",
+                    },
+                    lyrics: {
+                        type: "string",
+                        description: "Existing lyrics to edit or continue when mode is edit.",
+                    },
+                    title: {
+                        type: "string",
+                        description: "Optional song title to preserve in the generated output.",
+                    },
+                },
+                required: ["prompt"],
             },
         },
         {
@@ -187,6 +224,16 @@ export async function executeTool(
                 },
                 apiKey,
             );
+        case "generate_lyrics":
+            return generateLyrics(
+                {
+                    prompt: args.prompt as string,
+                    mode: validateLyricsMode(args.mode),
+                    lyrics: args.lyrics as string | undefined,
+                    title: args.title as string | undefined,
+                },
+                apiKey,
+            );
         case "generate_music":
             return generateMusic(
                 {
@@ -233,6 +280,10 @@ function musicOptionsFromInput(
     lyrics?: string,
 ): GenerateMusicOptions {
     return typeof input === "string" ? { prompt: input, lyrics } : input;
+}
+
+function validateLyricsMode(value: unknown): GenerateLyricsOptions["mode"] | undefined {
+    return value === "write_full_song" || value === "edit" ? value : undefined;
 }
 
 /**
@@ -353,6 +404,67 @@ export async function textToSpeech(
             type: "error",
             content: `TTS failed: ${String(err)}`,
         };
+    }
+}
+
+/**
+ * Generate kid-friendly song lyrics from a music prompt.
+ * Calls POST /v1/lyrics_generation.
+ * Returns plain text lyrics.
+ */
+export async function generateLyrics(
+    input: string | GenerateLyricsOptions,
+    apiKey: string,
+): Promise<ToolResult> {
+    const options = typeof input === "string" ? { prompt: input } : input;
+    try {
+        const existingLyrics = options.lyrics?.trim() ?? "";
+        const mode = options.mode ?? (existingLyrics ? "edit" : "write_full_song");
+        const payload: Record<string, unknown> = {
+            mode,
+            prompt: options.prompt,
+        };
+        if (existingLyrics) payload.lyrics = existingLyrics;
+        if (options.title?.trim()) payload.title = options.title.trim();
+
+        const resp = await fetch(`${MINIMAX_BASE}/v1/lyrics_generation`, {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json",
+                Authorization: `Bearer ${apiKey}`,
+            },
+            body: JSON.stringify(payload),
+        });
+
+        if (!resp.ok) {
+            const errorText = await resp.text();
+            return {
+                type: "error",
+                content: `Lyrics generation API error: ${resp.status} — ${errorText}`,
+            };
+        }
+
+        const data = (await resp.json()) as {
+            song_title?: string;
+            style_tags?: string;
+            lyrics?: string;
+            base_resp?: { status_code?: number; status_msg?: string };
+        };
+        if (data.base_resp && data.base_resp.status_code !== 0) {
+            return {
+                type: "error",
+                content: `Lyrics generation failed: ${data.base_resp.status_msg ?? "unknown error"}`,
+            };
+        }
+
+        const lyrics = data.lyrics;
+        if (!lyrics) {
+            return { type: "error", content: "Lyrics generation returned no lyrics text" };
+        }
+
+        return { type: "text", content: lyrics };
+    } catch (err) {
+        return { type: "error", content: `Lyrics generation failed: ${String(err)}` };
     }
 }
 

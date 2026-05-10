@@ -8,6 +8,7 @@ import {
     generateImage,
     textToSpeech,
     generateMusic,
+    generateLyrics,
     webSearch,
     analyzeImage,
     MINIMAX_BASE,
@@ -38,9 +39,9 @@ function jsonResponse(data: unknown, status = 200): Response {
 // ── Tool definitions ─────────────────────────────────────────────────
 
 describe("getToolDefinitions", () => {
-    it("returns five tool definitions", () => {
+    it("returns six tool definitions", () => {
         const defs = getToolDefinitions();
-        assert.equal(defs.length, 5);
+        assert.equal(defs.length, 6);
     });
 
     it("defines generate_image with correct schema", () => {
@@ -76,6 +77,24 @@ describe("getToolDefinitions", () => {
         assert.ok(schema.properties.volume);
         assert.ok(schema.properties.pitch);
         assert.deepEqual(schema.required, ["text"]);
+    });
+
+    it("defines generate_lyrics with correct schema", () => {
+        const defs = getToolDefinitions();
+        const lyrics = defs.find((d) => d.name === "generate_lyrics");
+        assert.ok(lyrics, "generate_lyrics tool should exist");
+        assert.equal(lyrics.name, "generate_lyrics");
+        const schema = lyrics.input_schema as {
+            type: string;
+            properties: Record<string, unknown>;
+            required: string[];
+        };
+        assert.equal(schema.type, "object");
+        assert.ok(schema.properties.prompt);
+        assert.ok(schema.properties.mode);
+        assert.ok(schema.properties.lyrics);
+        assert.ok(schema.properties.title);
+        assert.deepEqual(schema.required, ["prompt"]);
     });
 
     it("defines generate_music with correct schema", () => {
@@ -147,6 +166,15 @@ describe("executeTool", () => {
         const result = await executeTool("generate_music", { prompt: "upbeat tune" }, API_KEY);
         assert.equal(result.type, "audio");
         assert.ok(result.content.startsWith("data:audio/mp3;base64,"));
+    });
+
+    it("dispatches to generate_lyrics", async () => {
+        globalThis.fetch = async () =>
+            jsonResponse({ lyrics: "Verse: Hello world\nChorus: Hello again!" });
+
+        const result = await executeTool("generate_lyrics", { prompt: "a happy song" }, API_KEY);
+        assert.equal(result.type, "text");
+        assert.ok(result.content.includes("Hello world"));
     });
 
     it("returns error for unknown tool", async () => {
@@ -534,6 +562,188 @@ describe("generateMusic", () => {
         const result = await generateMusic("test", API_KEY);
         assert.ok(result.content.startsWith("data:audio/mp3;base64,"));
         assert.equal(result.type, "audio");
+    });
+});
+
+// ── generateLyrics ───────────────────────────────────────────────────
+
+describe("generateLyrics", () => {
+    beforeEach(() => {
+        originalFetch = globalThis.fetch;
+    });
+
+    afterEach(() => {
+        globalThis.fetch = originalFetch;
+    });
+
+    it("calls correct API endpoint and returns lyrics text", async () => {
+        let capturedUrl = "";
+        let capturedInit: RequestInit | undefined;
+        globalThis.fetch = async (url: string | URL | Request, init?: RequestInit) => {
+            capturedUrl = url.toString();
+            capturedInit = init;
+            return jsonResponse({
+                song_title: "Hello Song",
+                style_tags: "Pop, Happy",
+                lyrics: "Verse: Hello world\nChorus: Hello again!",
+                base_resp: { status_code: 0, status_msg: "success" },
+            });
+        };
+
+        const result = await generateLyrics("a happy birthday song", API_KEY);
+        assert.equal(result.type, "text");
+        assert.ok(result.content.includes("Hello world"));
+
+        assert.ok(capturedUrl.includes("/v1/lyrics_generation"));
+        assert.equal(capturedInit?.method, "POST");
+
+        const body = JSON.parse(capturedInit!.body as string);
+        assert.equal(body.mode, "write_full_song");
+        assert.equal(body.prompt, "a happy birthday song");
+        assert.equal("model" in body, false);
+
+        const headers = capturedInit!.headers as Record<string, string>;
+        assert.equal(headers["Authorization"], `Bearer ${API_KEY}`);
+    });
+
+    it("includes optional title and edit lyrics fields", async () => {
+        let capturedBody = "";
+        globalThis.fetch = async (_url: string | URL | Request, init?: RequestInit) => {
+            capturedBody = init?.body as string;
+            return jsonResponse({ lyrics: "Some lyrics" });
+        };
+
+        await generateLyrics(
+            {
+                prompt: "make this chorus stronger",
+                mode: "edit",
+                lyrics: "[Chorus]\nWe win today",
+                title: "Victory Song",
+            },
+            API_KEY,
+        );
+        const body = JSON.parse(capturedBody);
+        assert.equal(body.mode, "edit");
+        assert.equal(body.lyrics, "[Chorus]\nWe win today");
+        assert.equal(body.title, "Victory Song");
+    });
+
+    it("omits optional edit fields when not provided", async () => {
+        let capturedBody = "";
+        globalThis.fetch = async (_url: string | URL | Request, init?: RequestInit) => {
+            capturedBody = init?.body as string;
+            return jsonResponse({ lyrics: "Some lyrics" });
+        };
+
+        await generateLyrics("a fun song", API_KEY);
+        const body = JSON.parse(capturedBody);
+        assert.equal(body.mode, "write_full_song");
+        assert.equal("lyrics" in body, false);
+        assert.equal("title" in body, false);
+    });
+
+    it("accepts string input shorthand", async () => {
+        let capturedBody = "";
+        globalThis.fetch = async (_url: string | URL | Request, init?: RequestInit) => {
+            capturedBody = init?.body as string;
+            return jsonResponse({ lyrics: "Lyrics here" });
+        };
+
+        await generateLyrics("a song about friendship", API_KEY);
+        const body = JSON.parse(capturedBody);
+        assert.equal(body.prompt, "a song about friendship");
+    });
+
+    it("sends Authorization Bearer header with API key", async () => {
+        let capturedInit: RequestInit | undefined;
+        globalThis.fetch = async (_url: string | URL | Request, init?: RequestInit) => {
+            capturedInit = init;
+            return jsonResponse({ lyrics: "Test lyrics" });
+        };
+
+        await generateLyrics("test", API_KEY);
+        const headers = capturedInit!.headers as Record<string, string>;
+        assert.equal(headers["Authorization"], `Bearer ${API_KEY}`);
+    });
+
+    it("handles API error response", async () => {
+        mockFetch(jsonResponse({ error: "server error" }, 500));
+
+        const result = await generateLyrics("test", API_KEY);
+        assert.equal(result.type, "error");
+        assert.ok(result.content.includes("500"));
+    });
+
+    it("handles MiniMax base_resp error response", async () => {
+        mockFetch(
+            jsonResponse({
+                data: null,
+                base_resp: { status_code: 2001, status_msg: "invalid prompt" },
+            }),
+        );
+
+        const result = await generateLyrics("test", API_KEY);
+        assert.equal(result.type, "error");
+        assert.ok(result.content.includes("invalid prompt"));
+    });
+
+    it("handles network failure", async () => {
+        globalThis.fetch = async () => {
+            throw new Error("Connection reset");
+        };
+
+        const result = await generateLyrics("test", API_KEY);
+        assert.equal(result.type, "error");
+        assert.ok(result.content.includes("Connection reset"));
+    });
+
+    it("handles empty lyrics in response", async () => {
+        mockFetch(jsonResponse({ lyrics: "" }));
+
+        const result = await generateLyrics("test", API_KEY);
+        assert.equal(result.type, "error");
+        assert.ok(result.content.includes("no lyrics text"));
+    });
+
+    it("handles missing lyrics field in response", async () => {
+        mockFetch(jsonResponse({ song_title: "No Lyrics" }));
+
+        const result = await generateLyrics("test", API_KEY);
+        assert.equal(result.type, "error");
+        assert.ok(result.content.includes("no lyrics text"));
+    });
+
+    it("handles malformed response (no data field)", async () => {
+        mockFetch(jsonResponse({}));
+
+        const result = await generateLyrics("test", API_KEY);
+        assert.equal(result.type, "error");
+        assert.ok(result.content.includes("no lyrics text"));
+    });
+
+    it("returns lyrics text on success", async () => {
+        globalThis.fetch = async () =>
+            jsonResponse({
+                lyrics: "Verse: Jump up and down\nChorus: We are champions!",
+            });
+
+        const result = await generateLyrics("a fun gaming anthem", API_KEY);
+        assert.equal(result.type, "text");
+        assert.ok(result.content.includes("Jump up and down"));
+        assert.ok(result.content.includes("We are champions"));
+    });
+
+    it("snapshot: generate_lyrics result format", async () => {
+        globalThis.fetch = async () =>
+            jsonResponse({
+                lyrics: "Verse: Happy birthday to you!\nChorus: Happy birthday!",
+            });
+
+        const result = await generateLyrics("a birthday song", API_KEY);
+        assert.deepEqual(result, {
+            type: "text",
+            content: "Verse: Happy birthday to you!\nChorus: Happy birthday!",
+        });
     });
 });
 

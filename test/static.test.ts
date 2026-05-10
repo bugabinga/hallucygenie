@@ -133,6 +133,19 @@ describe("index.html health", () => {
         assert.equal(doc.querySelector("#music-instrumental"), null);
     });
 
+    it("has a 'Write lyrics for me' button in the music form", () => {
+        const doc = parseIndex();
+        const btn = doc.querySelector("#write-lyrics-btn");
+        assert.ok(btn, "Write lyrics button should exist");
+        assert.equal(btn?.tagName.toLowerCase(), "button");
+    });
+
+    it("quota badge includes lyrics item", () => {
+        const doc = parseIndex();
+        const lyricsItem = doc.querySelector('.quota-item[data-type="lyrics"]');
+        assert.ok(lyricsItem, "quota badge should have lyrics item");
+    });
+
     it("create modal has dialog ARIA", () => {
         const doc = parseIndex();
         const modal = doc.querySelector("#create-modal") as HTMLElement | null;
@@ -163,8 +176,14 @@ describe("index.html health", () => {
         const badge = doc.querySelector("#quota-badge") as HTMLElement | null;
         assert.equal(badge?.tagName.toLowerCase(), "span");
         assert.equal(badge?.getAttribute("role"), "status");
-        assert.equal(badge?.getAttribute("title"), "Images, voice, and music remaining today");
-        assert.equal(badge?.getAttribute("aria-label"), "Images, voice, and music remaining today");
+        assert.equal(
+            badge?.getAttribute("title"),
+            "Images, voice, music, and lyrics remaining today",
+        );
+        assert.equal(
+            badge?.getAttribute("aria-label"),
+            "Images, voice, music, and lyrics remaining today",
+        );
         assert.ok(doc.querySelector('.quota-item[data-type="speech"]'));
         assert.equal(styleCss.includes(".quota-badge:hover"), false);
         assert.match(styleCss, /\.quota-badge \{[^}]*cursor: default;/);

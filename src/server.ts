@@ -73,7 +73,7 @@ export interface ChatRequestBody {
 }
 
 export interface ExplicitToolDirective {
-    name: "generate_image" | "generate_music" | "text_to_speech";
+    name: "generate_image" | "generate_music" | "text_to_speech" | "generate_lyrics";
     args: Record<string, unknown>;
     prompt: string | null;
 }
@@ -445,6 +445,7 @@ export async function handleChat(
                             generate_image: "image",
                             text_to_speech: "speech",
                             generate_music: "music",
+                            generate_lyrics: "lyrics",
                         };
                         const feature = toolName ? featureMap[toolName] : null;
                         if (feature) {
@@ -516,7 +517,7 @@ function parseToolParams(raw: string | undefined, allowed: Set<string>): Record<
 
 export function parseExplicitToolDirective(content: string): ExplicitToolDirective | null {
     const match = content.match(
-        /^Use\s+(generate_image|generate_music|text_to_speech)\s+with\s+(prompt|text):\s*([\s\S]*?)(?:\nTool params:\s*([\s\S]*))?$/i,
+        /^Use\s+(generate_image|generate_music|text_to_speech|generate_lyrics)\s+with\s+(prompt|text):\s*([\s\S]*?)(?:\nTool params:\s*([\s\S]*))?$/i,
     );
     if (!match) return null;
 
@@ -529,6 +530,7 @@ export function parseExplicitToolDirective(content: string): ExplicitToolDirecti
         generate_image: new Set(["aspect_ratio"]),
         generate_music: new Set(["lyrics"]),
         text_to_speech: new Set(["voice_id", "speed", "volume", "pitch"]),
+        generate_lyrics: new Set(["mode", "lyrics", "title"]),
     };
     const args = parseToolParams(match[4], allowedParams[name]);
 
@@ -542,10 +544,11 @@ export function parseExplicitToolDirective(content: string): ExplicitToolDirecti
     return { name, args, prompt: value };
 }
 
-function featureForTool(name: string): "image" | "speech" | "music" | null {
+function featureForTool(name: string): "image" | "speech" | "music" | "lyrics" | null {
     if (name === "generate_image") return "image";
     if (name === "text_to_speech") return "speech";
     if (name === "generate_music") return "music";
+    if (name === "generate_lyrics") return "lyrics";
     return null;
 }
 
@@ -697,6 +700,7 @@ export async function handleRequest(req: Request): Promise<Response> {
             const speech = find("speech-hd");
             const image = find("image-01");
             const music = find("music-2.6");
+            const lyrics = find("lyrics-01") ?? find("lyrics");
             return jsonResponse({
                 chat: m2
                     ? {
@@ -724,6 +728,13 @@ export async function handleRequest(req: Request): Promise<Response> {
                           used: music.current_interval_usage_count,
                           total: music.current_interval_total_count,
                           resetsInMs: music.remains_time,
+                      }
+                    : null,
+                lyrics: lyrics
+                    ? {
+                          used: lyrics.current_interval_usage_count,
+                          total: lyrics.current_interval_total_count,
+                          resetsInMs: lyrics.remains_time,
                       }
                     : null,
             });
@@ -1026,6 +1037,15 @@ function assetParamsJson(
             lyrics_present: lyrics.length > 0,
             lyrics_excerpt: lyrics ? lyrics.slice(0, 200) : null,
             is_instrumental: lyrics.length === 0,
+        });
+    }
+    if (toolName === "generate_lyrics") {
+        return JSON.stringify({
+            endpoint: "lyrics_generation",
+            mode: stringParam(args, "mode") ?? null,
+            prompt: prompt ?? stringParam(args, "prompt") ?? null,
+            title: stringParam(args, "title") ?? null,
+            lyrics_present: Boolean(stringParam(args, "lyrics")),
         });
     }
     return null;
