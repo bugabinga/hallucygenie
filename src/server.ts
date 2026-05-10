@@ -576,12 +576,12 @@ function handleExplicitToolDirective(
 
             const feature = featureForTool(directive.name);
             const quota = feature ? checkQuota(database, feature) : { blocked: false };
-            const result = safeToolResultForUser(
-                directive.name,
-                quota.blocked
-                    ? { type: "error" as const, content: `Daily ${feature} quota is used up.` }
-                    : await executeToolSafely(directive.name, directive.args, apiKey),
-            );
+            const result = quota.blocked
+                ? { type: "error" as const, content: `Daily ${feature} quota is used up.` }
+                : safeToolResultForUser(
+                      directive.name,
+                      await executeToolSafely(directive.name, directive.args, apiKey),
+                  );
             const saved = sessionId
                 ? await saveAssetFile(
                       result,
