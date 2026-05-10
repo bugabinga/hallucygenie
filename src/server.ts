@@ -39,8 +39,7 @@ import {
     getMessages,
     saveMessage,
     getPreferences,
-    trackUsage,
-    checkQuota,
+    consumeQuota,
     getUsageToday,
     getOrCreateActiveSessionId,
     getOrCreateActiveSession,
@@ -63,6 +62,7 @@ function getOrCreateSteerQueue(sessionId: string): SteerQueue {
 export interface ChatMessage {
     role: "system" | "user" | "assistant" | "tool";
     content: string;
+    thinking?: string;
     tool_call_id?: string;
     tool_calls?: Array<{ id: string; name: string; input: Record<string, unknown> }>;
 }
@@ -320,7 +320,6 @@ export async function handleChat(
     const writer = writable.getWriter();
     const encoder = new TextEncoder();
     const savedToolResults = new Map<string, ToolResult>();
-    let thinkingBuffer = "";
 
     // Run agent loop in background, streaming events to SSE
     (async () => {
@@ -331,8 +330,10 @@ export async function handleChat(
                 async (event: AgentEvent) => {
                     // Convert agent events to SSE for the browser
                     switch (event.type) {
+                        case "thinking_reset": {
+                            break;
+                        }
                         case "thinking": {
-                            thinkingBuffer += event.content ?? "";
                             const sseData = `event: thinking\ndata: ${JSON.stringify({
                                 content: event.content,
                             })}\n\n`;
@@ -384,6 +385,17 @@ export async function handleChat(
                     }
                 },
                 steerQueue,
+                sessionId
+                    ? (toolName: string) => {
+                          const feature = featureForTool(toolName);
+                          if (!feature) return null;
+                          if (consumeQuota(database, feature) !== null) return null;
+                          return {
+                              type: "error" as const,
+                              content: `Daily ${feature} quota is used up.`,
+                          };
+                      }
+                    : undefined,
             );
 
             // Save assistant messages and tool results to DB
@@ -392,7 +404,6 @@ export async function handleChat(
                 // Use contextMessages.length, not messages.length, because finalMessages
                 // is built from the trimmed context, not the full untrimmed array.
                 const existingCount = contextMessages.length;
-                let thinkingSaved = false;
                 for (let i = existingCount; i < finalMessages.length; i++) {
                     const msg = finalMessages[i];
                     // Store tool_calls as JSON for Anthropic message reconstruction
@@ -411,9 +422,7 @@ export async function handleChat(
                                   : savedTool.content
                               : msg.content;
                     const thinking =
-                        !thinkingSaved && msg.role === "assistant" && thinkingBuffer.trim()
-                            ? thinkingBuffer
-                            : null;
+                        msg.role === "assistant" && msg.thinking?.trim() ? msg.thinking : null;
                     saveMessage(
                         database,
                         sessionId,
@@ -423,39 +432,11 @@ export async function handleChat(
                         msg.tool_call_id ?? null,
                         thinking,
                     );
-                    if (thinking) thinkingSaved = true;
                 }
 
                 if (steerQueue) {
                     for (const msg of drainSteer(steerQueue)) {
                         saveMessage(database, sessionId, "user", msg);
-                    }
-                }
-
-                // Track tool usage by correlating tool results with tool calls
-                const toolCallById = new Map<string, string>();
-                for (let i = existingCount; i < finalMessages.length; i++) {
-                    const msg = finalMessages[i];
-                    if (msg.role === "assistant" && msg.tool_calls) {
-                        for (const tc of msg.tool_calls) {
-                            toolCallById.set(tc.id, tc.name);
-                        }
-                    }
-                    if (msg.role === "tool" && msg.tool_call_id) {
-                        const toolName = toolCallById.get(msg.tool_call_id);
-                        const featureMap: Record<string, string> = {
-                            generate_image: "image",
-                            text_to_speech: "speech",
-                            generate_music: "music",
-                            generate_lyrics: "lyrics",
-                        };
-                        const feature = toolName ? featureMap[toolName] : null;
-                        if (feature) {
-                            const quotaStatus = checkQuota(database, feature);
-                            if (!quotaStatus.blocked) {
-                                trackUsage(database, feature);
-                            }
-                        }
                     }
                 }
             }
@@ -575,8 +556,8 @@ function handleExplicitToolDirective(
             await writeSse("tool_start", { id: toolCallId, name: directive.name });
 
             const feature = featureForTool(directive.name);
-            const quota = feature ? checkQuota(database, feature) : { blocked: false };
-            const result = quota.blocked
+            const quotaBlocked = feature ? consumeQuota(database, feature) === null : false;
+            const result = quotaBlocked
                 ? { type: "error" as const, content: `Daily ${feature} quota is used up.` }
                 : safeToolResultForUser(
                       directive.name,
@@ -618,9 +599,6 @@ function handleExplicitToolDirective(
                     null,
                     toolCallId,
                 );
-                if (feature && !quota.blocked && saved.type !== "error") {
-                    trackUsage(database, feature);
-                }
             }
         } catch (err) {
             await writeSse("error", { error: String(err) });

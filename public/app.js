@@ -2438,10 +2438,47 @@ var ASSET_PROMPT_PREVIEW_CHARS = 30;
 function assetUrl(id) {
   return `/asset/${id}`;
 }
-function assetPreviewText(asset) {
-  const text = asset.prompt?.trim() || asset.tool_name;
-  if (text.length <= ASSET_PROMPT_PREVIEW_CHARS) return text;
-  return `${text.slice(0, ASSET_PROMPT_PREVIEW_CHARS)}\u2026`;
+function parseParamsJson(paramsJson) {
+  if (!paramsJson) return {};
+  try {
+    return JSON.parse(paramsJson);
+  } catch {
+    return {};
+  }
+}
+function formatAssetDate(timestamp) {
+  const date = new Date(timestamp);
+  return date.toLocaleDateString(void 0, { month: "short", day: "numeric" });
+}
+function getModelName(params) {
+  const model = params["model"];
+  if (typeof model === "string" && model) {
+    return model.replace(/^MiniMax\//i, "");
+  }
+  return "";
+}
+function renderAssetParams(paramsJson) {
+  const params = parseParamsJson(paramsJson);
+  const parts = [];
+  const aspectRatio = params["aspect_ratio"];
+  if (typeof aspectRatio === "string" && aspectRatio) {
+    parts.push(aspectRatio);
+  }
+  const speed = params["speed"];
+  if (typeof speed === "string" && speed) {
+    parts.push(`${speed}x`);
+  } else if (typeof speed === "number" && speed !== 1) {
+    parts.push(`${speed}x`);
+  }
+  const lyrics = params["lyrics"];
+  if (typeof lyrics === "string" && lyrics) {
+    parts.push(lyrics.slice(0, 20) + (lyrics.length > 20 ? "\u2026" : ""));
+  }
+  const voiceId = params["voice_id"];
+  if (typeof voiceId === "string" && voiceId) {
+    parts.push(voiceId.slice(0, 8) + "\u2026");
+  }
+  return parts.join(" \xB7 ");
 }
 function assetTypeLabel(type) {
   if (type === "image") return "Image";
@@ -2476,16 +2513,56 @@ function renderAssetCard(asset) {
   card.className = "asset-card";
   card.dataset.type = asset.type;
   card.dataset.id = asset.id;
-  card.title = asset.prompt ?? asset.tool_name;
   const badge = document.createElement("div");
   badge.className = "asset-badge";
   badge.textContent = assetTypeLabel(asset.type);
   card.appendChild(badge);
   card.appendChild(renderAssetPreview(asset, url));
-  const meta = document.createElement("div");
-  meta.className = "asset-meta";
-  meta.textContent = assetPreviewText(asset);
-  card.appendChild(meta);
+  const params = parseParamsJson(asset.params_json);
+  const modelName = getModelName(params);
+  const header = document.createElement("div");
+  header.className = "asset-header";
+  const toolSpan = document.createElement("span");
+  toolSpan.className = "asset-tool";
+  toolSpan.textContent = asset.tool_name.replace(/_/g, " ");
+  header.appendChild(toolSpan);
+  if (modelName) {
+    const modelSpan = document.createElement("span");
+    modelSpan.className = "asset-model";
+    modelSpan.textContent = modelName;
+    header.appendChild(modelSpan);
+  }
+  const dateSpan = document.createElement("span");
+  dateSpan.className = "asset-date";
+  dateSpan.textContent = formatAssetDate(asset.created_at);
+  header.appendChild(dateSpan);
+  card.appendChild(header);
+  const prompt = asset.prompt?.trim();
+  if (prompt && prompt.length > ASSET_PROMPT_PREVIEW_CHARS) {
+    const details = document.createElement("details");
+    details.className = "asset-prompt-details";
+    const summary = document.createElement("summary");
+    summary.className = "asset-prompt-summary";
+    summary.textContent = prompt.slice(0, ASSET_PROMPT_PREVIEW_CHARS) + "\u2026";
+    const fullPrompt = document.createElement("div");
+    fullPrompt.className = "asset-prompt-full";
+    fullPrompt.textContent = prompt;
+    details.appendChild(summary);
+    details.appendChild(fullPrompt);
+    card.appendChild(details);
+  } else if (prompt) {
+    const meta = document.createElement("div");
+    meta.className = "asset-meta";
+    meta.textContent = prompt;
+    card.appendChild(meta);
+  }
+  const paramsStr = renderAssetParams(asset.params_json);
+  if (paramsStr) {
+    const paramsEl = document.createElement("div");
+    paramsEl.className = "asset-params";
+    paramsEl.textContent = paramsStr;
+    card.appendChild(paramsEl);
+  }
   const download = document.createElement("a");
   download.className = "asset-download";
   download.href = url;

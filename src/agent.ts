@@ -124,7 +124,7 @@ export const MINIMAX_MODEL = "MiniMax-M2.7-highspeed";
 // ── Types ────────────────────────────────────────────────────────────
 
 export interface AgentEvent {
-    type: "text" | "thinking" | "tool_start" | "tool_result" | "done";
+    type: "text" | "thinking" | "thinking_reset" | "tool_start" | "tool_result" | "done";
     content?: string;
     id?: string;
     name?: string;
@@ -132,6 +132,8 @@ export interface AgentEvent {
     prompt?: string; // for tool_result: the main prompt field used
     args?: Record<string, unknown>;
 }
+
+export type OnBeforeTool = (name: string, args: Record<string, unknown>) => ToolResult | null;
 
 export function safeToolResultForUser(toolName: string, result: ToolResult): ToolResult {
     if (result.type !== "error") return result;
@@ -500,11 +502,14 @@ export async function runAgentLoop(
     apiKey: string,
     onEvent: (event: AgentEvent) => void | Promise<void>,
     steerQueue?: SteerQueue,
+    onBeforeTool?: OnBeforeTool,
 ): Promise<ChatMessage[]> {
     const localMessages = [...messages];
     const tools = getToolDefinitions() as unknown as AnthropicTool[];
 
     while (true) {
+        await onEvent({ type: "thinking_reset" });
+
         const loopMessages = buildContext(localMessages);
         const payload = toAnthropicPayload(loopMessages, tools);
 
@@ -559,6 +564,7 @@ export async function runAgentLoop(
 
         // Process the Anthropic SSE stream
         let textContent = "";
+        let thinkingContent = "";
         let stopReason: string | null = null;
         const toolCalls = new Map<number, AnthropicToolCall>();
         let currentBlockType: "thinking" | "text" | "tool_use" | null = null;
@@ -628,6 +634,7 @@ export async function runAgentLoop(
                     if (deltaType === "thinking_delta") {
                         const thinking = (delta.thinking as string) || "";
                         if (thinking) {
+                            thinkingContent += thinking;
                             await onEvent({ type: "thinking", content: thinking });
                         }
                     } else if (deltaType === "text_delta") {
@@ -687,6 +694,7 @@ export async function runAgentLoop(
             localMessages.push({
                 role: "assistant",
                 content: textContent || "",
+                thinking: thinkingContent || undefined,
                 tool_calls: calls.map((tc) => ({
                     id: tc.id,
                     name: tc.name,
@@ -704,10 +712,10 @@ export async function runAgentLoop(
                     name: tc.name,
                 });
 
-                const result = safeToolResultForUser(
-                    tc.name,
-                    await executeToolSafely(tc.name, args, apiKey),
-                );
+                const substituted = onBeforeTool?.(tc.name, args) ?? null;
+                const result =
+                    substituted ??
+                    safeToolResultForUser(tc.name, await executeToolSafely(tc.name, args, apiKey));
 
                 await onEvent({
                     type: "tool_result",
@@ -752,6 +760,7 @@ export async function runAgentLoop(
                     localMessages.push({
                         role: "assistant",
                         content: textContent,
+                        thinking: thinkingContent || undefined,
                     });
                 }
                 for (const msg of steerMessages) {
@@ -765,6 +774,7 @@ export async function runAgentLoop(
             localMessages.push({
                 role: "assistant",
                 content: textContent,
+                thinking: thinkingContent || undefined,
             });
         }
 
