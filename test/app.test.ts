@@ -958,7 +958,6 @@ import {
     openLightbox,
     closeLightbox,
     showError,
-    restoreRecentError,
     streamChat,
     sendMessage,
     sendSteerMessage,
@@ -2213,26 +2212,10 @@ describe("showError", () => {
         assert.ok(toast.hidden, "toast should be hidden after duration");
     });
 
-    it("persists and restores a fresh recent error", () => {
+    it("does not persist transient errors to localStorage", () => {
         setupDOM();
         showError("Fresh error");
-        assert.equal(restoreRecentError(Date.now()), "Fresh error");
-    });
-
-    it("ignores expired recent errors", () => {
-        setupDOM();
-        const now = Date.now();
-        localStorage.setItem(
-            "hallucygenie_recent_error",
-            JSON.stringify({ message: "Old error", createdAt: now - 11 * 60 * 1000 }),
-        );
-        assert.equal(restoreRecentError(now), null);
-    });
-
-    it("ignores invalid recent error JSON", () => {
-        setupDOM();
-        localStorage.setItem("hallucygenie_recent_error", "not json");
-        assert.equal(restoreRecentError(Date.now()), null);
+        assert.equal(localStorage.getItem("hallucygenie_recent_error"), null);
     });
 
     it("does not show raw provider JSON in toast", () => {
