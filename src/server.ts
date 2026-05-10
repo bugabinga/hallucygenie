@@ -389,7 +389,9 @@ export async function handleChat(
             // Save assistant messages and tool results to DB
             if (sessionId) {
                 // Find new messages (those beyond what we sent)
-                const existingCount = messages.length;
+                // Use contextMessages.length, not messages.length, because finalMessages
+                // is built from the trimmed context, not the full untrimmed array.
+                const existingCount = contextMessages.length;
                 let thinkingSaved = false;
                 for (let i = existingCount; i < finalMessages.length; i++) {
                     const msg = finalMessages[i];

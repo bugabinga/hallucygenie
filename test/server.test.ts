@@ -1451,6 +1451,47 @@ describe("Integration: chat with agent loop + persistence", () => {
         }
     });
 
+    it("saves new assistant response to DB when existing history is trimmed", async () => {
+        // Regression test: finalMessages is built from contextMessages, not the full
+        // untrimmed messages array. If the save loop uses messages.length here, it
+        // starts past finalMessages.length and silently drops the assistant response.
+        const sessionId = "context-trim-session-" + Date.now();
+        const oversizedHistoryMessage = "old history ".repeat(90_000);
+        saveMessage(getDb()!, sessionId, "user", oversizedHistoryMessage);
+
+        const originalFetch = globalThis.fetch;
+        globalThis.fetch = async (_url, init) => {
+            const payload = JSON.parse(String(init?.body)) as {
+                messages: Array<{ role: string; content: string }>;
+            };
+            assert.equal(payload.messages.length, 1, "old history should be trimmed from payload");
+            assert.equal(payload.messages[0].content, "second message");
+            return anthropicResponse(anthropicTextSse(["Second response."]));
+        };
+
+        try {
+            const req = makeRequest(
+                "POST",
+                "/api/chat",
+                { messages: [{ role: "user", content: "second message" }] },
+                { "X-Session-Id": sessionId },
+            );
+            const resp = await handleChat(req, "test-key", sessionId);
+            await readBody(resp); // Must read stream for async DB writes to complete
+            await new Promise((r) => setTimeout(r, 100));
+
+            const msgsAfterRequest = getMessages(getDb()!, sessionId);
+            assert.ok(
+                msgsAfterRequest.some(
+                    (m) => m.role === "assistant" && m.content.includes("Second response"),
+                ),
+                "Assistant response should be saved after context trimming",
+            );
+        } finally {
+            globalThis.fetch = originalFetch;
+        }
+    });
+
     it("tool call: SSE stream with tool events + usage tracked", async () => {
         const toolCallSse = anthropicToolUseSse(
             "tc_1",
