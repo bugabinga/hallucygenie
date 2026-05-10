@@ -7,45 +7,6 @@ import type { UserProfile } from "./db.ts";
 import { createLogger } from "./log.ts";
 import { executeTool, getToolDefinitions, MINIMAX_BASE } from "./tools.ts";
 import type { ToolResult } from "./tools.ts";
-// Re-export for backward compatibility — consumers (e.g. tests) import from agent.ts
-export { MINIMAX_BASE } from "./tools.ts";
-
-// ── Deprecated state helpers (kept for test compatibility) ───────────
-
-interface ToolCallAccumulated {
-    id: string;
-    name: string;
-    arguments: string;
-}
-
-interface AgentState {
-    messages: ChatMessage[];
-    pendingToolCalls: ToolCallAccumulated[];
-}
-
-export function createAgentState(systemPrompt?: string): AgentState {
-    const messages: ChatMessage[] = [];
-    if (systemPrompt) {
-        messages.push({ role: "system", content: systemPrompt });
-    }
-    return { messages, pendingToolCalls: [] };
-}
-
-export function addUserMessage(state: AgentState, content: string): void {
-    state.messages.push({ role: "user", content });
-}
-
-export function addAssistantMessage(state: AgentState, content: string): void {
-    state.messages.push({ role: "assistant", content });
-}
-
-export function addToolResult(state: AgentState, toolCallId: string, content: string): void {
-    state.messages.push({ role: "tool", content, tool_call_id: toolCallId });
-}
-
-export function needsToolExecution(toolCalls: ToolCallAccumulated[]): boolean {
-    return toolCalls.length > 0;
-}
 
 const log = createLogger({ service: "agent" });
 
