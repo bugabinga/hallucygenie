@@ -755,6 +755,59 @@ describe("SSE streaming from Anthropic endpoint", () => {
         }
     });
 
+    it("preserves quota-blocked error for explicit tool directives", async () => {
+        const sessionId = "quota-blocked-session";
+        const db = getDb()!;
+        const existing = db
+            .prepare("SELECT count FROM daily_usage WHERE date = date('now') AND feature = 'image'")
+            .get() as { count: number } | undefined;
+
+        db.prepare(
+            "INSERT OR REPLACE INTO daily_usage (date, feature, count) VALUES (date('now'), 'image', 100)",
+        ).run();
+
+        const originalFetch = globalThis.fetch;
+        globalThis.fetch = async () => {
+            throw new Error("MiniMax API should not be called when quota is blocked");
+        };
+
+        try {
+            const req = makeRequest(
+                "POST",
+                "/api/chat",
+                {
+                    messages: [
+                        {
+                            role: "user",
+                            content: "Use generate_image with prompt: cat",
+                        },
+                    ],
+                },
+                { "X-Session-Id": sessionId },
+            );
+            const resp = await handleChat(req, "test-key", sessionId);
+            const body = await readBody(resp);
+
+            assert.ok(body.includes("Daily image quota is used up"));
+            assert.equal(body.includes("Couldn't generate the image"), false);
+
+            const rows = getMessages(db, sessionId);
+            assert.equal(rows.at(-1)?.role, "tool");
+            assert.equal(rows.at(-1)?.content, "Error: Daily image quota is used up.");
+        } finally {
+            globalThis.fetch = originalFetch;
+            if (existing) {
+                db.prepare(
+                    "INSERT OR REPLACE INTO daily_usage (date, feature, count) VALUES (date('now'), 'image', ?)",
+                ).run(existing.count);
+            } else {
+                db.prepare(
+                    "DELETE FROM daily_usage WHERE date = date('now') AND feature = 'image'",
+                ).run();
+            }
+        }
+    });
+
     it("does not reuse process-local IDs for persisted assets or direct tool calls", async () => {
         const dir = join(import.meta.dirname ?? ".", "test-data-asset-id-collision");
         const sessionId = "asset-id-collision-session";
