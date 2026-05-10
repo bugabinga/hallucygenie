@@ -228,6 +228,16 @@ async function serveStaticFile(path: string): Promise<Response | null> {
 // handleChat delegates to runAgentLoop which builds its own
 // Anthropic-format payload internally.
 
+function contentForPersistence(msg: ChatMessage, savedTool: ToolResult | null): string {
+    if (msg.role === "assistant") {
+        return msg.tool_calls ? "" : sanitizeAssistantMediaMarkup(msg.content);
+    }
+    if (savedTool) {
+        return savedTool.type === "error" ? `Error: ${savedTool.content}` : savedTool.content;
+    }
+    return msg.content;
+}
+
 export async function handleChat(
     req: Request,
     apiKey: string,
@@ -404,18 +414,9 @@ export async function handleChat(
                     // Store tool_calls as JSON for Anthropic message reconstruction
                     const toolCallsJson = msg.tool_calls ? JSON.stringify(msg.tool_calls) : null;
                     const savedTool = msg.tool_call_id
-                        ? savedToolResults.get(msg.tool_call_id)
+                        ? (savedToolResults.get(msg.tool_call_id) ?? null)
                         : null;
-                    const content =
-                        msg.role === "assistant"
-                            ? msg.tool_calls
-                                ? ""
-                                : sanitizeAssistantMediaMarkup(msg.content)
-                            : savedTool
-                              ? savedTool.type === "error"
-                                  ? `Error: ${savedTool.content}`
-                                  : savedTool.content
-                              : msg.content;
+                    const content = contentForPersistence(msg, savedTool);
                     const thinking =
                         msg.role === "assistant" && msg.thinking?.trim() ? msg.thinking : null;
                     saveMessage(
