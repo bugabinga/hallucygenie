@@ -9,6 +9,7 @@ import { Window } from "happy-dom";
 const indexHtml = readFileSync("public/index.html", "utf-8");
 const styleCss = readFileSync("public/style.css", "utf-8");
 const appTs = readFileSync("public/app.ts", "utf-8");
+const appJs = readFileSync("public/app.js", "utf-8");
 const justfile = readFileSync("justfile", "utf-8");
 const serverTs = readFileSync("src/server.ts", "utf-8");
 const gitignore = readFileSync(".gitignore", "utf-8");
@@ -363,6 +364,16 @@ describe("frontend session identity health", () => {
         assert.equal(appTs.includes("hallucygenie_user_profile_v1"), false);
         assert.doesNotMatch(appTs, /localStorage\.setItem\([^\)]*profile/i);
         assert.match(appTs, /\/api\/profile/);
+    });
+
+    it("uses localStorage only for onboarding plus legacy session cleanup", () => {
+        assert.equal(appTs.includes("hallucygenie_recent_error"), false);
+        assert.equal(appJs.includes("hallucygenie_recent_error"), false);
+        assert.doesNotMatch(appTs, /restoreRecentError|saveRecentError|clearRecentError/);
+        assert.doesNotMatch(appJs, /restoreRecentError|saveRecentError|clearRecentError/);
+        assert.match(appTs, /localStorage\.removeItem\(LEGACY_SESSION_KEY\)/);
+        assert.match(appTs, /localStorage\.setItem\(ONBOARDING_KEY, "1"\)/);
+        assert.match(appTs, /localStorage\.getItem\(ONBOARDING_KEY\)/);
     });
 });
 

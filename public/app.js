@@ -2176,8 +2176,6 @@ function renderThinkingBlock(text) {
   return `<details class="thinking-block"><summary>\u{1F4AD} Thinking${lines > 1 ? ` (${lines} lines)` : ""}\u2026</summary><div class="thinking-content">${renderMarkdown(text)}</div></details>`;
 }
 var LEGACY_SESSION_KEY = "hallucygenie_session_id";
-var RECENT_ERROR_KEY = "hallucygenie_recent_error";
-var RECENT_ERROR_TTL_MS = 10 * 60 * 1e3;
 var DEFAULT_USER_AVATAR = "\u{1F3AE}";
 var currentProfile = {
   version: 1,
@@ -2597,38 +2595,12 @@ function safeErrorMessage(message) {
   }
   return message;
 }
-function saveRecentError(message) {
-  localStorage.setItem(RECENT_ERROR_KEY, JSON.stringify({ message, createdAt: Date.now() }));
-}
-function clearRecentError() {
-  localStorage.removeItem(RECENT_ERROR_KEY);
-}
-function restoreRecentError(now = Date.now()) {
-  try {
-    const raw = localStorage.getItem(RECENT_ERROR_KEY);
-    if (!raw) return null;
-    const parsed = JSON.parse(raw);
-    if (typeof parsed.message !== "string" || typeof parsed.createdAt !== "number") {
-      clearRecentError();
-      return null;
-    }
-    if (now - parsed.createdAt > RECENT_ERROR_TTL_MS) {
-      clearRecentError();
-      return null;
-    }
-    return parsed.message;
-  } catch {
-    clearRecentError();
-    return null;
-  }
-}
 function showError(message, duration = 4e3) {
   const safeMessage = safeErrorMessage(message);
   const toast = $("#error-toast");
   const msgEl = $("#error-toast-message");
   msgEl.textContent = safeMessage;
   toast.hidden = false;
-  saveRecentError(safeMessage);
   if (toastTimeout) clearTimeout(toastTimeout);
   toastTimeout = setTimeout(() => {
     toast.hidden = true;
@@ -2701,7 +2673,6 @@ function ensureAssistantContent() {
 function handleSSEEvent(event) {
   const { event: eventType, data } = event;
   if (data === "[DONE]") {
-    clearRecentError();
     finishStreaming();
     return;
   }
@@ -2994,8 +2965,6 @@ async function updateQuotaBadge() {
 }
 function init() {
   clearLegacySessionId();
-  const restoredError = restoreRecentError();
-  if (restoredError) showError(restoredError);
   const form = $("#chat-form");
   const input = $("#chat-input");
   const sendBtn = $("#send-button");
@@ -3330,7 +3299,6 @@ export {
   renderToolCardLoading,
   renderToolResult,
   renderUserMessage,
-  restoreRecentError,
   sendMessage,
   sendSteer,
   sendSteerMessage,

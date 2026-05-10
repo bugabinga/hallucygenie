@@ -58,8 +58,6 @@ export function renderThinkingBlock(text: string): string {
 // ── API helpers ──────────────────────────────────────────────────────
 
 const LEGACY_SESSION_KEY = "hallucygenie_session_id";
-const RECENT_ERROR_KEY = "hallucygenie_recent_error";
-const RECENT_ERROR_TTL_MS = 10 * 60 * 1000;
 export const DEFAULT_USER_AVATAR = "🎮";
 
 let currentProfile: UserProfile = {
@@ -593,41 +591,12 @@ function safeErrorMessage(message: string): string {
     return message;
 }
 
-function saveRecentError(message: string): void {
-    localStorage.setItem(RECENT_ERROR_KEY, JSON.stringify({ message, createdAt: Date.now() }));
-}
-
-function clearRecentError(): void {
-    localStorage.removeItem(RECENT_ERROR_KEY);
-}
-
-export function restoreRecentError(now = Date.now()): string | null {
-    try {
-        const raw = localStorage.getItem(RECENT_ERROR_KEY);
-        if (!raw) return null;
-        const parsed = JSON.parse(raw) as { message?: unknown; createdAt?: unknown };
-        if (typeof parsed.message !== "string" || typeof parsed.createdAt !== "number") {
-            clearRecentError();
-            return null;
-        }
-        if (now - parsed.createdAt > RECENT_ERROR_TTL_MS) {
-            clearRecentError();
-            return null;
-        }
-        return parsed.message;
-    } catch {
-        clearRecentError();
-        return null;
-    }
-}
-
 export function showError(message: string, duration = 4000): void {
     const safeMessage = safeErrorMessage(message);
     const toast = $("#error-toast");
     const msgEl = $("#error-toast-message");
     msgEl.textContent = safeMessage;
     toast.hidden = false;
-    saveRecentError(safeMessage);
 
     if (toastTimeout) clearTimeout(toastTimeout);
     toastTimeout = setTimeout(() => {
@@ -727,7 +696,6 @@ function handleSSEEvent(event: SSEEvent): void {
 
     // Done signal
     if (data === "[DONE]") {
-        clearRecentError();
         finishStreaming();
         return;
     }
@@ -1139,8 +1107,6 @@ export async function updateQuotaBadge(): Promise<void> {
 
 export function init(): void {
     clearLegacySessionId();
-    const restoredError = restoreRecentError();
-    if (restoredError) showError(restoredError);
 
     const form = $("#chat-form") as HTMLFormElement;
     const input = $("#chat-input") as HTMLTextAreaElement;
