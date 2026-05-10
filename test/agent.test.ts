@@ -627,6 +627,26 @@ describe("runAgentLoop", () => {
         assert.equal(doneEvents.length, 1);
     });
 
+    it("handles null response body gracefully", async () => {
+        // Response with null body (status 200 but no body content)
+        mockAnthropic([new Response(null, { status: 200 })]);
+
+        const { events, onEvent } = collectEvents();
+        const messages = await runAgentLoop([{ role: "user", content: "hi" }], "test-key", onEvent);
+
+        // Should return local messages without crashing
+        assert.equal(messages.length, 1);
+        assert.equal(messages[0].role, "user");
+
+        // Should emit error and done events
+        const errorEvents = events.filter((e) => e.type === "error");
+        assert.equal(errorEvents.length, 1);
+        assert.ok(errorEvents[0].content?.includes("empty response"));
+
+        const doneEvents = events.filter((e) => e.type === "done");
+        assert.equal(doneEvents.length, 1);
+    });
+
     it("suppresses MiniMax tool id errors after tool result is emitted", async () => {
         const firstResponse = anthropicResponse(
             toolUseResponse("call_function_ynt4kuk8nlse_1", "generate_image", '{"prompt":"cat"}'),

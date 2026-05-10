@@ -582,7 +582,13 @@ export async function runAgentLoop(
         let currentBlockType: "thinking" | "text" | "tool_use" | null = null;
         let currentBlockIndex = -1;
 
-        const reader = resp.body!.getReader();
+        if (!resp.body) {
+            log.error("minimax response body is null");
+            await onEvent({ type: "error", content: "Server returned empty response" });
+            await onEvent({ type: "done" });
+            return localMessages;
+        }
+        const reader = resp.body.getReader();
         const decoder = new TextDecoder();
         let buffer = "";
         let currentEventType = "";
