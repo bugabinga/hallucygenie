@@ -91,8 +91,9 @@ describe("getToolDefinitions", () => {
         };
         assert.equal(schema.type, "object");
         assert.ok(schema.properties.prompt);
-        assert.ok(schema.properties.genre);
-        assert.ok(schema.properties.theme);
+        assert.ok(schema.properties.mode);
+        assert.ok(schema.properties.lyrics);
+        assert.ok(schema.properties.title);
         assert.deepEqual(schema.required, ["prompt"]);
     });
 
@@ -169,7 +170,7 @@ describe("executeTool", () => {
 
     it("dispatches to generate_lyrics", async () => {
         globalThis.fetch = async () =>
-            jsonResponse({ data: { lyrics: "Verse: Hello world\nChorus: Hello again!" } });
+            jsonResponse({ lyrics: "Verse: Hello world\nChorus: Hello again!" });
 
         const result = await executeTool("generate_lyrics", { prompt: "a happy song" }, API_KEY);
         assert.equal(result.type, "text");
@@ -582,7 +583,10 @@ describe("generateLyrics", () => {
             capturedUrl = url.toString();
             capturedInit = init;
             return jsonResponse({
-                data: { lyrics: "Verse: Hello world\nChorus: Hello again!" },
+                song_title: "Hello Song",
+                style_tags: "Pop, Happy",
+                lyrics: "Verse: Hello world\nChorus: Hello again!",
+                base_resp: { status_code: 0, status_msg: "success" },
             });
         };
 
@@ -594,47 +598,55 @@ describe("generateLyrics", () => {
         assert.equal(capturedInit?.method, "POST");
 
         const body = JSON.parse(capturedInit!.body as string);
-        assert.equal(body.model, "lyrics-01");
+        assert.equal(body.mode, "write_full_song");
         assert.equal(body.prompt, "a happy birthday song");
+        assert.equal("model" in body, false);
 
         const headers = capturedInit!.headers as Record<string, string>;
         assert.equal(headers["Authorization"], `Bearer ${API_KEY}`);
     });
 
-    it("includes optional genre and theme fields", async () => {
+    it("includes optional title and edit lyrics fields", async () => {
         let capturedBody = "";
         globalThis.fetch = async (_url: string | URL | Request, init?: RequestInit) => {
             capturedBody = init?.body as string;
-            return jsonResponse({ data: { lyrics: "Some lyrics" } });
+            return jsonResponse({ lyrics: "Some lyrics" });
         };
 
         await generateLyrics(
-            { prompt: "an adventure theme", genre: "EDM", theme: "courage" },
+            {
+                prompt: "make this chorus stronger",
+                mode: "edit",
+                lyrics: "[Chorus]\nWe win today",
+                title: "Victory Song",
+            },
             API_KEY,
         );
         const body = JSON.parse(capturedBody);
-        assert.equal(body.genre, "EDM");
-        assert.equal(body.theme, "courage");
+        assert.equal(body.mode, "edit");
+        assert.equal(body.lyrics, "[Chorus]\nWe win today");
+        assert.equal(body.title, "Victory Song");
     });
 
-    it("omits genre and theme when not provided", async () => {
+    it("omits optional edit fields when not provided", async () => {
         let capturedBody = "";
         globalThis.fetch = async (_url: string | URL | Request, init?: RequestInit) => {
             capturedBody = init?.body as string;
-            return jsonResponse({ data: { lyrics: "Some lyrics" } });
+            return jsonResponse({ lyrics: "Some lyrics" });
         };
 
         await generateLyrics("a fun song", API_KEY);
         const body = JSON.parse(capturedBody);
-        assert.equal("genre" in body, false);
-        assert.equal("theme" in body, false);
+        assert.equal(body.mode, "write_full_song");
+        assert.equal("lyrics" in body, false);
+        assert.equal("title" in body, false);
     });
 
     it("accepts string input shorthand", async () => {
         let capturedBody = "";
         globalThis.fetch = async (_url: string | URL | Request, init?: RequestInit) => {
             capturedBody = init?.body as string;
-            return jsonResponse({ data: { lyrics: "Lyrics here" } });
+            return jsonResponse({ lyrics: "Lyrics here" });
         };
 
         await generateLyrics("a song about friendship", API_KEY);
@@ -646,7 +658,7 @@ describe("generateLyrics", () => {
         let capturedInit: RequestInit | undefined;
         globalThis.fetch = async (_url: string | URL | Request, init?: RequestInit) => {
             capturedInit = init;
-            return jsonResponse({ data: { lyrics: "Test lyrics" } });
+            return jsonResponse({ lyrics: "Test lyrics" });
         };
 
         await generateLyrics("test", API_KEY);
@@ -686,7 +698,7 @@ describe("generateLyrics", () => {
     });
 
     it("handles empty lyrics in response", async () => {
-        mockFetch(jsonResponse({ data: { lyrics: "" } }));
+        mockFetch(jsonResponse({ lyrics: "" }));
 
         const result = await generateLyrics("test", API_KEY);
         assert.equal(result.type, "error");
@@ -694,7 +706,7 @@ describe("generateLyrics", () => {
     });
 
     it("handles missing lyrics field in response", async () => {
-        mockFetch(jsonResponse({ data: {} }));
+        mockFetch(jsonResponse({ song_title: "No Lyrics" }));
 
         const result = await generateLyrics("test", API_KEY);
         assert.equal(result.type, "error");
@@ -712,7 +724,7 @@ describe("generateLyrics", () => {
     it("returns lyrics text on success", async () => {
         globalThis.fetch = async () =>
             jsonResponse({
-                data: { lyrics: "Verse: Jump up and down\nChorus: We are champions!" },
+                lyrics: "Verse: Jump up and down\nChorus: We are champions!",
             });
 
         const result = await generateLyrics("a fun gaming anthem", API_KEY);
@@ -724,7 +736,7 @@ describe("generateLyrics", () => {
     it("snapshot: generate_lyrics result format", async () => {
         globalThis.fetch = async () =>
             jsonResponse({
-                data: { lyrics: "Verse: Happy birthday to you!\nChorus: Happy birthday!" },
+                lyrics: "Verse: Happy birthday to you!\nChorus: Happy birthday!",
             });
 
         const result = await generateLyrics("a birthday song", API_KEY);

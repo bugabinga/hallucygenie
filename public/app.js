@@ -2367,7 +2367,8 @@ function renderSteerMessage(content) {
 var TOOL_EMOJIS = {
   generate_image: "\u{1F3A8}",
   text_to_speech: "\u{1F399}\uFE0F",
-  generate_music: "\u{1F3B5}"
+  generate_music: "\u{1F3B5}",
+  generate_lyrics: "\u{1F4DD}"
 };
 function getToolEmoji(name) {
   return TOOL_EMOJIS[name] ?? "\u{1F527}";
@@ -2563,6 +2564,8 @@ var currentAssistantContent = null;
 var activeToolCards = /* @__PURE__ */ new Map();
 var rawTextBuffer = "";
 var thinkingBuffer = "";
+var lyricsWriteResolve = null;
+var capturedLyricsText = null;
 async function streamChat(messages, onEvent) {
   const resp = await fetch("/api/chat", {
     method: "POST",
@@ -2659,6 +2662,9 @@ function handleSSEEvent(event) {
   if (eventType === "tool_result") {
     try {
       const parsed = JSON.parse(data);
+      if (parsed.name === "generate_lyrics" && parsed.result.type === "text" && lyricsWriteResolve) {
+        capturedLyricsText = parsed.result.content;
+      }
       const loadingCard = activeToolCards.get(parsed.id);
       const resultCard = renderToolResult(parsed.name, parsed.result);
       if (loadingCard?.isConnected) {
@@ -2724,6 +2730,10 @@ function scrollToBottom() {
   });
 }
 function finishStreaming() {
+  if (lyricsWriteResolve && capturedLyricsText !== null) {
+    lyricsWriteResolve(capturedLyricsText);
+  }
+  capturedLyricsText = null;
   currentAssistantContent?.querySelectorAll(".assistant-text-region.is-streaming").forEach((el) => {
     el.innerHTML = renderMarkdown(rawTextBuffer);
     el.classList.remove("is-streaming");
@@ -2736,6 +2746,9 @@ function finishStreaming() {
   rawTextBuffer = "";
   thinkingBuffer = "";
   setStreamingUI(false);
+}
+function setLyricsWriteResolve(fn) {
+  lyricsWriteResolve = fn;
 }
 function setStreamingUI(streaming) {
   const input = $("#chat-input");
@@ -3165,6 +3178,25 @@ Tool params: aspect_ratio=${ratio}`
 Tool params: lyrics=${lyrics}`;
       sendMessage(msg);
     }
+  });
+  const writeLyricsBtn = document.querySelector("#write-lyrics-btn");
+  writeLyricsBtn?.addEventListener("click", () => {
+    const prompt = musicPromptInput.value.trim();
+    if (!prompt) {
+      showError("Describe the music first so I can write matching lyrics! \u270D\uFE0F");
+      musicPromptInput.focus();
+      return;
+    }
+    writeLyricsBtn.disabled = true;
+    writeLyricsBtn.textContent = "Writing... \u2728";
+    setLyricsWriteResolve((lyricsText) => {
+      musicLyricsInput.value = lyricsText;
+    });
+    sendMessage(`Use generate_lyrics with prompt: ${prompt}`).finally(() => {
+      writeLyricsBtn.disabled = false;
+      writeLyricsBtn.textContent = "Write lyrics for me \u2728";
+      setLyricsWriteResolve(null);
+    });
   });
   createVoiceForm.addEventListener("submit", (e) => {
     e.preventDefault();

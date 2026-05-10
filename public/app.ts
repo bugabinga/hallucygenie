@@ -1367,8 +1367,8 @@ export function init(): void {
     });
 
     // "Write lyrics for me" button — calls generate_lyrics and fills the textarea
-    const writeLyricsBtn = $("#write-lyrics-btn") as HTMLButtonElement;
-    writeLyricsBtn.addEventListener("click", () => {
+    const writeLyricsBtn = document.querySelector<HTMLButtonElement>("#write-lyrics-btn");
+    writeLyricsBtn?.addEventListener("click", () => {
         const prompt = musicPromptInput.value.trim();
         if (!prompt) {
             showError("Describe the music first so I can write matching lyrics! ✍️");

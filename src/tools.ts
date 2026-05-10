@@ -1,5 +1,5 @@
 // HallucyGenie — Tool definitions and execution
-// Implements generate_image, text_to_speech, generate_music
+// Implements generate_image, text_to_speech, generate_lyrics, generate_music
 
 // ── Types ────────────────────────────────────────────────────────────
 
@@ -29,8 +29,9 @@ export interface TextToSpeechOptions {
 
 export interface GenerateLyricsOptions {
     prompt: string;
-    genre?: string;
-    theme?: string;
+    mode?: "write_full_song" | "edit";
+    lyrics?: string;
+    title?: string;
 }
 
 export interface GenerateMusicOptions {
@@ -124,14 +125,19 @@ export function getToolDefinitions(): ToolDefinition[] {
                         description:
                             "Description or topic for the lyrics (e.g., 'a happy birthday song', 'an adventure theme').",
                     },
-                    genre: {
+                    mode: {
                         type: "string",
+                        enum: ["write_full_song", "edit"],
                         description:
-                            "Optional music genre hint (e.g., 'pop', 'hip-hop', 'EDM', 'ballad').",
+                            "Generation mode. Defaults to write_full_song unless existing lyrics are provided.",
                     },
-                    theme: {
+                    lyrics: {
                         type: "string",
-                        description: "Optional theme hint (e.g., 'friendship', 'fun', 'courage').",
+                        description: "Existing lyrics to edit or continue when mode is edit.",
+                    },
+                    title: {
+                        type: "string",
+                        description: "Optional song title to preserve in the generated output.",
                     },
                 },
                 required: ["prompt"],
@@ -222,8 +228,9 @@ export async function executeTool(
             return generateLyrics(
                 {
                     prompt: args.prompt as string,
-                    genre: args.genre as string | undefined,
-                    theme: args.theme as string | undefined,
+                    mode: validateLyricsMode(args.mode),
+                    lyrics: args.lyrics as string | undefined,
+                    title: args.title as string | undefined,
                 },
                 apiKey,
             );
@@ -273,6 +280,10 @@ function musicOptionsFromInput(
     lyrics?: string,
 ): GenerateMusicOptions {
     return typeof input === "string" ? { prompt: input, lyrics } : input;
+}
+
+function validateLyricsMode(value: unknown): GenerateLyricsOptions["mode"] | undefined {
+    return value === "write_full_song" || value === "edit" ? value : undefined;
 }
 
 /**
@@ -407,12 +418,14 @@ export async function generateLyrics(
 ): Promise<ToolResult> {
     const options = typeof input === "string" ? { prompt: input } : input;
     try {
+        const existingLyrics = options.lyrics?.trim() ?? "";
+        const mode = options.mode ?? (existingLyrics ? "edit" : "write_full_song");
         const payload: Record<string, unknown> = {
-            model: "lyrics-01",
+            mode,
             prompt: options.prompt,
         };
-        if (options.genre) payload.genre = options.genre;
-        if (options.theme) payload.theme = options.theme;
+        if (existingLyrics) payload.lyrics = existingLyrics;
+        if (options.title?.trim()) payload.title = options.title.trim();
 
         const resp = await fetch(`${MINIMAX_BASE}/v1/lyrics_generation`, {
             method: "POST",
@@ -432,7 +445,9 @@ export async function generateLyrics(
         }
 
         const data = (await resp.json()) as {
-            data?: { lyrics?: string } | null;
+            song_title?: string;
+            style_tags?: string;
+            lyrics?: string;
             base_resp?: { status_code?: number; status_msg?: string };
         };
         if (data.base_resp && data.base_resp.status_code !== 0) {
@@ -442,7 +457,7 @@ export async function generateLyrics(
             };
         }
 
-        const lyrics = data.data?.lyrics;
+        const lyrics = data.lyrics;
         if (!lyrics) {
             return { type: "error", content: "Lyrics generation returned no lyrics text" };
         }

@@ -530,7 +530,7 @@ export function parseExplicitToolDirective(content: string): ExplicitToolDirecti
         generate_image: new Set(["aspect_ratio"]),
         generate_music: new Set(["lyrics"]),
         text_to_speech: new Set(["voice_id", "speed", "volume", "pitch"]),
-        generate_lyrics: new Set(["genre", "theme"]),
+        generate_lyrics: new Set(["mode", "lyrics", "title"]),
     };
     const args = parseToolParams(match[4], allowedParams[name]);
 
@@ -704,7 +704,7 @@ export async function handleRequest(req: Request): Promise<Response> {
             const speech = find("speech-hd");
             const image = find("image-01");
             const music = find("music-2.6");
-            const lyrics = find("lyrics-01");
+            const lyrics = find("lyrics-01") ?? find("lyrics");
             return jsonResponse({
                 chat: m2
                     ? {
@@ -1045,10 +1045,11 @@ function assetParamsJson(
     }
     if (toolName === "generate_lyrics") {
         return JSON.stringify({
-            model: "lyrics-01",
+            endpoint: "lyrics_generation",
+            mode: stringParam(args, "mode") ?? null,
             prompt: prompt ?? stringParam(args, "prompt") ?? null,
-            genre: stringParam(args, "genre") ?? null,
-            theme: stringParam(args, "theme") ?? null,
+            title: stringParam(args, "title") ?? null,
+            lyrics_present: Boolean(stringParam(args, "lyrics")),
         });
     }
     return null;
