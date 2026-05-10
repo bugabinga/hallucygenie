@@ -19,7 +19,7 @@ import { createLogger, nextReqId } from "./log.ts";
 
 const log = createLogger({ service: "hallucygenie" });
 import type { Database } from "bun:sqlite";
-import type { ToolResult } from "./tools.ts";
+import { MINIMAX_BASE, type ToolResult } from "./tools.ts";
 import {
     runAgentLoop,
     buildSystemPrompt,
@@ -30,7 +30,6 @@ import {
     drainSteer,
     executeToolSafely,
     safeToolResultForUser,
-    MINIMAX_BASE,
     type SteerQueue,
     type AgentEvent,
 } from "./agent.ts";
@@ -90,10 +89,6 @@ const CORS_HEADERS: Record<string, string> = {
     "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
 };
 
-function corsHeaders(): Record<string, string> {
-    return { ...CORS_HEADERS };
-}
-
 // ── JSON response helpers ────────────────────────────────────────────
 
 function jsonResponse(
@@ -103,7 +98,7 @@ function jsonResponse(
 ): Response {
     const headers: Record<string, string> = {
         "Content-Type": "application/json",
-        ...corsHeaders(),
+        ...CORS_HEADERS,
         ...extraHeaders,
     };
     return new Response(JSON.stringify(data), { status, headers });
@@ -115,7 +110,7 @@ function sseResponse(stream: ReadableStream<Uint8Array>): Response {
             "Content-Type": "text/event-stream",
             "Cache-Control": "no-cache",
             Connection: "keep-alive",
-            ...corsHeaders(),
+            ...CORS_HEADERS,
         },
     });
 }
@@ -612,13 +607,9 @@ function handleExplicitToolDirective(
 
 // ── Session validation ──────────────────────────────────────────────
 
-function normalizeSessionId(sessionId: string | null): string | null {
-    const trimmed = sessionId?.trim() ?? "";
-    return trimmed || null;
-}
-
 export function validateSessionId(req: Request): string | null {
-    return normalizeSessionId(req.headers.get("X-Session-Id"));
+    const trimmed = req.headers.get("X-Session-Id")?.trim() ?? "";
+    return trimmed || null;
 }
 
 export function resolveSessionId(req: Request, database: Database): string {
@@ -644,7 +635,7 @@ export async function handleRequest(req: Request): Promise<Response> {
 
     // CORS preflight
     if (method === "OPTIONS") {
-        return new Response(null, { status: 204, headers: corsHeaders() });
+        return new Response(null, { status: 204, headers: CORS_HEADERS });
     }
 
     // API routes
