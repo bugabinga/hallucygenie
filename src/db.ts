@@ -476,6 +476,31 @@ export function checkQuota(db: Database, feature: string): QuotaStatus {
     return { used, limit, remaining, warning, blocked };
 }
 
+/**
+ * Atomically check and consume one quota unit for a feature.
+ * Returns the new usage count, or null if quota was already exhausted.
+ */
+export function consumeQuota(db: Database, feature: string): number | null {
+    const limit = QUOTAS[feature] ?? 0;
+    if (limit === 0) return 0;
+
+    const result = db
+        .prepare(
+            `INSERT INTO daily_usage (date, feature, count)
+             VALUES (date('now'), ?, 1)
+             ON CONFLICT(date, feature) DO UPDATE SET count = count + 1
+             WHERE daily_usage.count < ?`,
+        )
+        .run(feature, limit);
+
+    if (result.changes === 0) return null;
+
+    const row = db
+        .prepare("SELECT count FROM daily_usage WHERE date = date('now') AND feature = ?")
+        .get(feature) as { count: number } | undefined;
+    return row?.count ?? 1;
+}
+
 // ── Assets ─────────────────────────────────────────────────────────
 
 export interface AssetRow {

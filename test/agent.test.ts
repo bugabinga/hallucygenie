@@ -27,7 +27,7 @@ import {
     executeToolSafely,
     DEFAULT_MAX_CONTEXT_TOKENS,
 } from "../src/agent.ts";
-import type { AgentEvent } from "../src/agent.ts";
+import type { AgentEvent, OnBeforeTool } from "../src/agent.ts";
 
 // ── Test helpers ─────────────────────────────────────────────────────
 
@@ -1039,6 +1039,138 @@ describe("runAgentLoop", () => {
         );
         assert.equal(toolResultContent.tool_use_id, "tu_1");
     });
+
+    it("emits thinking_reset at the start of each LLM call iteration", async () => {
+        const firstResponse = anthropicResponse(
+            toolUseResponse("call_1", "generate_image", '{"prompt":"cat"}'),
+        );
+        const secondResponse = anthropicResponse(textResponse(["Done!"]));
+        let llmCallCount = 0;
+        globalThis.fetch = async (url: string | URL | Request) => {
+            if (url.toString().includes("/anthropic/v1/messages")) {
+                llmCallCount++;
+                return llmCallCount === 1 ? firstResponse : secondResponse;
+            }
+            return new Response(JSON.stringify({ data: { image_urls: ["https://img/cat.png"] } }), {
+                status: 200,
+                headers: { "Content-Type": "application/json" },
+            });
+        };
+
+        const { events, onEvent } = collectEvents();
+        await runAgentLoop([{ role: "user", content: "draw a cat" }], "test-key", onEvent);
+
+        assert.equal(events.filter((e) => e.type === "thinking_reset").length, 2);
+    });
+
+    it("onBeforeTool substitutes a result and skips normal tool execution", async () => {
+        const firstResponse = anthropicResponse(
+            toolUseResponse("call_1", "generate_image", '{"prompt":"cat"}'),
+        );
+        const secondResponse = anthropicResponse(textResponse(["Done!"]));
+        let llmCallCount = 0;
+        let toolExecuted = false;
+        globalThis.fetch = async (url: string | URL | Request) => {
+            if (url.toString().includes("/anthropic/v1/messages")) {
+                llmCallCount++;
+                return llmCallCount === 1 ? firstResponse : secondResponse;
+            }
+            toolExecuted = true;
+            return new Response(JSON.stringify({ data: { image_urls: ["https://img/cat.png"] } }), {
+                status: 200,
+                headers: { "Content-Type": "application/json" },
+            });
+        };
+
+        const onBeforeTool: OnBeforeTool = (toolName) =>
+            toolName === "generate_image"
+                ? { type: "error", content: "Daily image quota is used up." }
+                : null;
+
+        const { events, onEvent } = collectEvents();
+        await runAgentLoop(
+            [{ role: "user", content: "draw a cat" }],
+            "test-key",
+            onEvent,
+            undefined,
+            onBeforeTool,
+        );
+
+        assert.equal(toolExecuted, false);
+        const toolResult = events.find((e) => e.type === "tool_result");
+        assert.equal(toolResult?.result?.type, "error");
+        assert.equal(toolResult?.result?.content, "Daily image quota is used up.");
+    });
+
+    it("onBeforeTool returning null proceeds with normal tool execution", async () => {
+        const firstResponse = anthropicResponse(
+            toolUseResponse("call_1", "generate_image", '{"prompt":"cat"}'),
+        );
+        const secondResponse = anthropicResponse(textResponse(["Done!"]));
+        let llmCallCount = 0;
+        let toolExecuted = false;
+        globalThis.fetch = async (url: string | URL | Request) => {
+            if (url.toString().includes("/anthropic/v1/messages")) {
+                llmCallCount++;
+                return llmCallCount === 1 ? firstResponse : secondResponse;
+            }
+            toolExecuted = true;
+            return new Response(JSON.stringify({ data: { image_urls: ["https://img/cat.png"] } }), {
+                status: 200,
+                headers: { "Content-Type": "application/json" },
+            });
+        };
+
+        const { events, onEvent } = collectEvents();
+        await runAgentLoop(
+            [{ role: "user", content: "draw a cat" }],
+            "test-key",
+            onEvent,
+            undefined,
+            () => null,
+        );
+
+        assert.equal(toolExecuted, true);
+        assert.equal(events.find((e) => e.type === "tool_result")?.result?.type, "image");
+    });
+
+    it("stores thinking on the matching assistant turn", async () => {
+        const firstResponse = anthropicResponse([
+            messageStart(),
+            contentBlockStart(0, "thinking"),
+            contentBlockDelta(0, "thinking_delta", "plan tool"),
+            contentBlockStop(0),
+            contentBlockStart(1, "tool_use", { id: "call_1", name: "generate_image" }),
+            contentBlockDelta(1, "input_json_delta", '{"prompt":"cat"}'),
+            contentBlockStop(1),
+            messageDelta("tool_use"),
+            messageStop(),
+        ]);
+        const secondResponse = anthropicResponse(thinkingTextResponse("plan final", "Done!"));
+        let llmCallCount = 0;
+        globalThis.fetch = async (url: string | URL | Request) => {
+            if (url.toString().includes("/anthropic/v1/messages")) {
+                llmCallCount++;
+                return llmCallCount === 1 ? firstResponse : secondResponse;
+            }
+            return new Response(JSON.stringify({ data: { image_urls: ["https://img/cat.png"] } }), {
+                status: 200,
+                headers: { "Content-Type": "application/json" },
+            });
+        };
+
+        const { onEvent } = collectEvents();
+        const messages = await runAgentLoop(
+            [{ role: "user", content: "draw a cat" }],
+            "test-key",
+            onEvent,
+        );
+
+        assert.equal(messages[1].role, "assistant");
+        assert.equal(messages[1].thinking, "plan tool");
+        assert.equal(messages[3].role, "assistant");
+        assert.equal(messages[3].thinking, "plan final");
+    });
 });
 
 // ── Snapshot tests for event sequences ───────────────────────────────
@@ -1064,6 +1196,7 @@ describe("Agent event sequence snapshots", () => {
         }));
 
         assert.deepEqual(eventTypes, [
+            { type: "thinking_reset" },
             { type: "text", content: "Hi" },
             { type: "text", content: " there" },
             { type: "done" },
@@ -1096,7 +1229,14 @@ describe("Agent event sequence snapshots", () => {
         await runAgentLoop([{ role: "user", content: "draw" }], "test-key", onEvent);
 
         const eventTypes = events.map((e) => e.type);
-        assert.deepEqual(eventTypes, ["tool_start", "tool_result", "text", "done"]);
+        assert.deepEqual(eventTypes, [
+            "thinking_reset",
+            "tool_start",
+            "tool_result",
+            "thinking_reset",
+            "text",
+            "done",
+        ]);
     });
 
     it("snapshot: thinking + text event sequence", async () => {
@@ -1106,7 +1246,7 @@ describe("Agent event sequence snapshots", () => {
         await runAgentLoop([{ role: "user", content: "hello" }], "test-key", onEvent);
 
         const eventTypes = events.map((e) => e.type);
-        assert.deepEqual(eventTypes, ["thinking", "text", "done"]);
+        assert.deepEqual(eventTypes, ["thinking_reset", "thinking", "text", "done"]);
     });
 
     it("snapshot: message history after tool call", async () => {

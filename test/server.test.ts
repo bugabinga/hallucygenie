@@ -19,7 +19,7 @@ import { MINIMAX_MODEL } from "../src/agent.ts";
 import { existsSync, rmSync, mkdirSync } from "node:fs";
 import { join } from "node:path";
 import http from "node:http";
-import { getMessages, getAssets } from "../src/db.ts";
+import { getMessages, getAssets, getUsageToday } from "../src/db.ts";
 import {
     trackUsage,
     saveMessage,
@@ -752,6 +752,60 @@ describe("SSE streaming from Anthropic endpoint", () => {
             });
         } finally {
             globalThis.fetch = originalFetch;
+        }
+    });
+
+    it("consumes exactly one quota unit for successful explicit tool directives", async () => {
+        const sessionId = "explicit-quota-once-session";
+        const db = getDb()!;
+        const existing = db
+            .prepare("SELECT count FROM daily_usage WHERE date = date('now') AND feature = 'image'")
+            .get() as { count: number } | undefined;
+        db.prepare(
+            "INSERT OR REPLACE INTO daily_usage (date, feature, count) VALUES (date('now'), 'image', 99)",
+        ).run();
+
+        const originalFetch = globalThis.fetch;
+        let imageApiCalls = 0;
+        globalThis.fetch = async (url: string | URL | Request) => {
+            const urlStr = url.toString();
+            if (urlStr === "https://example.com/once.png") {
+                return new Response(new Uint8Array([1, 2, 3]), {
+                    status: 200,
+                    headers: { "Content-Type": "image/png" },
+                });
+            }
+            if (urlStr.includes("/v1/image_generation")) imageApiCalls++;
+            return new Response(
+                JSON.stringify({ data: { image_urls: ["https://example.com/once.png"] } }),
+                { status: 200, headers: { "Content-Type": "application/json" } },
+            );
+        };
+
+        try {
+            const req = makeRequest(
+                "POST",
+                "/api/chat",
+                { messages: [{ role: "user", content: "Use generate_image with prompt: cat" }] },
+                { "X-Session-Id": sessionId },
+            );
+            const resp = await handleChat(req, "test-key", sessionId);
+            const body = await readBody(resp);
+
+            assert.ok(body.includes("/asset/"));
+            assert.equal(imageApiCalls, 1);
+            assert.equal(getUsageToday(db).image, 100);
+        } finally {
+            globalThis.fetch = originalFetch;
+            if (existing) {
+                db.prepare(
+                    "INSERT OR REPLACE INTO daily_usage (date, feature, count) VALUES (date('now'), 'image', ?)",
+                ).run(existing.count);
+            } else {
+                db.prepare(
+                    "DELETE FROM daily_usage WHERE date = date('now') AND feature = 'image'",
+                ).run();
+            }
         }
     });
 
@@ -1594,6 +1648,125 @@ describe("Integration: chat with agent loop + persistence", () => {
             );
         } finally {
             globalThis.fetch = originalFetch;
+        }
+    });
+
+    it("agent-loop tool call consumes exactly one quota unit", async () => {
+        const sessionId = "agent-quota-once-session";
+        const db = getDb()!;
+        const existing = db
+            .prepare("SELECT count FROM daily_usage WHERE date = date('now') AND feature = 'image'")
+            .get() as { count: number } | undefined;
+        db.prepare(
+            "INSERT OR REPLACE INTO daily_usage (date, feature, count) VALUES (date('now'), 'image', 99)",
+        ).run();
+
+        const toolCallSse = anthropicToolUseSse("tc_quota_1", "generate_image", '{"prompt":"cat"}');
+        const finalSse = anthropicTextSse(["Done."]);
+        let llmCallCount = 0;
+        let imageApiCalls = 0;
+        const originalFetch = globalThis.fetch;
+        globalThis.fetch = async (url: string | URL | Request) => {
+            const urlStr = url.toString();
+            if (urlStr.includes("/anthropic/v1/messages")) {
+                const events = llmCallCount === 0 ? toolCallSse : finalSse;
+                llmCallCount++;
+                return anthropicResponse(events);
+            }
+            if (urlStr === "https://example.com/quota-once.png") {
+                return new Response(new Uint8Array([1, 2, 3]), {
+                    status: 200,
+                    headers: { "Content-Type": "image/png" },
+                });
+            }
+            if (urlStr.includes("/v1/image_generation")) imageApiCalls++;
+            return new Response(
+                JSON.stringify({ data: { image_urls: ["https://example.com/quota-once.png"] } }),
+                { status: 200, headers: { "Content-Type": "application/json" } },
+            );
+        };
+
+        try {
+            const req = makeRequest(
+                "POST",
+                "/api/chat",
+                { messages: [{ role: "user", content: "make an image" }] },
+                { "X-Session-Id": sessionId },
+            );
+            const resp = await handleChat(req, "test-key", sessionId);
+            const body = await readBody(resp);
+
+            assert.ok(body.includes("/asset/"));
+            assert.equal(imageApiCalls, 1);
+            assert.equal(getUsageToday(db).image, 100);
+        } finally {
+            globalThis.fetch = originalFetch;
+            if (existing) {
+                db.prepare(
+                    "INSERT OR REPLACE INTO daily_usage (date, feature, count) VALUES (date('now'), 'image', ?)",
+                ).run(existing.count);
+            } else {
+                db.prepare(
+                    "DELETE FROM daily_usage WHERE date = date('now') AND feature = 'image'",
+                ).run();
+            }
+        }
+    });
+
+    it("agent-loop tool call blocks before API when quota is exhausted", async () => {
+        const sessionId = "agent-quota-blocked-session";
+        const db = getDb()!;
+        const existing = db
+            .prepare("SELECT count FROM daily_usage WHERE date = date('now') AND feature = 'image'")
+            .get() as { count: number } | undefined;
+        db.prepare(
+            "INSERT OR REPLACE INTO daily_usage (date, feature, count) VALUES (date('now'), 'image', 100)",
+        ).run();
+
+        const toolCallSse = anthropicToolUseSse(
+            "tc_blocked_1",
+            "generate_image",
+            '{"prompt":"cat"}',
+        );
+        const finalSse = anthropicTextSse(["Try later."]);
+        let llmCallCount = 0;
+        let imageApiCalls = 0;
+        const originalFetch = globalThis.fetch;
+        globalThis.fetch = async (url: string | URL | Request) => {
+            const urlStr = url.toString();
+            if (urlStr.includes("/anthropic/v1/messages")) {
+                const events = llmCallCount === 0 ? toolCallSse : finalSse;
+                llmCallCount++;
+                return anthropicResponse(events);
+            }
+            if (urlStr.includes("/v1/image_generation")) imageApiCalls++;
+            throw new Error("image API should not be called when quota is exhausted");
+        };
+
+        try {
+            const req = makeRequest(
+                "POST",
+                "/api/chat",
+                { messages: [{ role: "user", content: "make an image" }] },
+                { "X-Session-Id": sessionId },
+            );
+            const resp = await handleChat(req, "test-key", sessionId);
+            const body = await readBody(resp);
+
+            assert.ok(body.includes("Daily image quota is used up"));
+            assert.equal(imageApiCalls, 0);
+            assert.equal(getUsageToday(db).image, 100);
+        } finally {
+            globalThis.fetch = originalFetch;
+            if (existing) {
+                db.prepare(
+                    "INSERT OR REPLACE INTO daily_usage (date, feature, count) VALUES (date('now'), 'image', ?)",
+                ).run(existing.count);
+            } else {
+                db.prepare(
+                    "DELETE FROM daily_usage WHERE date = date('now') AND feature = 'image'",
+                ).run();
+            }
         }
     });
 

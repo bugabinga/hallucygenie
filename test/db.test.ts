@@ -29,6 +29,7 @@ import {
     trackUsage,
     getUsageToday,
     checkQuota,
+    consumeQuota,
     saveAsset,
     getAssets,
     getAsset,
@@ -697,6 +698,52 @@ describe("QUOTAS constant", () => {
         assert.equal(QUOTAS.speech, 9000);
         assert.equal(QUOTAS.image, 100);
         assert.equal(QUOTAS.music, 100);
+    });
+});
+
+// ── Atomic quota consumption ────────────────────────────────────────
+
+describe("consumeQuota", () => {
+    let db: Database;
+    beforeEach(() => {
+        db = freshDb();
+    });
+
+    it("allows consumption when quota is available", () => {
+        assert.equal(consumeQuota(db, "image"), 1);
+        assert.equal(checkQuota(db, "image").used, 1);
+    });
+
+    it("returns null when quota is exhausted", () => {
+        for (let i = 0; i < QUOTAS.image; i++) {
+            assert.notEqual(consumeQuota(db, "image"), null);
+        }
+
+        assert.equal(consumeQuota(db, "image"), null);
+        assert.equal(checkQuota(db, "image").used, QUOTAS.image);
+    });
+
+    it("does not increment count beyond limit", () => {
+        db.prepare(
+            "INSERT INTO daily_usage (date, feature, count) VALUES (date('now'), 'image', 99)",
+        ).run();
+
+        assert.equal(consumeQuota(db, "image"), 100);
+        assert.equal(consumeQuota(db, "image"), null);
+        assert.equal(consumeQuota(db, "image"), null);
+        assert.equal(checkQuota(db, "image").used, 100);
+    });
+
+    it("returns 0 for features with no quota limit", () => {
+        assert.equal(consumeQuota(db, "unknown_feature"), 0);
+        assert.deepEqual(getUsageToday(db), {});
+    });
+
+    it("consumes independently for different features", () => {
+        assert.equal(consumeQuota(db, "image"), 1);
+        assert.equal(consumeQuota(db, "music"), 1);
+        assert.equal(checkQuota(db, "image").used, 1);
+        assert.equal(checkQuota(db, "music").used, 1);
     });
 });
 
