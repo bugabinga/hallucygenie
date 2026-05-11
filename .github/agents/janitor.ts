@@ -216,7 +216,7 @@ function upsertStickyComment(number: number, body: string) {
 function maybeRequestCopilot(number: number, commentBody: string) {
     if (process.env.JANITOR_REQUEST_COPILOT !== "true") return;
     if (!/Request-Copilot:\s*yes/i.test(commentBody)) return;
-    const result = gh(["pr", "edit", String(number), "--add-reviewer", "Copilot"], {
+    const result = gh(["pr", "edit", String(number), "--add-reviewer", "@copilot"], {
         allowFail: true,
     });
     if (result.status === 0) console.log(`Requested Copilot review for PR #${number}`);
