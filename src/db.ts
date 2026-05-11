@@ -268,7 +268,9 @@ export function createSession(
         `INSERT INTO sessions (id, name, name_source, created_at, updated_at)
          VALUES (?, ?, ?, datetime('now'), datetime('now'))`,
     ).run(id, normalized, DEFAULT_SESSION_NAME_SOURCE);
-    return getSession(db, id)!;
+    const session = getSession(db, id);
+    if (!session) throw new Error(`session not found after insert: ${id}`);
+    return session;
 }
 
 function ensureSession(db: Database, id: string): SessionRow {
@@ -313,7 +315,9 @@ export function renameSession(db: Database, id: string, name: string): SessionRo
         )
         .run(normalized, id);
     if (result.changes !== 1) throw new Error(`session not found: ${id}`);
-    return getSession(db, id)!;
+    const session = getSession(db, id);
+    if (!session) throw new Error(`session not found after update: ${id}`);
+    return session;
 }
 
 export function archiveSession(db: Database, id: string): void {
@@ -484,21 +488,27 @@ export function consumeQuota(db: Database, feature: string): number | null {
     const limit = QUOTAS[feature] ?? 0;
     if (limit === 0) return 0;
 
-    const result = db
-        .prepare(
-            `INSERT INTO daily_usage (date, feature, count)
-             VALUES (date('now'), ?, 1)
-             ON CONFLICT(date, feature) DO UPDATE SET count = count + 1
-             WHERE daily_usage.count < ?`,
-        )
-        .run(feature, limit);
+    const consumed = db
+        .transaction(() => {
+            const result = db
+                .prepare(
+                    `INSERT INTO daily_usage (date, feature, count)
+                     VALUES (date('now'), ?, 1)
+                     ON CONFLICT(date, feature) DO UPDATE SET count = count + 1
+                     WHERE daily_usage.count < ?`,
+                )
+                .run(feature, limit);
 
-    if (result.changes === 0) return null;
+            if (result.changes === 0) return null;
 
-    const row = db
-        .prepare("SELECT count FROM daily_usage WHERE date = date('now') AND feature = ?")
-        .get(feature) as { count: number } | undefined;
-    return row?.count ?? 1;
+            const row = db
+                .prepare("SELECT count FROM daily_usage WHERE date = date('now') AND feature = ?")
+                .get(feature) as { count: number } | undefined;
+            return row?.count ?? 1;
+        })
+        .immediate();
+
+    return consumed;
 }
 
 /**

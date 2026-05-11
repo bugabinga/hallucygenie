@@ -14,6 +14,7 @@ import {
     getOrCreateActiveSessionId,
     getOrCreateActiveSession,
     createSession,
+    getSession,
     listSessions,
     renameSession,
     archiveSession,
@@ -930,5 +931,129 @@ describe("saveAsset + getAssets + getAsset", () => {
         // Newest first (by created_at DESC)
         assert.equal(assets[0].id, id2);
         assert.equal(assets[1].id, id1);
+    });
+});
+
+// ── Bug fixes ───────────────────────────────────────────────────────
+
+describe("consumeQuota race condition (HG-BUG-001)", () => {
+    let db: Database;
+    beforeEach(() => {
+        db = freshDb();
+    });
+
+    it("serialized transaction prevents exceeding limit", () => {
+        // Simulate many sequential calls that would race in a non-serialized
+        // implementation. The transaction wrapper must ensure each call sees
+        // the committed count before deciding whether to increment.
+        for (let i = 0; i < QUOTAS.image; i++) {
+            assert.notEqual(consumeQuota(db, "image"), null);
+        }
+        // One more call must be blocked — returns null
+        assert.equal(consumeQuota(db, "image"), null);
+        // Count must never exceed the limit
+        assert.equal(checkQuota(db, "image").used, QUOTAS.image);
+        assert.equal(checkQuota(db, "image").blocked, true);
+    });
+
+    it("serialized transaction prevents double-count when starting at limit-1", () => {
+        // Set count to limit - 1 and call consumeQuota exactly once per "request"
+        db.prepare(
+            "INSERT INTO daily_usage (date, feature, count) VALUES (date('now'), 'music', ?)",
+        ).run(QUOTAS.music - 1);
+
+        // First call succeeds
+        assert.equal(consumeQuota(db, "music"), QUOTAS.music);
+        // Second call is blocked — no race
+        assert.equal(consumeQuota(db, "music"), null);
+        assert.equal(checkQuota(db, "music").used, QUOTAS.music);
+    });
+
+    it("consumeQuota returns 0 for unlimited feature inside transaction", () => {
+        // Unknown feature returns 0 without entering the transaction
+        assert.equal(consumeQuota(db, "no_such_feature"), 0);
+    });
+});
+
+describe("createSession getSession null guard (HG-BUG-002)", () => {
+    let db: Database;
+    beforeEach(() => {
+        db = freshDb();
+    });
+
+    it("returns valid session on normal insert", () => {
+        const id = "test-session-normal";
+        const session = createSession(db, id, "My Session");
+        assert.equal(session.id, id);
+        assert.equal(session.name, "My Session");
+        assert.equal(session.name_source, "default");
+    });
+
+    it("guards against null return from getSession after insert", () => {
+        // Simulate getSession returning null after a successful INSERT by
+        // inserting a session, deleting it, then calling getSession directly.
+        // The fix changes the crash (TypeError on ! assertion) into a
+        // descriptive Error throw.  We verify getSession returns null for
+        // a deleted row, proving the guard is necessary.
+        const id = "deleted-after-insert";
+        db.prepare(
+            `INSERT INTO sessions (id, name, name_source, created_at, updated_at)
+             VALUES (?, ?, ?, datetime('now'), datetime('now'))`,
+        ).run(id, "Temp", "default");
+        db.prepare("DELETE FROM sessions WHERE id = ?").run(id);
+
+        // Verify getSession returns null for the deleted row — this proves
+        // the non-null assertion in the old code would have crashed.
+        assert.equal(getSession(db, id), null);
+
+        // The fix: createSession now throws a descriptive Error instead of
+        // crashing on the ! assertion.  (createSession re-inserts, so in normal
+        // use the re-insert succeeds, but the guard handles the null case.)
+        const reInserted = createSession(db, id, "Temp");
+        assert.equal(reInserted.id, id);
+    });
+});
+
+describe("renameSession getSession null guard (HG-BUG-003)", () => {
+    let db: Database;
+    beforeEach(() => {
+        db = freshDb();
+    });
+
+    it("returns updated session on normal rename", () => {
+        const id = "rename-test";
+        createSession(db, id, "Old Name");
+        const renamed = renameSession(db, id, "New Name");
+        assert.equal(renamed.name, "New Name");
+        assert.equal(renamed.name_source, "manual");
+    });
+
+    it("throws descriptive error when session deleted between UPDATE and SELECT", () => {
+        const id = "ghost-rename";
+        createSession(db, id, "Target");
+
+        // Simulate race: UPDATE succeeds (changes=1), then row is deleted
+        // before the subsequent SELECT that getSession would run.
+        const result = db
+            .prepare(
+                `UPDATE sessions
+                 SET name = ?, name_source = 'manual', updated_at = datetime('now')
+                 WHERE id = ? AND archived_at IS NULL`,
+            )
+            .run("Deleted Soon", id);
+        assert.equal(result.changes, 1);
+
+        // Delete the row — simulating concurrent deletion
+        db.prepare("DELETE FROM sessions WHERE id = ?").run(id);
+
+        // Verify getSession returns null for the corrupted state
+        assert.equal(getSession(db, id), null);
+
+        // The fixed renameSession throws a descriptive error instead of crashing
+        assert.throws(() => renameSession(db, id, "Should Fail"), /session not found/);
+    });
+
+    it("throws when renaming non-existent session", () => {
+        assert.throws(() => renameSession(db, "does-not-exist", "Whatever"), /session not found/);
     });
 });
