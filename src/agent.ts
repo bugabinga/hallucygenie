@@ -94,7 +94,11 @@ export interface AgentEvent {
     args?: Record<string, unknown>;
 }
 
-export type OnBeforeTool = (name: string, args: Record<string, unknown>) => ToolResult | null;
+export type OnBeforeTool = (
+    name: string,
+    args: Record<string, unknown>,
+    id?: string,
+) => ToolResult | null;
 
 export function safeToolResultForUser(toolName: string, result: ToolResult): ToolResult {
     if (result.type !== "error") return result;
@@ -673,7 +677,7 @@ export async function runAgentLoop(
                     name: tc.name,
                 });
 
-                const substituted = onBeforeTool?.(tc.name, args) ?? null;
+                const substituted = onBeforeTool?.(tc.name, args, tc.id) ?? null;
                 const result =
                     substituted ??
                     safeToolResultForUser(tc.name, await executeToolSafely(tc.name, args, apiKey));

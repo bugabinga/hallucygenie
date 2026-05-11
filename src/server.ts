@@ -39,6 +39,7 @@ import {
     saveMessage,
     getPreferences,
     consumeQuota,
+    releaseQuota,
     getUsageToday,
     getOrCreateActiveSessionId,
     getOrCreateActiveSession,
@@ -325,6 +326,7 @@ export async function handleChat(
     const writer = writable.getWriter();
     const encoder = new TextEncoder();
     const savedToolResults = new Map<string, ToolResult>();
+    const consumedQuotaByToolId = new Map<string, string>();
 
     // Run agent loop in background, streaming events to SSE
     (async () => {
@@ -374,7 +376,14 @@ export async function handleChat(
                                       event.args,
                                   )
                                 : event.result;
-                            if (event.id) savedToolResults.set(event.id, saved);
+                            if (event.id) {
+                                savedToolResults.set(event.id, saved);
+                                const feature = consumedQuotaByToolId.get(event.id);
+                                if (feature && saved.type === "error") {
+                                    releaseQuota(database, feature);
+                                    consumedQuotaByToolId.delete(event.id);
+                                }
+                            }
                             const sseData = `event: tool_result\ndata: ${JSON.stringify({
                                 id: event.id,
                                 name: event.name,
@@ -391,10 +400,13 @@ export async function handleChat(
                 },
                 steerQueue,
                 sessionId
-                    ? (toolName: string) => {
+                    ? (toolName: string, _args: Record<string, unknown>, toolId?: string) => {
                           const feature = featureForTool(toolName);
                           if (!feature) return null;
-                          if (consumeQuota(database, feature) !== null) return null;
+                          if (consumeQuota(database, feature) !== null) {
+                              if (toolId) consumedQuotaByToolId.set(toolId, feature);
+                              return null;
+                          }
                           return {
                               type: "error" as const,
                               content: `Daily ${feature} quota is used up.`,
@@ -568,6 +580,9 @@ function handleExplicitToolDirective(
                       directive.args,
                   )
                 : result;
+            if (feature && !quotaBlocked && saved.type === "error") {
+                releaseQuota(database, feature);
+            }
 
             await writeSse("tool_result", {
                 id: toolCallId,
