@@ -462,24 +462,20 @@ export async function handleChat(
 // ── Explicit Create tool directives ─────────────────────────────────
 
 export function sanitizeAssistantMediaMarkup(content: string): string {
-    const withoutMarkdownImages = content.replace(/!\[[^\]\n]*\]\([^\)\n]+\)/g, "");
-    const withoutHtmlMedia = withoutMarkdownImages
+    const cleaned = content
+        .replace(/!\[[^\]\n]*\]\([^\)\n]+\)/g, "")
         .replace(/<img\b[^>]*>/gi, "")
         .replace(/<audio\b[\s\S]*?<\/audio>/gi, "")
-        .replace(/<video\b[\s\S]*?<\/video>/gi, "");
-    const withoutGeneratedUrls = withoutHtmlMedia.replace(
-        /https?:\/\/\S*(?:hailuo-image|image_inference_output|aliyuncs)\S*/gi,
-        "",
-    );
-    const normalized = withoutGeneratedUrls
+        .replace(/<video\b[\s\S]*?<\/video>/gi, "")
+        .replace(/https?:\/\/\S*(?:hailuo-image|image_inference_output|aliyuncs)\S*/gi, "")
         .replace(/[ \t]+\n/g, "\n")
         .replace(/\n{3,}/g, "\n\n")
         .trim();
 
-    if (/^here(?:'s| is) your (?:image|music|audio)[:!.\s]*$/i.test(normalized)) {
+    if (/^here(?:'s| is) your (?:image|music|audio)[:!.\s]*$/i.test(cleaned)) {
         return "Generated media is shown in the tool card.";
     }
-    return normalized;
+    return cleaned;
 }
 
 function parseToolParams(raw: string | undefined, allowed: Set<string>): Record<string, unknown> {

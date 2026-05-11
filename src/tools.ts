@@ -218,9 +218,9 @@ export async function executeTool(
                 {
                     text: args.text as string,
                     voice_id: args.voice_id as string | undefined,
-                    speed: clampNumber(args.speed, 0.5, 2),
-                    volume: clampNumber(args.volume, 0, 10),
-                    pitch: clampNumber(args.pitch, -12, 12),
+                    speed: clampAudioParam(args.speed, 0.5, 2),
+                    volume: clampAudioParam(args.volume, 0, 10),
+                    pitch: clampAudioParam(args.pitch, -12, 12),
                 },
                 apiKey,
             );
@@ -259,7 +259,7 @@ function validateAspectRatio(value: unknown): GenerateImageOptions["aspect_ratio
         : undefined;
 }
 
-function clampNumber(value: unknown, min: number, max: number): number | undefined {
+function clampAudioParam(value: unknown, min: number, max: number): number | undefined {
     if (typeof value !== "number" || !Number.isFinite(value)) return undefined;
     return Math.min(max, Math.max(min, value));
 }
@@ -356,9 +356,9 @@ export async function textToSpeech(
 
     try {
         const voiceSetting: Record<string, unknown> = { voice_id: voice };
-        const speed = clampNumber(options.speed, 0.5, 2);
-        const volume = clampNumber(options.volume, 0, 10);
-        const pitch = clampNumber(options.pitch, -12, 12);
+        const speed = clampAudioParam(options.speed, 0.5, 2);
+        const volume = clampAudioParam(options.volume, 0, 10);
+        const pitch = clampAudioParam(options.pitch, -12, 12);
         if (speed !== undefined) voiceSetting.speed = speed;
         if (volume !== undefined) voiceSetting.vol = volume;
         if (pitch !== undefined) voiceSetting.pitch = pitch;
