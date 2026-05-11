@@ -952,6 +952,25 @@ describe("runAgentLoop", () => {
         assert.equal(toolResultContent.tool_use_id, "tu_1");
     });
 
+    it("handles response with null body gracefully", async () => {
+        globalThis.fetch = async () => new Response(null, { status: 200 });
+
+        const { events, onEvent } = collectEvents();
+        const messages = await runAgentLoop(
+            [{ role: "user", content: "hello" }],
+            "test-key",
+            onEvent,
+        );
+
+        assert.equal(messages.length, 1);
+        assert.ok(
+            events.some(
+                (event) => event.type === "text" && event.content.includes("empty response"),
+            ),
+        );
+        assert.ok(events.some((event) => event.type === "done"));
+    });
+
     it("emits thinking_reset at the start of each LLM call iteration", async () => {
         const firstResponse = anthropicResponse(
             toolUseResponse("call_1", "generate_image", '{"prompt":"cat"}'),
