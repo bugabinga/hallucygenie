@@ -30,6 +30,7 @@ import {
     getUsageToday,
     checkQuota,
     consumeQuota,
+    releaseQuota,
     saveAsset,
     getAssets,
     getAsset,
@@ -744,6 +745,17 @@ describe("consumeQuota", () => {
         assert.equal(consumeQuota(db, "music"), 1);
         assert.equal(checkQuota(db, "image").used, 1);
         assert.equal(checkQuota(db, "music").used, 1);
+    });
+
+    it("releases consumed quota after failed attempts", () => {
+        assert.equal(consumeQuota(db, "image"), 1);
+        releaseQuota(db, "image");
+        assert.equal(checkQuota(db, "image").used, 0);
+    });
+
+    it("releaseQuota never decrements below zero", () => {
+        releaseQuota(db, "image");
+        assert.equal(checkQuota(db, "image").used, 0);
     });
 });
 

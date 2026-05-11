@@ -501,6 +501,19 @@ export function consumeQuota(db: Database, feature: string): number | null {
     return row?.count ?? 1;
 }
 
+/**
+ * Release one previously consumed quota unit after a tool attempt fails.
+ * This preserves atomic pre-execution reservation while charging only successful outputs.
+ */
+export function releaseQuota(db: Database, feature: string): void {
+    if ((QUOTAS[feature] ?? 0) === 0) return;
+    db.prepare(
+        `UPDATE daily_usage
+         SET count = count - 1
+         WHERE date = date('now') AND feature = ? AND count > 0`,
+    ).run(feature);
+}
+
 // ── Assets ─────────────────────────────────────────────────────────
 
 export interface AssetRow {
