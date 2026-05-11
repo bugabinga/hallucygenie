@@ -699,6 +699,7 @@ describe("QUOTAS constant", () => {
         assert.equal(QUOTAS.speech, 9000);
         assert.equal(QUOTAS.image, 100);
         assert.equal(QUOTAS.music, 100);
+        assert.equal(QUOTAS.lyrics, 100);
     });
 });
 
@@ -733,6 +734,17 @@ describe("consumeQuota", () => {
         assert.equal(consumeQuota(db, "image"), null);
         assert.equal(consumeQuota(db, "image"), null);
         assert.equal(checkQuota(db, "image").used, 100);
+    });
+
+    it("does not increment any quota feature beyond its limit", () => {
+        for (const [feature, limit] of Object.entries(QUOTAS)) {
+            db.prepare(
+                "INSERT INTO daily_usage (date, feature, count) VALUES (date('now'), ?, ?)",
+            ).run(feature, limit);
+
+            assert.equal(consumeQuota(db, feature), null, feature);
+            assert.equal(checkQuota(db, feature).used, limit, feature);
+        }
     });
 
     it("returns 0 for features with no quota limit", () => {
