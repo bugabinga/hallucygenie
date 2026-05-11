@@ -155,6 +155,27 @@ describe("index.html health", () => {
         assert.equal(modal?.getAttribute("aria-labelledby"), "create-title");
     });
 
+    it("has session switcher controls", () => {
+        const doc = parseIndex();
+        assert.ok(doc.querySelector("#session-select"));
+        assert.ok(doc.querySelector("#session-new"));
+    });
+
+    it("create panels have recent history containers", () => {
+        const doc = parseIndex();
+        for (const kind of ["image", "music", "voice", "search"]) {
+            assert.ok(doc.querySelector(`.create-recent[data-kind="${kind}"]`), kind);
+        }
+    });
+
+    it("lightbox is an accessible dialog", () => {
+        const doc = parseIndex();
+        const lightbox = doc.querySelector("#lightbox") as HTMLElement | null;
+        assert.equal(lightbox?.getAttribute("role"), "dialog");
+        assert.equal(lightbox?.getAttribute("aria-modal"), "true");
+        assert.equal(lightbox?.getAttribute("aria-label"), "Image preview");
+    });
+
     it("profile button and modal have accessible labels", () => {
         const doc = parseIndex();
         assert.equal(doc.querySelector("#profile-btn")?.getAttribute("aria-label"), "Open profile");

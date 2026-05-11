@@ -91,12 +91,14 @@ function contentBlockStart(
 
 function contentBlockDelta(
     index: number,
-    deltaType: "thinking_delta" | "text_delta" | "input_json_delta",
+    deltaType: "thinking_delta" | "signature_delta" | "text_delta" | "input_json_delta",
     value: string,
 ): string {
     const delta: Record<string, unknown> = { type: deltaType };
     if (deltaType === "thinking_delta") {
         delta.thinking = value;
+    } else if (deltaType === "signature_delta") {
+        delta.signature = value;
     } else if (deltaType === "text_delta") {
         delta.text = value;
     } else if (deltaType === "input_json_delta") {
@@ -1102,6 +1104,54 @@ describe("runAgentLoop", () => {
         assert.equal(messages[1].thinking, "plan tool");
         assert.equal(messages[3].role, "assistant");
         assert.equal(messages[3].thinking, "plan final");
+    });
+
+    it("replays thinking signature before tool_use on the next model turn", async () => {
+        const firstResponse = anthropicResponse([
+            messageStart(),
+            contentBlockStart(0, "thinking"),
+            contentBlockDelta(0, "thinking_delta", "plan tool"),
+            contentBlockDelta(0, "signature_delta", "sig_123"),
+            contentBlockStop(0),
+            contentBlockStart(1, "tool_use", { id: "call_sig_1", name: "generate_image" }),
+            contentBlockDelta(1, "input_json_delta", '{"prompt":"cat"}'),
+            contentBlockStop(1),
+            messageDelta("tool_use"),
+            messageStop(),
+        ]);
+        const secondResponse = anthropicResponse(textResponse(["Done!"]));
+        const bodies: Array<Record<string, unknown>> = [];
+        let llmCalls = 0;
+        globalThis.fetch = async (url: string | URL | Request, init?: RequestInit) => {
+            const urlStr = url.toString();
+            if (urlStr.includes("/anthropic/v1/messages")) {
+                bodies.push(JSON.parse(init?.body as string) as Record<string, unknown>);
+                llmCalls++;
+                return llmCalls === 1 ? firstResponse : secondResponse;
+            }
+            return new Response(
+                JSON.stringify({ data: { image_urls: ["https://example.com/cat.png"] } }),
+                { status: 200, headers: { "Content-Type": "application/json" } },
+            );
+        };
+
+        const { onEvent } = collectEvents();
+        const messages = await runAgentLoop(
+            [{ role: "user", content: "make image" }],
+            "test-key",
+            onEvent,
+        );
+
+        assert.equal(messages[1].thinking_signature, "sig_123");
+        const secondBody = bodies[1] as { messages: Array<{ role: string; content: unknown }> };
+        const assistant = secondBody.messages.find(
+            (m) => m.role === "assistant" && Array.isArray(m.content),
+        );
+        const content = assistant!.content as Array<Record<string, unknown>>;
+        assert.equal(content[0].type, "thinking");
+        assert.equal(content[0].thinking, "plan tool");
+        assert.equal(content[0].signature, "sig_123");
+        assert.equal(content[1].type, "tool_use");
     });
 });
 

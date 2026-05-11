@@ -1,5 +1,5 @@
 ---
-{ "status": "open", "specs": ["HG-SPEC-015"] }
+{ "status": "fixed", "specs": ["HG-SPEC-015"] }
 ---
 
 # HG-SPEC-015: Quota status aria-label is static

@@ -1,5 +1,5 @@
 ---
-{ "status": "open", "specs": ["HG-SPEC-006", "HG-SPEC-008", "HG-SPEC-012"] }
+{ "status": "fixed", "specs": ["HG-SPEC-006", "HG-SPEC-008", "HG-SPEC-012"] }
 ---
 
 # HG-SPEC-006: Create input history missing

@@ -5,7 +5,7 @@ description: MiniMax API integration for HallucyGenie. Use when working with Min
 
 # MiniMax API — HallucyGenie
 
-Current docs crawl: 2026-05-02 from `https://platform.minimax.io/docs/llms.txt` into `~/.pi/research/pages/`.
+Current docs crawl: 2026-05-11 from `https://platform.minimax.io/docs/llms.txt` into `~/.pi/research/pages/`.
 
 ## Base URLs
 
@@ -18,7 +18,7 @@ Current docs crawl: 2026-05-02 from `https://platform.minimax.io/docs/llms.txt` 
 ## Authentication
 
 - Use `Authorization: Bearer <key>` for all endpoints.
-- CRITICAL: `/anthropic/v1/messages` accepts both `Authorization: Bearer` and `x-api-key` in practice.
+- CRITICAL: `/anthropic/v1/messages` docs now specify `X-Api-Key`; earlier project testing found both `Authorization: Bearer` and `x-api-key` accepted in practice.
 - All other endpoints (TTS, image, music, web search, VLM, video, file mgmt) **ONLY** accept `Authorization: Bearer`.
 - Using `x-api-key` on other endpoints returns `{"base_resp":{"status_code":1004}}`.
 - Token Plan API keys are separate from pay-as-you-go keys.
@@ -30,6 +30,7 @@ Current docs crawl: 2026-05-02 from `https://platform.minimax.io/docs/llms.txt` 
 - `POST /anthropic/v1/messages`
 - Models: `MiniMax-M2.7-highspeed`, `MiniMax-M2.7`, `MiniMax-M2.5-highspeed`, `MiniMax-M2.5`, `MiniMax-M2.1-highspeed`, `MiniMax-M2.1`, `MiniMax-M2`
 - Context window: 204,800 tokens. Max token count means input + output.
+- `max_tokens` request max is now documented as 204,800 tokens.
 - Highspeed output: ~100 tps. Standard: ~60 tps.
 - Supported params: `model`, `messages`, `max_tokens`, `stream`, `system`, `temperature`, `tool_choice`, `tools`, `top_p`, `metadata`, `thinking`.
 - Ignored params: `top_k`, `stop_sequences`, `service_tier`, `mcp_servers`, `context_management`, `container`.
@@ -60,17 +61,21 @@ Current docs crawl: 2026-05-02 from `https://platform.minimax.io/docs/llms.txt` 
 - Output: `output_format: "hex"` by default. Convert with `Buffer.from(hex, "hex").toString("base64")` → data URL.
 - Text >3,000 chars: streaming recommended.
 - Pause markers: `<#1.5#>` range `[0.01, 99.99]`, between speakable segments, no consecutive pauses.
+- Inline pronunciation: wrap pinyin tone numbers or IPA in half-width parentheses, e.g. `(he2)` or `(lɪv)`.
 - Speech-2.8 interjection tags: `(laughs)`, `(chuckle)`, `(coughs)`, `(clear-throat)`, `(groans)`, `(breath)`, `(pant)`, `(inhale)`, `(exhale)`, `(gasps)`, `(sniffs)`, `(sighs)`, `(snorts)`, `(burps)`, `(lip-smacking)`, `(humming)`, `(hissing)`, `(emm)`, `(sneezes)`.
 - `voice_setting`: `voice_id`, `speed` `[0.5,2]`, `vol` `(0,10]`, `pitch` `[-12,12]`, `emotion`.
-- `audio_setting`: `sample_rate` `8000|16000|22050|24000|32000|44100`, `bitrate` `32000|64000|128000|256000`, `format` `mp3|pcm|flac|wav`, `channel` `1|2`, `force_cbr` for streamed MP3.
+- `audio_setting`: `sample_rate` `8000|16000|22050|24000|32000|44100`, `bitrate` `32000|64000|128000|256000`, `format` `mp3|pcm|flac|wav|pcmu_raw|pcmu_wav|opus`, `channel` `1|2`, `force_cbr` for streamed MP3.
 - `voice_modify`: `pitch/intensity/timbre` `[-100,100]`, `sound_effects`: `spacious_echo|auditorium_echo|lofi_telephone|robotic`.
 - `language_boost`: 40 language values or `auto`.
 - `subtitle_enable`: returns `subtitle_file` URL.
+- `subtitle_type`: `sentence` (default), `word`, `word_streaming` (only valid with `stream=true`).
 - System voices: docs list `English_expressive_narrator` and many others; latest list also via `GET /v1/voice/get`.
 
 ### Async long TTS
 
 - `POST /v1/t2a_async_v2` — create task, up to **1,000,000 chars/request**.
+- `file_id` text-file input is now documented up to **1,000,000 chars**; supported file formats: `txt`, `zip`.
+- Async `audio_setting.format`: `mp3|pcm|flac|wav|pcmu_raw|pcmu_wav|opus`; `voice_modify` supports `mp3|wav|flac` only.
 - `GET /v1/query/t2a_async_query_v2` — query task → get `file_id` → use File API retrieve/download.
 - Returned audio URL valid 9 hours (32,400 seconds).
 
@@ -182,10 +187,10 @@ Token Plan quotas:
 | Feature      | RPM | TPM/Conn       |
 | ------------ | --- | -------------- |
 | Text M2.x    | 500 | 20,000,000 TPM |
-| TTS          | 60  | 20,000 TPM     |
+| TTS          | 60  | —              |
 | Voice clone  | 60  | —              |
 | Voice design | 20  | —              |
-| Image        | 10  | 60 TPM         |
+| Image        | 10  | —              |
 | Music        | 120 | 20 conn        |
 | Video        | 5   | —              |
 

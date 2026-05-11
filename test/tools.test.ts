@@ -75,6 +75,7 @@ describe("getToolDefinitions", () => {
         assert.ok(schema.properties.voice_id);
         assert.ok(schema.properties.speed);
         assert.ok(schema.properties.volume);
+        assert.equal(schema.properties.volume.exclusiveMinimum, 0);
         assert.ok(schema.properties.pitch);
         assert.deepEqual(schema.required, ["text"]);
     });
@@ -258,6 +259,14 @@ describe("generateImage", () => {
         assert.ok(result.content.includes("no image URLs"));
     });
 
+    it("handles MiniMax base_resp error response", async () => {
+        mockFetch(jsonResponse({ base_resp: { status_code: 1004, status_msg: "login fail" } }));
+
+        const result = await generateImage("test", API_KEY);
+        assert.equal(result.type, "error");
+        assert.ok(result.content.includes("login fail"));
+    });
+
     it("handles response with missing data field", async () => {
         mockFetch(jsonResponse({}));
 
@@ -346,6 +355,18 @@ describe("textToSpeech", () => {
         assert.equal(body.voice_setting.pitch, -2);
     });
 
+    it("omits unsupported zero volume", async () => {
+        let capturedBody = "";
+        globalThis.fetch = async (_url: string | URL | Request, init?: RequestInit) => {
+            capturedBody = init?.body as string;
+            return jsonResponse({ data: { audio: "48656c6c6f" } });
+        };
+
+        await textToSpeech({ text: "hello", volume: 0 }, API_KEY);
+        const body = JSON.parse(capturedBody);
+        assert.equal("vol" in body.voice_setting, false);
+    });
+
     it("defaults to English_expressive_narrator voice", async () => {
         let capturedBody = "";
         globalThis.fetch = async (_url: string | URL | Request, init?: RequestInit) => {
@@ -394,6 +415,14 @@ describe("textToSpeech", () => {
         const result = await textToSpeech("hello", API_KEY);
         assert.equal(result.type, "error");
         assert.ok(result.content.includes("empty audio"));
+    });
+
+    it("handles MiniMax base_resp error response", async () => {
+        mockFetch(jsonResponse({ base_resp: { status_code: 2013, status_msg: "text too long" } }));
+
+        const result = await textToSpeech("hello", API_KEY);
+        assert.equal(result.type, "error");
+        assert.ok(result.content.includes("text too long"));
     });
 
     it("handles missing audio field in response", async () => {

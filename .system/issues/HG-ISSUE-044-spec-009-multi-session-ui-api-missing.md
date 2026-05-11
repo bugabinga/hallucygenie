@@ -1,5 +1,5 @@
 ---
-{ "status": "open", "specs": ["HG-SPEC-009", "HG-SPEC-007"] }
+{ "status": "fixed", "specs": ["HG-SPEC-009", "HG-SPEC-007"] }
 ---
 
 # HG-SPEC-009: Multi-session API and header switcher missing

@@ -2231,6 +2231,67 @@ async function deleteProfile() {
   if (!resp.ok) throw new Error(`Failed to reset profile: ${resp.status}`);
   return await resp.json();
 }
+async function fetchSessions() {
+  const resp = await fetch("/api/sessions");
+  if (!resp.ok) throw new Error(`Failed to load sessions: ${resp.status}`);
+  return await resp.json();
+}
+async function createNewSession() {
+  const resp = await fetch("/api/sessions", { method: "POST", headers: createApiHeaders() });
+  if (!resp.ok) throw new Error(`Failed to create session: ${resp.status}`);
+  return (await resp.json()).session;
+}
+async function activateSession(id) {
+  const resp = await fetch(`/api/sessions/${encodeURIComponent(id)}/activate`, {
+    method: "POST",
+    headers: createApiHeaders()
+  });
+  if (!resp.ok) throw new Error(`Failed to activate session: ${resp.status}`);
+}
+function draftApiEnabled() {
+  return typeof document !== "undefined" && Boolean(document.querySelector("#session-select"));
+}
+async function getDraft(kind) {
+  if (!draftApiEnabled()) return null;
+  try {
+    const resp = await fetch(`/api/draft/${kind}`);
+    if (!resp.ok) return null;
+    return (await resp.json()).draft;
+  } catch {
+    return null;
+  }
+}
+async function putDraft(kind, value) {
+  if (!draftApiEnabled()) return;
+  try {
+    await fetch(`/api/draft/${kind}`, {
+      method: "PUT",
+      headers: createApiHeaders(),
+      body: JSON.stringify(value)
+    });
+  } catch {
+    return;
+  }
+}
+async function clearDraft(kind) {
+  if (!draftApiEnabled()) return;
+  try {
+    await fetch(`/api/draft/${kind}`, { method: "DELETE", headers: createApiHeaders() });
+  } catch {
+    return;
+  }
+}
+async function fetchCreateHistory(kind) {
+  const resp = await fetch(`/api/create-history?kind=${encodeURIComponent(kind)}&limit=5`);
+  if (!resp.ok) return [];
+  return (await resp.json()).items;
+}
+async function deleteCreateHistoryItem(id) {
+  await fetch(`/api/create-history/${encodeURIComponent(id)}`, {
+    method: "DELETE",
+    headers: createApiHeaders()
+  });
+}
 function avatarEmoji(value) {
   const trimmed = Array.from(value.trim()).slice(0, 4).join("");
   if (!trimmed || /^data:/i.test(trimmed)) return DEFAULT_USER_AVATAR;
@@ -2420,17 +2481,43 @@ function renderToolResult(toolName, result) {
   }
   return card;
 }
+var lightboxReturnFocus = null;
+function focusableIn(root) {
+  return Array.from(
+    root.querySelectorAll(
+      'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
+    )
+  ).filter((el) => !el.hasAttribute("disabled") && !el.closest("[hidden]"));
+}
+function trapFocus(root, e) {
+  if (e.key !== "Tab" || root.hidden) return;
+  const focusable = focusableIn(root);
+  if (focusable.length === 0) return;
+  const first = focusable[0];
+  const last = focusable[focusable.length - 1];
+  if (e.shiftKey && document.activeElement === first) {
+    e.preventDefault();
+    last.focus();
+  } else if (!e.shiftKey && document.activeElement === last) {
+    e.preventDefault();
+    first.focus();
+  }
+}
 function openLightbox(src) {
   const lightbox = $("#lightbox");
   const img = $("#lightbox-img");
+  lightboxReturnFocus = document.activeElement;
   img.src = src;
   lightbox.hidden = false;
+  lightbox.querySelector(".lightbox-close")?.focus();
 }
 function closeLightbox() {
   const lightbox = $("#lightbox");
   lightbox.hidden = true;
   const img = $("#lightbox-img");
   img.src = "";
+  lightboxReturnFocus?.focus();
+  lightboxReturnFocus = null;
 }
 var ASSET_PROMPT_PREVIEW_CHARS = 30;
 function formatAssetDate(timestamp) {
@@ -2601,6 +2688,9 @@ var rawTextBuffer = "";
 var thinkingBuffer = "";
 var lyricsWriteResolve = null;
 var capturedLyricsText = null;
+var streamHadError = false;
+var clearDraftAfterDone = null;
+var refreshSessionsAfterDone = null;
 async function streamChat(messages, onEvent) {
   const resp = await fetch("/api/chat", {
     method: "POST",
@@ -2609,17 +2699,23 @@ async function streamChat(messages, onEvent) {
   });
   if (resp.status === 400) {
     const parsed = await resp.json().catch(() => null);
+    streamHadError = true;
     showError(parsed?.error ?? "Session expired \u2014 please reload the page \u{1F504}");
+    finishStreaming();
     return;
   }
   if (!resp.ok) {
     const parsed = await resp.json().catch(() => null);
     const msg = parsed?.error ?? `Something went wrong (${resp.status}). Try again! \u{1F937}`;
+    streamHadError = true;
     showError(msg);
+    finishStreaming();
     return;
   }
   if (!resp.body) {
+    streamHadError = true;
     showError("No response from server \u{1F634}");
+    finishStreaming();
     return;
   }
   const reader = resp.body.getReader();
@@ -2673,6 +2769,7 @@ function handleSSEEvent(event) {
     return;
   }
   if (eventType === "error") {
+    streamHadError = true;
     try {
       const parsed = JSON.parse(data);
       showError(parsed.error ?? "Something went wrong \u{1F615}");
@@ -2779,6 +2876,10 @@ function finishStreaming() {
   activeToolCards.clear();
   rawTextBuffer = "";
   thinkingBuffer = "";
+  if (clearDraftAfterDone && !streamHadError) void clearDraft(clearDraftAfterDone);
+  if (!streamHadError) refreshSessionsAfterDone?.();
+  clearDraftAfterDone = null;
+  streamHadError = false;
   setStreamingUI(false);
 }
 function setLyricsWriteResolve(fn) {
@@ -2804,7 +2905,7 @@ function setStreamingUI(streaming) {
     input.focus();
   }
 }
-async function sendMessage(content) {
+async function sendMessage(content, draftKind = "chat") {
   if (!content.trim()) return;
   if (isStreaming) {
     await sendSteerMessage(content);
@@ -2821,11 +2922,13 @@ async function sendMessage(content) {
   const input = $("#chat-input");
   input.value = "";
   autoResizeInput();
+  clearDraftAfterDone = draftKind;
   isStreaming = true;
   setStreamingUI(true);
   try {
     await streamChat([{ role: "user", content }]);
   } catch (err) {
+    streamHadError = true;
     showError("Connection lost. Check your internet? \u{1F4E1}");
     finishStreaming();
   }
@@ -2926,27 +3029,101 @@ function handleInputChange() {
   sendBtn.disabled = !input.value.trim();
   autoResizeInput();
 }
+function debounce(fn, ms) {
+  let timer = null;
+  return () => {
+    if (timer) clearTimeout(timer);
+    timer = setTimeout(fn, ms);
+  };
+}
+function clearChatUi() {
+  const list2 = $("#message-list");
+  list2.innerHTML = `
+        <div class="message message--assistant message--welcome">
+            <div class="message-avatar" aria-hidden="true">\u{1F9DE}</div>
+            <div class="message-bubble"><div class="message-content">Hey! \u{1F44B} I'm HallucyGenie. Ask me anything \u2014 I can chat, make images \u{1F525}, do voices \u{1F399}\uFE0F, and create music \u{1F3B5}</div></div>
+        </div>`;
+}
+function defaultCreateDraft() {
+  return {
+    selectedTab: "image",
+    image: { prompt: "", aspect_ratio: "16:9" },
+    music: { prompt: "", lyrics: "" },
+    voice: { text: "", speed: "1.0" },
+    search: { query: "" }
+  };
+}
+function createDraftFromDom() {
+  return {
+    selectedTab: $("#create-modal").dataset.tabOpen || "image",
+    image: {
+      prompt: $("#img-prompt").value,
+      aspect_ratio: $("#img-ratio").value
+    },
+    music: {
+      prompt: $("#music-prompt").value,
+      lyrics: $("#music-lyrics").value
+    },
+    voice: {
+      text: $("#voice-text").value,
+      speed: $("#voice-speed").value
+    },
+    search: { query: $("#search-query").value }
+  };
+}
+function applyCreateDraft(draft) {
+  $("#img-prompt").value = draft.image.prompt;
+  $("#img-ratio").value = draft.image.aspect_ratio;
+  $("#music-prompt").value = draft.music.prompt;
+  $("#music-lyrics").value = draft.music.lyrics;
+  $("#voice-text").value = draft.voice.text;
+  $("#voice-speed").value = draft.voice.speed;
+  $("#search-query").value = draft.search.query;
+}
+function isCreateDraft(value) {
+  return Boolean(
+    value && typeof value === "object" && "image" in value && "selectedTab" in value
+  );
+}
+var QUOTA_LABELS = {
+  chat: "Chat",
+  speech: "Voice",
+  image: "Images",
+  music: "Music",
+  lyrics: "Lyrics"
+};
 async function updateQuotaBadge() {
   const badge = $("#quota-badge");
   if (!badge) return;
+  const labels = [];
   try {
     const resp = await fetch("/api/quota");
-    if (!resp.ok) return;
+    if (!resp.ok) {
+      badge.setAttribute("aria-label", "Quota unavailable");
+      return;
+    }
     const data = await resp.json();
     const items = badge.querySelectorAll(".quota-item[data-type]");
     for (const item of items) {
       const type = item.dataset.type;
       const q = data[type];
+      const label = item.title || QUOTA_LABELS[type] || type;
       if (!q || q.total === 0) {
         item.querySelector(".quota-used").textContent = "\u2014";
         item.className = "quota-item";
+        labels.push(`${label} quota unavailable`);
         continue;
       }
+      const remaining = q.total - q.used;
       const pct = q.used / q.total;
-      item.querySelector(".quota-used").textContent = `${q.total - q.used}`;
+      const state = pct >= 0.95 ? "critical" : pct >= 0.8 ? "warning" : "ok";
+      item.querySelector(".quota-used").textContent = `${remaining}`;
       item.className = pct >= 0.95 ? "quota-item critical" : pct >= 0.8 ? "quota-item warn" : "quota-item";
+      labels.push(`${label}: ${remaining} of ${q.total} remaining, ${state}`);
     }
+    badge.setAttribute("aria-label", labels.join(". "));
   } catch {
+    badge.setAttribute("aria-label", "Quota unavailable");
   }
 }
 function init() {
@@ -2959,6 +3136,42 @@ function init() {
   const lightboxBackdrop = lightbox.querySelector(".lightbox-backdrop");
   const steerClose = $("#steer-close");
   const connectionStatus = $("#connection-status");
+  const sessionSelect = document.querySelector("#session-select");
+  const sessionNew = document.querySelector("#session-new");
+  async function refreshSessions() {
+    const data = await fetchSessions();
+    if (!sessionSelect) return;
+    sessionSelect.innerHTML = "";
+    for (const session of data.sessions) {
+      const option = document.createElement("option");
+      option.value = session.id;
+      option.textContent = session.name;
+      option.selected = session.id === data.activeSessionId;
+      sessionSelect.appendChild(option);
+    }
+  }
+  async function reloadActiveSessionUi() {
+    clearChatUi();
+    await loadHistory();
+    await restoreDrafts();
+    loadAssets();
+    await loadCurrentRecent();
+  }
+  async function switchSession(id) {
+    if (isStreaming && !confirm("A response is still running. Switch chats anyway?")) return;
+    await activateSession(id);
+    await refreshSessions();
+    await reloadActiveSessionUi();
+  }
+  refreshSessionsAfterDone = () => void refreshSessions().catch(() => void 0);
+  sessionSelect?.addEventListener("change", () => {
+    void switchSession(sessionSelect.value).catch(() => showError("Failed to switch chat \u{1F615}"));
+  });
+  sessionNew?.addEventListener("click", () => {
+    if (isStreaming && !confirm("A response is still running. Start a new chat anyway?"))
+      return;
+    void createNewSession().then(refreshSessions).then(reloadActiveSessionUi).catch(() => showError("Failed to create chat \u{1F615}"));
+  });
   connectionStatus.setAttribute(
     "aria-label",
     `Connection status: ${connectionStatus.title || "Connected"}`
@@ -3068,6 +3281,7 @@ function init() {
   });
   lightboxClose.addEventListener("click", closeLightbox);
   lightboxBackdrop.addEventListener("click", closeLightbox);
+  lightbox.addEventListener("keydown", (e) => trapFocus(lightbox, e));
   document.addEventListener("keydown", (e) => {
     if (e.key === "Escape") {
       closeLightbox();
@@ -3092,16 +3306,31 @@ function init() {
     });
     currentSlide = idx;
   }
+  function getOnboardingFocusable() {
+    return focusableIn(onboarding);
+  }
+  function focusCurrentOnboardingButton() {
+    slides[currentSlide]?.querySelector("button")?.focus();
+  }
+  function trapOnboardingFocus(e) {
+    trapFocus(onboarding, e);
+  }
   function dismissOnboarding() {
     onboarding.hidden = true;
     localStorage.setItem(ONBOARDING_KEY, "1");
+    input.focus();
   }
+  onboarding.addEventListener("keydown", trapOnboardingFocus);
   if (!localStorage.getItem(ONBOARDING_KEY)) {
     onboarding.hidden = false;
     showSlide(0);
+    requestAnimationFrame(focusCurrentOnboardingButton);
   }
   onboarding.querySelectorAll(".onboarding-next").forEach((btn) => {
-    btn.addEventListener("click", () => showSlide(currentSlide + 1));
+    btn.addEventListener("click", () => {
+      showSlide(currentSlide + 1);
+      focusCurrentOnboardingButton();
+    });
   });
   $("#onboarding-try-chat").addEventListener("click", () => {
     dismissOnboarding();
@@ -3135,6 +3364,7 @@ function init() {
     createClose.focus();
   }
   function closeCreateModal() {
+    void putDraft("create", createDraftFromDom());
     createModal.hidden = true;
     createModalReturnFocus?.focus();
     createModalReturnFocus = null;
@@ -3159,21 +3389,19 @@ function init() {
   createModal.addEventListener("keydown", trapCreateModalFocus);
   const tabs = createModal.querySelectorAll(".create-tab");
   const panels = createModal.querySelectorAll(".create-panel");
+  function setCreateTab(tabName) {
+    tabs.forEach((t) => t.classList.toggle("active", t.dataset.tab === tabName));
+    panels.forEach((p) => {
+      p.hidden = p.dataset.panel !== tabName;
+    });
+    createModal.dataset.tabOpen = tabName;
+    if (tabName === "assets") loadAssets();
+    void loadCurrentRecent();
+  }
   tabs.forEach((tab) => {
     tab.addEventListener("click", () => {
-      tabs.forEach((t) => t.classList.remove("active"));
-      panels.forEach((p) => {
-        p.hidden = true;
-      });
-      tab.classList.add("active");
-      const panel = createModal.querySelector(
-        `[data-panel="${tab.dataset.tab}"]`
-      );
-      if (panel) {
-        panel.hidden = false;
-        createModal.dataset.tabOpen = tab.dataset.tab ?? "";
-        if (tab.dataset.tab === "assets") loadAssets();
-      }
+      setCreateTab(tab.dataset.tab ?? "image");
+      void putDraft("create", createDraftFromDom());
     });
   });
   const createImgForm = $("#create-image-form");
@@ -3187,6 +3415,105 @@ function init() {
   const voiceTextInput = $("#voice-text");
   const voiceSpeedInput = $("#voice-speed");
   const searchQueryInput = $("#search-query");
+  const persistCreateDraft = debounce(() => void putDraft("create", createDraftFromDom()), 200);
+  const persistChatDraft = debounce(() => void putDraft("chat", { text: input.value }), 200);
+  function fillFormFromHistory(item) {
+    const inputData = item.input;
+    if (item.kind === "image") {
+      imgPromptInput.value = String(inputData.prompt ?? "");
+      imgRatioInput.value = String(inputData.aspect_ratio ?? "16:9");
+      setCreateTab("image");
+    } else if (item.kind === "music") {
+      musicPromptInput.value = String(inputData.prompt ?? "");
+      musicLyricsInput.value = String(inputData.lyrics ?? "");
+      setCreateTab("music");
+    } else if (item.kind === "voice") {
+      voiceTextInput.value = String(inputData.text ?? "");
+      voiceSpeedInput.value = String(inputData.speed ?? "1.0");
+      setCreateTab("voice");
+    } else if (item.kind === "search") {
+      searchQueryInput.value = String(inputData.query ?? inputData.prompt ?? "");
+      setCreateTab("search");
+    }
+    void putDraft("create", createDraftFromDom());
+  }
+  async function loadRecent(kind) {
+    const container = createModal.querySelector(
+      `.create-recent[data-kind="${kind}"]`
+    );
+    if (!container) return;
+    const items = await fetchCreateHistory(kind);
+    container.innerHTML = "";
+    if (items.length === 0) return;
+    const label = document.createElement("span");
+    label.className = "recent-label";
+    label.textContent = "Recent \u25BE";
+    container.appendChild(label);
+    for (const item of items) {
+      const button = document.createElement("button");
+      button.type = "button";
+      button.className = "recent-button";
+      button.textContent = String(
+        item.input.prompt ?? item.input.text ?? item.input.query ?? item.tool_name
+      ).slice(0, 24);
+      button.addEventListener("click", () => fillFormFromHistory(item));
+      const remove = document.createElement("button");
+      remove.type = "button";
+      remove.className = "recent-remove";
+      remove.setAttribute("aria-label", "Remove recent item");
+      remove.textContent = "\xD7";
+      remove.addEventListener("click", () => {
+        void deleteCreateHistoryItem(item.id).then(() => loadRecent(kind));
+      });
+      container.appendChild(button);
+      container.appendChild(remove);
+    }
+  }
+  async function loadCurrentRecent() {
+    const kind = createModal.dataset.tabOpen || "image";
+    if (kind === "assets") return;
+    await loadRecent(kind);
+  }
+  async function restoreDrafts() {
+    const chatDraft = await getDraft("chat");
+    if (chatDraft && typeof chatDraft === "object" && "text" in chatDraft) {
+      input.value = String(chatDraft.text ?? "");
+      handleInputChange();
+    }
+    const createDraft = await getDraft("create");
+    if (isCreateDraft(createDraft)) {
+      applyCreateDraft(createDraft);
+      setCreateTab(createDraft.selectedTab || "image");
+    } else {
+      applyCreateDraft(defaultCreateDraft());
+      setCreateTab("image");
+    }
+  }
+  [
+    imgPromptInput,
+    imgRatioInput,
+    musicPromptInput,
+    musicLyricsInput,
+    voiceTextInput,
+    voiceSpeedInput,
+    searchQueryInput
+  ].forEach((el) => {
+    el.addEventListener("input", persistCreateDraft);
+    el.addEventListener("change", persistCreateDraft);
+  });
+  input.addEventListener("input", persistChatDraft);
+  window.addEventListener("visibilitychange", () => {
+    if (document.visibilityState === "hidden") {
+      void putDraft("chat", { text: input.value });
+      void putDraft("create", createDraftFromDom());
+    }
+  });
+  window.addEventListener("pagehide", () => {
+    void putDraft("chat", { text: input.value });
+    void putDraft("create", createDraftFromDom());
+  });
+  void refreshSessions().catch(() => void 0);
+  void restoreDrafts().catch(() => void 0);
   createImgForm.addEventListener("submit", (e) => {
     e.preventDefault();
     const prompt = imgPromptInput.value.trim();
@@ -3195,7 +3522,8 @@ function init() {
       closeCreateModal();
       sendMessage(
         `Use generate_image with prompt: ${prompt}
-Tool params: aspect_ratio=${ratio}`
+Tool params: aspect_ratio=${ratio}`,
+        "create"
       );
     }
   });
@@ -3208,7 +3536,7 @@ Tool params: aspect_ratio=${ratio}`
       let msg = `Use generate_music with prompt: ${prompt}`;
       if (lyrics) msg += `
 Tool params: lyrics=${lyrics}`;
-      sendMessage(msg);
+      sendMessage(msg, "create");
     }
   });
   const writeLyricsBtn = document.querySelector("#write-lyrics-btn");
@@ -3224,7 +3552,7 @@ Tool params: lyrics=${lyrics}`;
     setLyricsWriteResolve((lyricsText) => {
       musicLyricsInput.value = lyricsText;
     });
-    sendMessage(`Use generate_lyrics with prompt: ${prompt}`).finally(() => {
+    sendMessage(`Use generate_lyrics with prompt: ${prompt}`, "create").finally(() => {
       writeLyricsBtn.disabled = false;
       writeLyricsBtn.textContent = "Write lyrics for me \u2728";
       setLyricsWriteResolve(null);
@@ -3236,8 +3564,11 @@ Tool params: lyrics=${lyrics}`;
     const speed = voiceSpeedInput.value;
     if (text) {
       closeCreateModal();
-      sendMessage(`Use text_to_speech with text: ${text}
-Tool params: speed=${speed}`);
+      sendMessage(
+        `Use text_to_speech with text: ${text}
+Tool params: speed=${speed}`,
+        "create"
+      );
     }
   });
   createSearchForm.addEventListener("submit", (e) => {
@@ -3245,7 +3576,7 @@ Tool params: speed=${speed}`);
     const query = searchQueryInput.value.trim();
     if (query) {
       closeCreateModal();
-      sendMessage(`Search the web for: ${query}`);
+      sendMessage(`Search the web for: ${query}`, "create");
     }
   });
   input.focus();

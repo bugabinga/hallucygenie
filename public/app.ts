@@ -33,6 +33,32 @@ interface ToolResultEvent {
     result: ToolResult;
 }
 
+interface SessionRow {
+    id: string;
+    name: string;
+    name_source: "default" | "manual" | "auto";
+    created_at: string;
+    updated_at: string;
+    archived_at: string | null;
+}
+
+interface CreateDraft {
+    selectedTab: string;
+    image: { prompt: string; aspect_ratio: string };
+    music: { prompt: string; lyrics: string };
+    voice: { text: string; speed: string };
+    search: { query: string };
+}
+
+interface CreateHistoryItem {
+    id: string;
+    kind: string;
+    tool_name: string;
+    input: Record<string, unknown>;
+    status: "submitted" | "succeeded" | "failed";
+    asset_id: string | null;
+}
+
 export interface UserProfile {
     version: 1;
     username: string;
@@ -120,6 +146,76 @@ export async function deleteProfile(): Promise<UserProfile> {
     const resp = await fetch("/api/profile", { method: "DELETE", headers: createApiHeaders() });
     if (!resp.ok) throw new Error(`Failed to reset profile: ${resp.status}`);
     return (await resp.json()) as UserProfile;
+}
+
+async function fetchSessions(): Promise<{ activeSessionId: string; sessions: SessionRow[] }> {
+    const resp = await fetch("/api/sessions");
+    if (!resp.ok) throw new Error(`Failed to load sessions: ${resp.status}`);
+    return (await resp.json()) as { activeSessionId: string; sessions: SessionRow[] };
+}
+
+async function createNewSession(): Promise<SessionRow> {
+    const resp = await fetch("/api/sessions", { method: "POST", headers: createApiHeaders() });
+    if (!resp.ok) throw new Error(`Failed to create session: ${resp.status}`);
+    return ((await resp.json()) as { session: SessionRow }).session;
+}
+
+async function activateSession(id: string): Promise<void> {
+    const resp = await fetch(`/api/sessions/${encodeURIComponent(id)}/activate`, {
+        method: "POST",
+        headers: createApiHeaders(),
+    });
+    if (!resp.ok) throw new Error(`Failed to activate session: ${resp.status}`);
+}
+
+function draftApiEnabled(): boolean {
+    return typeof document !== "undefined" && Boolean(document.querySelector("#session-select"));
+}
+
+async function getDraft(kind: "chat" | "create"): Promise<unknown | null> {
+    if (!draftApiEnabled()) return null;
+    try {
+        const resp = await fetch(`/api/draft/${kind}`);
+        if (!resp.ok) return null;
+        return ((await resp.json()) as { draft: unknown | null }).draft;
+    } catch {
+        return null;
+    }
+}
+
+async function putDraft(kind: "chat" | "create", value: unknown): Promise<void> {
+    if (!draftApiEnabled()) return;
+    try {
+        await fetch(`/api/draft/${kind}`, {
+            method: "PUT",
+            headers: createApiHeaders(),
+            body: JSON.stringify(value),
+        });
+    } catch {
+        return;
+    }
+}
+
+async function clearDraft(kind: "chat" | "create"): Promise<void> {
+    if (!draftApiEnabled()) return;
+    try {
+        await fetch(`/api/draft/${kind}`, { method: "DELETE", headers: createApiHeaders() });
+    } catch {
+        return;
+    }
+}
+
+async function fetchCreateHistory(kind: string): Promise<CreateHistoryItem[]> {
+    const resp = await fetch(`/api/create-history?kind=${encodeURIComponent(kind)}&limit=5`);
+    if (!resp.ok) return [];
+    return ((await resp.json()) as { items: CreateHistoryItem[] }).items;
+}
+
+async function deleteCreateHistoryItem(id: string): Promise<void> {
+    await fetch(`/api/create-history/${encodeURIComponent(id)}`, {
+        method: "DELETE",
+        headers: createApiHeaders(),
+    });
 }
 
 function avatarEmoji(value: string): string {
@@ -362,11 +458,38 @@ export function renderToolResult(toolName: string, result: ToolResult): HTMLElem
 
 // ── Lightbox ─────────────────────────────────────────────────────────
 
+let lightboxReturnFocus: HTMLElement | null = null;
+
+function focusableIn(root: HTMLElement): HTMLElement[] {
+    return Array.from(
+        root.querySelectorAll<HTMLElement>(
+            'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])',
+        ),
+    ).filter((el) => !el.hasAttribute("disabled") && !el.closest("[hidden]"));
+}
+
+function trapFocus(root: HTMLElement, e: KeyboardEvent): void {
+    if (e.key !== "Tab" || root.hidden) return;
+    const focusable = focusableIn(root);
+    if (focusable.length === 0) return;
+    const first = focusable[0];
+    const last = focusable[focusable.length - 1];
+    if (e.shiftKey && document.activeElement === first) {
+        e.preventDefault();
+        last.focus();
+    } else if (!e.shiftKey && document.activeElement === last) {
+        e.preventDefault();
+        first.focus();
+    }
+}
+
 export function openLightbox(src: string): void {
     const lightbox = $("#lightbox");
     const img = $("#lightbox-img") as HTMLImageElement;
+    lightboxReturnFocus = document.activeElement as HTMLElement | null;
     img.src = src;
     lightbox.hidden = false;
+    lightbox.querySelector<HTMLElement>(".lightbox-close")?.focus();
 }
 
 export function closeLightbox(): void {
@@ -374,6 +497,8 @@ export function closeLightbox(): void {
     lightbox.hidden = true;
     const img = $("#lightbox-img") as HTMLImageElement;
     img.src = "";
+    lightboxReturnFocus?.focus();
+    lightboxReturnFocus = null;
 }
 
 // ── Asset Gallery ─────────────────────────────────────────────────────
@@ -601,6 +726,9 @@ let rawTextBuffer = ""; // raw text for markdown re-rendering
 let thinkingBuffer = ""; // accumulated thinking text from thinking events
 let lyricsWriteResolve: ((value: string) => void) | null = null; // set when "Write lyrics" is active
 let capturedLyricsText: string | null = null; // lyrics result from generate_lyrics tool
+let streamHadError = false;
+let clearDraftAfterDone: "chat" | "create" | null = null;
+let refreshSessionsAfterDone: (() => void) | null = null;
 
 // ── SSE Stream Processing ────────────────────────────────────────────
 
@@ -616,19 +744,25 @@ export async function streamChat(
 
     if (resp.status === 400) {
         const parsed = await resp.json().catch(() => null);
+        streamHadError = true;
         showError(parsed?.error ?? "Session expired — please reload the page 🔄");
+        finishStreaming();
         return;
     }
 
     if (!resp.ok) {
         const parsed = await resp.json().catch(() => null);
         const msg = parsed?.error ?? `Something went wrong (${resp.status}). Try again! 🤷`;
+        streamHadError = true;
         showError(msg);
+        finishStreaming();
         return;
     }
 
     if (!resp.body) {
+        streamHadError = true;
         showError("No response from server 😴");
+        finishStreaming();
         return;
     }
 
@@ -701,6 +835,7 @@ function handleSSEEvent(event: SSEEvent): void {
 
     // Error event
     if (eventType === "error") {
+        streamHadError = true;
         try {
             const parsed = JSON.parse(data);
             showError(parsed.error ?? "Something went wrong 😕");
@@ -844,6 +979,10 @@ function finishStreaming(): void {
     activeToolCards.clear();
     rawTextBuffer = "";
     thinkingBuffer = "";
+    if (clearDraftAfterDone && !streamHadError) void clearDraft(clearDraftAfterDone);
+    if (!streamHadError) refreshSessionsAfterDone?.();
+    clearDraftAfterDone = null;
+    streamHadError = false;
     setStreamingUI(false);
 }
 
@@ -878,7 +1017,10 @@ function setStreamingUI(streaming: boolean): void {
 
 // ── Send Message ─────────────────────────────────────────────────────
 
-export async function sendMessage(content: string): Promise<void> {
+export async function sendMessage(
+    content: string,
+    draftKind: "chat" | "create" = "chat",
+): Promise<void> {
     if (!content.trim()) return;
 
     // If streaming, treat as steer message
@@ -904,6 +1046,7 @@ export async function sendMessage(content: string): Promise<void> {
     const input = $("#chat-input") as HTMLTextAreaElement;
     input.value = "";
     autoResizeInput();
+    clearDraftAfterDone = draftKind;
 
     // Start streaming
     isStreaming = true;
@@ -912,6 +1055,7 @@ export async function sendMessage(content: string): Promise<void> {
     try {
         await streamChat([{ role: "user", content }]);
     } catch (err) {
+        streamHadError = true;
         showError("Connection lost. Check your internet? 📡");
         finishStreaming();
     }
@@ -1053,6 +1197,68 @@ export function handleInputChange(): void {
     autoResizeInput();
 }
 
+function debounce(fn: () => void, ms: number): () => void {
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    return () => {
+        if (timer) clearTimeout(timer);
+        timer = setTimeout(fn, ms);
+    };
+}
+
+function clearChatUi(): void {
+    const list = $("#message-list");
+    list.innerHTML = `
+        <div class="message message--assistant message--welcome">
+            <div class="message-avatar" aria-hidden="true">🧞</div>
+            <div class="message-bubble"><div class="message-content">Hey! 👋 I'm HallucyGenie. Ask me anything — I can chat, make images 🔥, do voices 🎙️, and create music 🎵</div></div>
+        </div>`;
+}
+
+function defaultCreateDraft(): CreateDraft {
+    return {
+        selectedTab: "image",
+        image: { prompt: "", aspect_ratio: "16:9" },
+        music: { prompt: "", lyrics: "" },
+        voice: { text: "", speed: "1.0" },
+        search: { query: "" },
+    };
+}
+
+function createDraftFromDom(): CreateDraft {
+    return {
+        selectedTab: ($("#create-modal") as HTMLElement).dataset.tabOpen || "image",
+        image: {
+            prompt: ($("#img-prompt") as HTMLTextAreaElement).value,
+            aspect_ratio: ($("#img-ratio") as HTMLSelectElement).value,
+        },
+        music: {
+            prompt: ($("#music-prompt") as HTMLTextAreaElement).value,
+            lyrics: ($("#music-lyrics") as HTMLTextAreaElement).value,
+        },
+        voice: {
+            text: ($("#voice-text") as HTMLTextAreaElement).value,
+            speed: ($("#voice-speed") as HTMLSelectElement).value,
+        },
+        search: { query: ($("#search-query") as HTMLTextAreaElement).value },
+    };
+}
+
+function applyCreateDraft(draft: CreateDraft): void {
+    ($("#img-prompt") as HTMLTextAreaElement).value = draft.image.prompt;
+    ($("#img-ratio") as HTMLSelectElement).value = draft.image.aspect_ratio;
+    ($("#music-prompt") as HTMLTextAreaElement).value = draft.music.prompt;
+    ($("#music-lyrics") as HTMLTextAreaElement).value = draft.music.lyrics;
+    ($("#voice-text") as HTMLTextAreaElement).value = draft.voice.text;
+    ($("#voice-speed") as HTMLSelectElement).value = draft.voice.speed;
+    ($("#search-query") as HTMLTextAreaElement).value = draft.search.query;
+}
+
+function isCreateDraft(value: unknown): value is CreateDraft {
+    return Boolean(
+        value && typeof value === "object" && "image" in value && "selectedTab" in value,
+    );
+}
+
 // ── Quota Badge ──────────────────────────────────────────────────
 
 interface QuotaData {
@@ -1063,29 +1269,47 @@ interface QuotaData {
     lyrics: { used: number; total: number } | null;
 }
 
+const QUOTA_LABELS: Record<keyof QuotaData, string> = {
+    chat: "Chat",
+    speech: "Voice",
+    image: "Images",
+    music: "Music",
+    lyrics: "Lyrics",
+};
+
 export async function updateQuotaBadge(): Promise<void> {
     const badge = $("#quota-badge") as HTMLElement | null;
     if (!badge) return;
+    const labels: string[] = [];
     try {
         const resp = await fetch("/api/quota");
-        if (!resp.ok) return;
+        if (!resp.ok) {
+            badge.setAttribute("aria-label", "Quota unavailable");
+            return;
+        }
         const data: QuotaData = await resp.json();
         const items = badge.querySelectorAll<HTMLSpanElement>(".quota-item[data-type]");
         for (const item of items) {
             const type = item.dataset.type as keyof QuotaData;
             const q = data[type];
+            const label = item.title || QUOTA_LABELS[type] || type;
             if (!q || q.total === 0) {
                 item.querySelector(".quota-used")!.textContent = "—";
                 item.className = "quota-item";
+                labels.push(`${label} quota unavailable`);
                 continue;
             }
+            const remaining = q.total - q.used;
             const pct = q.used / q.total;
-            item.querySelector(".quota-used")!.textContent = `${q.total - q.used}`;
+            const state = pct >= 0.95 ? "critical" : pct >= 0.8 ? "warning" : "ok";
+            item.querySelector(".quota-used")!.textContent = `${remaining}`;
             item.className =
                 pct >= 0.95 ? "quota-item critical" : pct >= 0.8 ? "quota-item warn" : "quota-item";
+            labels.push(`${label}: ${remaining} of ${q.total} remaining, ${state}`);
         }
+        badge.setAttribute("aria-label", labels.join(". "));
     } catch {
-        // Non-critical — ignore
+        badge.setAttribute("aria-label", "Quota unavailable");
     }
 }
 
@@ -1102,6 +1326,50 @@ export function init(): void {
     const lightboxBackdrop = lightbox.querySelector(".lightbox-backdrop") as HTMLElement;
     const steerClose = $("#steer-close") as HTMLElement;
     const connectionStatus = $("#connection-status") as HTMLElement;
+    const sessionSelect = document.querySelector<HTMLSelectElement>("#session-select");
+    const sessionNew = document.querySelector<HTMLButtonElement>("#session-new");
+
+    async function refreshSessions(): Promise<void> {
+        const data = await fetchSessions();
+        if (!sessionSelect) return;
+        sessionSelect.innerHTML = "";
+        for (const session of data.sessions) {
+            const option = document.createElement("option");
+            option.value = session.id;
+            option.textContent = session.name;
+            option.selected = session.id === data.activeSessionId;
+            sessionSelect.appendChild(option);
+        }
+    }
+
+    async function reloadActiveSessionUi(): Promise<void> {
+        clearChatUi();
+        await loadHistory();
+        await restoreDrafts();
+        loadAssets();
+        await loadCurrentRecent();
+    }
+
+    async function switchSession(id: string): Promise<void> {
+        if (isStreaming && !confirm("A response is still running. Switch chats anyway?")) return;
+        await activateSession(id);
+        await refreshSessions();
+        await reloadActiveSessionUi();
+    }
+
+    refreshSessionsAfterDone = () => void refreshSessions().catch(() => undefined);
+
+    sessionSelect?.addEventListener("change", () => {
+        void switchSession(sessionSelect.value).catch(() => showError("Failed to switch chat 😕"));
+    });
+    sessionNew?.addEventListener("click", () => {
+        if (isStreaming && !confirm("A response is still running. Start a new chat anyway?"))
+            return;
+        void createNewSession()
+            .then(refreshSessions)
+            .then(reloadActiveSessionUi)
+            .catch(() => showError("Failed to create chat 😕"));
+    });
 
     connectionStatus.setAttribute(
         "aria-label",
@@ -1233,6 +1501,7 @@ export function init(): void {
     // Lightbox close
     lightboxClose.addEventListener("click", closeLightbox);
     lightboxBackdrop.addEventListener("click", closeLightbox);
+    lightbox.addEventListener("keydown", (e) => trapFocus(lightbox, e));
     document.addEventListener("keydown", (e) => {
         if (e.key === "Escape") {
             closeLightbox();
@@ -1263,20 +1532,39 @@ export function init(): void {
         currentSlide = idx;
     }
 
+    function getOnboardingFocusable(): HTMLElement[] {
+        return focusableIn(onboarding);
+    }
+
+    function focusCurrentOnboardingButton(): void {
+        slides[currentSlide]?.querySelector<HTMLElement>("button")?.focus();
+    }
+
+    function trapOnboardingFocus(e: KeyboardEvent): void {
+        trapFocus(onboarding, e);
+    }
+
     function dismissOnboarding(): void {
         onboarding.hidden = true;
         localStorage.setItem(ONBOARDING_KEY, "1");
+        input.focus();
     }
+
+    onboarding.addEventListener("keydown", trapOnboardingFocus);
 
     // Show onboarding on first visit
     if (!localStorage.getItem(ONBOARDING_KEY)) {
         onboarding.hidden = false;
         showSlide(0);
+        requestAnimationFrame(focusCurrentOnboardingButton);
     }
 
     // Next buttons (slides 0 and 1 → next slide)
     onboarding.querySelectorAll<HTMLButtonElement>(".onboarding-next").forEach((btn) => {
-        btn.addEventListener("click", () => showSlide(currentSlide + 1));
+        btn.addEventListener("click", () => {
+            showSlide(currentSlide + 1);
+            focusCurrentOnboardingButton();
+        });
     });
 
     // Slide 2: Try chat button
@@ -1328,6 +1616,7 @@ export function init(): void {
     }
 
     function closeCreateModal(): void {
+        void putDraft("create", createDraftFromDom());
         createModal.hidden = true;
         createModalReturnFocus?.focus();
         createModalReturnFocus = null;
@@ -1356,21 +1645,20 @@ export function init(): void {
     // Tab switching
     const tabs = createModal.querySelectorAll<HTMLButtonElement>(".create-tab");
     const panels = createModal.querySelectorAll<HTMLElement>(".create-panel");
+    function setCreateTab(tabName: string): void {
+        tabs.forEach((t) => t.classList.toggle("active", t.dataset.tab === tabName));
+        panels.forEach((p) => {
+            p.hidden = p.dataset.panel !== tabName;
+        });
+        createModal.dataset.tabOpen = tabName;
+        if (tabName === "assets") loadAssets();
+        void loadCurrentRecent();
+    }
+
     tabs.forEach((tab) => {
         tab.addEventListener("click", () => {
-            tabs.forEach((t) => t.classList.remove("active"));
-            panels.forEach((p) => {
-                p.hidden = true;
-            });
-            tab.classList.add("active");
-            const panel = createModal.querySelector<HTMLElement>(
-                `[data-panel="${tab.dataset.tab}"]`,
-            );
-            if (panel) {
-                panel.hidden = false;
-                createModal.dataset.tabOpen = tab.dataset.tab ?? "";
-                if (tab.dataset.tab === "assets") loadAssets();
-            }
+            setCreateTab(tab.dataset.tab ?? "image");
+            void putDraft("create", createDraftFromDom());
         });
     });
 
@@ -1386,6 +1674,111 @@ export function init(): void {
     const voiceTextInput = $("#voice-text") as HTMLTextAreaElement;
     const voiceSpeedInput = $("#voice-speed") as HTMLSelectElement;
     const searchQueryInput = $("#search-query") as HTMLTextAreaElement;
+    const persistCreateDraft = debounce(() => void putDraft("create", createDraftFromDom()), 200);
+    const persistChatDraft = debounce(() => void putDraft("chat", { text: input.value }), 200);
+
+    function fillFormFromHistory(item: CreateHistoryItem): void {
+        const inputData = item.input;
+        if (item.kind === "image") {
+            imgPromptInput.value = String(inputData.prompt ?? "");
+            imgRatioInput.value = String(inputData.aspect_ratio ?? "16:9");
+            setCreateTab("image");
+        } else if (item.kind === "music") {
+            musicPromptInput.value = String(inputData.prompt ?? "");
+            musicLyricsInput.value = String(inputData.lyrics ?? "");
+            setCreateTab("music");
+        } else if (item.kind === "voice") {
+            voiceTextInput.value = String(inputData.text ?? "");
+            voiceSpeedInput.value = String(inputData.speed ?? "1.0");
+            setCreateTab("voice");
+        } else if (item.kind === "search") {
+            searchQueryInput.value = String(inputData.query ?? inputData.prompt ?? "");
+            setCreateTab("search");
+        }
+        void putDraft("create", createDraftFromDom());
+    }
+
+    async function loadRecent(kind: string): Promise<void> {
+        const container = createModal.querySelector<HTMLElement>(
+            `.create-recent[data-kind="${kind}"]`,
+        );
+        if (!container) return;
+        const items = await fetchCreateHistory(kind);
+        container.innerHTML = "";
+        if (items.length === 0) return;
+        const label = document.createElement("span");
+        label.className = "recent-label";
+        label.textContent = "Recent ▾";
+        container.appendChild(label);
+        for (const item of items) {
+            const button = document.createElement("button");
+            button.type = "button";
+            button.className = "recent-button";
+            button.textContent = String(
+                item.input.prompt ?? item.input.text ?? item.input.query ?? item.tool_name,
+            ).slice(0, 24);
+            button.addEventListener("click", () => fillFormFromHistory(item));
+            const remove = document.createElement("button");
+            remove.type = "button";
+            remove.className = "recent-remove";
+            remove.setAttribute("aria-label", "Remove recent item");
+            remove.textContent = "×";
+            remove.addEventListener("click", () => {
+                void deleteCreateHistoryItem(item.id).then(() => loadRecent(kind));
+            });
+            container.appendChild(button);
+            container.appendChild(remove);
+        }
+    }
+
+    async function loadCurrentRecent(): Promise<void> {
+        const kind = createModal.dataset.tabOpen || "image";
+        if (kind === "assets") return;
+        await loadRecent(kind);
+    }
+
+    async function restoreDrafts(): Promise<void> {
+        const chatDraft = await getDraft("chat");
+        if (chatDraft && typeof chatDraft === "object" && "text" in chatDraft) {
+            input.value = String((chatDraft as { text: unknown }).text ?? "");
+            handleInputChange();
+        }
+        const createDraft = await getDraft("create");
+        if (isCreateDraft(createDraft)) {
+            applyCreateDraft(createDraft);
+            setCreateTab(createDraft.selectedTab || "image");
+        } else {
+            applyCreateDraft(defaultCreateDraft());
+            setCreateTab("image");
+        }
+    }
+
+    [
+        imgPromptInput,
+        imgRatioInput,
+        musicPromptInput,
+        musicLyricsInput,
+        voiceTextInput,
+        voiceSpeedInput,
+        searchQueryInput,
+    ].forEach((el) => {
+        el.addEventListener("input", persistCreateDraft);
+        el.addEventListener("change", persistCreateDraft);
+    });
+    input.addEventListener("input", persistChatDraft);
+    window.addEventListener("visibilitychange", () => {
+        if (document.visibilityState === "hidden") {
+            void putDraft("chat", { text: input.value });
+            void putDraft("create", createDraftFromDom());
+        }
+    });
+    window.addEventListener("pagehide", () => {
+        void putDraft("chat", { text: input.value });
+        void putDraft("create", createDraftFromDom());
+    });
+
+    void refreshSessions().catch(() => undefined);
+    void restoreDrafts().catch(() => undefined);
 
     createImgForm.addEventListener("submit", (e) => {
         e.preventDefault();
@@ -1395,6 +1788,7 @@ export function init(): void {
             closeCreateModal();
             sendMessage(
                 `Use generate_image with prompt: ${prompt}\nTool params: aspect_ratio=${ratio}`,
+                "create",
             );
         }
     });
@@ -1407,7 +1801,7 @@ export function init(): void {
             closeCreateModal();
             let msg = `Use generate_music with prompt: ${prompt}`;
             if (lyrics) msg += `\nTool params: lyrics=${lyrics}`;
-            sendMessage(msg);
+            sendMessage(msg, "create");
         }
     });
 
@@ -1425,7 +1819,7 @@ export function init(): void {
         setLyricsWriteResolve((lyricsText: string) => {
             musicLyricsInput.value = lyricsText;
         });
-        sendMessage(`Use generate_lyrics with prompt: ${prompt}`).finally(() => {
+        sendMessage(`Use generate_lyrics with prompt: ${prompt}`, "create").finally(() => {
             writeLyricsBtn.disabled = false;
             writeLyricsBtn.textContent = "Write lyrics for me ✨";
             setLyricsWriteResolve(null);
@@ -1438,7 +1832,10 @@ export function init(): void {
         const speed = voiceSpeedInput.value;
         if (text) {
             closeCreateModal();
-            sendMessage(`Use text_to_speech with text: ${text}\nTool params: speed=${speed}`);
+            sendMessage(
+                `Use text_to_speech with text: ${text}\nTool params: speed=${speed}`,
+                "create",
+            );
         }
     });
 
@@ -1447,7 +1844,7 @@ export function init(): void {
         const query = searchQueryInput.value.trim();
         if (query) {
             closeCreateModal();
-            sendMessage(`Search the web for: ${query}`);
+            sendMessage(`Search the web for: ${query}`, "create");
         }
     });
 

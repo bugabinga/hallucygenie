@@ -19,6 +19,19 @@ import {
     getUsageToday,
     getOrCreateActiveSessionId,
     getOrCreateActiveSession,
+    listSessions,
+    createSession,
+    setActiveSessionId,
+    getSession,
+    renameSession,
+    archiveSession,
+    autoNameSession,
+    getDraft,
+    saveDraft,
+    deleteDraft,
+    recordToolInputHistory,
+    listToolInputHistory,
+    hideToolInputHistory,
     QUOTAS,
     type AssetRow,
 } from "./db.ts";
@@ -61,6 +74,7 @@ export interface ChatMessage {
     role: "system" | "user" | "assistant" | "tool";
     content: string;
     thinking?: string;
+    thinking_signature?: string;
     tool_call_id?: string;
     tool_calls?: Array<{ id: string; name: string; input: Record<string, unknown> }>;
 }
@@ -306,7 +320,9 @@ export async function handleChat(
 
     // Save user message to DB
     if (sessionId) {
+        const userCount = countSessionUserMessages(database, sessionId);
         saveMessage(database, sessionId, "user", lastUserMsg.content);
+        if (userCount === 0) autoNameDefaultSession(database, sessionId, lastUserMsg.content);
     }
 
     const explicitTool = parseExplicitToolDirective(lastUserMsg.content);
@@ -330,7 +346,7 @@ export async function handleChat(
     const writer = writable.getWriter();
     const encoder = new TextEncoder();
     const savedToolResults = new Map<string, ToolResult>();
-    const consumedQuotaByToolId = new Map<string, string>();
+    const consumedQuotaByToolId = new Map<string, { feature: string; amount: number }>();
 
     // Run agent loop in background, streaming events to SSE
     (async () => {
@@ -382,10 +398,29 @@ export async function handleChat(
                                 : event.result;
                             if (event.id) {
                                 savedToolResults.set(event.id, saved);
-                                const feature = consumedQuotaByToolId.get(event.id);
-                                if (feature && saved.type === "error") {
-                                    releaseQuota(database, feature);
+                                const consumed = consumedQuotaByToolId.get(event.id);
+                                if (consumed && saved.type === "error") {
+                                    releaseQuota(database, consumed.feature, consumed.amount);
                                     consumedQuotaByToolId.delete(event.id);
+                                }
+                            }
+                            if (
+                                sessionId &&
+                                getSession(database, sessionId) &&
+                                event.name &&
+                                event.args
+                            ) {
+                                try {
+                                    recordToolInputHistory(database, {
+                                        session_id: sessionId,
+                                        origin: "agent",
+                                        tool_name: event.name,
+                                        input: event.args,
+                                        status: saved.type === "error" ? "failed" : "succeeded",
+                                        asset_id: assetIdFromToolResult(saved),
+                                    });
+                                } catch (err) {
+                                    log.warn("tool history save failed", { error: String(err) });
                                 }
                             }
                             const sseData = `event: tool_result\ndata: ${JSON.stringify({
@@ -407,8 +442,9 @@ export async function handleChat(
                     ? (toolName: string, _args: Record<string, unknown>, toolId?: string) => {
                           const feature = featureForTool(toolName);
                           if (!feature) return null;
-                          if (consumeQuota(database, feature) !== null) {
-                              if (toolId) consumedQuotaByToolId.set(toolId, feature);
+                          const amount = quotaAmountForTool(toolName, _args);
+                          if (consumeQuota(database, feature, amount) !== null) {
+                              if (toolId) consumedQuotaByToolId.set(toolId, { feature, amount });
                               return null;
                           }
                           return {
@@ -543,6 +579,13 @@ function featureForTool(name: string): "image" | "speech" | "music" | "lyrics" |
     return null;
 }
 
+function quotaAmountForTool(name: string, args: Record<string, unknown>): number {
+    if (name !== "text_to_speech") return 1;
+    const text = args.text;
+    if (typeof text !== "string") return 1;
+    return Math.max(1, Array.from(text).length);
+}
+
 function handleExplicitToolDirective(
     directive: ExplicitToolDirective,
     apiKey: string,
@@ -564,7 +607,10 @@ function handleExplicitToolDirective(
             await writeSse("tool_start", { id: toolCallId, name: directive.name });
 
             const feature = featureForTool(directive.name);
-            const quotaBlocked = feature ? consumeQuota(database, feature) === null : false;
+            const quotaAmount = quotaAmountForTool(directive.name, directive.args);
+            const quotaBlocked = feature
+                ? consumeQuota(database, feature, quotaAmount) === null
+                : false;
             const result = quotaBlocked
                 ? { type: "error" as const, content: `Daily ${feature} quota is used up.` }
                 : safeToolResultForUser(
@@ -581,7 +627,22 @@ function handleExplicitToolDirective(
                   )
                 : result;
             if (feature && !quotaBlocked && saved.type === "error") {
-                releaseQuota(database, feature);
+                releaseQuota(database, feature, quotaAmount);
+            }
+
+            if (sessionId && getSession(database, sessionId)) {
+                try {
+                    recordToolInputHistory(database, {
+                        session_id: sessionId,
+                        origin: "create",
+                        tool_name: directive.name,
+                        input: directive.args,
+                        status: saved.type === "error" ? "failed" : "succeeded",
+                        asset_id: assetIdFromToolResult(saved),
+                    });
+                } catch (err) {
+                    log.warn("tool history save failed", { error: String(err) });
+                }
             }
 
             await writeSse("tool_result", {
@@ -641,6 +702,53 @@ function handleHealth(): Response {
         status: "ok",
         uptime: Math.floor((Date.now() - startTime) / 1000),
     });
+}
+
+function countSessionUserMessages(database: Database, sessionId: string): number {
+    const row = database
+        .prepare("SELECT count(*) AS count FROM messages WHERE session_id = ? AND role = 'user'")
+        .get(sessionId) as { count: number };
+    return row.count;
+}
+
+function sessionNameFromPrompt(prompt: string): string {
+    const words = prompt
+        .replace(/Use\s+\w+\s+with\s+(?:prompt|text):/i, "")
+        .replace(/Tool params:[\s\S]*/i, "")
+        .replace(/[^\p{L}\p{N}\s]/gu, " ")
+        .trim()
+        .split(/\s+/)
+        .filter((word) => word.length > 1)
+        .slice(0, 5);
+    if (words.length === 0) return "New idea";
+    return words
+        .slice(0, Math.max(2, Math.min(5, words.length)))
+        .map((word) => word[0]!.toUpperCase() + word.slice(1).toLowerCase())
+        .join(" ");
+}
+
+function autoNameDefaultSession(database: Database, sessionId: string, prompt: string): void {
+    const session = getSession(database, sessionId);
+    if (!session || session.name_source !== "default") return;
+    try {
+        autoNameSession(database, sessionId, sessionNameFromPrompt(prompt));
+    } catch (err) {
+        log.warn("session auto-name failed", { sessionId, error: String(err) });
+    }
+}
+
+function parseJsonObject(input: unknown, label: string): Record<string, unknown> {
+    if (!input || typeof input !== "object" || Array.isArray(input)) {
+        throw new Error(`${label} must be an object`);
+    }
+    return input as Record<string, unknown>;
+}
+
+function parseLimitOffset(url: URL): { limit: number; offset: number } {
+    return {
+        limit: Number(url.searchParams.get("limit") ?? 20),
+        offset: Number(url.searchParams.get("offset") ?? 0),
+    };
 }
 
 // ── Main request handler ─────────────────────────────────────────────
@@ -767,6 +875,107 @@ export async function handleRequest(req: Request): Promise<Response> {
 
         if (path === "/api/profile" && method === "DELETE") {
             return jsonResponse(deleteUserProfile(database));
+        }
+
+        if (path === "/api/sessions" && method === "GET") {
+            const activeId = getOrCreateActiveSessionId(database);
+            return jsonResponse({ activeSessionId: activeId, sessions: listSessions(database) });
+        }
+
+        if (path === "/api/sessions" && method === "POST") {
+            const session = createSession(database);
+            setActiveSessionId(database, session.id);
+            return jsonResponse({ session }, 201);
+        }
+
+        const activateMatch = path.match(/^\/api\/sessions\/([^/]+)\/activate$/);
+        if (activateMatch && method === "POST") {
+            const session = getSession(database, decodeURIComponent(activateMatch[1]!));
+            if (!session || session.archived_at) return jsonResponse({ error: "Not found" }, 404);
+            setActiveSessionId(database, session.id);
+            return jsonResponse({ session });
+        }
+
+        const sessionMatch = path.match(/^\/api\/sessions\/([^/]+)$/);
+        if (sessionMatch && method === "PATCH") {
+            let body: unknown;
+            try {
+                body = await req.json();
+                const obj = parseJsonObject(body, "session");
+                if (typeof obj.name !== "string") throw new Error("name must be a string");
+                return jsonResponse({
+                    session: renameSession(database, sessionMatch[1]!, obj.name),
+                });
+            } catch (err) {
+                return jsonResponse(
+                    { error: String(err instanceof Error ? err.message : err) },
+                    400,
+                );
+            }
+        }
+
+        if (sessionMatch && method === "DELETE") {
+            try {
+                const id = sessionMatch[1]!;
+                const activeId = getOrCreateActiveSessionId(database);
+                archiveSession(database, id);
+                if (activeId === id) setActiveSessionId(database, createSession(database).id);
+                return jsonResponse({ ok: true });
+            } catch {
+                return jsonResponse({ error: "Not found" }, 404);
+            }
+        }
+
+        if ((path === "/api/draft/chat" || path === "/api/draft/create") && method === "GET") {
+            const kind = path.endsWith("/chat") ? "chat" : "create";
+            const row = getDraft(database, resolveSessionId(req, database), kind);
+            return jsonResponse({ draft: row ? JSON.parse(row.value_json) : null });
+        }
+
+        if ((path === "/api/draft/chat" || path === "/api/draft/create") && method === "PUT") {
+            const kind = path.endsWith("/chat") ? "chat" : "create";
+            try {
+                const value = await req.json();
+                return jsonResponse({
+                    draft: JSON.parse(
+                        saveDraft(database, resolveSessionId(req, database), kind, value)
+                            .value_json,
+                    ),
+                });
+            } catch (err) {
+                return jsonResponse(
+                    { error: String(err instanceof Error ? err.message : err) },
+                    400,
+                );
+            }
+        }
+
+        if ((path === "/api/draft/chat" || path === "/api/draft/create") && method === "DELETE") {
+            const kind = path.endsWith("/chat") ? "chat" : "create";
+            deleteDraft(database, resolveSessionId(req, database), kind);
+            return jsonResponse({ ok: true });
+        }
+
+        if (path === "/api/create-history" && method === "GET") {
+            const url = new URL(req.url);
+            const { limit, offset } = parseLimitOffset(url);
+            const kind = url.searchParams.get("kind") ?? undefined;
+            const items = listToolInputHistory(database, resolveSessionId(req, database), {
+                kind,
+                limit,
+                offset,
+            }).map((item) => ({ ...item, input: JSON.parse(item.input_json) }));
+            return jsonResponse({ items });
+        }
+
+        const historyMatch = path.match(/^\/api\/create-history\/([^/]+)$/);
+        if (historyMatch && method === "DELETE") {
+            try {
+                hideToolInputHistory(database, resolveSessionId(req, database), historyMatch[1]!);
+                return jsonResponse({ ok: true });
+            } catch {
+                return jsonResponse({ error: "Not found" }, 404);
+            }
         }
 
         if (path === "/api/chat" && method === "POST") {
@@ -998,6 +1207,11 @@ export function initDatabase(dbPath = "data/hallucygenie.db"): Database {
     mkdirSync(dir, { recursive: true });
     db = initDb(dbPath);
     return db;
+}
+
+function assetIdFromToolResult(result: ToolResult): string | null {
+    const match = result.content.match(/^\/asset\/(asset_[0-9a-f-]+)$/i);
+    return match?.[1] ?? null;
 }
 
 function extensionForMime(mime: string): string {

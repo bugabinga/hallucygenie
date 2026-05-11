@@ -34,6 +34,12 @@ import {
     saveAsset,
     getAssets,
     getAsset,
+    saveDraft,
+    getDraft,
+    deleteDraft,
+    recordToolInputHistory,
+    listToolInputHistory,
+    hideToolInputHistory,
     QUOTAS,
 } from "../src/db.ts";
 
@@ -83,7 +89,7 @@ describe("runMigrations", () => {
             .prepare("SELECT version FROM schema_migrations ORDER BY version")
             .all()
             .map((r: any) => r.version);
-        assert.deepEqual(versions, [1, 2, 3, 4, 5, 6, 7, 8, 9]);
+        assert.deepEqual(versions, [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]);
 
         db.close();
     });
@@ -357,6 +363,59 @@ describe("Sessions", () => {
             listSessions(db).some((row) => row.id === "session-archive"),
             false,
         );
+    });
+});
+
+// ── Drafts ──────────────────────────────────────────────────────────
+
+describe("Draft CRUD", () => {
+    let db: Database;
+    beforeEach(() => {
+        db = freshDb();
+    });
+
+    it("saves, reads, and deletes chat drafts scoped by session", () => {
+        const session = createSession(db);
+        saveDraft(db, session.id, "chat", { text: "unfinished prompt" });
+        assert.deepEqual(JSON.parse(getDraft(db, session.id, "chat")!.value_json), {
+            text: "unfinished prompt",
+        });
+        deleteDraft(db, session.id, "chat");
+        assert.equal(getDraft(db, session.id, "chat"), null);
+    });
+
+    it("rejects raw asset data in drafts", () => {
+        const session = createSession(db);
+        assert.throws(() =>
+            saveDraft(db, session.id, "create", { image: "data:image/png;base64,aaaa" }),
+        );
+    });
+});
+
+// ── Tool Input History ──────────────────────────────────────────────
+
+describe("Tool input history", () => {
+    let db: Database;
+    beforeEach(() => {
+        db = freshDb();
+    });
+
+    it("records, lists, and soft-hides structured tool input", () => {
+        const session = createSession(db);
+        const row = recordToolInputHistory(db, {
+            session_id: session.id,
+            origin: "create",
+            tool_name: "generate_image",
+            input: { prompt: "cat", aspect_ratio: "16:9" },
+            status: "succeeded",
+            asset_id: "asset_123",
+        });
+        const items = listToolInputHistory(db, session.id, { kind: "image" });
+        assert.equal(items.length, 1);
+        assert.equal(items[0].id, row.id);
+        assert.deepEqual(JSON.parse(items[0].input_json), { prompt: "cat", aspect_ratio: "16:9" });
+        hideToolInputHistory(db, session.id, row.id);
+        assert.equal(listToolInputHistory(db, session.id, { kind: "image" }).length, 0);
     });
 });
 
@@ -759,10 +818,24 @@ describe("consumeQuota", () => {
         assert.equal(checkQuota(db, "music").used, 1);
     });
 
+    it("consumes speech quota by character amount", () => {
+        assert.equal(consumeQuota(db, "speech", 5), 5);
+        assert.equal(checkQuota(db, "speech").used, 5);
+        assert.equal(consumeQuota(db, "speech", QUOTAS.speech - 5), QUOTAS.speech);
+        assert.equal(consumeQuota(db, "speech", 1), null);
+        assert.equal(checkQuota(db, "speech").used, QUOTAS.speech);
+    });
+
     it("releases consumed quota after failed attempts", () => {
         assert.equal(consumeQuota(db, "image"), 1);
         releaseQuota(db, "image");
         assert.equal(checkQuota(db, "image").used, 0);
+    });
+
+    it("releases speech quota by character amount", () => {
+        assert.equal(consumeQuota(db, "speech", 5), 5);
+        releaseQuota(db, "speech", 3);
+        assert.equal(checkQuota(db, "speech").used, 2);
     });
 
     it("releaseQuota never decrements below zero", () => {

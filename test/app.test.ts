@@ -12,6 +12,11 @@ import type { SSEEvent } from "../public/app.ts";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const SNAPSHOTS_DIR = join(__dirname, "__snapshots__");
+const ORIGINAL_FETCH = globalThis.fetch;
+
+after(() => {
+    globalThis.fetch = ORIGINAL_FETCH;
+});
 
 function writeSnapshot(name: string, html: string): void {
     try {
@@ -1031,10 +1036,10 @@ function setupDOM(): { win: any; doc: any; errors: string[] } {
     <div id="steer-hint" hidden></div>
     <div id="message-list"></div>
     <div id="typing-indicator" hidden></div>
-    <div id="lightbox">
+    <div id="lightbox" role="dialog" aria-modal="true" aria-label="Image preview" hidden>
       <div class="lightbox-backdrop"></div>
       <div class="lightbox-content"><img id="lightbox-img" /></div>
-      <button class="lightbox-close">×</button>
+      <button class="lightbox-close" aria-label="Close image preview">×</button>
     </div>
     <div id="error-toast" hidden>
       <span id="error-toast-icon">😕</span>
@@ -2517,6 +2522,54 @@ describe("init accessibility behavior", () => {
         );
         assert.equal(doc.activeElement, closeBtn);
     });
+
+    it("traps onboarding focus and restores focus on dismiss", () => {
+        const { doc, win } = setupDOM();
+        init();
+
+        const onboarding = doc.querySelector("#onboarding") as HTMLElement;
+        const first = doc.querySelector(".onboarding-next") as HTMLButtonElement;
+        const last = doc.querySelector("#onboarding-done") as HTMLButtonElement;
+        const input = doc.querySelector("#chat-input") as HTMLTextAreaElement;
+
+        first.focus();
+        onboarding.dispatchEvent(
+            new win.KeyboardEvent("keydown", {
+                key: "Tab",
+                shiftKey: true,
+                bubbles: true,
+                cancelable: true,
+            }),
+        );
+        assert.equal(doc.activeElement, last);
+
+        last.click();
+        assert.equal(onboarding.hidden, true);
+        assert.equal(doc.activeElement, input);
+    });
+
+    it("traps lightbox focus and restores opener focus", () => {
+        const { doc, win } = setupDOM();
+        init();
+
+        const opener = doc.querySelector("#create-btn") as HTMLButtonElement;
+        const lightbox = doc.querySelector("#lightbox") as HTMLElement;
+        const closeBtn = doc.querySelector(".lightbox-close") as HTMLButtonElement;
+
+        opener.focus();
+        openLightbox("/asset/img1");
+        assert.equal(lightbox.hidden, false);
+        assert.equal(doc.activeElement, closeBtn);
+
+        lightbox.dispatchEvent(
+            new win.KeyboardEvent("keydown", { key: "Tab", bubbles: true, cancelable: true }),
+        );
+        assert.equal(doc.activeElement, closeBtn);
+
+        closeBtn.click();
+        assert.equal(lightbox.hidden, true);
+        assert.equal(doc.activeElement, opener);
+    });
 });
 
 // ── HG-ISSUE-007/008/009: Asset URL handling, quota refresh, assets refresh ──
@@ -2573,6 +2626,9 @@ describe("updateQuotaBadge", () => {
         assert.ok(speechItem, "speech quota item exists");
         const speechUsed = speechItem!.querySelector(".quota-used");
         assert.equal(speechUsed!.textContent, "95"); // 100 - 5
+        const label = doc.querySelector("#quota-badge")!.getAttribute("aria-label") ?? "";
+        assert.match(label, /Images: 90 of 100 remaining, ok/);
+        assert.match(label, /Voice: 95 of 100 remaining, ok/);
     });
 
     it("does not crash on fetch failure", async () => {

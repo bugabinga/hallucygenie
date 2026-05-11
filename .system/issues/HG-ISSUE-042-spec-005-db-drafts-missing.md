@@ -1,5 +1,5 @@
 ---
-{ "status": "open", "specs": ["HG-SPEC-005", "HG-SPEC-007"] }
+{ "status": "fixed", "specs": ["HG-SPEC-005", "HG-SPEC-007"] }
 ---
 
 # HG-SPEC-005: DB-owned drafts and UI state persistence missing

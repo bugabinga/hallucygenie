@@ -391,6 +391,13 @@ export function toAnthropicPayload(
             anthropicMessages.push({ role: "user", content: msg.content });
         } else if (msg.role === "assistant") {
             const content: Array<Record<string, unknown>> = [];
+            if (msg.thinking && msg.thinking_signature) {
+                content.push({
+                    type: "thinking",
+                    thinking: msg.thinking,
+                    signature: msg.thinking_signature,
+                });
+            }
             if (msg.content) {
                 content.push({ type: "text", text: msg.content });
             }
@@ -539,6 +546,7 @@ export async function runAgentLoop(
         // Process the Anthropic SSE stream
         let textContent = "";
         let thinkingContent = "";
+        let thinkingSignature = "";
         let stopReason: string | null = null;
         const toolCalls = new Map<number, AnthropicToolCall>();
         let currentBlockType: "thinking" | "text" | "tool_use" | null = null;
@@ -611,6 +619,8 @@ export async function runAgentLoop(
                             thinkingContent += thinking;
                             await onEvent({ type: "thinking", content: thinking });
                         }
+                    } else if (deltaType === "signature_delta") {
+                        thinkingSignature += (delta.signature as string) || "";
                     } else if (deltaType === "text_delta") {
                         const text = stripModelControlPlaceholders((delta.text as string) || "");
                         if (text) {
@@ -669,6 +679,7 @@ export async function runAgentLoop(
                 role: "assistant",
                 content: textContent || "",
                 thinking: thinkingContent || undefined,
+                thinking_signature: thinkingSignature || undefined,
                 tool_calls: calls.map((tc) => ({
                     id: tc.id,
                     name: tc.name,
@@ -735,6 +746,7 @@ export async function runAgentLoop(
                         role: "assistant",
                         content: textContent,
                         thinking: thinkingContent || undefined,
+                        thinking_signature: thinkingSignature || undefined,
                     });
                 }
                 for (const msg of steerMessages) {
@@ -749,6 +761,7 @@ export async function runAgentLoop(
                 role: "assistant",
                 content: textContent,
                 thinking: thinkingContent || undefined,
+                thinking_signature: thinkingSignature || undefined,
             });
         }
 

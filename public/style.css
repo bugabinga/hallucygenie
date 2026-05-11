@@ -263,6 +263,34 @@ textarea,
     box-shadow: none;
 }
 
+.session-switcher {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    min-width: 0;
+}
+
+.session-select {
+    max-width: 150px;
+    min-width: 80px;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-md);
+    background: var(--color-bg-card);
+    color: var(--color-text);
+    padding: 4px 8px;
+    font-size: 0.8rem;
+    text-overflow: ellipsis;
+}
+
+.session-new {
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-md);
+    background: var(--color-bg-card);
+    color: var(--color-text);
+    min-width: 32px;
+    min-height: 32px;
+}
+
 /* Quota badge */
 .quota-badge {
     display: flex;
@@ -285,6 +313,27 @@ textarea,
 }
 .quota-item.critical {
     color: var(--color-primary);
+}
+
+.create-recent {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-xs);
+    margin-bottom: var(--space-sm);
+}
+
+.recent-button,
+.recent-remove {
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-sm);
+    background: var(--color-bg-card);
+    color: var(--color-text);
+    padding: 3px 7px;
+    font-size: 0.75rem;
+}
+
+.recent-remove {
+    color: var(--color-text-dim);
 }
 
 /* ── Onboarding Overlay ─────────────────────────────────────────── */

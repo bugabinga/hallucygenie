@@ -809,6 +809,96 @@ describe("SSE streaming from Anthropic endpoint", () => {
         }
     });
 
+    it("consumes speech quota by text character count for explicit TTS", async () => {
+        const sessionId = "explicit-speech-char-quota-session";
+        const db = getDb()!;
+        const existing = db
+            .prepare(
+                "SELECT count FROM daily_usage WHERE date = date('now') AND feature = 'speech'",
+            )
+            .get() as { count: number } | undefined;
+        db.prepare(
+            "INSERT OR REPLACE INTO daily_usage (date, feature, count) VALUES (date('now'), 'speech', 3)",
+        ).run();
+
+        const originalFetch = globalThis.fetch;
+        globalThis.fetch = async () =>
+            new Response(JSON.stringify({ data: { audio: "ff" } }), {
+                status: 200,
+                headers: { "Content-Type": "application/json" },
+            });
+
+        try {
+            const req = makeRequest(
+                "POST",
+                "/api/chat",
+                { messages: [{ role: "user", content: "Use text_to_speech with text: hello" }] },
+                { "X-Session-Id": sessionId },
+            );
+            const resp = await handleChat(req, "test-key", sessionId);
+            const body = await readBody(resp);
+
+            assert.ok(body.includes("/asset/"));
+            assert.equal(getUsageToday(db).speech, 8);
+        } finally {
+            globalThis.fetch = originalFetch;
+            if (existing) {
+                db.prepare(
+                    "INSERT OR REPLACE INTO daily_usage (date, feature, count) VALUES (date('now'), 'speech', ?)",
+                ).run(existing.count);
+            } else {
+                db.prepare(
+                    "DELETE FROM daily_usage WHERE date = date('now') AND feature = 'speech'",
+                ).run();
+            }
+        }
+    });
+
+    it("releases speech character quota after failed explicit TTS", async () => {
+        const sessionId = "explicit-speech-char-release-session";
+        const db = getDb()!;
+        const existing = db
+            .prepare(
+                "SELECT count FROM daily_usage WHERE date = date('now') AND feature = 'speech'",
+            )
+            .get() as { count: number } | undefined;
+        db.prepare(
+            "INSERT OR REPLACE INTO daily_usage (date, feature, count) VALUES (date('now'), 'speech', 3)",
+        ).run();
+
+        const originalFetch = globalThis.fetch;
+        globalThis.fetch = async () =>
+            new Response(
+                JSON.stringify({ base_resp: { status_code: 2013, status_msg: "bad text" } }),
+                { status: 200, headers: { "Content-Type": "application/json" } },
+            );
+
+        try {
+            const req = makeRequest(
+                "POST",
+                "/api/chat",
+                { messages: [{ role: "user", content: "Use text_to_speech with text: hello" }] },
+                { "X-Session-Id": sessionId },
+            );
+            const resp = await handleChat(req, "test-key", sessionId);
+            const body = await readBody(resp);
+
+            assert.ok(body.includes("Couldn't generate voice audio"));
+            assert.equal(getUsageToday(db).speech, 3);
+        } finally {
+            globalThis.fetch = originalFetch;
+            if (existing) {
+                db.prepare(
+                    "INSERT OR REPLACE INTO daily_usage (date, feature, count) VALUES (date('now'), 'speech', ?)",
+                ).run(existing.count);
+            } else {
+                db.prepare(
+                    "DELETE FROM daily_usage WHERE date = date('now') AND feature = 'speech'",
+                ).run();
+            }
+        }
+    });
+
     it("preserves quota-blocked error for explicit tool directives", async () => {
         const sessionId = "quota-blocked-session";
         const db = getDb()!;
@@ -2477,6 +2567,81 @@ describe("GET /api/state", () => {
         assert.equal(body.activeSession.name, "New Chat");
         assert.equal(body.activeSession.nameSource, "default");
         assert.equal(body.ui.maxMessageLength, 2000);
+    });
+});
+
+describe("Session, draft, and create-history APIs", () => {
+    it("creates, lists, activates, renames, and archives sessions", async () => {
+        const createResp = await handleRequest(
+            new Request("http://localhost/api/sessions", { method: "POST" }),
+        );
+        assert.equal(createResp.status, 201);
+        const created = (await createResp.json()) as { session: { id: string } };
+
+        const renameResp = await handleRequest(
+            new Request(`http://localhost/api/sessions/${created.session.id}`, {
+                method: "PATCH",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ name: "Boss Fight" }),
+            }),
+        );
+        assert.equal(renameResp.status, 200);
+
+        const listResp = await handleRequest(new Request("http://localhost/api/sessions"));
+        const list = (await listResp.json()) as { sessions: Array<{ id: string; name: string }> };
+        assert.equal(
+            list.sessions.some((s) => s.id === created.session.id && s.name === "Boss Fight"),
+            true,
+        );
+
+        const archiveResp = await handleRequest(
+            new Request(`http://localhost/api/sessions/${created.session.id}`, {
+                method: "DELETE",
+            }),
+        );
+        assert.equal(archiveResp.status, 200);
+    });
+
+    it("saves and clears active-session drafts", async () => {
+        const putResp = await handleRequest(
+            new Request("http://localhost/api/draft/chat", {
+                method: "PUT",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ text: "draft" }),
+            }),
+        );
+        assert.equal(putResp.status, 200);
+        const getResp = await handleRequest(new Request("http://localhost/api/draft/chat"));
+        assert.deepEqual(((await getResp.json()) as { draft: unknown }).draft, { text: "draft" });
+        const delResp = await handleRequest(
+            new Request("http://localhost/api/draft/chat", { method: "DELETE" }),
+        );
+        assert.equal(delResp.status, 200);
+    });
+
+    it("lists and soft-deletes create history", async () => {
+        const db = getDb()!;
+        const sessionId = resolveSessionId(new Request("http://localhost/api/state"), db);
+        saveMessage(db, sessionId, "user", "seed");
+        const row = db
+            .prepare(
+                `INSERT INTO tool_input_history (id, session_id, kind, origin, tool_name, input_json, status)
+                 VALUES ('hist_1', ?, 'image', 'create', 'generate_image', '{"prompt":"cat"}', 'succeeded') RETURNING id`,
+            )
+            .get(sessionId) as { id: string };
+        assert.equal(row.id, "hist_1");
+        const listResp = await handleRequest(
+            new Request("http://localhost/api/create-history?kind=image"),
+        );
+        const list = (await listResp.json()) as { items: Array<{ id: string; input: unknown }> };
+        assert.equal(
+            list.items.some((item) => item.id === "hist_1"),
+            true,
+        );
+        const delResp = await handleRequest(
+            new Request("http://localhost/api/create-history/hist_1", { method: "DELETE" }),
+        );
+        assert.equal(delResp.status, 200);
     });
 });
 

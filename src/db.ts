@@ -327,6 +327,175 @@ export function archiveSession(db: Database, id: string): void {
     if (result.changes !== 1) throw new Error(`session not found: ${id}`);
 }
 
+export function autoNameSession(db: Database, id: string, name: string): SessionRow {
+    const normalized = normalizeSessionName(name);
+    const result = db
+        .prepare(
+            `UPDATE sessions
+             SET name = ?, name_source = 'auto', updated_at = datetime('now')
+             WHERE id = ? AND archived_at IS NULL AND name_source = 'default'`,
+        )
+        .run(normalized, id);
+    if (result.changes !== 1) throw new Error(`session not auto-nameable: ${id}`);
+    return getSession(db, id)!;
+}
+
+// ── Drafts ─────────────────────────────────────────────────────────
+
+export interface DraftRow {
+    session_id: string;
+    kind: "chat" | "create";
+    value_json: string;
+    updated_at: string;
+}
+
+function validateDraftKind(kind: string): "chat" | "create" {
+    if (kind === "chat" || kind === "create") return kind;
+    throw new Error(`invalid draft kind: ${kind}`);
+}
+
+export function getDraft(
+    db: Database,
+    sessionId: string,
+    kind: "chat" | "create",
+): DraftRow | null {
+    return db
+        .prepare(
+            "SELECT session_id, kind, value_json, updated_at FROM drafts WHERE session_id = ? AND kind = ?",
+        )
+        .get(sessionId, kind) as DraftRow | null;
+}
+
+export function saveDraft(
+    db: Database,
+    sessionId: string,
+    kind: "chat" | "create",
+    value: unknown,
+): DraftRow {
+    const validKind = validateDraftKind(kind);
+    const valueJson = JSON.stringify(value);
+    assertNoRawAssetDataInMessage(valueJson);
+    db.prepare(
+        `INSERT INTO drafts (session_id, kind, value_json, updated_at)
+         VALUES (?, ?, ?, datetime('now'))
+         ON CONFLICT(session_id, kind) DO UPDATE SET value_json = excluded.value_json, updated_at = datetime('now')`,
+    ).run(sessionId, validKind, valueJson);
+    return getDraft(db, sessionId, validKind)!;
+}
+
+export function deleteDraft(db: Database, sessionId: string, kind: "chat" | "create"): void {
+    db.prepare("DELETE FROM drafts WHERE session_id = ? AND kind = ?").run(
+        sessionId,
+        validateDraftKind(kind),
+    );
+}
+
+// ── Tool input history ─────────────────────────────────────────────
+
+export interface ToolInputHistoryRow {
+    id: string;
+    session_id: string;
+    kind: string;
+    origin: "create" | "chat" | "agent";
+    tool_name: string;
+    input_json: string;
+    status: "submitted" | "succeeded" | "failed";
+    asset_id: string | null;
+    hidden_at: string | null;
+    created_at: string;
+    updated_at: string;
+}
+
+export function kindForTool(toolName: string): string {
+    if (toolName === "generate_image") return "image";
+    if (toolName === "generate_music" || toolName === "generate_lyrics") return "music";
+    if (toolName === "text_to_speech") return "voice";
+    if (toolName === "web_search") return "search";
+    if (toolName === "analyze_image") return "image";
+    return "other";
+}
+
+function validateHistoryStatus(status: string): ToolInputHistoryRow["status"] {
+    if (status === "submitted" || status === "succeeded" || status === "failed") return status;
+    throw new Error(`invalid history status: ${status}`);
+}
+
+export function recordToolInputHistory(
+    db: Database,
+    input: {
+        session_id: string;
+        kind?: string;
+        origin: "create" | "chat" | "agent";
+        tool_name: string;
+        input: Record<string, unknown>;
+        status: "submitted" | "succeeded" | "failed";
+        asset_id?: string | null;
+    },
+): ToolInputHistoryRow {
+    const id = randomUUID();
+    const inputJson = JSON.stringify(input.input);
+    assertNoRawAssetDataInMessage(inputJson);
+    db.prepare(
+        `INSERT INTO tool_input_history
+         (id, session_id, kind, origin, tool_name, input_json, status, asset_id, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))`,
+    ).run(
+        id,
+        input.session_id,
+        input.kind ?? kindForTool(input.tool_name),
+        input.origin,
+        input.tool_name,
+        inputJson,
+        validateHistoryStatus(input.status),
+        input.asset_id ?? null,
+    );
+    return getToolInputHistory(db, id)!;
+}
+
+export function getToolInputHistory(db: Database, id: string): ToolInputHistoryRow | null {
+    return db
+        .prepare("SELECT * FROM tool_input_history WHERE id = ?")
+        .get(id) as ToolInputHistoryRow | null;
+}
+
+export function listToolInputHistory(
+    db: Database,
+    sessionId: string,
+    options: { kind?: string; limit?: number; offset?: number } = {},
+): ToolInputHistoryRow[] {
+    const limit = Math.min(Math.max(options.limit ?? 20, 1), 50);
+    const offset = Math.max(options.offset ?? 0, 0);
+    if (options.kind) {
+        return db
+            .prepare(
+                `SELECT * FROM tool_input_history
+                 WHERE session_id = ? AND kind = ? AND hidden_at IS NULL
+                 ORDER BY created_at DESC, id DESC
+                 LIMIT ? OFFSET ?`,
+            )
+            .all(sessionId, options.kind, limit, offset) as ToolInputHistoryRow[];
+    }
+    return db
+        .prepare(
+            `SELECT * FROM tool_input_history
+             WHERE session_id = ? AND hidden_at IS NULL
+             ORDER BY created_at DESC, id DESC
+             LIMIT ? OFFSET ?`,
+        )
+        .all(sessionId, limit, offset) as ToolInputHistoryRow[];
+}
+
+export function hideToolInputHistory(db: Database, sessionId: string, id: string): void {
+    const result = db
+        .prepare(
+            `UPDATE tool_input_history
+             SET hidden_at = datetime('now'), updated_at = datetime('now')
+             WHERE id = ? AND session_id = ? AND hidden_at IS NULL`,
+        )
+        .run(id, sessionId);
+    if (result.changes !== 1) throw new Error(`history item not found: ${id}`);
+}
+
 // ── Message CRUD ────────────────────────────────────────────────────
 
 export interface MessageRow {
@@ -477,41 +646,44 @@ export function checkQuota(db: Database, feature: string): QuotaStatus {
 }
 
 /**
- * Atomically check and consume one quota unit for a feature.
+ * Atomically check and consume quota for a feature.
  * Returns the new usage count, or null if quota was already exhausted.
  */
-export function consumeQuota(db: Database, feature: string): number | null {
+export function consumeQuota(db: Database, feature: string, amount = 1): number | null {
+    if (!Number.isInteger(amount) || amount <= 0) throw new Error("quota amount invalid");
     const limit = QUOTAS[feature] ?? 0;
     if (limit === 0) return 0;
+    if (amount > limit) return null;
 
     const result = db
         .prepare(
             `INSERT INTO daily_usage (date, feature, count)
-             VALUES (date('now'), ?, 1)
-             ON CONFLICT(date, feature) DO UPDATE SET count = count + 1
-             WHERE daily_usage.count < ?`,
+             VALUES (date('now'), ?, ?)
+             ON CONFLICT(date, feature) DO UPDATE SET count = count + ?
+             WHERE daily_usage.count + ? <= ?`,
         )
-        .run(feature, limit);
+        .run(feature, amount, amount, amount, limit);
 
     if (result.changes === 0) return null;
 
     const row = db
         .prepare("SELECT count FROM daily_usage WHERE date = date('now') AND feature = ?")
         .get(feature) as { count: number } | undefined;
-    return row?.count ?? 1;
+    return row?.count ?? amount;
 }
 
 /**
- * Release one previously consumed quota unit after a tool attempt fails.
+ * Release previously consumed quota after a tool attempt fails.
  * This preserves atomic pre-execution reservation while charging only successful outputs.
  */
-export function releaseQuota(db: Database, feature: string): void {
+export function releaseQuota(db: Database, feature: string, amount = 1): void {
+    if (!Number.isInteger(amount) || amount <= 0) throw new Error("quota amount invalid");
     if ((QUOTAS[feature] ?? 0) === 0) return;
     db.prepare(
         `UPDATE daily_usage
-         SET count = count - 1
+         SET count = max(0, count - ?)
          WHERE date = date('now') AND feature = ? AND count > 0`,
-    ).run(feature);
+    ).run(amount, feature);
 }
 
 // ── Assets ─────────────────────────────────────────────────────────

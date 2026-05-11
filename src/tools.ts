@@ -98,7 +98,7 @@ export function getToolDefinitions(): ToolDefinition[] {
                     },
                     volume: {
                         type: "number",
-                        minimum: 0,
+                        exclusiveMinimum: 0,
                         maximum: 10,
                         description: "Speech volume. Defaults to MiniMax service default.",
                     },
@@ -219,7 +219,7 @@ export async function executeTool(
                     text: args.text as string,
                     voice_id: args.voice_id as string | undefined,
                     speed: clampAudioParam(args.speed, 0.5, 2),
-                    volume: clampAudioParam(args.volume, 0, 10),
+                    volume: validateVolume(args.volume),
                     pitch: clampAudioParam(args.pitch, -12, 12),
                 },
                 apiKey,
@@ -262,6 +262,23 @@ function validateAspectRatio(value: unknown): GenerateImageOptions["aspect_ratio
 function clampAudioParam(value: unknown, min: number, max: number): number | undefined {
     if (typeof value !== "number" || !Number.isFinite(value)) return undefined;
     return Math.min(max, Math.max(min, value));
+}
+
+function validateVolume(value: unknown): number | undefined {
+    if (typeof value !== "number" || !Number.isFinite(value)) return undefined;
+    if (value <= 0) return undefined;
+    return Math.min(10, value);
+}
+
+function baseRespError(
+    data: { base_resp?: { status_code?: number; status_msg?: string } },
+    label: string,
+): ToolResult | null {
+    if (!data.base_resp || data.base_resp.status_code === 0) return null;
+    return {
+        type: "error",
+        content: `${label} failed: ${data.base_resp.status_msg ?? "unknown error"}`,
+    };
 }
 
 function imageOptionsFromInput(input: string | GenerateImageOptions): GenerateImageOptions {
@@ -322,7 +339,10 @@ export async function generateImage(
 
         const data = (await resp.json()) as {
             data?: { image_urls?: string[] };
+            base_resp?: { status_code?: number; status_msg?: string };
         };
+        const baseResp = baseRespError(data, "Image generation");
+        if (baseResp) return baseResp;
 
         const urls = data?.data?.image_urls;
         if (!urls || urls.length === 0) {
@@ -357,7 +377,7 @@ export async function textToSpeech(
     try {
         const voiceSetting: Record<string, unknown> = { voice_id: voice };
         const speed = clampAudioParam(options.speed, 0.5, 2);
-        const volume = clampAudioParam(options.volume, 0, 10);
+        const volume = validateVolume(options.volume);
         const pitch = clampAudioParam(options.pitch, -12, 12);
         if (speed !== undefined) voiceSetting.speed = speed;
         if (volume !== undefined) voiceSetting.vol = volume;
@@ -384,7 +404,13 @@ export async function textToSpeech(
             };
         }
 
-        const data = (await resp.json()) as { data?: { audio?: string } };
+        const data = (await resp.json()) as {
+            data?: { audio?: string };
+            base_resp?: { status_code?: number; status_msg?: string };
+        };
+        const baseResp = baseRespError(data, "TTS");
+        if (baseResp) return baseResp;
+
         const hex = data?.data?.audio;
 
         if (!hex) {
@@ -450,12 +476,8 @@ export async function generateLyrics(
             lyrics?: string;
             base_resp?: { status_code?: number; status_msg?: string };
         };
-        if (data.base_resp && data.base_resp.status_code !== 0) {
-            return {
-                type: "error",
-                content: `Lyrics generation failed: ${data.base_resp.status_msg ?? "unknown error"}`,
-            };
-        }
+        const baseResp = baseRespError(data, "Lyrics generation");
+        if (baseResp) return baseResp;
 
         const lyrics = data.lyrics;
         if (!lyrics) {
@@ -513,12 +535,8 @@ export async function generateMusic(
             data?: { audio?: string } | null;
             base_resp?: { status_code?: number; status_msg?: string };
         };
-        if (data.base_resp && data.base_resp.status_code !== 0) {
-            return {
-                type: "error",
-                content: `Music generation failed: ${data.base_resp.status_msg ?? "unknown error"}`,
-            };
-        }
+        const baseResp = baseRespError(data, "Music generation");
+        if (baseResp) return baseResp;
 
         const hex = data.data?.audio;
 

@@ -1,5 +1,5 @@
 ---
-{ "status": "open", "specs": ["HG-SPEC-015"] }
+{ "status": "fixed", "specs": ["HG-SPEC-015"] }
 ---
 
 # HG-SPEC-015: Onboarding/lightbox dialog focus and ARIA gaps
