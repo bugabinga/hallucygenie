@@ -170,8 +170,6 @@ export function parseToolArguments(args: string): Record<string, unknown> {
     }
 }
 
-// ── Anthropic message format conversion ──────────────────────────────
-
 // ── Token estimation & context window ──────────────────────────────
 
 /** Default max tokens for context input (reserve 4,096 for model output out of 204,800).

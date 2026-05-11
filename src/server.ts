@@ -11,6 +11,15 @@ import {
     getUserProfile,
     saveUserProfile,
     deleteUserProfile,
+    getMessages,
+    saveMessage,
+    getPreferences,
+    consumeQuota,
+    releaseQuota,
+    getUsageToday,
+    getOrCreateActiveSessionId,
+    getOrCreateActiveSession,
+    QUOTAS,
 } from "./db.ts";
 import { dirname } from "node:path";
 import { createServer, type IncomingMessage, type ServerResponse, type Server } from "node:http";
@@ -33,18 +42,6 @@ import {
     type SteerQueue,
     type AgentEvent,
 } from "./agent.ts";
-
-import {
-    getMessages,
-    saveMessage,
-    getPreferences,
-    consumeQuota,
-    releaseQuota,
-    getUsageToday,
-    getOrCreateActiveSessionId,
-    getOrCreateActiveSession,
-    QUOTAS,
-} from "./db.ts";
 
 const steerQueues = new Map<string, SteerQueue>();
 
