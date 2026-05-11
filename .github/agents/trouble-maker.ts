@@ -13,7 +13,7 @@
  */
 import { readdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { runPi, readFindings } from "./lib.ts";
+import { prepareExistingPr, runPi, readFindings } from "./lib.ts";
 
 const root = join(import.meta.dirname, "../..");
 
@@ -30,6 +30,48 @@ try {
 }
 
 const piFlags = ["--no-session", "--no-prompt-templates"];
+const existingPr = prepareExistingPr("trouble-maker", "agent/trouble-maker-");
+
+if (existingPr) {
+    console.log(
+        `\n=== Repair existing PR #${existingPr.number} (minimax/MiniMax-M2.5-highspeed) ===\n`,
+    );
+    runPi(
+        "code",
+        [
+            "-p",
+            ...piFlags,
+            "--provider",
+            "minimax",
+            "--model",
+            "MiniMax-M2.5-highspeed",
+            "--thinking",
+            "off",
+            "--tools",
+            "read,edit,write,bash,grep,find",
+            `Repair existing trouble-maker PR #${existingPr.number}.
+
+Read ${existingPr.contextPath}.
+
+Fix unchecked janitor checklist items and actionable review/comment findings.
+Keep current PR scope. Add/update tests. Only touch src/ and test/.
+Run relevant tests. Write PR body/update notes to /tmp/pi-agent-pr-body.md.
+
+No talk. Repair. Test. Write PR body. Done.`,
+        ],
+        0,
+    );
+    try {
+        writeFileSync(
+            "/tmp/pi-agent-pr-body.md",
+            `trouble-maker: addressed janitor feedback for PR #${existingPr.number}.`,
+            { flag: "wx" },
+        );
+    } catch {
+        /* already written */
+    }
+    process.exit(0);
+}
 
 // --- Pass 1: analyze ---
 console.log("\n=== Pass 1: Analyze (minimax/MiniMax-M2.7-highspeed) ===\n");

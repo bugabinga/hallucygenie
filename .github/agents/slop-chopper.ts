@@ -15,12 +15,54 @@
  */
 import { writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { runPi, readFindings } from "./lib.ts";
+import { prepareExistingPr, runPi, readFindings } from "./lib.ts";
 
 const root = join(import.meta.dirname, "../..");
 
 const piFlags = ["--no-session", "--no-prompt-templates"];
 const timeout = 8 * 60 * 1000;
+const existingPr = prepareExistingPr("slop-chopper", "agent/slop-chopper-");
+
+if (existingPr) {
+    console.log(
+        `\n=== Repair existing PR #${existingPr.number} (minimax/MiniMax-M2.5-highspeed) ===\n`,
+    );
+    runPi(
+        "code",
+        [
+            "-p",
+            ...piFlags,
+            "--provider",
+            "minimax",
+            "--model",
+            "MiniMax-M2.5-highspeed",
+            "--thinking",
+            "off",
+            "--tools",
+            "read,edit,write,bash,grep,find",
+            `Repair existing slop-chopper PR #${existingPr.number}.
+
+Read ${existingPr.contextPath}.
+
+Fix unchecked janitor checklist items and actionable review/comment findings.
+Keep current cleanup scope. Only touch src/ unless tests must change for the repair.
+Run relevant tests. Write PR body/update notes to /tmp/pi-agent-pr-body.md.
+
+No talk. Repair. Test. Write PR body. Done.`,
+        ],
+        timeout,
+    );
+    try {
+        writeFileSync(
+            "/tmp/pi-agent-pr-body.md",
+            `slop-chopper: addressed janitor feedback for PR #${existingPr.number}.`,
+            { flag: "wx" },
+        );
+    } catch {
+        /* already written */
+    }
+    process.exit(0);
+}
 
 // --- Pass 1: analyze ---
 console.log("\n=== Pass 1: Analyze (minimax/MiniMax-M2.7-highspeed) ===\n");

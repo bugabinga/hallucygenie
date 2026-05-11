@@ -15,10 +15,64 @@
 import { readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { randomInt } from "node:crypto";
-import { runPi, readFindings } from "./lib.ts";
+import { prepareExistingPr, runPi, readFindings } from "./lib.ts";
 
 const root = join(import.meta.dirname, "../..");
 const SPECS_DIR = join(root, ".system/specs");
+const piFlags = ["--no-session", "--no-prompt-templates"];
+const timeout = 8 * 60 * 1000;
+const existingPr = prepareExistingPr("speck-ferkel", "agent/speck-ferkel-");
+
+if (existingPr) {
+    const existingSpecName = existingPr.branch.replace("agent/speck-ferkel-", "");
+    let specBlock = "";
+    try {
+        specBlock = `\nSPEC ${existingSpecName}\n${readFileSync(join(SPECS_DIR, `${existingSpecName}.md`), "utf-8")}`;
+        writeFileSync("/tmp/pi-agent-spec-name", existingSpecName);
+    } catch {
+        /* PR context still has enough info */
+    }
+
+    console.log(
+        `\n=== Repair existing PR #${existingPr.number} (minimax/MiniMax-M2.5-highspeed) ===\n`,
+    );
+    runPi(
+        "code",
+        [
+            "-p",
+            ...piFlags,
+            "--provider",
+            "minimax",
+            "--model",
+            "MiniMax-M2.5-highspeed",
+            "--thinking",
+            "off",
+            "--tools",
+            "read,edit,write,bash,grep,find",
+            `Repair existing speck-ferkel PR #${existingPr.number}.
+
+Read ${existingPr.contextPath}.
+${specBlock}
+
+Fix unchecked janitor checklist items and actionable review/comment findings.
+Keep current spec scope. Add/update tests. Only touch src/ and test/.
+Run relevant tests. Write PR body/update notes to /tmp/pi-agent-pr-body.md.
+
+No talk. Repair. Test. Write PR body. Done.`,
+        ],
+        timeout,
+    );
+    try {
+        writeFileSync(
+            "/tmp/pi-agent-pr-body.md",
+            `speck-ferkel: addressed janitor feedback for PR #${existingPr.number}.`,
+            { flag: "wx" },
+        );
+    } catch {
+        /* already written */
+    }
+    process.exit(0);
+}
 
 const specs = readdirSync(SPECS_DIR).filter((f) => f.endsWith(".md"));
 if (specs.length === 0) {
@@ -32,9 +86,6 @@ console.log(`Checking spec: ${specName}`);
 writeFileSync("/tmp/pi-agent-spec-name", specName);
 
 const specContent = readFileSync(join(SPECS_DIR, chosen), "utf-8");
-
-const piFlags = ["--no-session", "--no-prompt-templates"];
-const timeout = 8 * 60 * 1000;
 
 // --- Pass 1: analyze ---
 console.log("\n=== Pass 1: Analyze (minimax/MiniMax-M2.7-highspeed) ===\n");

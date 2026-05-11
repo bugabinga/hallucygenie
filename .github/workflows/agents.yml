@@ -57,6 +57,7 @@ jobs:
             - run: bun run --bun .github/agents/speck-ferkel.ts
               env:
                   MINIMAX_API_KEY: ${{ secrets.MINIMAX_API_KEY }}
+                  GH_TOKEN: ${{ steps.app-token.outputs.token }}
             - name: Agent report
               if: always()
               run: |
@@ -78,6 +79,19 @@ jobs:
                   fi
                   if git diff --quiet; then
                       echo "No drift — spec matches code"
+                      exit 0
+                  fi
+                  if [ -f /tmp/pi-agent-existing-pr-branch ]; then
+                      PR_NUMBER=$(cat /tmp/pi-agent-existing-pr-number)
+                      BRANCH=$(cat /tmp/pi-agent-existing-pr-branch)
+                      just fmt || true
+                      git add -A
+                      if git diff --cached --quiet; then
+                          echo "No repair changes for existing PR #${PR_NUMBER}"
+                          exit 0
+                      fi
+                      git commit --no-verify -m "🐖 speck-ferkel: address janitor feedback for PR #${PR_NUMBER}"
+                      git push --no-verify origin "HEAD:${BRANCH}"
                       exit 0
                   fi
                   SPEC_NAME=$(cat /tmp/pi-agent-spec-name 2>/dev/null || echo "unknown-spec")
@@ -130,6 +144,7 @@ jobs:
             - run: bun run --bun .github/agents/trouble-maker.ts
               env:
                   MINIMAX_API_KEY: ${{ secrets.MINIMAX_API_KEY }}
+                  GH_TOKEN: ${{ steps.app-token.outputs.token }}
             - name: Agent report
               if: always()
               run: |
@@ -151,6 +166,19 @@ jobs:
                   fi
                   if git diff --quiet; then
                       echo "No bugs found"
+                      exit 0
+                  fi
+                  if [ -f /tmp/pi-agent-existing-pr-branch ]; then
+                      PR_NUMBER=$(cat /tmp/pi-agent-existing-pr-number)
+                      BRANCH=$(cat /tmp/pi-agent-existing-pr-branch)
+                      just fmt || true
+                      git add -A
+                      if git diff --cached --quiet; then
+                          echo "No repair changes for existing PR #${PR_NUMBER}"
+                          exit 0
+                      fi
+                      git commit --no-verify -m "🔥 trouble-maker: address janitor feedback for PR #${PR_NUMBER}"
+                      git push --no-verify origin "HEAD:${BRANCH}"
                       exit 0
                   fi
                   BRANCH="agent/trouble-maker-$(date +%Y%m%d-%H%M%S)"
@@ -202,6 +230,7 @@ jobs:
             - run: bun run --bun .github/agents/slop-chopper.ts
               env:
                   MINIMAX_API_KEY: ${{ secrets.MINIMAX_API_KEY }}
+                  GH_TOKEN: ${{ steps.app-token.outputs.token }}
             - name: Agent report
               if: always()
               run: |
@@ -223,6 +252,19 @@ jobs:
                   fi
                   if git diff --quiet; then
                       echo "No slop found"
+                      exit 0
+                  fi
+                  if [ -f /tmp/pi-agent-existing-pr-branch ]; then
+                      PR_NUMBER=$(cat /tmp/pi-agent-existing-pr-number)
+                      BRANCH=$(cat /tmp/pi-agent-existing-pr-branch)
+                      just fmt || true
+                      git add -A
+                      if git diff --cached --quiet; then
+                          echo "No repair changes for existing PR #${PR_NUMBER}"
+                          exit 0
+                      fi
+                      git commit --no-verify -m "🪓 slop-chopper: address janitor feedback for PR #${PR_NUMBER}"
+                      git push --no-verify origin "HEAD:${BRANCH}"
                       exit 0
                   fi
                   BRANCH="agent/slop-chopper-$(date +%Y%m%d-%H%M%S)"
