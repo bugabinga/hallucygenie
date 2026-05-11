@@ -527,6 +527,16 @@ export async function runAgentLoop(
             return localMessages;
         }
 
+        if (!resp.body) {
+            log.warn("minimax api response has null body");
+            await onEvent({
+                type: "text",
+                content: "I got an empty response from the server. Please try again.",
+            });
+            await onEvent({ type: "done" });
+            return localMessages;
+        }
+
         // Process the Anthropic SSE stream
         let textContent = "";
         let thinkingContent = "";
@@ -535,7 +545,7 @@ export async function runAgentLoop(
         let currentBlockType: "thinking" | "text" | "tool_use" | null = null;
         let currentBlockIndex = -1;
 
-        const reader = resp.body!.getReader();
+        const reader = resp.body.getReader();
         const decoder = new TextDecoder();
         let buffer = "";
         let currentEventType = "";
