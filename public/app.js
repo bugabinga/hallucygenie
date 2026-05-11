@@ -2433,17 +2433,6 @@ function closeLightbox() {
   img.src = "";
 }
 var ASSET_PROMPT_PREVIEW_CHARS = 30;
-function assetUrl(id) {
-  return `/asset/${id}`;
-}
-function parseParamsJson(paramsJson) {
-  if (!paramsJson) return {};
-  try {
-    return JSON.parse(paramsJson);
-  } catch {
-    return {};
-  }
-}
 function formatAssetDate(timestamp) {
   const date = new Date(timestamp);
   return date.toLocaleDateString(void 0, { month: "short", day: "numeric" });
@@ -2455,8 +2444,7 @@ function getModelName(params) {
   }
   return "";
 }
-function renderAssetParams(paramsJson) {
-  const params = parseParamsJson(paramsJson);
+function renderAssetParams(params) {
   const parts = [];
   const aspectRatio = params["aspect_ratio"];
   if (typeof aspectRatio === "string" && aspectRatio) {
@@ -2506,7 +2494,6 @@ function renderAssetPreview(asset, url) {
   return button;
 }
 function renderAssetCard(asset) {
-  const url = assetUrl(asset.id);
   const card = document.createElement("div");
   card.className = "asset-card";
   card.dataset.type = asset.type;
@@ -2515,9 +2502,8 @@ function renderAssetCard(asset) {
   badge.className = "asset-badge";
   badge.textContent = assetTypeLabel(asset.type);
   card.appendChild(badge);
-  card.appendChild(renderAssetPreview(asset, url));
-  const params = parseParamsJson(asset.params_json);
-  const modelName = getModelName(params);
+  card.appendChild(renderAssetPreview(asset, asset.url));
+  const modelName = getModelName(asset.params);
   const header = document.createElement("div");
   header.className = "asset-header";
   const toolSpan = document.createElement("span");
@@ -2554,7 +2540,7 @@ function renderAssetCard(asset) {
     meta.textContent = prompt;
     card.appendChild(meta);
   }
-  const paramsStr = renderAssetParams(asset.params_json);
+  const paramsStr = renderAssetParams(asset.params);
   if (paramsStr) {
     const paramsEl = document.createElement("div");
     paramsEl.className = "asset-params";
@@ -2563,7 +2549,7 @@ function renderAssetCard(asset) {
   }
   const download = document.createElement("a");
   download.className = "asset-download";
-  download.href = url;
+  download.href = asset.download_url;
   download.download = asset.filename;
   download.textContent = "Download";
   card.appendChild(download);

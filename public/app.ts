@@ -388,23 +388,12 @@ interface Asset {
     tool_name: string;
     size_bytes: number;
     created_at: number;
-    params_json: string | null;
+    params: Record<string, unknown>;
+    url: string;
+    download_url: string;
 }
 
 const ASSET_PROMPT_PREVIEW_CHARS = 30;
-
-function assetUrl(id: string): string {
-    return `/asset/${id}`;
-}
-
-function parseParamsJson(paramsJson: string | null): Record<string, unknown> {
-    if (!paramsJson) return {};
-    try {
-        return JSON.parse(paramsJson) as Record<string, unknown>;
-    } catch {
-        return {};
-    }
-}
 
 function formatAssetDate(timestamp: number): string {
     const date = new Date(timestamp);
@@ -420,8 +409,7 @@ function getModelName(params: Record<string, unknown>): string {
     return "";
 }
 
-function renderAssetParams(paramsJson: string | null): string {
-    const params = parseParamsJson(paramsJson);
+function renderAssetParams(params: Record<string, unknown>): string {
     const parts: string[] = [];
 
     const aspectRatio = params["aspect_ratio"];
@@ -481,7 +469,6 @@ function renderAssetPreview(asset: Asset, url: string): HTMLElement {
 }
 
 function renderAssetCard(asset: Asset): HTMLElement {
-    const url = assetUrl(asset.id);
     const card = document.createElement("div");
     card.className = "asset-card";
     card.dataset.type = asset.type;
@@ -492,10 +479,9 @@ function renderAssetCard(asset: Asset): HTMLElement {
     badge.textContent = assetTypeLabel(asset.type);
     card.appendChild(badge);
 
-    card.appendChild(renderAssetPreview(asset, url));
+    card.appendChild(renderAssetPreview(asset, asset.url));
 
-    const params = parseParamsJson(asset.params_json);
-    const modelName = getModelName(params);
+    const modelName = getModelName(asset.params);
 
     // Tool/model/date header
     const header = document.createElement("div");
@@ -538,7 +524,7 @@ function renderAssetCard(asset: Asset): HTMLElement {
     }
 
     // Params
-    const paramsStr = renderAssetParams(asset.params_json);
+    const paramsStr = renderAssetParams(asset.params);
     if (paramsStr) {
         const paramsEl = document.createElement("div");
         paramsEl.className = "asset-params";
@@ -548,7 +534,7 @@ function renderAssetCard(asset: Asset): HTMLElement {
 
     const download = document.createElement("a");
     download.className = "asset-download";
-    download.href = url;
+    download.href = asset.download_url;
     download.download = asset.filename;
     download.textContent = "Download";
     card.appendChild(download);

@@ -355,8 +355,9 @@ describe("frontend session identity health", () => {
         assert.match(appTs, /localStorage\.removeItem\(LEGACY_SESSION_KEY\)/);
     });
 
-    it("builds active-session asset URLs without session query", () => {
-        assert.match(appTs, /return `\/asset\/\$\{id\}`/);
+    it("uses active-session asset API URLs without session query", () => {
+        assert.match(appTs, /asset\.url/);
+        assert.match(appTs, /asset\.download_url/);
         assert.equal(appTs.includes("?s="), false);
     });
 

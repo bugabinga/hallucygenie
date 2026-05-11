@@ -20,6 +20,7 @@ import {
     getOrCreateActiveSessionId,
     getOrCreateActiveSession,
     QUOTAS,
+    type AssetRow,
 } from "./db.ts";
 import { dirname } from "node:path";
 import { createServer, type IncomingMessage, type ServerResponse, type Server } from "node:http";
@@ -73,6 +74,12 @@ export interface ExplicitToolDirective {
     name: "generate_image" | "generate_music" | "text_to_speech" | "generate_lyrics";
     args: Record<string, unknown>;
     prompt: string | null;
+}
+
+export interface AssetApiRow extends Omit<AssetRow, "params_json"> {
+    params: Record<string, unknown>;
+    url: string;
+    download_url: string;
 }
 
 // ── Configuration ────────────────────────────────────────────────────
@@ -814,8 +821,13 @@ export async function handleRequest(req: Request): Promise<Response> {
     if (path === "/assets" && method === "GET") {
         const dbOrErr = requireDb();
         if (dbOrErr instanceof Response) return dbOrErr;
-        const assets = getAssets(dbOrErr, resolveSessionId(req, dbOrErr));
-        return jsonResponse({ assets });
+        try {
+            const assets = getAssets(dbOrErr, resolveSessionId(req, dbOrErr)).map(assetApiRow);
+            return jsonResponse({ assets });
+        } catch (err) {
+            log.error("asset metadata error", { error: String(err) });
+            return jsonResponse({ error: "Invalid asset metadata" }, 500);
+        }
     }
 
     // GET /asset/:id — serve a specific asset file for explicit or active session
@@ -950,6 +962,26 @@ let db: Database | null = null;
  */
 export function getDb(): Database | null {
     return db;
+}
+
+function parseAssetParams(paramsJson: string | null): Record<string, unknown> {
+    if (!paramsJson) return {};
+    const parsed = JSON.parse(paramsJson) as unknown;
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+        throw new Error("asset params_json must be an object");
+    }
+    return parsed as Record<string, unknown>;
+}
+
+function assetApiRow(asset: AssetRow): AssetApiRow {
+    const { params_json: paramsJson, ...row } = asset;
+    const url = `/asset/${asset.id}`;
+    return {
+        ...row,
+        params: parseAssetParams(paramsJson),
+        url,
+        download_url: url,
+    };
 }
 
 /** Get db or return 500 immediately. For use inside request handler only. */

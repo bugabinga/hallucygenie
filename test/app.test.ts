@@ -2584,7 +2584,7 @@ describe("updateQuotaBadge", () => {
 });
 
 describe("loadAssets", () => {
-    it("fetches /assets without session header and builds asset URLs", async () => {
+    it("fetches /assets without session header and uses asset API URLs", async () => {
         const { doc } = setupDOM();
         let requestOpts: RequestInit | undefined;
 
@@ -2605,7 +2605,9 @@ describe("loadAssets", () => {
                                     tool_name: "generate_image",
                                     size_bytes: 1024,
                                     created_at: Date.now(),
-                                    params_json: null,
+                                    params: {},
+                                    url: "/asset/img-1",
+                                    download_url: "/asset/img-1",
                                 },
                                 {
                                     id: "aud-1",
@@ -2617,7 +2619,9 @@ describe("loadAssets", () => {
                                     tool_name: "generate_music",
                                     size_bytes: 2048,
                                     created_at: Date.now(),
-                                    params_json: null,
+                                    params: {},
+                                    url: "/asset/aud-1",
+                                    download_url: "/asset/aud-1",
                                 },
                             ],
                         }),
@@ -2649,9 +2653,11 @@ describe("loadAssets", () => {
         assert.equal(audio!.controls, true);
         assert.equal(audio!.preload, "metadata");
         assert.equal(audio!.src.includes("?s="), false);
+        assert.equal(audio!.src.includes("/asset/aud-1"), true);
 
         const downloads = doc.querySelectorAll(".asset-download");
         assert.equal(downloads.length, 2, "every asset should have a download link");
+        assert.equal((downloads[0] as HTMLAnchorElement).href.includes("/asset/img-1"), true);
 
         // No 20-item cap — all assets rendered
         const grid = doc.querySelector("#assets-grid");
@@ -2677,7 +2683,9 @@ describe("loadAssets", () => {
                                 tool_name: "generate_image",
                                 size_bytes: 1024,
                                 created_at: timestamp,
-                                params_json: JSON.stringify({ model: "MiniMax/Image-01" }),
+                                params: { model: "MiniMax/Image-01" },
+                                url: "/asset/img-1",
+                                download_url: "/asset/img-1",
                             },
                         ],
                     }),
@@ -2704,7 +2712,7 @@ describe("loadAssets", () => {
         assert.equal(dateEl!.textContent, "Mar 15");
     });
 
-    it("renders generation params from params_json", async () => {
+    it("renders generation params from API params", async () => {
         const { doc } = setupDOM();
 
         (globalThis as any).fetch = () =>
@@ -2722,10 +2730,12 @@ describe("loadAssets", () => {
                                 tool_name: "generate_image",
                                 size_bytes: 1024,
                                 created_at: Date.now(),
-                                params_json: JSON.stringify({
+                                params: {
                                     aspect_ratio: "16:9",
                                     model: "MiniMax/Image-01",
-                                }),
+                                },
+                                url: "/asset/img-1",
+                                download_url: "/asset/img-1",
                             },
                         ],
                     }),
@@ -2759,9 +2769,11 @@ describe("loadAssets", () => {
                                 tool_name: "generate_music",
                                 size_bytes: 2048,
                                 created_at: Date.now(),
-                                params_json: JSON.stringify({
+                                params: {
                                     lyrics: "This is a long lyrics preview",
-                                }),
+                                },
+                                url: "/asset/music-1",
+                                download_url: "/asset/music-1",
                             },
                         ],
                     }),
@@ -2796,7 +2808,9 @@ describe("loadAssets", () => {
                                 tool_name: "generate_image",
                                 size_bytes: 1024,
                                 created_at: Date.now(),
-                                params_json: null,
+                                params: {},
+                                url: "/asset/img-1",
+                                download_url: "/asset/img-1",
                             },
                         ],
                     }),
@@ -2837,7 +2851,9 @@ describe("loadAssets", () => {
                                 tool_name: "generate_image",
                                 size_bytes: 1024,
                                 created_at: Date.now(),
-                                params_json: null,
+                                params: {},
+                                url: "/asset/img-1",
+                                download_url: "/asset/img-1",
                             },
                         ],
                     }),
@@ -2874,10 +2890,12 @@ describe("loadAssets", () => {
                                 tool_name: "text_to_speech",
                                 size_bytes: 1024,
                                 created_at: Date.now(),
-                                params_json: JSON.stringify({
+                                params: {
                                     speed: "1.5",
                                     voice_id: "hunter",
-                                }),
+                                },
+                                url: "/asset/voice-1",
+                                download_url: "/asset/voice-1",
                             },
                         ],
                     }),
@@ -2915,7 +2933,9 @@ describe("loadAssets", () => {
                                 tool_name: "generate_music",
                                 size_bytes: 2048,
                                 created_at: Date.now(),
-                                params_json: null,
+                                params: {},
+                                url: "/asset/aud-1",
+                                download_url: "/asset/aud-1",
                             },
                         ],
                     }),

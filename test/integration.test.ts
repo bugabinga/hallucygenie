@@ -113,7 +113,7 @@ function loadFontManifest(): FontManifest {
     return JSON.parse(readFileSync("public/fonts/fonts.manifest.json", "utf-8")) as FontManifest;
 }
 
-function seedActiveAsset(id: string, bytes?: Uint8Array): void {
+function seedActiveAsset(id: string, bytes?: Uint8Array, params?: Record<string, unknown>): void {
     const db = getDb();
     assert.ok(db);
     const sessionId = getOrCreateActiveSessionId(db);
@@ -134,6 +134,7 @@ function seedActiveAsset(id: string, bytes?: Uint8Array): void {
         tool_name: "generate_image",
         size_bytes: bytes?.byteLength ?? 0,
         created_at: Date.now(),
+        params_json: params ? JSON.stringify(params) : null,
     });
 }
 
@@ -276,6 +277,39 @@ describe("GET /assets (no session)", () => {
                 (asset: { id: string }) => asset.id === "integration-active-list",
             ),
         );
+    });
+
+    it("returns parsed params and stable asset URLs without DB internals", async () => {
+        seedActiveAsset("integration-active-details", undefined, {
+            model: "image-01",
+            aspect_ratio: "16:9",
+        });
+
+        const r = await api("GET", "/assets");
+        assert.equal(r.status, 200);
+        const asset = (r.body as any).assets.find(
+            (item: { id: string }) => item.id === "integration-active-details",
+        );
+
+        assert.deepEqual(asset.params, { model: "image-01", aspect_ratio: "16:9" });
+        assert.equal(asset.url, "/asset/integration-active-details");
+        assert.equal(asset.download_url, "/asset/integration-active-details");
+        assert.equal("params_json" in asset, false);
+        assert.equal(String(asset.url).includes("data/assets"), false);
+        assert.equal(String(asset.download_url).includes("data/assets"), false);
+    });
+
+    it("returns explicit error for malformed params_json", async () => {
+        seedActiveAsset("integration-bad-params");
+        const database = getDb();
+        assert.ok(database);
+        database
+            .prepare("UPDATE assets SET params_json = ? WHERE id = ?")
+            .run("{", "integration-bad-params");
+
+        const r = await api("GET", "/assets");
+        assert.equal(r.status, 500);
+        assert.equal((r.body as any).error, "Invalid asset metadata");
     });
 });
 
