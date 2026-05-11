@@ -213,7 +213,7 @@ describe("index.html health", () => {
         assert.match(styleCss, /\.create-panels \{[^}]*flex: 1;/);
         assert.match(styleCss, /\.create-panels \{[^}]*min-height: 0;/);
         assert.match(styleCss, /\.create-panels \{[^}]*overflow-y: auto;/);
-        assert.match(styleCss, /\.modal-content \{[^}]*background: rgba\(20, 20, 26, 0\.95\);/);
+        assert.match(styleCss, /\.modal-content \{[^}]*background: rgba\(20, 20, 26, 0\.94\);/);
         assert.match(styleCss, /backdrop-filter: blur\(10px\)/);
     });
 
