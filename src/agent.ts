@@ -6,6 +6,7 @@ import type { ChatMessage } from "./server.ts";
 import type { UserProfile } from "./db.ts";
 import { createLogger } from "./log.ts";
 import { executeTool, getToolDefinitions, MINIMAX_BASE } from "./tools.ts";
+export { MINIMAX_BASE };
 import type { ToolResult } from "./tools.ts";
 
 const log = createLogger({ service: "agent" });
