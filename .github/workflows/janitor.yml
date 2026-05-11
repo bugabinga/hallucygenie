@@ -1,0 +1,50 @@
+name: Agent Janitor
+
+on:
+    schedule:
+        - cron: "17 11 * * *"
+    workflow_dispatch:
+        inputs:
+            request_copilot:
+                description: "Allow janitor to request Copilot reviews when policy says yes"
+                required: false
+                type: boolean
+                default: false
+
+permissions:
+    contents: read
+
+env:
+    PI_OFFLINE: "1"
+
+jobs:
+    janitor:
+        name: 🧹 janitor
+        runs-on: ubuntu-latest
+        timeout-minutes: 20
+        environment: AI api keys
+        steps:
+            - uses: actions/create-github-app-token@v2
+              id: app-token
+              with:
+                  app-id: ${{ secrets.AGENT_BOT_APP_ID }}
+                  private-key: ${{ secrets.AGENT_BOT_PRIVATE_KEY }}
+            - uses: actions/checkout@v6.0.2
+              with:
+                  token: ${{ steps.app-token.outputs.token }}
+            - uses: oven-sh/setup-bun@v2.2.0
+              with:
+                  bun-version: 1.3.13
+            - uses: actions/cache@v5.0.5
+              with:
+                  path: ~/.bun/install/cache
+                  key: ${{ runner.os }}-bun-${{ hashFiles('bun.lock') }}
+                  restore-keys: ${{ runner.os }}-bun-
+            - run: npm install -g @mariozechner/pi-coding-agent
+            - run: bun install --frozen-lockfile
+            - name: Review bot PRs
+              run: bun run --bun .github/agents/janitor.ts
+              env:
+                  GH_TOKEN: ${{ steps.app-token.outputs.token }}
+                  ZAI_API_KEY: ${{ secrets.ZAI_API_KEY }}
+                  JANITOR_REQUEST_COPILOT: ${{ inputs.request_copilot == true && 'true' || 'false' }}
