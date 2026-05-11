@@ -21,6 +21,7 @@ import {
     apiErrorMessageForUser,
     executeToolSafely,
     DEFAULT_MAX_CONTEXT_TOKENS,
+    MINIMAX_BASE,
 } from "../src/agent.ts";
 import type { AgentEvent, OnBeforeTool } from "../src/agent.ts";
 
@@ -1452,6 +1453,10 @@ describe("Steering in agent loop", () => {
 // ── System Prompt ────────────────────────────────────────────────────
 
 describe("System Prompt", () => {
+    it("re-exports MINIMAX_BASE for compatibility", () => {
+        assert.equal(MINIMAX_BASE, "https://api.minimax.io");
+    });
+
     it("SYSTEM_PROMPT is a non-empty string", () => {
         assert.equal(typeof SYSTEM_PROMPT, "string");
         assert.ok(SYSTEM_PROMPT.length > 0, "system prompt should not be empty");
