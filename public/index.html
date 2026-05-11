@@ -186,16 +186,16 @@
                             />
                         </div>
                         <div class="form-group">
-                            <label for="profile-interests">Interests</label>
+                            <label for="profile-interests">Topics to bring up</label>
                             <textarea
                                 id="profile-interests"
                                 rows="2"
                                 maxlength="300"
-                                placeholder="Roblox, Minecraft, editing..."
+                                placeholder="Minecraft builds, Roblox obbies, video editing..."
                             ></textarea>
                         </div>
                         <div class="form-group">
-                            <label for="profile-hates">Dislikes</label>
+                            <label for="profile-hates">Things to avoid</label>
                             <textarea
                                 id="profile-hates"
                                 rows="2"
@@ -204,25 +204,48 @@
                             ></textarea>
                         </div>
                         <div class="form-group">
-                            <label for="profile-favorites">Favorites</label>
+                            <label for="profile-favorites">Style favorites</label>
                             <textarea
                                 id="profile-favorites"
                                 rows="2"
                                 maxlength="300"
-                                placeholder="Favorite games, colors, characters..."
+                                placeholder="Blue fire, fox mascots, synthwave, favorite characters..."
                             ></textarea>
                         </div>
-                        <div class="form-group">
-                            <label for="profile-avatar">Avatar emoji</label>
-                            <input id="profile-avatar" maxlength="8" placeholder="🎮" />
+                        <div class="profile-avatar-editor">
+                            <div class="profile-avatar-preview" aria-label="Current avatar preview">
+                                <span id="profile-avatar-emoji-preview" aria-hidden="true">🎮</span>
+                                <img id="profile-avatar-img" alt="Current avatar" hidden />
+                            </div>
+                            <div class="profile-avatar-fields">
+                                <div class="form-group">
+                                    <label for="profile-avatar">Avatar emoji</label>
+                                    <input
+                                        id="profile-avatar"
+                                        maxlength="16"
+                                        placeholder="Type an emoji"
+                                        autocomplete="off"
+                                    />
+                                    <input id="profile-avatar-asset" type="hidden" />
+                                </div>
+                                <div class="form-group">
+                                    <label for="profile-avatar-upload">Upload avatar image</label>
+                                    <input
+                                        id="profile-avatar-upload"
+                                        type="file"
+                                        accept="image/png,image/jpeg,image/webp,image/gif"
+                                    />
+                                </div>
+                            </div>
                         </div>
-                        <p class="profile-note">Saved in this app on this device.</p>
+                        <!-- prettier-ignore -->
+                        <p class="profile-note">Profile details guide Genie. Saved in this app on this device.</p>
                         <div class="profile-actions">
                             <button type="submit" class="btn-primary">Save</button>
                             <!-- prettier-ignore -->
                             <button id="profile-reset" type="button" class="btn-secondary">Reset</button>
                             <!-- prettier-ignore -->
-                            <button id="profile-generate" type="button" class="btn-secondary" disabled title="Avatar generation unlocks after profile assets are ready">Generate avatar 🎨</button>
+                            <button id="profile-generate" type="button" class="btn-secondary">Generate avatar 🎨</button>
                         </div>
                     </form>
                 </div>

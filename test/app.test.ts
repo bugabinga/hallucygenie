@@ -1056,10 +1056,14 @@ function setupDOM(): { win: any; doc: any; errors: string[] } {
           <textarea id="profile-interests"></textarea>
           <textarea id="profile-hates"></textarea>
           <textarea id="profile-favorites"></textarea>
+          <span id="profile-avatar-emoji-preview">🎮</span>
+          <img id="profile-avatar-img" hidden />
           <input id="profile-avatar" />
+          <input id="profile-avatar-asset" type="hidden" />
+          <input id="profile-avatar-upload" type="file" />
           <button type="submit">Save</button>
           <button id="profile-reset" type="button">Reset</button>
-          <button id="profile-generate" type="button" disabled>Generate avatar 🎨</button>
+          <button id="profile-generate" type="button">Generate avatar 🎨</button>
         </form>
       </div>
     </div>
@@ -1666,6 +1670,20 @@ describe("profile frontend helpers", () => {
                 }),
             /Avatar data URLs are not allowed/,
         );
+    });
+
+    it("preserves uploaded asset avatar from the form", () => {
+        setupDOM();
+        const profile = normalizedProfileFromForm({
+            username: "GamerKid",
+            interests: "Minecraft",
+            hates: "spam",
+            favorites: "blue fire",
+            avatar: "🎮",
+            avatarAsset: "asset_123abc",
+        });
+
+        assert.deepEqual(profile.avatar, { type: "asset", value: "asset_123abc" });
     });
 
     it("renders emoji and asset avatars with fallback", () => {

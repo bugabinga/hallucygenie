@@ -2231,6 +2231,23 @@ async function deleteProfile() {
   if (!resp.ok) throw new Error(`Failed to reset profile: ${resp.status}`);
   return await resp.json();
 }
+async function uploadProfileAvatar(file, profile) {
+  const body = new FormData();
+  body.set("avatar", file);
+  body.set("profile", JSON.stringify(profile));
+  const resp = await fetch("/api/profile/avatar", { method: "POST", body });
+  if (!resp.ok) throw new Error(`Failed to upload avatar: ${resp.status}`);
+  return (await resp.json()).profile;
+}
+async function generateProfileAvatar(profile) {
+  const resp = await fetch("/api/profile/avatar/generate", {
+    method: "POST",
+    headers: createApiHeaders(),
+    body: JSON.stringify(profile)
+  });
+  if (!resp.ok) throw new Error(`Failed to generate avatar: ${resp.status}`);
+  return (await resp.json()).profile;
+}
 async function fetchSessions() {
   const resp = await fetch("/api/sessions");
   if (!resp.ok) throw new Error(`Failed to load sessions: ${resp.status}`);
@@ -2298,14 +2315,18 @@ function avatarEmoji(value) {
   return trimmed;
 }
 function normalizedProfileFromForm(form) {
+  const avatarAsset = form.avatarAsset?.trim() ?? "";
   if (/^data:/i.test(form.avatar.trim())) throw new Error("Avatar data URLs are not allowed");
+  if (avatarAsset && !/^asset_[0-9a-f-]+$/i.test(avatarAsset)) {
+    throw new Error("Avatar asset id is invalid");
+  }
   return {
     version: 1,
     username: Array.from(form.username.trim()).slice(0, 40).join(""),
     interests: Array.from(form.interests.trim()).slice(0, 300).join(""),
     hates: Array.from(form.hates.trim()).slice(0, 300).join(""),
     favorites: Array.from(form.favorites.trim()).slice(0, 300).join(""),
-    avatar: { type: "emoji", value: avatarEmoji(form.avatar) },
+    avatar: avatarAsset ? { type: "asset", value: avatarAsset } : { type: "emoji", value: avatarEmoji(form.avatar) },
     updatedAt: Date.now()
   };
 }
@@ -3187,13 +3208,42 @@ function init() {
   const profileHates = $("#profile-hates");
   const profileFavorites = $("#profile-favorites");
   const profileAvatar = $("#profile-avatar");
+  const profileAvatarAsset = $("#profile-avatar-asset");
+  const profileAvatarUpload = $("#profile-avatar-upload");
+  const profileAvatarImg = $("#profile-avatar-img");
+  const profileAvatarEmojiPreview = $("#profile-avatar-emoji-preview");
+  const profileGenerate = $("#profile-generate");
   let profileModalReturnFocus = null;
+  function updateProfileAvatarPreview(profile) {
+    if (profile.avatar.type === "asset") {
+      profileAvatarImg.src = `/asset/${profile.avatar.value}`;
+      profileAvatarImg.hidden = false;
+      profileAvatarEmojiPreview.hidden = true;
+      return;
+    }
+    profileAvatarImg.hidden = true;
+    profileAvatarImg.removeAttribute("src");
+    profileAvatarEmojiPreview.hidden = false;
+    profileAvatarEmojiPreview.textContent = avatarEmoji(profile.avatar.value);
+  }
+  function profileFromCurrentForm() {
+    return normalizedProfileFromForm({
+      username: profileUsername.value,
+      interests: profileInterests.value,
+      hates: profileHates.value,
+      favorites: profileFavorites.value,
+      avatar: profileAvatar.value,
+      avatarAsset: profileAvatarAsset.value
+    });
+  }
   function fillProfileForm(profile) {
     profileUsername.value = profile.username;
     profileInterests.value = profile.interests;
     profileHates.value = profile.hates;
     profileFavorites.value = profile.favorites;
     profileAvatar.value = profile.avatar.type === "emoji" ? profile.avatar.value : DEFAULT_USER_AVATAR;
+    profileAvatarAsset.value = profile.avatar.type === "asset" ? profile.avatar.value : "";
+    updateProfileAvatarPreview(profile);
   }
   async function loadProfileIntoForm() {
     const profile = await fetchProfile();
@@ -3236,17 +3286,52 @@ function init() {
   profileClose.addEventListener("click", closeProfileModal);
   profileBackdrop.addEventListener("click", closeProfileModal);
   profileModal.addEventListener("keydown", trapProfileModalFocus);
+  profileAvatar.addEventListener("input", () => {
+    profileAvatarAsset.value = "";
+    updateProfileAvatarPreview(profileFromCurrentForm());
+  });
+  profileAvatarUpload.addEventListener("change", () => {
+    const file = profileAvatarUpload.files?.[0];
+    if (!file) return;
+    let profile;
+    try {
+      profile = profileFromCurrentForm();
+    } catch (err) {
+      showError(err instanceof Error ? err.message : "Invalid profile");
+      return;
+    }
+    profileAvatarUpload.disabled = true;
+    void uploadProfileAvatar(file, profile).then((saved) => {
+      setCurrentProfile(saved);
+      fillProfileForm(saved);
+    }).catch(() => showError("Failed to upload avatar \u{1F615}")).finally(() => {
+      profileAvatarUpload.disabled = false;
+      profileAvatarUpload.value = "";
+    });
+  });
+  profileGenerate.addEventListener("click", () => {
+    let profile;
+    try {
+      profile = profileFromCurrentForm();
+    } catch (err) {
+      showError(err instanceof Error ? err.message : "Invalid profile");
+      return;
+    }
+    profileGenerate.disabled = true;
+    profileGenerate.textContent = "Generating... \u2728";
+    void generateProfileAvatar(profile).then((saved) => {
+      setCurrentProfile(saved);
+      fillProfileForm(saved);
+    }).catch(() => showError("Failed to generate avatar \u{1F615}")).finally(() => {
+      profileGenerate.disabled = false;
+      profileGenerate.textContent = "Generate avatar \u{1F3A8}";
+    });
+  });
   profileForm.addEventListener("submit", (e) => {
     e.preventDefault();
     let profile;
     try {
-      profile = normalizedProfileFromForm({
-        username: profileUsername.value,
-        interests: profileInterests.value,
-        hates: profileHates.value,
-        favorites: profileFavorites.value,
-        avatar: profileAvatar.value
-      });
+      profile = profileFromCurrentForm();
     } catch (err) {
       showError(err instanceof Error ? err.message : "Invalid profile");
       return;

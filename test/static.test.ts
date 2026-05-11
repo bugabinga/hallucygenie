@@ -183,7 +183,27 @@ describe("index.html health", () => {
         assert.equal(modal?.getAttribute("role"), "dialog");
         assert.equal(modal?.getAttribute("aria-modal"), "true");
         assert.equal(modal?.getAttribute("aria-labelledby"), "profile-title");
-        assert.ok(doc.querySelector("#profile-generate")?.hasAttribute("disabled"));
+        assert.equal(doc.querySelector("#profile-generate")?.hasAttribute("disabled"), false);
+    });
+
+    it("profile fields have distinct guidance and avatar image controls", () => {
+        const doc = parseIndex();
+        assert.equal(
+            doc.querySelector('label[for="profile-interests"]')?.textContent,
+            "Topics to bring up",
+        );
+        assert.equal(
+            doc.querySelector('label[for="profile-favorites"]')?.textContent,
+            "Style favorites",
+        );
+        assert.equal(
+            doc.querySelector("#profile-avatar")?.getAttribute("placeholder"),
+            "Type an emoji",
+        );
+        assert.equal(doc.querySelector("#profile-avatar")?.getAttribute("autocomplete"), "off");
+        assert.ok(doc.querySelector("#profile-avatar-img"));
+        assert.equal(doc.querySelector("#profile-avatar-upload")?.getAttribute("type"), "file");
+        assert.equal(indexHtml.toLowerCase().includes("email"), false);
     });
 
     it("connection status exposes accessible status", () => {

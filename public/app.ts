@@ -148,6 +148,25 @@ export async function deleteProfile(): Promise<UserProfile> {
     return (await resp.json()) as UserProfile;
 }
 
+async function uploadProfileAvatar(file: File, profile: UserProfile): Promise<UserProfile> {
+    const body = new FormData();
+    body.set("avatar", file);
+    body.set("profile", JSON.stringify(profile));
+    const resp = await fetch("/api/profile/avatar", { method: "POST", body });
+    if (!resp.ok) throw new Error(`Failed to upload avatar: ${resp.status}`);
+    return ((await resp.json()) as { profile: UserProfile }).profile;
+}
+
+async function generateProfileAvatar(profile: UserProfile): Promise<UserProfile> {
+    const resp = await fetch("/api/profile/avatar/generate", {
+        method: "POST",
+        headers: createApiHeaders(),
+        body: JSON.stringify(profile),
+    });
+    if (!resp.ok) throw new Error(`Failed to generate avatar: ${resp.status}`);
+    return ((await resp.json()) as { profile: UserProfile }).profile;
+}
+
 async function fetchSessions(): Promise<{ activeSessionId: string; sessions: SessionRow[] }> {
     const resp = await fetch("/api/sessions");
     if (!resp.ok) throw new Error(`Failed to load sessions: ${resp.status}`);
@@ -230,15 +249,22 @@ export function normalizedProfileFromForm(form: {
     hates: string;
     favorites: string;
     avatar: string;
+    avatarAsset?: string;
 }): UserProfile {
+    const avatarAsset = form.avatarAsset?.trim() ?? "";
     if (/^data:/i.test(form.avatar.trim())) throw new Error("Avatar data URLs are not allowed");
+    if (avatarAsset && !/^asset_[0-9a-f-]+$/i.test(avatarAsset)) {
+        throw new Error("Avatar asset id is invalid");
+    }
     return {
         version: 1,
         username: Array.from(form.username.trim()).slice(0, 40).join(""),
         interests: Array.from(form.interests.trim()).slice(0, 300).join(""),
         hates: Array.from(form.hates.trim()).slice(0, 300).join(""),
         favorites: Array.from(form.favorites.trim()).slice(0, 300).join(""),
-        avatar: { type: "emoji", value: avatarEmoji(form.avatar) },
+        avatar: avatarAsset
+            ? { type: "asset", value: avatarAsset }
+            : { type: "emoji", value: avatarEmoji(form.avatar) },
         updatedAt: Date.now(),
     };
 }
@@ -1387,7 +1413,36 @@ export function init(): void {
     const profileHates = $("#profile-hates") as HTMLTextAreaElement;
     const profileFavorites = $("#profile-favorites") as HTMLTextAreaElement;
     const profileAvatar = $("#profile-avatar") as HTMLInputElement;
+    const profileAvatarAsset = $("#profile-avatar-asset") as HTMLInputElement;
+    const profileAvatarUpload = $("#profile-avatar-upload") as HTMLInputElement;
+    const profileAvatarImg = $("#profile-avatar-img") as HTMLImageElement;
+    const profileAvatarEmojiPreview = $("#profile-avatar-emoji-preview") as HTMLElement;
+    const profileGenerate = $("#profile-generate") as HTMLButtonElement;
     let profileModalReturnFocus: HTMLElement | null = null;
+
+    function updateProfileAvatarPreview(profile: UserProfile): void {
+        if (profile.avatar.type === "asset") {
+            profileAvatarImg.src = `/asset/${profile.avatar.value}`;
+            profileAvatarImg.hidden = false;
+            profileAvatarEmojiPreview.hidden = true;
+            return;
+        }
+        profileAvatarImg.hidden = true;
+        profileAvatarImg.removeAttribute("src");
+        profileAvatarEmojiPreview.hidden = false;
+        profileAvatarEmojiPreview.textContent = avatarEmoji(profile.avatar.value);
+    }
+
+    function profileFromCurrentForm(): UserProfile {
+        return normalizedProfileFromForm({
+            username: profileUsername.value,
+            interests: profileInterests.value,
+            hates: profileHates.value,
+            favorites: profileFavorites.value,
+            avatar: profileAvatar.value,
+            avatarAsset: profileAvatarAsset.value,
+        });
+    }
 
     function fillProfileForm(profile: UserProfile): void {
         profileUsername.value = profile.username;
@@ -1396,6 +1451,8 @@ export function init(): void {
         profileFavorites.value = profile.favorites;
         profileAvatar.value =
             profile.avatar.type === "emoji" ? profile.avatar.value : DEFAULT_USER_AVATAR;
+        profileAvatarAsset.value = profile.avatar.type === "asset" ? profile.avatar.value : "";
+        updateProfileAvatarPreview(profile);
     }
 
     async function loadProfileIntoForm(): Promise<void> {
@@ -1444,17 +1501,58 @@ export function init(): void {
     profileClose.addEventListener("click", closeProfileModal);
     profileBackdrop.addEventListener("click", closeProfileModal);
     profileModal.addEventListener("keydown", trapProfileModalFocus);
+    profileAvatar.addEventListener("input", () => {
+        profileAvatarAsset.value = "";
+        updateProfileAvatarPreview(profileFromCurrentForm());
+    });
+    profileAvatarUpload.addEventListener("change", () => {
+        const file = profileAvatarUpload.files?.[0];
+        if (!file) return;
+        let profile: UserProfile;
+        try {
+            profile = profileFromCurrentForm();
+        } catch (err) {
+            showError(err instanceof Error ? err.message : "Invalid profile");
+            return;
+        }
+        profileAvatarUpload.disabled = true;
+        void uploadProfileAvatar(file, profile)
+            .then((saved) => {
+                setCurrentProfile(saved);
+                fillProfileForm(saved);
+            })
+            .catch(() => showError("Failed to upload avatar 😕"))
+            .finally(() => {
+                profileAvatarUpload.disabled = false;
+                profileAvatarUpload.value = "";
+            });
+    });
+    profileGenerate.addEventListener("click", () => {
+        let profile: UserProfile;
+        try {
+            profile = profileFromCurrentForm();
+        } catch (err) {
+            showError(err instanceof Error ? err.message : "Invalid profile");
+            return;
+        }
+        profileGenerate.disabled = true;
+        profileGenerate.textContent = "Generating... ✨";
+        void generateProfileAvatar(profile)
+            .then((saved) => {
+                setCurrentProfile(saved);
+                fillProfileForm(saved);
+            })
+            .catch(() => showError("Failed to generate avatar 😕"))
+            .finally(() => {
+                profileGenerate.disabled = false;
+                profileGenerate.textContent = "Generate avatar 🎨";
+            });
+    });
     profileForm.addEventListener("submit", (e) => {
         e.preventDefault();
         let profile: UserProfile;
         try {
-            profile = normalizedProfileFromForm({
-                username: profileUsername.value,
-                interests: profileInterests.value,
-                hates: profileHates.value,
-                favorites: profileFavorites.value,
-                avatar: profileAvatar.value,
-            });
+            profile = profileFromCurrentForm();
         } catch (err) {
             showError(err instanceof Error ? err.message : "Invalid profile");
             return;

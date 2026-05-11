@@ -2602,6 +2602,109 @@ describe("Session, draft, and create-history APIs", () => {
         assert.equal(archiveResp.status, 200);
     });
 
+    it("uploads profile avatar images into asset storage", async () => {
+        const body = new FormData();
+        body.set(
+            "avatar",
+            new File([new Uint8Array([1, 2, 3])], "avatar.png", { type: "image/png" }),
+        );
+        body.set(
+            "profile",
+            JSON.stringify({
+                version: 1,
+                username: "GamerKid",
+                interests: "Minecraft",
+                hates: "spam",
+                favorites: "blue fire",
+                avatar: { type: "emoji", value: "🎮" },
+                updatedAt: 1,
+            }),
+        );
+        const resp = await handleRequest(
+            new Request("http://localhost/api/profile/avatar", { method: "POST", body }),
+        );
+        assert.equal(resp.status, 200);
+        const json = (await resp.json()) as {
+            profile: { avatar: { type: string; value: string } };
+        };
+        assert.equal(json.profile.avatar.type, "asset");
+        assert.match(json.profile.avatar.value, /^asset_/);
+        const assets = getAssets(
+            getDb()!,
+            resolveSessionId(new Request("http://localhost/api/state"), getDb()!),
+        );
+        assert.equal(
+            assets.some((asset) => asset.id === json.profile.avatar.value),
+            true,
+        );
+    });
+
+    it("generates profile avatars through MiniMax image generation", async () => {
+        const prevFetch = globalThis.fetch;
+        const prevKey = process.env.MINIMAX_API_KEY;
+        const calls: string[] = [];
+        process.env.MINIMAX_API_KEY = "test-key";
+        globalThis.fetch = async (url: URL | RequestInfo, init?: RequestInit) => {
+            calls.push(String(url));
+            if (String(url).includes("/v1/image_generation")) {
+                const payload = JSON.parse(String(init?.body)) as {
+                    prompt: string;
+                    aspect_ratio: string;
+                };
+                assert.match(payload.prompt, /GamerKid/);
+                assert.equal(payload.aspect_ratio, "1:1");
+                return new Response(
+                    JSON.stringify({
+                        data: { image_urls: ["https://img.test/avatar.png"] },
+                        base_resp: { status_code: 0 },
+                    }),
+                    {
+                        status: 200,
+                        headers: { "Content-Type": "application/json" },
+                    },
+                );
+            }
+            return new Response(new Uint8Array([9, 8, 7]), {
+                status: 200,
+                headers: { "Content-Type": "image/png" },
+            });
+        };
+        try {
+            const resp = await handleRequest(
+                new Request("http://localhost/api/profile/avatar/generate", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                        version: 1,
+                        username: "GamerKid",
+                        interests: "Minecraft",
+                        hates: "spam",
+                        favorites: "blue fire",
+                        avatar: { type: "emoji", value: "🎮" },
+                        updatedAt: 1,
+                    }),
+                }),
+            );
+            assert.equal(resp.status, 200);
+            const json = (await resp.json()) as {
+                profile: { avatar: { type: string; value: string } };
+            };
+            assert.equal(json.profile.avatar.type, "asset");
+            assert.equal(
+                calls.some((url) => url.includes("/v1/image_generation")),
+                true,
+            );
+            assert.equal(
+                calls.some((url) => url === "https://img.test/avatar.png"),
+                true,
+            );
+        } finally {
+            globalThis.fetch = prevFetch;
+            if (prevKey) process.env.MINIMAX_API_KEY = prevKey;
+            else delete process.env.MINIMAX_API_KEY;
+        }
+    });
+
     it("saves and clears active-session drafts", async () => {
         const putResp = await handleRequest(
             new Request("http://localhost/api/draft/chat", {

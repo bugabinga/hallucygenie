@@ -751,6 +751,94 @@ function parseLimitOffset(url: URL): { limit: number; offset: number } {
     };
 }
 
+function isAvatarImageMime(mime: string): boolean {
+    return ["image/png", "image/jpeg", "image/webp", "image/gif"].includes(mime);
+}
+
+function profileAvatarPrompt(profile: ReturnType<typeof getUserProfile>): string {
+    const parts = [
+        profile.username ? `username: ${profile.username}` : "kid gamer creator",
+        profile.interests ? `topics: ${profile.interests}` : "gaming and YouTube",
+        profile.favorites ? `style favorites: ${profile.favorites}` : "fun bright mascot",
+        profile.hates ? `avoid: ${profile.hates}` : "",
+    ].filter(Boolean);
+    return `Square friendly gaming avatar for a kid creator. ${parts.join(". ")}. Clean icon, expressive, safe for YouTube profile picture.`.slice(
+        0,
+        1500,
+    );
+}
+
+function saveProfileAvatar(
+    database: Database,
+    profileInput: unknown,
+    assetId: string,
+): ReturnType<typeof getUserProfile> {
+    const profile = saveUserProfile(database, {
+        ...parseJsonObject(profileInput, "profile"),
+        avatar: { type: "asset", value: assetId },
+    });
+    return profile;
+}
+
+async function handleProfileAvatarUpload(req: Request, database: Database): Promise<Response> {
+    try {
+        const sessionId = resolveSessionId(req, database);
+        const form = await req.formData();
+        const file = form.get("avatar");
+        if (!(file instanceof File)) return jsonResponse({ error: "avatar file required" }, 400);
+        if (!isAvatarImageMime(file.type))
+            return jsonResponse({ error: "avatar image type invalid" }, 400);
+        if (file.size > 2 * 1024 * 1024)
+            return jsonResponse({ error: "avatar image too large" }, 400);
+        const profileJson = String(form.get("profile") ?? "{}");
+        const profileInput = JSON.parse(profileJson) as unknown;
+        const saved = saveAssetBuffer(
+            "image",
+            Buffer.from(await file.arrayBuffer()),
+            file.type,
+            sessionId,
+            "profile_avatar",
+            "Uploaded profile avatar",
+            { source: "upload" },
+        );
+        const assetId = assetIdFromToolResult(saved);
+        if (!assetId) throw new Error("avatar asset save failed");
+        const profile = saveProfileAvatar(database, profileInput, assetId);
+        return jsonResponse({ profile, assetUrl: saved.content });
+    } catch (err) {
+        return jsonResponse({ error: String(err instanceof Error ? err.message : err) }, 400);
+    }
+}
+
+async function handleProfileAvatarGenerate(req: Request, database: Database): Promise<Response> {
+    const apiKey = process.env.MINIMAX_API_KEY;
+    if (!apiKey) return jsonResponse({ error: "MINIMAX_API_KEY not configured" }, 503);
+    try {
+        const sessionId = resolveSessionId(req, database);
+        const profileInput = await req.json();
+        const profile = saveUserProfile(database, profileInput);
+        if (consumeQuota(database, "image") === null) {
+            return jsonResponse({ error: "Daily image quota is used up." }, 429);
+        }
+        const args = { prompt: profileAvatarPrompt(profile), aspect_ratio: "1:1" };
+        const result = safeToolResultForUser(
+            "generate_image",
+            await executeToolSafely("generate_image", args, apiKey),
+        );
+        const saved = await saveAssetFile(result, sessionId, "generate_image", args.prompt, args);
+        if (saved.type === "error") {
+            releaseQuota(database, "image");
+            return jsonResponse({ error: saved.content }, 502);
+        }
+        const assetId = assetIdFromToolResult(saved);
+        if (!assetId) throw new Error("avatar asset save failed");
+        const savedProfile = saveProfileAvatar(database, profile, assetId);
+        return jsonResponse({ profile: savedProfile, assetUrl: saved.content });
+    } catch (err) {
+        return jsonResponse({ error: String(err instanceof Error ? err.message : err) }, 400);
+    }
+}
+
 // ── Main request handler ─────────────────────────────────────────────
 
 export async function handleRequest(req: Request): Promise<Response> {
@@ -858,6 +946,14 @@ export async function handleRequest(req: Request): Promise<Response> {
 
         if (path === "/api/profile" && method === "GET") {
             return jsonResponse(getUserProfile(database));
+        }
+
+        if (path === "/api/profile/avatar" && method === "POST") {
+            return handleProfileAvatarUpload(req, database);
+        }
+
+        if (path === "/api/profile/avatar/generate" && method === "POST") {
+            return handleProfileAvatarGenerate(req, database);
         }
 
         if (path === "/api/profile" && method === "PUT") {
