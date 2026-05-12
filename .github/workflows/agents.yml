@@ -314,7 +314,7 @@ jobs:
             - run: bun install --frozen-lockfile
             - run: bun run --bun .github/agents/robotnik.ts
               env:
-                  MINIMAX_API_KEY: ${{ secrets.MINIMAX_API_KEY }}
+                  ZAI_API_KEY: ${{ secrets.ZAI_API_KEY }}
                   GH_TOKEN: ${{ steps.app-token.outputs.token }}
             - name: Agent report
               if: always()

@@ -9,7 +9,7 @@
  *        /|     |\
  *
  * ╔═════════════════════════════════════════╗
- * ║ Single pass: minimax/M2.5 -> fix issue  ║
+ * ║ Single pass: zai/glm-5.1 -> fix issue   ║
  * ╚═════════════════════════════════════════╝
  */
 import { existsSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
@@ -90,18 +90,16 @@ if (existingPr) {
         ? `\nISSUE ${issue.id}\nPath: ${issue.path}\n${issue.text}\n\nRELATED SPECS\n${specsBlock(issue.text) || "none"}`
         : "";
 
-    console.log(
-        `\n=== Repair existing PR #${existingPr.number} (minimax/MiniMax-M2.5-highspeed) ===\n`,
-    );
+    console.log(`\n=== Repair existing PR #${existingPr.number} (zai/glm-5.1) ===\n`);
     runPi(
         "code",
         [
             "-p",
             ...piFlags,
             "--provider",
-            "minimax",
+            "zai",
             "--model",
-            "MiniMax-M2.5-highspeed",
+            "glm-5.1",
             "--thinking",
             "off",
             "--tools",
@@ -151,9 +149,9 @@ runPi(
         "-p",
         ...piFlags,
         "--provider",
-        "minimax",
+        "zai",
         "--model",
-        "MiniMax-M2.5-highspeed",
+        "glm-5.1",
         "--thinking",
         "medium",
         "--tools",
