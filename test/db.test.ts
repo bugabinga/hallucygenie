@@ -35,6 +35,9 @@ import {
     getAssets,
     getAsset,
     QUOTAS,
+    getDraft,
+    saveDraft,
+    deleteDraft,
 } from "../src/db.ts";
 
 // Helper: create a fresh in-memory DB with migrations applied
@@ -83,7 +86,7 @@ describe("runMigrations", () => {
             .prepare("SELECT version FROM schema_migrations ORDER BY version")
             .all()
             .map((r: any) => r.version);
-        assert.deepEqual(versions, [1, 2, 3, 4, 5, 6, 7, 8, 9]);
+        assert.deepEqual(versions, [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]);
 
         db.close();
     });
@@ -930,5 +933,73 @@ describe("saveAsset + getAssets + getAsset", () => {
         // Newest first (by created_at DESC)
         assert.equal(assets[0].id, id2);
         assert.equal(assets[1].id, id1);
+    });
+});
+
+describe("Draft CRUD", () => {
+    let db: Database;
+    beforeEach(() => {
+        db = freshDb();
+    });
+
+    it("getDraft returns null when no draft exists", () => {
+        const draft = getDraft(db, "no-such-session", "chat");
+        assert.equal(draft, null);
+    });
+
+    it("saveDraft and getDraft round-trips chat draft", () => {
+        saveDraft(db, "draft-session-1", "chat", "Hello, genie!");
+        const draft = getDraft(db, "draft-session-1", "chat");
+        assert.notEqual(draft, null);
+        assert.equal(draft!.content, "Hello, genie!");
+        assert.equal(draft!.draft_type, "chat");
+        assert.equal(draft!.session_id, "draft-session-1");
+    });
+
+    it("saveDraft and getDraft round-trips create draft", () => {
+        saveDraft(db, "draft-session-2", "create", "Draw a dragon");
+        const draft = getDraft(db, "draft-session-2", "create");
+        assert.notEqual(draft, null);
+        assert.equal(draft!.content, "Draw a dragon");
+        assert.equal(draft!.draft_type, "create");
+    });
+
+    it("saveDraft overwrites existing draft", () => {
+        saveDraft(db, "draft-session-3", "chat", "First");
+        saveDraft(db, "draft-session-3", "chat", "Second");
+        const draft = getDraft(db, "draft-session-3", "chat");
+        assert.equal(draft!.content, "Second");
+    });
+
+    it("deleteDraft removes the draft", () => {
+        saveDraft(db, "draft-session-4", "chat", "To be deleted");
+        deleteDraft(db, "draft-session-4", "chat");
+        const draft = getDraft(db, "draft-session-4", "chat");
+        assert.equal(draft, null);
+    });
+
+    it("chat and create drafts are independent", () => {
+        saveDraft(db, "draft-session-5", "chat", "Chat draft");
+        saveDraft(db, "draft-session-5", "create", "Create draft");
+        const chatDraft = getDraft(db, "draft-session-5", "chat");
+        const createDraft = getDraft(db, "draft-session-5", "create");
+        assert.equal(chatDraft!.content, "Chat draft");
+        assert.equal(createDraft!.content, "Create draft");
+    });
+
+    it("drafts are scoped to session", () => {
+        saveDraft(db, "session-A", "chat", "Draft A");
+        saveDraft(db, "session-B", "chat", "Draft B");
+        const draftA = getDraft(db, "session-A", "chat");
+        const draftB = getDraft(db, "session-B", "chat");
+        assert.equal(draftA!.content, "Draft A");
+        assert.equal(draftB!.content, "Draft B");
+    });
+
+    it("rejects raw asset data in draft", () => {
+        assert.throws(
+            () => saveDraft(db, "draft-session-6", "chat", "data:image/png;base64,aaaa"),
+            /raw asset data/,
+        );
     });
 });

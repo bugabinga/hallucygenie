@@ -21,6 +21,9 @@ import {
     getOrCreateActiveSession,
     QUOTAS,
     type AssetRow,
+    getDraft,
+    saveDraft,
+    deleteDraft,
 } from "./db.ts";
 import { dirname } from "node:path";
 import { createServer, type IncomingMessage, type ServerResponse, type Server } from "node:http";
@@ -810,6 +813,42 @@ export async function handleRequest(req: Request): Promise<Response> {
         if (path === "/api/usage" && method === "GET") {
             const usage = getUsageToday(database);
             return jsonResponse({ usage, limits: QUOTAS });
+        }
+
+        // Draft routes
+        const draftMatch = path.match(/^\/api\/draft\/(chat|create)$/);
+        if (draftMatch) {
+            const draftType = draftMatch[1] as "chat" | "create";
+            const sessionId = resolveSessionId(req, database);
+
+            if (method === "GET") {
+                const draft = getDraft(database, sessionId, draftType);
+                return jsonResponse({ draft: draft ? { content: draft.content } : null });
+            }
+
+            if (method === "PUT") {
+                let parsed: unknown;
+                try {
+                    parsed = await req.json();
+                } catch {
+                    return jsonResponse({ error: "Invalid JSON in request body" }, 400);
+                }
+                if (
+                    !parsed ||
+                    typeof parsed !== "object" ||
+                    !("content" in parsed) ||
+                    typeof (parsed as { content: unknown }).content !== "string"
+                ) {
+                    return jsonResponse({ error: "Missing required field: content" }, 400);
+                }
+                saveDraft(database, sessionId, draftType, (parsed as { content: string }).content);
+                return jsonResponse({ ok: true });
+            }
+
+            if (method === "DELETE") {
+                deleteDraft(database, sessionId, draftType);
+                return jsonResponse({ ok: true });
+            }
         }
 
         return jsonResponse({ error: "Not found" }, 404);

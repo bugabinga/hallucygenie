@@ -2570,3 +2570,96 @@ describe("GET /api/quota", () => {
         }
     });
 });
+
+// ── Draft API Routes ─────────────────────────────────────────────────
+
+describe("Draft API routes", () => {
+    it("GET /api/draft/chat returns null when no draft exists", async () => {
+        ensureTestDb();
+        const req = makeRequest("GET", "/api/draft/chat");
+        const resp = await handleRequest(req);
+        assert.equal(resp.status, 200);
+        const body = (await readJson(resp)) as { draft: null };
+        assert.equal(body.draft, null);
+    });
+
+    it("PUT /api/draft/chat saves and GET returns the draft", async () => {
+        ensureTestDb();
+        const putReq = makeRequest("PUT", "/api/draft/chat", { content: "Hello genie!" });
+        const putResp = await handleRequest(putReq);
+        assert.equal(putResp.status, 200);
+
+        const getReq = makeRequest("GET", "/api/draft/chat");
+        const getResp = await handleRequest(getReq);
+        assert.equal(getResp.status, 200);
+        const body = (await readJson(getResp)) as { draft: { content: string } };
+        assert.equal(body.draft?.content, "Hello genie!");
+    });
+
+    it("PUT /api/draft/create saves and GET returns the draft", async () => {
+        ensureTestDb();
+        const putReq = makeRequest("PUT", "/api/draft/create", { content: "Draw a dragon" });
+        const putResp = await handleRequest(putReq);
+        assert.equal(putResp.status, 200);
+
+        const getReq = makeRequest("GET", "/api/draft/create");
+        const getResp = await handleRequest(getReq);
+        assert.equal(getResp.status, 200);
+        const body = (await readJson(getResp)) as { draft: { content: string } };
+        assert.equal(body.draft?.content, "Draw a dragon");
+    });
+
+    it("DELETE /api/draft/chat removes the draft", async () => {
+        ensureTestDb();
+        const putReq = makeRequest("PUT", "/api/draft/chat", { content: "To be deleted" });
+        await handleRequest(putReq);
+
+        const delReq = makeRequest("DELETE", "/api/draft/chat");
+        const delResp = await handleRequest(delReq);
+        assert.equal(delResp.status, 200);
+
+        const getReq = makeRequest("GET", "/api/draft/chat");
+        const getResp = await handleRequest(getReq);
+        const body = (await readJson(getResp)) as { draft: null };
+        assert.equal(body.draft, null);
+    });
+
+    it("PUT /api/draft/chat with missing content returns 400", async () => {
+        ensureTestDb();
+        const req = makeRequest("PUT", "/api/draft/chat", { wrong: "field" });
+        const resp = await handleRequest(req);
+        assert.equal(resp.status, 400);
+    });
+
+    it("PUT /api/draft/chat with non-string content returns 400", async () => {
+        ensureTestDb();
+        const req = makeRequest("PUT", "/api/draft/chat", { content: 123 });
+        const resp = await handleRequest(req);
+        assert.equal(resp.status, 400);
+    });
+
+    it("chat and create drafts are independent", async () => {
+        ensureTestDb();
+        await handleRequest(makeRequest("PUT", "/api/draft/chat", { content: "Chat draft" }));
+        await handleRequest(makeRequest("PUT", "/api/draft/create", { content: "Create draft" }));
+
+        const chatResp = await handleRequest(makeRequest("GET", "/api/draft/chat"));
+        const createResp = await handleRequest(makeRequest("GET", "/api/draft/create"));
+
+        const chatBody = (await readJson(chatResp)) as { draft: { content: string } };
+        const createBody = (await readJson(createResp)) as { draft: { content: string } };
+
+        assert.equal(chatBody.draft?.content, "Chat draft");
+        assert.equal(createBody.draft?.content, "Create draft");
+    });
+
+    it("overwrites existing draft on PUT", async () => {
+        ensureTestDb();
+        await handleRequest(makeRequest("PUT", "/api/draft/chat", { content: "First" }));
+        await handleRequest(makeRequest("PUT", "/api/draft/chat", { content: "Second" }));
+
+        const resp = await handleRequest(makeRequest("GET", "/api/draft/chat"));
+        const body = (await readJson(resp)) as { draft: { content: string } };
+        assert.equal(body.draft?.content, "Second");
+    });
+});

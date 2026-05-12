@@ -122,6 +122,106 @@ export async function deleteProfile(): Promise<UserProfile> {
     return (await resp.json()) as UserProfile;
 }
 
+// ── Draft Persistence ───────────────────────────────────────────────
+
+export interface DraftData {
+    content: string;
+}
+
+export interface DraftResponse {
+    draft: DraftData | null;
+}
+
+let chatDraftTimer: ReturnType<typeof setTimeout> | null = null;
+let createDraftTimer: ReturnType<typeof setTimeout> | null = null;
+const DRAFT_DEBOUNCE_MS = 200;
+
+/**
+ * Fetch a draft from the server.
+ */
+export async function fetchDraft(draftType: "chat" | "create"): Promise<string> {
+    try {
+        const resp = await fetch(`/api/draft/${draftType}`, {
+            headers: createApiHeaders(),
+        });
+        if (!resp.ok) return "";
+        const data: DraftResponse = await resp.json();
+        return data.draft?.content ?? "";
+    } catch {
+        return "";
+    }
+}
+
+/**
+ * Save a draft to the server (debounced).
+ */
+export function saveDraftDebounced(draftType: "chat" | "create", content: string): void {
+    const timer = draftType === "chat" ? chatDraftTimer : createDraftTimer;
+    if (timer !== null) {
+        clearTimeout(timer);
+    }
+    const newTimer = setTimeout(async () => {
+        try {
+            await fetch(`/api/draft/${draftType}`, {
+                method: "PUT",
+                headers: createApiHeaders(),
+                body: JSON.stringify({ content }),
+            });
+        } catch {
+            // Non-critical — ignore draft save errors
+        }
+    }, DRAFT_DEBOUNCE_MS);
+    if (draftType === "chat") {
+        chatDraftTimer = newTimer;
+    } else {
+        createDraftTimer = newTimer;
+    }
+}
+
+/**
+ * Flush a pending draft save immediately.
+ */
+export async function flushDraft(draftType: "chat" | "create", content: string): Promise<void> {
+    const timer = draftType === "chat" ? chatDraftTimer : createDraftTimer;
+    if (timer !== null) {
+        clearTimeout(timer);
+        if (draftType === "chat") {
+            chatDraftTimer = null;
+        } else {
+            createDraftTimer = null;
+        }
+    }
+    try {
+        await fetch(`/api/draft/${draftType}`, {
+            method: "PUT",
+            headers: createApiHeaders(),
+            body: JSON.stringify({ content }),
+        });
+    } catch {
+        // Non-critical
+    }
+}
+
+/**
+ * Delete a draft from the server.
+ */
+export async function deleteDraft(draftType: "chat" | "create"): Promise<void> {
+    const timer = draftType === "chat" ? chatDraftTimer : createDraftTimer;
+    if (timer !== null) {
+        clearTimeout(timer);
+        if (draftType === "chat") {
+            chatDraftTimer = null;
+        } else {
+            createDraftTimer = null;
+        }
+    }
+    try {
+        await fetch(`/api/draft/${draftType}`, { method: "DELETE", headers: createApiHeaders() });
+    } catch {
+        // Non-critical
+    }
+}
+
 function avatarEmoji(value: string): string {
     const trimmed = Array.from(value.trim()).slice(0, 4).join("");
     if (!trimmed || /^data:/i.test(trimmed)) return DEFAULT_USER_AVATAR;
@@ -887,6 +987,10 @@ export async function sendMessage(content: string): Promise<void> {
         return;
     }
 
+    // Clear chat draft on submit (spec: clear only after stream done with no error)
+    // We flush and delete here because we're about to send
+    await deleteDraft("chat");
+
     const messageList = $("#message-list");
 
     // Render user message
@@ -1051,6 +1155,8 @@ export function handleInputChange(): void {
     const sendBtn = $("#send-button") as HTMLButtonElement;
     sendBtn.disabled = !input.value.trim();
     autoResizeInput();
+    // Save chat draft with debounce
+    saveDraftDebounced("chat", input.value);
 }
 
 // ── Quota Badge ──────────────────────────────────────────────────
@@ -1325,9 +1431,44 @@ export function init(): void {
         createModalReturnFocus = document.activeElement as HTMLElement | null;
         createModal.hidden = false;
         createClose.focus();
+        // Restore create draft
+        void (async () => {
+            const draft = await fetchDraft("create");
+            if (draft) {
+                const activeTab = createModal.dataset.tabOpen;
+                if (activeTab === "image") {
+                    imgPromptInput.value = draft;
+                } else if (activeTab === "music") {
+                    const parts = draft.split("\n---\n");
+                    musicPromptInput.value = parts[0] ?? "";
+                    musicLyricsInput.value = parts[1] ?? "";
+                } else if (activeTab === "voice") {
+                    voiceTextInput.value = draft;
+                } else if (activeTab === "search") {
+                    searchQueryInput.value = draft;
+                }
+            }
+        })();
     }
 
     function closeCreateModal(): void {
+        // Flush create draft before closing
+        const activeTab = createModal.dataset.tabOpen;
+        let content = "";
+        if (activeTab === "image") {
+            content = imgPromptInput.value;
+        } else if (activeTab === "music") {
+            content = musicPromptInput.value + "\n---\n" + musicLyricsInput.value;
+        } else if (activeTab === "voice") {
+            content = voiceTextInput.value;
+        } else if (activeTab === "search") {
+            content = searchQueryInput.value;
+        }
+        if (content.trim()) {
+            saveDraftDebounced("create", content);
+        } else {
+            void deleteDraft("create");
+        }
         createModal.hidden = true;
         createModalReturnFocus?.focus();
         createModalReturnFocus = null;
@@ -1353,27 +1494,6 @@ export function init(): void {
     createBackdrop.addEventListener("click", closeCreateModal);
     createModal.addEventListener("keydown", trapCreateModalFocus);
 
-    // Tab switching
-    const tabs = createModal.querySelectorAll<HTMLButtonElement>(".create-tab");
-    const panels = createModal.querySelectorAll<HTMLElement>(".create-panel");
-    tabs.forEach((tab) => {
-        tab.addEventListener("click", () => {
-            tabs.forEach((t) => t.classList.remove("active"));
-            panels.forEach((p) => {
-                p.hidden = true;
-            });
-            tab.classList.add("active");
-            const panel = createModal.querySelector<HTMLElement>(
-                `[data-panel="${tab.dataset.tab}"]`,
-            );
-            if (panel) {
-                panel.hidden = false;
-                createModal.dataset.tabOpen = tab.dataset.tab ?? "";
-                if (tab.dataset.tab === "assets") loadAssets();
-            }
-        });
-    });
-
     // Form submissions — send as prompt to chat
     const createImgForm = $("#create-image-form") as HTMLFormElement;
     const createMusicForm = $("#create-music-form") as HTMLFormElement;
@@ -1393,6 +1513,7 @@ export function init(): void {
         const ratio = imgRatioInput.value;
         if (prompt) {
             closeCreateModal();
+            void deleteDraft("create");
             sendMessage(
                 `Use generate_image with prompt: ${prompt}\nTool params: aspect_ratio=${ratio}`,
             );
@@ -1405,6 +1526,7 @@ export function init(): void {
         const lyrics = musicLyricsInput.value.trim();
         if (prompt) {
             closeCreateModal();
+            void deleteDraft("create");
             let msg = `Use generate_music with prompt: ${prompt}`;
             if (lyrics) msg += `\nTool params: lyrics=${lyrics}`;
             sendMessage(msg);
@@ -1438,6 +1560,7 @@ export function init(): void {
         const speed = voiceSpeedInput.value;
         if (text) {
             closeCreateModal();
+            void deleteDraft("create");
             sendMessage(`Use text_to_speech with text: ${text}\nTool params: speed=${speed}`);
         }
     });
@@ -1447,9 +1570,75 @@ export function init(): void {
         const query = searchQueryInput.value.trim();
         if (query) {
             closeCreateModal();
+            void deleteDraft("create");
             sendMessage(`Search the web for: ${query}`);
         }
     });
+
+    // Tab switching — save create draft on tab change
+    const tabs = createModal.querySelectorAll<HTMLButtonElement>(".create-tab");
+    const panels = createModal.querySelectorAll<HTMLElement>(".create-panel");
+    tabs.forEach((tab) => {
+        tab.addEventListener("click", () => {
+            // Flush current tab's draft before switching
+            const prevTab = createModal.dataset.tabOpen;
+            if (prevTab) {
+                let content = "";
+                if (prevTab === "image") {
+                    content = imgPromptInput.value;
+                } else if (prevTab === "music") {
+                    content = musicPromptInput.value + "\n---\n" + musicLyricsInput.value;
+                } else if (prevTab === "voice") {
+                    content = voiceTextInput.value;
+                } else if (prevTab === "search") {
+                    content = searchQueryInput.value;
+                }
+                if (content.trim()) {
+                    saveDraftDebounced("create", content);
+                }
+            }
+
+            tabs.forEach((t) => t.classList.remove("active"));
+            panels.forEach((p) => {
+                p.hidden = true;
+            });
+            tab.classList.add("active");
+            const panel = createModal.querySelector<HTMLElement>(
+                `[data-panel="${tab.dataset.tab}"]`,
+            );
+            if (panel) {
+                panel.hidden = false;
+                createModal.dataset.tabOpen = tab.dataset.tab ?? "";
+                if (tab.dataset.tab === "assets") loadAssets();
+            }
+        });
+    });
+
+    // Lifecycle flushes — flush chat draft on visibility change and page hide
+    document.addEventListener("visibilitychange", () => {
+        if (document.visibilityState === "hidden") {
+            const chatContent = input.value;
+            if (chatContent) {
+                void flushDraft("chat", chatContent);
+            }
+        }
+    });
+
+    window.addEventListener("pagehide", () => {
+        const chatContent = input.value;
+        if (chatContent) {
+            void flushDraft("chat", chatContent);
+        }
+    });
+
+    // Restore chat draft on init
+    void (async () => {
+        const draft = await fetchDraft("chat");
+        if (draft) {
+            input.value = draft;
+            handleInputChange();
+        }
+    })();
 
     // Focus input
     input.focus();

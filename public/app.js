@@ -2231,6 +2231,76 @@ async function deleteProfile() {
   if (!resp.ok) throw new Error(`Failed to reset profile: ${resp.status}`);
   return await resp.json();
 }
+var chatDraftTimer = null;
+var createDraftTimer = null;
+var DRAFT_DEBOUNCE_MS = 200;
+async function fetchDraft(draftType) {
+  try {
+    const resp = await fetch(`/api/draft/${draftType}`, {
+      headers: createApiHeaders()
+    });
+    if (!resp.ok) return "";
+    const data = await resp.json();
+    return data.draft?.content ?? "";
+  } catch {
+    return "";
+  }
+}
+function saveDraftDebounced(draftType, content) {
+  const timer = draftType === "chat" ? chatDraftTimer : createDraftTimer;
+  if (timer !== null) {
+    clearTimeout(timer);
+  }
+  const newTimer = setTimeout(async () => {
+    try {
+      await fetch(`/api/draft/${draftType}`, {
+        method: "PUT",
+        headers: createApiHeaders(),
+        body: JSON.stringify({ content })
+      });
+    } catch {
+    }
+  }, DRAFT_DEBOUNCE_MS);
+  if (draftType === "chat") {
+    chatDraftTimer = newTimer;
+  } else {
+    createDraftTimer = newTimer;
+  }
+}
+async function flushDraft(draftType, content) {
+  const timer = draftType === "chat" ? chatDraftTimer : createDraftTimer;
+  if (timer !== null) {
+    clearTimeout(timer);
+    if (draftType === "chat") {
+      chatDraftTimer = null;
+    } else {
+      createDraftTimer = null;
+    }
+  }
+  try {
+    await fetch(`/api/draft/${draftType}`, {
+      method: "PUT",
+      headers: createApiHeaders(),
+      body: JSON.stringify({ content })
+    });
+  } catch {
+  }
+}
+async function deleteDraft(draftType) {
+  const timer = draftType === "chat" ? chatDraftTimer : createDraftTimer;
+  if (timer !== null) {
+    clearTimeout(timer);
+    if (draftType === "chat") {
+      chatDraftTimer = null;
+    } else {
+      createDraftTimer = null;
+    }
+  }
+  try {
+    await fetch(`/api/draft/${draftType}`, { method: "DELETE", headers: createApiHeaders() });
+  } catch {
+  }
+}
 function avatarEmoji(value) {
   const trimmed = Array.from(value.trim()).slice(0, 4).join("");
   if (!trimmed || /^data:/i.test(trimmed)) return DEFAULT_USER_AVATAR;
@@ -2810,6 +2880,7 @@ async function sendMessage(content) {
     await sendSteerMessage(content);
     return;
   }
+  await deleteDraft("chat");
   const messageList = $("#message-list");
   const userMsg = renderUserMessage(content);
   messageList.appendChild(userMsg);
@@ -2925,6 +2996,7 @@ function handleInputChange() {
   const sendBtn = $("#send-button");
   sendBtn.disabled = !input.value.trim();
   autoResizeInput();
+  saveDraftDebounced("chat", input.value);
 }
 async function updateQuotaBadge() {
   const badge = $("#quota-badge");
@@ -3133,8 +3205,41 @@ function init() {
     createModalReturnFocus = document.activeElement;
     createModal.hidden = false;
     createClose.focus();
+    void (async () => {
+      const draft = await fetchDraft("create");
+      if (draft) {
+        const activeTab = createModal.dataset.tabOpen;
+        if (activeTab === "image") {
+          imgPromptInput.value = draft;
+        } else if (activeTab === "music") {
+          const parts = draft.split("\n---\n");
+          musicPromptInput.value = parts[0] ?? "";
+          musicLyricsInput.value = parts[1] ?? "";
+        } else if (activeTab === "voice") {
+          voiceTextInput.value = draft;
+        } else if (activeTab === "search") {
+          searchQueryInput.value = draft;
+        }
+      }
+    })();
   }
   function closeCreateModal() {
+    const activeTab = createModal.dataset.tabOpen;
+    let content = "";
+    if (activeTab === "image") {
+      content = imgPromptInput.value;
+    } else if (activeTab === "music") {
+      content = musicPromptInput.value + "\n---\n" + musicLyricsInput.value;
+    } else if (activeTab === "voice") {
+      content = voiceTextInput.value;
+    } else if (activeTab === "search") {
+      content = searchQueryInput.value;
+    }
+    if (content.trim()) {
+      saveDraftDebounced("create", content);
+    } else {
+      void deleteDraft("create");
+    }
     createModal.hidden = true;
     createModalReturnFocus?.focus();
     createModalReturnFocus = null;
@@ -3157,25 +3262,6 @@ function init() {
   createClose.addEventListener("click", closeCreateModal);
   createBackdrop.addEventListener("click", closeCreateModal);
   createModal.addEventListener("keydown", trapCreateModalFocus);
-  const tabs = createModal.querySelectorAll(".create-tab");
-  const panels = createModal.querySelectorAll(".create-panel");
-  tabs.forEach((tab) => {
-    tab.addEventListener("click", () => {
-      tabs.forEach((t) => t.classList.remove("active"));
-      panels.forEach((p) => {
-        p.hidden = true;
-      });
-      tab.classList.add("active");
-      const panel = createModal.querySelector(
-        `[data-panel="${tab.dataset.tab}"]`
-      );
-      if (panel) {
-        panel.hidden = false;
-        createModal.dataset.tabOpen = tab.dataset.tab ?? "";
-        if (tab.dataset.tab === "assets") loadAssets();
-      }
-    });
-  });
   const createImgForm = $("#create-image-form");
   const createMusicForm = $("#create-music-form");
   const createVoiceForm = $("#create-voice-form");
@@ -3193,6 +3279,7 @@ function init() {
     const ratio = imgRatioInput.value;
     if (prompt) {
       closeCreateModal();
+      void deleteDraft("create");
       sendMessage(
         `Use generate_image with prompt: ${prompt}
 Tool params: aspect_ratio=${ratio}`
@@ -3205,6 +3292,7 @@ Tool params: aspect_ratio=${ratio}`
     const lyrics = musicLyricsInput.value.trim();
     if (prompt) {
       closeCreateModal();
+      void deleteDraft("create");
       let msg = `Use generate_music with prompt: ${prompt}`;
       if (lyrics) msg += `
 Tool params: lyrics=${lyrics}`;
@@ -3236,6 +3324,7 @@ Tool params: lyrics=${lyrics}`;
     const speed = voiceSpeedInput.value;
     if (text) {
       closeCreateModal();
+      void deleteDraft("create");
       sendMessage(`Use text_to_speech with text: ${text}
 Tool params: speed=${speed}`);
     }
@@ -3245,9 +3334,66 @@ Tool params: speed=${speed}`);
     const query = searchQueryInput.value.trim();
     if (query) {
       closeCreateModal();
+      void deleteDraft("create");
       sendMessage(`Search the web for: ${query}`);
     }
   });
+  const tabs = createModal.querySelectorAll(".create-tab");
+  const panels = createModal.querySelectorAll(".create-panel");
+  tabs.forEach((tab) => {
+    tab.addEventListener("click", () => {
+      const prevTab = createModal.dataset.tabOpen;
+      if (prevTab) {
+        let content = "";
+        if (prevTab === "image") {
+          content = imgPromptInput.value;
+        } else if (prevTab === "music") {
+          content = musicPromptInput.value + "\n---\n" + musicLyricsInput.value;
+        } else if (prevTab === "voice") {
+          content = voiceTextInput.value;
+        } else if (prevTab === "search") {
+          content = searchQueryInput.value;
+        }
+        if (content.trim()) {
+          saveDraftDebounced("create", content);
+        }
+      }
+      tabs.forEach((t) => t.classList.remove("active"));
+      panels.forEach((p) => {
+        p.hidden = true;
+      });
+      tab.classList.add("active");
+      const panel = createModal.querySelector(
+        `[data-panel="${tab.dataset.tab}"]`
+      );
+      if (panel) {
+        panel.hidden = false;
+        createModal.dataset.tabOpen = tab.dataset.tab ?? "";
+        if (tab.dataset.tab === "assets") loadAssets();
+      }
+    });
+  });
+  document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState === "hidden") {
+      const chatContent = input.value;
+      if (chatContent) {
+        void flushDraft("chat", chatContent);
+      }
+    }
+  });
+  window.addEventListener("pagehide", () => {
+    const chatContent = input.value;
+    if (chatContent) {
+      void flushDraft("chat", chatContent);
+    }
+  });
+  void (async () => {
+    const draft = await fetchDraft("chat");
+    if (draft) {
+      input.value = draft;
+      handleInputChange();
+    }
+  })();
   input.focus();
   document.documentElement.dataset.hgReady = "1";
 }
@@ -3264,9 +3410,12 @@ export {
   closeLightbox,
   createApiHeaders,
   createElement,
+  deleteDraft,
   deleteProfile,
+  fetchDraft,
   fetchHistory,
   fetchProfile,
+  flushDraft,
   getToolEmoji,
   handleInputChange,
   init,
@@ -3285,6 +3434,7 @@ export {
   renderToolCardLoading,
   renderToolResult,
   renderUserMessage,
+  saveDraftDebounced,
   sendMessage,
   sendSteer,
   sendSteerMessage,

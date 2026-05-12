@@ -570,3 +570,68 @@ export function getAsset(db: Database, assetId: string): AssetRow | null {
         .prepare("SELECT * FROM assets WHERE id = ?")
         .get(assetId) as unknown as AssetRow | null;
 }
+
+// ── Drafts ─────────────────────────────────────────────────────────
+
+export interface DraftRow {
+    session_id: string;
+    draft_type: "chat" | "create";
+    content: string;
+    created_at: string;
+    updated_at: string;
+}
+
+function validateDraftType(draftType: string): draftType is "chat" | "create" {
+    return draftType === "chat" || draftType === "create";
+}
+
+function assertDraftContentSafe(content: string): void {
+    assertNoRawAssetDataInMessage(content);
+}
+
+/**
+ * Get a draft for a session.
+ * Returns null if no draft exists.
+ */
+export function getDraft(
+    db: Database,
+    sessionId: string,
+    draftType: "chat" | "create",
+): DraftRow | null {
+    return db
+        .prepare(
+            `SELECT session_id, draft_type, content, created_at, updated_at
+       FROM drafts
+       WHERE session_id = ? AND draft_type = ?`,
+        )
+        .get(sessionId, draftType) as DraftRow | null;
+}
+
+/**
+ * Save or update a draft. Creates if not exists.
+ */
+export function saveDraft(
+    db: Database,
+    sessionId: string,
+    draftType: "chat" | "create",
+    content: string,
+): void {
+    assertDraftContentSafe(content);
+    db.prepare(
+        `INSERT INTO drafts (session_id, draft_type, content, created_at, updated_at)
+         VALUES (?, ?, ?, datetime('now'), datetime('now'))
+         ON CONFLICT(session_id, draft_type) DO UPDATE SET
+           content = excluded.content,
+           updated_at = datetime('now')`,
+    ).run(sessionId, draftType, content);
+}
+
+/**
+ * Delete a draft for a session.
+ */
+export function deleteDraft(db: Database, sessionId: string, draftType: "chat" | "create"): void {
+    db.prepare("DELETE FROM drafts WHERE session_id = ? AND draft_type = ?").run(
+        sessionId,
+        draftType,
+    );
+}
