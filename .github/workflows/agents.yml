@@ -3,6 +3,7 @@ name: Agent Patrol
 on:
     schedule:
         - cron: "17 */6 * * *"
+        - cron: "47 */2 * * *"
     workflow_dispatch:
         inputs:
             agent:
@@ -13,6 +14,8 @@ on:
                     - speck-ferkel
                     - trouble-maker
                     - slop-chopper
+                    - robotnik
+                    - janitor
                     - all
 
 permissions:
@@ -23,7 +26,7 @@ env:
 
 jobs:
     speck-ferkel:
-        if: ${{ inputs.agent == 'speck-ferkel' || inputs.agent == 'all' || github.event_name == 'schedule' }}
+        if: ${{ inputs.agent == 'speck-ferkel' || inputs.agent == 'all' || github.event.schedule == '17 */6 * * *' }}
         name: 🐖 speck ferkel
         runs-on: ubuntu-latest
         timeout-minutes: 15
@@ -110,7 +113,7 @@ jobs:
                   GH_TOKEN: ${{ steps.app-token.outputs.token }}
 
     trouble-maker:
-        if: ${{ inputs.agent == 'trouble-maker' || inputs.agent == 'all' || github.event_name == 'schedule' }}
+        if: ${{ inputs.agent == 'trouble-maker' || inputs.agent == 'all' || github.event.schedule == '17 */6 * * *' }}
         name: 🔥 trouble maker
         runs-on: ubuntu-latest
         timeout-minutes: 25
@@ -196,7 +199,7 @@ jobs:
                   GH_TOKEN: ${{ steps.app-token.outputs.token }}
 
     slop-chopper:
-        if: ${{ inputs.agent == 'slop-chopper' || inputs.agent == 'all' || github.event_name == 'schedule' }}
+        if: ${{ inputs.agent == 'slop-chopper' || inputs.agent == 'all' || github.event.schedule == '17 */6 * * *' }}
         name: 🪓 slop chopper
         runs-on: ubuntu-latest
         timeout-minutes: 15
@@ -280,3 +283,118 @@ jobs:
                       --body-file /tmp/pi-agent-pr-body.md
               env:
                   GH_TOKEN: ${{ steps.app-token.outputs.token }}
+
+    robotnik:
+        if: ${{ inputs.agent == 'robotnik' || inputs.agent == 'all' || github.event.schedule == '17 */6 * * *' }}
+        name: 🤖 robotnik
+        runs-on: ubuntu-latest
+        timeout-minutes: 20
+        environment: AI api keys
+        steps:
+            - uses: actions/create-github-app-token@v2
+              id: app-token
+              with:
+                  app-id: ${{ secrets.AGENT_BOT_APP_ID }}
+                  private-key: ${{ secrets.AGENT_BOT_PRIVATE_KEY }}
+            - uses: actions/checkout@v6.0.2
+              with:
+                  token: ${{ steps.app-token.outputs.token }}
+            - uses: oven-sh/setup-bun@v2.2.0
+              with:
+                  bun-version: 1.3.13
+            - uses: actions/cache@v5.0.5
+              with:
+                  path: ~/.bun/install/cache
+                  key: ${{ runner.os }}-bun-${{ hashFiles('bun.lock') }}
+                  restore-keys: ${{ runner.os }}-bun-
+            - uses: taiki-e/install-action@v2.75.28
+              with:
+                  tool: just
+            - run: npm install -g @mariozechner/pi-coding-agent
+            - run: bun install --frozen-lockfile
+            - run: bun run --bun .github/agents/robotnik.ts
+              env:
+                  MINIMAX_API_KEY: ${{ secrets.MINIMAX_API_KEY }}
+                  GH_TOKEN: ${{ steps.app-token.outputs.token }}
+            - name: Agent report
+              if: always()
+              run: |
+                  for f in /tmp/pi-agent-findings.md /tmp/pi-agent-pr-body.md; do
+                      if [ -f "$f" ]; then
+                          echo "## $(basename "$f")" >> "$GITHUB_STEP_SUMMARY"
+                          echo >> "$GITHUB_STEP_SUMMARY"
+                          cat "$f" >> "$GITHUB_STEP_SUMMARY"
+                          echo >> "$GITHUB_STEP_SUMMARY"
+                      fi
+                  done
+            - name: Create PR if changes
+              run: |
+                  git config user.name "hallucygenie-agent-bot[bot]"
+                  git config user.email "${{ secrets.AGENT_BOT_APP_ID }}+hallucygenie-agent-bot[bot]@users.noreply.github.com"
+                  if ! git rev-parse --git-dir >/dev/null 2>&1; then
+                      echo "No git repo (act local run) — skipping PR"
+                      exit 0
+                  fi
+                  if git diff --quiet; then
+                      echo "No issue fix"
+                      exit 0
+                  fi
+                  if [ -f /tmp/pi-agent-existing-pr-branch ]; then
+                      PR_NUMBER=$(cat /tmp/pi-agent-existing-pr-number)
+                      BRANCH=$(cat /tmp/pi-agent-existing-pr-branch)
+                      just fmt || true
+                      git add -A
+                      if git diff --cached --quiet; then
+                          echo "No repair changes for existing PR #${PR_NUMBER}"
+                          exit 0
+                      fi
+                      git commit --no-verify -m "🤖 robotnik: address janitor feedback for PR #${PR_NUMBER}"
+                      git push --no-verify origin "HEAD:${BRANCH}"
+                      exit 0
+                  fi
+                  ISSUE_ID=$(cat /tmp/pi-agent-issue-id 2>/dev/null || echo "HG-ISSUE-000")
+                  ISSUE_SLUG=$(cat /tmp/pi-agent-issue-slug 2>/dev/null || echo "issue")
+                  BRANCH="agent/robotnik-${ISSUE_ID}-${ISSUE_SLUG}-$(date +%Y%m%d-%H%M%S)"
+                  git checkout -b "${BRANCH}"
+                  just fmt || true
+                  git add -A
+                  git commit --no-verify -m "🤖 robotnik: fix ${ISSUE_ID}"
+                  git push --no-verify origin "${BRANCH}"
+                  gh pr create \
+                      --base trunk \
+                      --head "${BRANCH}" \
+                      --title "🤖 robotnik: ${ISSUE_ID}" \
+                      --body-file /tmp/pi-agent-pr-body.md
+              env:
+                  GH_TOKEN: ${{ steps.app-token.outputs.token }}
+
+    janitor:
+        if: ${{ inputs.agent == 'janitor' || inputs.agent == 'all' || github.event.schedule == '47 */2 * * *' }}
+        name: 🧹 janitor
+        runs-on: ubuntu-latest
+        timeout-minutes: 20
+        environment: AI api keys
+        steps:
+            - uses: actions/create-github-app-token@v2
+              id: app-token
+              with:
+                  app-id: ${{ secrets.AGENT_BOT_APP_ID }}
+                  private-key: ${{ secrets.AGENT_BOT_PRIVATE_KEY }}
+            - uses: actions/checkout@v6.0.2
+              with:
+                  token: ${{ steps.app-token.outputs.token }}
+            - uses: oven-sh/setup-bun@v2.2.0
+              with:
+                  bun-version: 1.3.13
+            - uses: actions/cache@v5.0.5
+              with:
+                  path: ~/.bun/install/cache
+                  key: ${{ runner.os }}-bun-${{ hashFiles('bun.lock') }}
+                  restore-keys: ${{ runner.os }}-bun-
+            - run: npm install -g @mariozechner/pi-coding-agent
+            - run: bun install --frozen-lockfile
+            - name: Review bot PRs
+              run: bun run --bun .github/agents/janitor.ts
+              env:
+                  GH_TOKEN: ${{ steps.app-token.outputs.token }}
+                  ZAI_API_KEY: ${{ secrets.ZAI_API_KEY }}
