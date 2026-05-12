@@ -225,10 +225,20 @@ function normalizeCommentBody(body: string) {
         ?.trim()
         .toLowerCase();
     const hasUncheckedItems = /^- \[ \]/m.test(normalized);
+    const hasHumanOnlyUncheckedItems =
+        /^- \[ \].*(action_required|behind|rebase|merge state|PR body|metadata|manual|human)/im.test(
+            normalized,
+        );
     if (status === "ready" && hasUncheckedItems) {
         normalized = normalized.replace(
             /## Janitor status:\s*ready/i,
             "## Janitor status: needs-fix",
+        );
+    }
+    if (status === "needs-fix" && hasHumanOnlyUncheckedItems) {
+        normalized = normalized.replace(
+            /## Janitor status:\s*needs-fix/i,
+            "## Janitor status: needs-human",
         );
     }
 
@@ -359,9 +369,9 @@ ${MARKER}
 
 Decision rules:
 - waiting-for-ci: latest required checks are pending or missing.
-- needs-fix: CI failed or review/comment issues need code changes.
+- needs-fix: CI failed or review/comment issues require repo code/test changes the owning agent can make.
 - ready: CI green, branch is current/mergeable, and no actionable unresolved issues.
-- needs-human: action_required check, conflict, branch behind trunk, security/auth/deploy/workflow risk, broad unclear change, duplicate PR, or human decision needed.
+- needs-human: action_required check, conflict, branch behind trunk, unknown merge state, PR metadata/body-only issue, security/auth/deploy/workflow risk, broad unclear change, duplicate PR, or human decision needed.
 - If status is ready, every checklist item must be checked.
 - Use unchecked checklist items only for issues that block ready status.
 - Do not request or mention Copilot review.
