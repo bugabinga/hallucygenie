@@ -3,6 +3,7 @@ name: Agent Patrol
 on:
     schedule:
         - cron: "17 */6 * * *"
+        - cron: "17 3,9,15,21 * * *"
         - cron: "47 */2 * * *"
     workflow_dispatch:
         inputs:
@@ -285,7 +286,7 @@ jobs:
                   GH_TOKEN: ${{ steps.app-token.outputs.token }}
 
     robotnik:
-        if: ${{ inputs.agent == 'robotnik' || inputs.agent == 'all' || github.event.schedule == '17 */6 * * *' }}
+        if: ${{ inputs.agent == 'robotnik' || inputs.agent == 'all' || github.event.schedule == '17 */6 * * *' || github.event.schedule == '17 3,9,15,21 * * *' }}
         name: 🤖 robotnik
         runs-on: ubuntu-latest
         timeout-minutes: 20
