@@ -769,6 +769,26 @@ describe("consumeQuota", () => {
         releaseQuota(db, "image");
         assert.equal(checkQuota(db, "image").used, 0);
     });
+
+    it("consumeQuota uses a transaction (serialises concurrent calls via BEGIN IMMEDIATE)", async () => {
+        // Image limit is 100. Run many concurrent consumes and verify total never exceeds limit.
+        const limit = QUOTAS.image!;
+        const numConcurrent = 50;
+        const results = await Promise.all(
+            Array.from({ length: numConcurrent }, () => {
+                const result = consumeQuota(db, "image");
+                return Promise.resolve(result); // microtask to allow interleaving
+            }),
+        );
+
+        const successes = results.filter((r) => r !== null).length;
+        const finalUsed = checkQuota(db, "image").used;
+
+        // No more than `limit` successes total
+        assert.ok(successes <= limit, `Expected ≤${limit} successes, got ${successes}`);
+        assert.equal(finalUsed, successes, "final used count must match success count");
+        assert.equal(finalUsed, Math.min(limit, numConcurrent));
+    });
 });
 
 // ── Assets ─────────────────────────────────────────────────────────

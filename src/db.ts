@@ -484,21 +484,33 @@ export function consumeQuota(db: Database, feature: string): number | null {
     const limit = QUOTAS[feature] ?? 0;
     if (limit === 0) return 0;
 
-    const result = db
-        .prepare(
+    db.exec("BEGIN IMMEDIATE");
+    try {
+        const current = db
+            .prepare("SELECT count FROM daily_usage WHERE date = date('now') AND feature = ?")
+            .get(feature) as { count: number } | undefined;
+
+        if ((current?.count ?? 0) >= limit) {
+            db.exec("COMMIT");
+            return null;
+        }
+
+        db.prepare(
             `INSERT INTO daily_usage (date, feature, count)
              VALUES (date('now'), ?, 1)
-             ON CONFLICT(date, feature) DO UPDATE SET count = count + 1
-             WHERE daily_usage.count < ?`,
-        )
-        .run(feature, limit);
+             ON CONFLICT(date, feature) DO UPDATE SET count = count + 1`,
+        ).run(feature);
 
-    if (result.changes === 0) return null;
+        db.exec("COMMIT");
 
-    const row = db
-        .prepare("SELECT count FROM daily_usage WHERE date = date('now') AND feature = ?")
-        .get(feature) as { count: number } | undefined;
-    return row?.count ?? 1;
+        const row = db
+            .prepare("SELECT count FROM daily_usage WHERE date = date('now') AND feature = ?")
+            .get(feature) as { count: number } | undefined;
+        return row?.count ?? 1;
+    } catch (err) {
+        db.exec("ROLLBACK");
+        throw err;
+    }
 }
 
 /**

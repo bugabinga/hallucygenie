@@ -2783,4 +2783,24 @@ describe("SSE parser error paths", () => {
         assert.ok(toolResult);
         assert.equal(toolResult.prompt, "space jazz");
     });
+
+    it("compactToolResultForModel handles text result with null content", () => {
+        // Regression: if a tool returns {type:"text", content:null},
+        // accessing result.content.length threw TypeError
+        const compact = compactToolResultForModel("some_tool", {
+            type: "text",
+            content: null as unknown as string,
+        });
+        assert.equal(compact, "");
+    });
+
+    it("compactToolResultForModel truncates long text content", () => {
+        const long = "x".repeat(5000);
+        const compact = compactToolResultForModel("some_tool", {
+            type: "text",
+            content: long,
+        });
+        assert.ok(compact.length < long.length);
+        assert.ok(compact.includes("[Tool result truncated"));
+    });
 });

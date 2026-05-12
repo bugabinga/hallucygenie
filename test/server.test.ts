@@ -14,8 +14,11 @@ import {
     resolveSessionId,
     parseExplicitToolDirective,
     sanitizeAssistantMediaMarkup,
+    removeSteerQueue,
+    cleanupInactiveSteerQueues,
+    steerQueues,
 } from "../src/server.ts";
-import { MINIMAX_MODEL } from "../src/agent.ts";
+import { MINIMAX_MODEL, createSteerQueue } from "../src/agent.ts";
 import { existsSync, rmSync, mkdirSync } from "node:fs";
 import { join } from "node:path";
 import http from "node:http";
@@ -2568,5 +2571,63 @@ describe("GET /api/quota", () => {
             if (prevKey) process.env.MINIMAX_API_KEY = prevKey;
             else delete process.env.MINIMAX_API_KEY;
         }
+    });
+});
+
+// -- steerQueues memory leak prevention --
+
+describe("steerQueues cleanup", () => {
+    beforeEach(() => {
+        // Clear all steer queues before each test to ensure isolation
+        steerQueues.clear();
+    });
+
+    it("removeSteerQueue removes a queue from the Map", () => {
+        const testSid = `steer-cleanup-test-${Date.now()}`;
+
+        // Manually seed a queue (simulating what getOrCreateSteerQueue does)
+        steerQueues.set(testSid, { queue: createSteerQueue(), lastUsed: Date.now() });
+        assert.equal(steerQueues.has(testSid), true);
+
+        removeSteerQueue(testSid);
+
+        assert.equal(steerQueues.has(testSid), false);
+    });
+
+    it("cleanupInactiveSteerQueues removes queues inactive beyond TTL and leaves recent ones", () => {
+        const staleSid = `stale-queue-${Date.now()}`;
+        const freshSid = `fresh-queue-${Date.now()}`;
+        const now = Date.now();
+        const ttl = 30 * 60 * 1000; // STEER_QUEUE_TTL_MS = 30 minutes
+
+        // A queue used just now — should NOT be removed
+        steerQueues.set(freshSid, { queue: createSteerQueue(), lastUsed: now });
+        // A queue last used 31 minutes ago — should be removed (beyond TTL)
+        steerQueues.set(staleSid, { queue: createSteerQueue(), lastUsed: now - ttl - 1 });
+
+        const removed = cleanupInactiveSteerQueues();
+
+        assert.ok(removed >= 1, "Should have removed at least the stale queue");
+        assert.equal(steerQueues.has(staleSid), false, "Stale queue must be removed");
+        assert.equal(steerQueues.has(freshSid), true, "Fresh queue must still exist");
+    });
+
+    it("steerQueues Map does not grow unbounded when queues are cleaned up", () => {
+        // Simulate 100 sessions being used, then all going stale
+        const ttl = 30 * 60 * 1000;
+        const now = Date.now();
+
+        for (let i = 0; i < 100; i++) {
+            steerQueues.set(`session-${i}`, {
+                queue: createSteerQueue(),
+                lastUsed: now - ttl - 1, // all stale
+            });
+        }
+
+        assert.equal(steerQueues.size, 100);
+
+        cleanupInactiveSteerQueues();
+
+        assert.equal(steerQueues.size, 0, "All stale queues should be removed");
     });
 });

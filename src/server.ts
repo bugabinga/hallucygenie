@@ -44,16 +44,45 @@ import {
     type AgentEvent,
 } from "./agent.ts";
 
-const steerQueues = new Map<string, SteerQueue>();
+// Exported for unit testing only — do not use in production code.
+export const steerQueues = new Map<string, { queue: SteerQueue; lastUsed: number }>();
+const STEER_QUEUE_TTL_MS = 30 * 60 * 1000; // 30 minutes
 
 function getOrCreateSteerQueue(sessionId: string): SteerQueue {
-    let queue = steerQueues.get(sessionId);
-    if (!queue) {
-        queue = createSteerQueue();
-        steerQueues.set(sessionId, queue);
+    let entry = steerQueues.get(sessionId);
+    if (!entry) {
+        entry = { queue: createSteerQueue(), lastUsed: Date.now() };
+        steerQueues.set(sessionId, entry);
+    } else {
+        entry.lastUsed = Date.now();
     }
-    return queue;
+    return entry.queue;
 }
+
+export function removeSteerQueue(sessionId: string): void {
+    steerQueues.delete(sessionId);
+}
+
+/**
+ * Remove all steer queues that have been inactive for more than STEER_QUEUE_TTL_MS.
+ * Call this periodically (e.g., once per minute) to prevent unbounded Map growth.
+ */
+export function cleanupInactiveSteerQueues(): number {
+    const now = Date.now();
+    let removed = 0;
+    for (const [id, entry] of steerQueues.entries()) {
+        if (now - entry.lastUsed > STEER_QUEUE_TTL_MS) {
+            steerQueues.delete(id);
+            removed++;
+        }
+    }
+    return removed;
+}
+
+// Start periodic cleanup of inactive steer queues
+setInterval(() => {
+    cleanupInactiveSteerQueues();
+}, 60_000);
 
 // ── Types ────────────────────────────────────────────────────────────
 

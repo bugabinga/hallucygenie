@@ -363,6 +363,7 @@ export function compactToolResultForModel(toolName: string, result: ToolResult):
         return `Generated audio with ${toolName}. The UI displays it in a tool card. Do not embed audio data, audio URLs, or markdown media in your reply.`;
     }
 
+    if (result.content == null) return "";
     if (result.content.length > 4000) {
         return `${result.content.slice(0, 4000)}\n[Tool result truncated for context]`;
     }
