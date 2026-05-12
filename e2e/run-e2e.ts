@@ -13,7 +13,12 @@ import { existsSync, mkdtempSync, rmSync } from "node:fs";
 import { randomUUID } from "node:crypto";
 
 import { startServer, initDatabase, shutdown, resetStateForTesting } from "../src/server.ts";
-import { setupMinimaxMocks, cleanupMinimaxMocks } from "./minimax-mock.ts";
+import {
+    setupMinimaxMocks,
+    cleanupMinimaxMocks,
+    resetMinimaxMockCalls,
+    getMinimaxMockCalls,
+} from "./minimax-mock.ts";
 
 const CHROMIUM_CANDIDATES = [
     process.env.CHROMIUM_PATH,
@@ -636,6 +641,157 @@ async function runE2ETests(): Promise<void> {
 
             await page.click("#profile-reset");
             await expectHidden(page, "#profile-modal");
+            await page.close();
+        },
+        results,
+    );
+
+    await runTest(
+        "profile rejects raw avatar data URL through API",
+        async () => {
+            const page = await browser!.newPage();
+            await waitForApp(page, { dismissOnboarding: true });
+
+            const result = await page.evaluate(async () => {
+                const resp = await fetch("/api/profile", {
+                    method: "PUT",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                        username: "Bad Avatar",
+                        interests: "Minecraft",
+                        avatar: "data:image/png;base64,AAAA",
+                    }),
+                });
+                return { status: resp.status, body: (await resp.json()) as { error?: string } };
+            });
+
+            assertEqual(result.status, 400, "Raw avatar data URL rejected");
+            if (!/avatar/i.test(result.body.error ?? "")) {
+                throw new Error(`Expected avatar validation error, got ${result.body.error}`);
+            }
+
+            await page.close();
+        },
+        results,
+    );
+
+    await runTest(
+        "profile generates avatar asset, persists, and uses it in chat",
+        async () => {
+            const page = await browser!.newPage();
+            await waitForApp(page, { dismissOnboarding: true });
+            resetMinimaxMockCalls();
+
+            const initialProfileLoad = page.waitForResponse(
+                (res) => res.url().includes("/api/profile") && res.request().method() === "GET",
+            );
+            await page.click("#profile-btn");
+            await expectVisible(page, "#profile-modal");
+            await initialProfileLoad;
+
+            await page.fill("#profile-username", "GamerKid");
+            await page.fill("#profile-interests", "Minecraft build battles");
+            await page.fill("#profile-hates", "scary gore");
+            await page.fill("#profile-favorites", "blue fire and pixel art");
+            await expectEnabled(page.locator("#profile-generate"));
+
+            const generateResponse = page.waitForResponse(
+                (res) =>
+                    res.url().includes("/api/profile/avatar/generate") &&
+                    res.request().method() === "POST",
+            );
+            await page.click("#profile-generate");
+            const resp = await generateResponse;
+            assertEqual(resp.status(), 200, "Avatar generation response");
+            await expectEnabled(page.locator("#profile-generate"));
+
+            await expectVisible(page, "#profile-avatar-img");
+            const assetId = await page.locator("#profile-avatar-asset").inputValue();
+            if (!/^asset_[0-9a-f-]+$/i.test(assetId))
+                throw new Error(`Invalid asset id: ${assetId}`);
+            const previewSrc =
+                (await page.locator("#profile-avatar-img").getAttribute("src")) ?? "";
+            if (!previewSrc.includes(`/asset/${assetId}`)) {
+                throw new Error(`Preview did not use generated asset: ${previewSrc}`);
+            }
+            assertEqual(
+                await page.locator("#profile-btn").getAttribute("data-avatar"),
+                "🖼️",
+                "Profile button shows image avatar",
+            );
+
+            const profile = await page.evaluate(async () => {
+                return (await (await fetch("/api/profile")).json()) as {
+                    username: string;
+                    avatar: { type: string; value: string };
+                };
+            });
+            assertEqual(profile.username, "GamerKid", "Generated avatar kept profile username");
+            assertEqual(profile.avatar.type, "asset", "Generated avatar profile type");
+            assertEqual(profile.avatar.value, assetId, "Generated avatar profile asset id");
+
+            const assets = await page.evaluate(async () => {
+                return (await (await fetch("/assets")).json()) as {
+                    assets: Array<{ id: string; type: string; tool_name: string; url: string }>;
+                };
+            });
+            const asset = assets.assets.find((item) => item.id === assetId);
+            if (!asset) throw new Error(`Generated avatar asset missing from /assets: ${assetId}`);
+            assertEqual(asset.type, "image", "Generated avatar asset type");
+            assertEqual(asset.tool_name, "generate_image", "Generated avatar tool name");
+            assertEqual(asset.url, `/asset/${assetId}`, "Generated avatar asset URL");
+
+            const imageCalls = getMinimaxMockCalls().filter((call) =>
+                call.url.includes("/v1/image_generation"),
+            );
+            assertEqual(imageCalls.length, 1, "MiniMax image generation call count");
+            const payload = JSON.parse(imageCalls[0].body) as {
+                prompt: string;
+                aspect_ratio: string;
+            };
+            assertEqual(payload.aspect_ratio, "1:1", "Avatar aspect ratio");
+            if (!payload.prompt.includes("GamerKid") || !payload.prompt.includes("Minecraft")) {
+                throw new Error(`Avatar prompt missed profile context: ${payload.prompt}`);
+            }
+            if (/data:image|base64/i.test(payload.prompt)) {
+                throw new Error("Avatar prompt leaked raw asset data");
+            }
+
+            await page.click("#profile-close");
+            await expectHidden(page, "#profile-modal");
+            await page.evaluate(() => localStorage.clear());
+            await page.reload();
+            await waitForAppReady(page);
+            await page.evaluate(() => {
+                localStorage.setItem("hg_onboarding_done", "1");
+                const onboarding = document.getElementById("onboarding");
+                if (onboarding) onboarding.hidden = true;
+            });
+
+            const reloadedProfileLoad = page.waitForResponse(
+                (res) => res.url().includes("/api/profile") && res.request().method() === "GET",
+            );
+            await page.click("#profile-btn");
+            await expectVisible(page, "#profile-modal");
+            await reloadedProfileLoad;
+            assertEqual(
+                await page.locator("#profile-avatar-asset").inputValue(),
+                assetId,
+                "Generated avatar asset persisted after reload",
+            );
+            await expectVisible(page, "#profile-avatar-img");
+            await page.click("#profile-close");
+            await expectHidden(page, "#profile-modal");
+
+            await page.fill("#chat-input", "Show my avatar test");
+            await page.press("#chat-input", "Enter");
+            const userAvatar = page.locator(".message--user .profile-avatar-img").first();
+            await userAvatar.waitFor({ state: "attached", timeout: 5000 });
+            const userAvatarSrc = (await userAvatar.getAttribute("src")) ?? "";
+            if (!userAvatarSrc.includes(`/asset/${assetId}`)) {
+                throw new Error(`User bubble did not use generated avatar: ${userAvatarSrc}`);
+            }
+
             await page.close();
         },
         results,

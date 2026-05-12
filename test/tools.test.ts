@@ -39,9 +39,13 @@ function jsonResponse(data: unknown, status = 200): Response {
 // ── Tool definitions ─────────────────────────────────────────────────
 
 describe("getToolDefinitions", () => {
-    it("returns six tool definitions", () => {
+    it("returns five live-safe tool definitions", () => {
         const defs = getToolDefinitions();
-        assert.equal(defs.length, 6);
+        assert.equal(defs.length, 5);
+        assert.equal(
+            defs.some((tool) => tool.name === "analyze_image"),
+            false,
+        );
     });
 
     it("defines generate_image with correct schema", () => {
@@ -57,6 +61,11 @@ describe("getToolDefinitions", () => {
         assert.equal(schema.type, "object");
         assert.ok(schema.properties.prompt);
         assert.ok(schema.properties.aspect_ratio);
+        assert.ok(schema.properties.n);
+        assert.ok(schema.properties.seed);
+        assert.ok(schema.properties.width);
+        assert.ok(schema.properties.height);
+        assert.ok(schema.properties.prompt_optimizer);
         assert.deepEqual(schema.required, ["prompt"]);
     });
 
@@ -231,6 +240,34 @@ describe("generateImage", () => {
         await generateImage({ prompt: "wide cat", aspect_ratio: "16:9" }, API_KEY);
         const body = JSON.parse(capturedBody);
         assert.equal(body.aspect_ratio, "16:9");
+    });
+
+    it("passes and clamps optional image generation params", async () => {
+        let capturedBody = "";
+        globalThis.fetch = async (_url: string | URL | Request, init?: RequestInit) => {
+            capturedBody = init!.body as string;
+            return jsonResponse({ data: { image_urls: ["https://example.com/custom.png"] } });
+        };
+
+        await generateImage(
+            {
+                prompt: "custom cat",
+                aspect_ratio: "21:9",
+                n: 12,
+                seed: 123,
+                width: 517,
+                height: 2055,
+                prompt_optimizer: false,
+            },
+            API_KEY,
+        );
+        const body = JSON.parse(capturedBody);
+        assert.equal(body.aspect_ratio, "21:9");
+        assert.equal(body.n, 9);
+        assert.equal(body.seed, 123);
+        assert.equal(body.width, 512);
+        assert.equal(body.height, 2048);
+        assert.equal(body.prompt_optimizer, false);
     });
 
     it("handles API error response", async () => {
@@ -1287,13 +1324,6 @@ describe("getToolDefinitions schema content", () => {
         assert.ok(tool, "web_search tool should exist");
         assert.ok(tool.input_schema.properties?.query, "should have query property");
         assert.equal(tool.input_schema.required?.[0], "query");
-    });
-
-    it("analyze_image schema has required image_url field", async () => {
-        const tool = getToolDefinitions().find((t) => t.name === "analyze_image");
-        assert.ok(tool, "analyze_image tool should exist");
-        assert.ok(tool.input_schema.properties?.image_url, "should have image_url property");
-        assert.equal(tool.input_schema.required?.[0], "image_url");
     });
 
     it("web_search returns error on network failure", async () => {

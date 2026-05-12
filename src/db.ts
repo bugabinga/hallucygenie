@@ -185,7 +185,9 @@ function normalizeProfileText(value: unknown, field: string, max: number): strin
 }
 
 function normalizeProfileAvatar(value: unknown): UserProfile["avatar"] {
-    if (!value || typeof value !== "object") return DEFAULT_USER_PROFILE.avatar;
+    if (value === undefined || value === null) return DEFAULT_USER_PROFILE.avatar;
+    if (typeof value !== "object" || Array.isArray(value))
+        throw new Error("avatar must be an object");
     const avatar = value as Record<string, unknown>;
     if (avatar.type !== "emoji" && avatar.type !== "asset") throw new Error("avatar type invalid");
     if (typeof avatar.value !== "string") throw new Error("avatar value must be a string");

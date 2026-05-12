@@ -24,6 +24,7 @@ import {
     MINIMAX_BASE,
 } from "../src/agent.ts";
 import type { AgentEvent, OnBeforeTool } from "../src/agent.ts";
+import { getToolDefinitions } from "../src/tools.ts";
 
 // ── Test helpers ─────────────────────────────────────────────────────
 
@@ -506,6 +507,30 @@ describe("runAgentLoop", () => {
         const textEvents = events.filter((e) => e.type === "text");
         assert.equal(textEvents.length, 1);
         assert.equal(textEvents[0].content, "Hello world");
+    });
+
+    it("handles thinking-only response with a visible fallback", async () => {
+        const events_arr: string[] = [
+            messageStart(),
+            contentBlockStart(0, "thinking"),
+            contentBlockDelta(0, "thinking_delta", "plan only"),
+            contentBlockStop(0),
+            messageDelta("end_turn"),
+            messageStop(),
+        ];
+
+        mockAnthropic([anthropicResponse(events_arr)]);
+
+        const { events, onEvent } = collectEvents();
+        const messages = await runAgentLoop([{ role: "user", content: "hi" }], "test-key", onEvent);
+
+        const textEvents = events.filter((e) => e.type === "text");
+        assert.equal(textEvents.length, 1);
+        assert.match(textEvents[0].content, /empty final answer/i);
+        assert.equal(messages.length, 2);
+        assert.equal(messages[1].role, "assistant");
+        assert.match(messages[1].content, /empty final answer/i);
+        assert.equal(messages[1].thinking, "plan only");
     });
 
     it("handles empty response (no content, no tools)", async () => {
@@ -1845,7 +1870,11 @@ describe("Prompt Caching", () => {
 
         const parsed = JSON.parse(capturedBody);
         assert.ok(parsed.tools, "should have tools");
-        assert.equal(parsed.tools.length, 6, "should have 6 tools");
+        assert.equal(
+            parsed.tools.length,
+            getToolDefinitions().length,
+            "should include every live tool",
+        );
 
         // All but the last tool should NOT have cache_control
         for (const tool of parsed.tools.slice(0, -1)) {

@@ -318,16 +318,19 @@ export async function handleChat(
 
     const lastUserMsg = validation.body.messages[validation.body.messages.length - 1];
 
+    const explicitTool = parseExplicitToolDirective(lastUserMsg.content);
+    if (explicitTool) {
+        if (sessionId && countSessionUserMessages(database, sessionId) === 0) {
+            autoNameDefaultSession(database, sessionId, explicitTool.prompt ?? explicitTool.name);
+        }
+        return handleExplicitToolDirective(explicitTool, apiKey, database, sessionId);
+    }
+
     // Save user message to DB
     if (sessionId) {
         const userCount = countSessionUserMessages(database, sessionId);
         saveMessage(database, sessionId, "user", lastUserMsg.content);
         if (userCount === 0) autoNameDefaultSession(database, sessionId, lastUserMsg.content);
-    }
-
-    const explicitTool = parseExplicitToolDirective(lastUserMsg.content);
-    if (explicitTool) {
-        return handleExplicitToolDirective(explicitTool, apiKey, database, sessionId);
     }
 
     // Apply context window trimming to avoid blowing the token limit
@@ -347,6 +350,7 @@ export async function handleChat(
     const encoder = new TextEncoder();
     const savedToolResults = new Map<string, ToolResult>();
     const consumedQuotaByToolId = new Map<string, { feature: string; amount: number }>();
+    let assistantTurnStarts = 0;
 
     // Run agent loop in background, streaming events to SSE
     (async () => {
@@ -358,6 +362,12 @@ export async function handleChat(
                     // Convert agent events to SSE for the browser
                     switch (event.type) {
                         case "thinking_reset": {
+                            if (assistantTurnStarts > 0) {
+                                await writer.write(
+                                    encoder.encode("event: assistant_turn_start\ndata: {}\n\n"),
+                                );
+                            }
+                            assistantTurnStarts++;
                             break;
                         }
                         case "thinking": {
@@ -554,7 +564,14 @@ export function parseExplicitToolDirective(content: string): ExplicitToolDirecti
     if (!value) return null;
 
     const allowedParams: Record<ExplicitToolDirective["name"], Set<string>> = {
-        generate_image: new Set(["aspect_ratio"]),
+        generate_image: new Set([
+            "aspect_ratio",
+            "n",
+            "seed",
+            "width",
+            "height",
+            "prompt_optimizer",
+        ]),
         generate_music: new Set(["lyrics"]),
         text_to_speech: new Set(["voice_id", "speed", "volume", "pitch"]),
         generate_lyrics: new Set(["mode", "lyrics", "title"]),

@@ -16,7 +16,12 @@ export interface ToolResult {
 
 export interface GenerateImageOptions {
     prompt: string;
-    aspect_ratio?: "1:1" | "16:9" | "9:16" | "4:3";
+    aspect_ratio?: "1:1" | "16:9" | "4:3" | "3:2" | "2:3" | "3:4" | "9:16" | "21:9";
+    n?: number;
+    seed?: number;
+    width?: number;
+    height?: number;
+    prompt_optimizer?: boolean;
 }
 
 export interface TextToSpeechOptions {
@@ -68,9 +73,14 @@ export function getToolDefinitions(): ToolDefinition[] {
                     },
                     aspect_ratio: {
                         type: "string",
-                        enum: ["1:1", "16:9", "9:16", "4:3"],
+                        enum: ["1:1", "16:9", "4:3", "3:2", "2:3", "3:4", "9:16", "21:9"],
                         description: "Output aspect ratio. Defaults to 16:9 for Create UI.",
                     },
+                    n: { type: "number", minimum: 1, maximum: 9 },
+                    seed: { type: "number" },
+                    width: { type: "number", minimum: 512, maximum: 2048 },
+                    height: { type: "number", minimum: 512, maximum: 2048 },
+                    prompt_optimizer: { type: "boolean" },
                 },
                 required: ["prompt"],
             },
@@ -176,20 +186,6 @@ export function getToolDefinitions(): ToolDefinition[] {
                 required: ["query"],
             },
         },
-        {
-            name: "analyze_image",
-            description: "Analyze or describe an image from a URL. Returns a text description.",
-            input_schema: {
-                type: "object",
-                properties: {
-                    image_url: {
-                        type: "string",
-                        description: "URL of the image to analyze",
-                    },
-                },
-                required: ["image_url"],
-            },
-        },
     ];
 }
 
@@ -210,6 +206,11 @@ export async function executeTool(
                 {
                     prompt: args.prompt as string,
                     aspect_ratio: validateAspectRatio(args.aspect_ratio),
+                    n: args.n as number | undefined,
+                    seed: args.seed as number | undefined,
+                    width: args.width as number | undefined,
+                    height: args.height as number | undefined,
+                    prompt_optimizer: args.prompt_optimizer as boolean | undefined,
                 },
                 apiKey,
             );
@@ -254,9 +255,21 @@ export async function executeTool(
 // ── Tool implementations ─────────────────────────────────────────────
 
 function validateAspectRatio(value: unknown): GenerateImageOptions["aspect_ratio"] | undefined {
-    return value === "1:1" || value === "16:9" || value === "9:16" || value === "4:3"
+    return value === "1:1" ||
+        value === "16:9" ||
+        value === "4:3" ||
+        value === "3:2" ||
+        value === "2:3" ||
+        value === "3:4" ||
+        value === "9:16" ||
+        value === "21:9"
         ? value
         : undefined;
+}
+
+function clampIntegerParam(value: unknown, min: number, max: number): number | undefined {
+    if (typeof value !== "number" || !Number.isInteger(value)) return undefined;
+    return Math.min(max, Math.max(min, value));
 }
 
 function clampAudioParam(value: unknown, min: number, max: number): number | undefined {
@@ -319,6 +332,16 @@ export async function generateImage(
         };
         const aspectRatio = validateAspectRatio(options.aspect_ratio);
         if (aspectRatio) payload.aspect_ratio = aspectRatio;
+        const n = clampIntegerParam(options.n, 1, 9);
+        if (n !== undefined) payload.n = n;
+        if (typeof options.seed === "number" && Number.isInteger(options.seed))
+            payload.seed = options.seed;
+        const width = clampIntegerParam(options.width, 512, 2048);
+        const height = clampIntegerParam(options.height, 512, 2048);
+        if (width !== undefined) payload.width = width - (width % 8);
+        if (height !== undefined) payload.height = height - (height % 8);
+        if (typeof options.prompt_optimizer === "boolean")
+            payload.prompt_optimizer = options.prompt_optimizer;
 
         const resp = await fetch(`${MINIMAX_BASE}/v1/image_generation`, {
             method: "POST",

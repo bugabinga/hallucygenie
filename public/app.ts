@@ -46,7 +46,7 @@ interface CreateDraft {
     selectedTab: string;
     image: { prompt: string; aspect_ratio: string };
     music: { prompt: string; lyrics: string };
-    voice: { text: string; speed: string };
+    voice: { text: string; speed: string; voice_id: string; volume: string; pitch: string };
     search: { query: string };
 }
 
@@ -753,6 +753,7 @@ let thinkingBuffer = ""; // accumulated thinking text from thinking events
 let lyricsWriteResolve: ((value: string) => void) | null = null; // set when "Write lyrics" is active
 let capturedLyricsText: string | null = null; // lyrics result from generate_lyrics tool
 let streamHadError = false;
+let streamHadToolResult = false;
 let clearDraftAfterDone: "chat" | "create" | null = null;
 let refreshSessionsAfterDone: (() => void) | null = null;
 
@@ -840,6 +841,17 @@ function ensureAssistantContent(): HTMLElement {
 function handleSSEEvent(event: SSEEvent): void {
     const { event: eventType, data } = event;
 
+    if (eventType === "assistant_turn_start") {
+        if (currentAssistantContent && currentAssistantContent.childNodes.length > 0) {
+            currentAssistantEl = null;
+            currentAssistantContent = null;
+            activeToolCards.clear();
+            rawTextBuffer = "";
+            thinkingBuffer = "";
+        }
+        return;
+    }
+
     // Done signal
     if (data === "[DONE]") {
         finishStreaming();
@@ -910,6 +922,7 @@ function handleSSEEvent(event: SSEEvent): void {
             activeToolCards.delete(parsed.id);
             scrollToBottom();
             // Refresh quota badge and assets tab after tool execution
+            streamHadToolResult = true;
             updateQuotaBadge();
             if (($("#create-modal") as HTMLElement)?.dataset.tabOpen === "assets") loadAssets();
         } catch {
@@ -1007,8 +1020,10 @@ function finishStreaming(): void {
     thinkingBuffer = "";
     if (clearDraftAfterDone && !streamHadError) void clearDraft(clearDraftAfterDone);
     if (!streamHadError) refreshSessionsAfterDone?.();
+    if (streamHadToolResult) void updateQuotaBadge();
     clearDraftAfterDone = null;
     streamHadError = false;
+    streamHadToolResult = false;
     setStreamingUI(false);
 }
 
@@ -1245,7 +1260,13 @@ function defaultCreateDraft(): CreateDraft {
         selectedTab: "image",
         image: { prompt: "", aspect_ratio: "16:9" },
         music: { prompt: "", lyrics: "" },
-        voice: { text: "", speed: "1.0" },
+        voice: {
+            text: "",
+            speed: "1.0",
+            voice_id: "English_expressive_narrator",
+            volume: "",
+            pitch: "",
+        },
         search: { query: "" },
     };
 }
@@ -1264,6 +1285,12 @@ function createDraftFromDom(): CreateDraft {
         voice: {
             text: ($("#voice-text") as HTMLTextAreaElement).value,
             speed: ($("#voice-speed") as HTMLSelectElement).value,
+            voice_id:
+                (document.querySelector("#voice-id") as HTMLInputElement | null)?.value ??
+                "English_expressive_narrator",
+            volume:
+                (document.querySelector("#voice-volume") as HTMLInputElement | null)?.value ?? "",
+            pitch: (document.querySelector("#voice-pitch") as HTMLInputElement | null)?.value ?? "",
         },
         search: { query: ($("#search-query") as HTMLTextAreaElement).value },
     };
@@ -1276,6 +1303,12 @@ function applyCreateDraft(draft: CreateDraft): void {
     ($("#music-lyrics") as HTMLTextAreaElement).value = draft.music.lyrics;
     ($("#voice-text") as HTMLTextAreaElement).value = draft.voice.text;
     ($("#voice-speed") as HTMLSelectElement).value = draft.voice.speed;
+    const voiceId = document.querySelector("#voice-id") as HTMLInputElement | null;
+    const voiceVolume = document.querySelector("#voice-volume") as HTMLInputElement | null;
+    const voicePitch = document.querySelector("#voice-pitch") as HTMLInputElement | null;
+    if (voiceId) voiceId.value = draft.voice.voice_id ?? "English_expressive_narrator";
+    if (voiceVolume) voiceVolume.value = draft.voice.volume ?? "";
+    if (voicePitch) voicePitch.value = draft.voice.pitch ?? "";
     ($("#search-query") as HTMLTextAreaElement).value = draft.search.query;
 }
 
@@ -1771,6 +1804,9 @@ export function init(): void {
     const musicLyricsInput = $("#music-lyrics") as HTMLTextAreaElement;
     const voiceTextInput = $("#voice-text") as HTMLTextAreaElement;
     const voiceSpeedInput = $("#voice-speed") as HTMLSelectElement;
+    const voiceIdInput = document.querySelector<HTMLInputElement>("#voice-id");
+    const voiceVolumeInput = document.querySelector<HTMLInputElement>("#voice-volume");
+    const voicePitchInput = document.querySelector<HTMLInputElement>("#voice-pitch");
     const searchQueryInput = $("#search-query") as HTMLTextAreaElement;
     const persistCreateDraft = debounce(() => void putDraft("create", createDraftFromDom()), 200);
     const persistChatDraft = debounce(() => void putDraft("chat", { text: input.value }), 200);
@@ -1788,6 +1824,10 @@ export function init(): void {
         } else if (item.kind === "voice") {
             voiceTextInput.value = String(inputData.text ?? "");
             voiceSpeedInput.value = String(inputData.speed ?? "1.0");
+            if (voiceIdInput)
+                voiceIdInput.value = String(inputData.voice_id ?? "English_expressive_narrator");
+            if (voiceVolumeInput) voiceVolumeInput.value = String(inputData.volume ?? "");
+            if (voicePitchInput) voicePitchInput.value = String(inputData.pitch ?? "");
             setCreateTab("voice");
         } else if (item.kind === "search") {
             searchQueryInput.value = String(inputData.query ?? inputData.prompt ?? "");
@@ -1858,11 +1898,18 @@ export function init(): void {
         musicLyricsInput,
         voiceTextInput,
         voiceSpeedInput,
+        voiceIdInput,
+        voiceVolumeInput,
+        voicePitchInput,
         searchQueryInput,
-    ].forEach((el) => {
-        el.addEventListener("input", persistCreateDraft);
-        el.addEventListener("change", persistCreateDraft);
-    });
+    ]
+        .filter((el): el is HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement =>
+            Boolean(el),
+        )
+        .forEach((el) => {
+            el.addEventListener("input", persistCreateDraft);
+            el.addEventListener("change", persistCreateDraft);
+        });
     input.addEventListener("input", persistChatDraft);
     window.addEventListener("visibilitychange", () => {
         if (document.visibilityState === "hidden") {
@@ -1928,10 +1975,14 @@ export function init(): void {
         e.preventDefault();
         const text = voiceTextInput.value.trim();
         const speed = voiceSpeedInput.value;
+        const params = [`speed=${speed}`];
+        if (voiceIdInput?.value.trim()) params.push(`voice_id=${voiceIdInput.value.trim()}`);
+        if (voiceVolumeInput?.value.trim()) params.push(`volume=${voiceVolumeInput.value.trim()}`);
+        if (voicePitchInput?.value.trim()) params.push(`pitch=${voicePitchInput.value.trim()}`);
         if (text) {
             closeCreateModal();
             sendMessage(
-                `Use text_to_speech with text: ${text}\nTool params: speed=${speed}`,
+                `Use text_to_speech with text: ${text}\nTool params: ${params.join(",")}`,
                 "create",
             );
         }

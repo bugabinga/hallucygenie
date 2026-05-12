@@ -17,6 +17,7 @@ import {
     listSessions,
     renameSession,
     archiveSession,
+    autoNameSession,
     setActiveSessionId,
     getUserProfile,
     saveUserProfile,
@@ -1003,5 +1004,101 @@ describe("saveAsset + getAssets + getAsset", () => {
         // Newest first (by created_at DESC)
         assert.equal(assets[0].id, id2);
         assert.equal(assets[1].id, id1);
+    });
+});
+
+describe("Mutation-strength DB invariants", () => {
+    it("autoNameSession only allows default sessions", () => {
+        const db = freshDb();
+        const session = createSession(db, undefined, "Manual");
+        renameSession(db, session.id, "Manual Name");
+        assert.throws(
+            () => autoNameSession(db, session.id, "Auto Name"),
+            /session not auto-nameable/,
+        );
+        db.close();
+    });
+
+    it("rejects invalid draft kinds", () => {
+        const db = freshDb();
+        const session = createSession(db);
+        assert.throws(() => saveDraft(db, session.id, "bad", { text: "x" }), /invalid draft kind/);
+        db.close();
+    });
+
+    it("validates tool history status and maps kinds", () => {
+        const cases = [
+            ["generate_image", "image"],
+            ["analyze_image", "image"],
+            ["generate_music", "music"],
+            ["generate_lyrics", "music"],
+            ["text_to_speech", "voice"],
+            ["web_search", "search"],
+            ["unknown", "other"],
+        ] as const;
+        for (const [tool_name, kind] of cases) {
+            const db = freshDb();
+            const session = createSession(db);
+            recordToolInputHistory(db, {
+                session_id: session.id,
+                origin: "agent",
+                tool_name,
+                input: { prompt: tool_name },
+                status: "succeeded",
+            });
+            assert.equal(
+                listToolInputHistory(db, session.id, { kind }).at(0)?.tool_name,
+                tool_name,
+            );
+            db.close();
+        }
+        const db = freshDb();
+        const session = createSession(db);
+        assert.throws(
+            () =>
+                recordToolInputHistory(db, {
+                    session_id: session.id,
+                    origin: "agent",
+                    tool_name: "generate_image",
+                    input: {},
+                    status: "done",
+                }),
+            /invalid history status/,
+        );
+        db.close();
+    });
+
+    it("clamps create history pagination", () => {
+        const db = freshDb();
+        const session = createSession(db);
+        for (let i = 0; i < 60; i++) {
+            recordToolInputHistory(db, {
+                session_id: session.id,
+                origin: "agent",
+                tool_name: "web_search",
+                input: { query: String(i) },
+                status: "succeeded",
+            });
+        }
+        assert.equal(listToolInputHistory(db, session.id, { limit: 999 }).length, 50);
+        assert.equal(listToolInputHistory(db, session.id, { limit: -5 }).length, 1);
+        assert.equal(listToolInputHistory(db, session.id, { limit: 1, offset: -10 }).length, 1);
+        db.close();
+    });
+
+    it("rejects invalid quota amounts and exact oversized amounts", () => {
+        const db = freshDb();
+        assert.throws(() => consumeQuota(db, "image", 0), /quota amount invalid/);
+        assert.throws(() => consumeQuota(db, "image", 1.5), /quota amount invalid/);
+        assert.equal(consumeQuota(db, "image", QUOTAS.image + 1), null);
+        assert.equal(consumeQuota(db, "image", QUOTAS.image), QUOTAS.image);
+        db.close();
+    });
+
+    it("raw asset guard catches compact base64 payloads", () => {
+        assert.throws(
+            () => assertNoRawAssetDataInMessage(`data:image/png;base64,${"A".repeat(4096)}`),
+            /raw asset data/,
+        );
     });
 });

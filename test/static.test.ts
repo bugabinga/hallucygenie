@@ -245,6 +245,11 @@ describe("index.html health", () => {
         assert.match(styleCss, /@media \(prefers-reduced-motion: reduce\)/);
         assert.match(styleCss, /\.stream-chunk \{[^}]*animation: stream-chunk-in/);
         assert.match(styleCss, /\.stream-chunk \{[^}]*display: inline-block;/);
+        assert.match(
+            styleCss,
+            /@keyframes stream-chunk-in \{[\s\S]*clip-path: inset\(0 100% 0 0\)/,
+        );
+        assert.match(styleCss, /\.stream-chunk \{[^}]*steps\(8, end\)/);
         assert.doesNotMatch(styleCss, /\.stream-char/);
     });
 

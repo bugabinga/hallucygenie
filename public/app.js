@@ -2139,9 +2139,8 @@ marked.use({
     },
     image({ href, title, text }) {
       const safeHref = escapeHtml(href);
-      const safeAlt = escapeHtml(text || "Generated image");
-      const titleAttr = title ? ` title="${escapeHtml(title)}"` : "";
-      return `<img class="markdown-image" src="${safeHref}" alt="${safeAlt}"${titleAttr} loading="lazy" referrerpolicy="no-referrer">`;
+      const safeText = escapeHtml(text || title || "image");
+      return `<a href="${safeHref}" target="_blank" rel="noopener nofollow">[image: ${safeText}]</a>`;
     },
     html({ text }) {
       return escapeHtml(text);
@@ -2710,6 +2709,7 @@ var thinkingBuffer = "";
 var lyricsWriteResolve = null;
 var capturedLyricsText = null;
 var streamHadError = false;
+var streamHadToolResult = false;
 var clearDraftAfterDone = null;
 var refreshSessionsAfterDone = null;
 async function streamChat(messages, onEvent) {
@@ -2775,6 +2775,16 @@ function ensureAssistantContent() {
 }
 function handleSSEEvent(event) {
   const { event: eventType, data } = event;
+  if (eventType === "assistant_turn_start") {
+    if (currentAssistantContent && currentAssistantContent.childNodes.length > 0) {
+      currentAssistantEl = null;
+      currentAssistantContent = null;
+      activeToolCards.clear();
+      rawTextBuffer = "";
+      thinkingBuffer = "";
+    }
+    return;
+  }
   if (data === "[DONE]") {
     finishStreaming();
     return;
@@ -2826,6 +2836,7 @@ function handleSSEEvent(event) {
       }
       activeToolCards.delete(parsed.id);
       scrollToBottom();
+      streamHadToolResult = true;
       updateQuotaBadge();
       if ($("#create-modal")?.dataset.tabOpen === "assets") loadAssets();
     } catch {
@@ -2899,8 +2910,10 @@ function finishStreaming() {
   thinkingBuffer = "";
   if (clearDraftAfterDone && !streamHadError) void clearDraft(clearDraftAfterDone);
   if (!streamHadError) refreshSessionsAfterDone?.();
+  if (streamHadToolResult) void updateQuotaBadge();
   clearDraftAfterDone = null;
   streamHadError = false;
+  streamHadToolResult = false;
   setStreamingUI(false);
 }
 function setLyricsWriteResolve(fn) {
@@ -3070,7 +3083,13 @@ function defaultCreateDraft() {
     selectedTab: "image",
     image: { prompt: "", aspect_ratio: "16:9" },
     music: { prompt: "", lyrics: "" },
-    voice: { text: "", speed: "1.0" },
+    voice: {
+      text: "",
+      speed: "1.0",
+      voice_id: "English_expressive_narrator",
+      volume: "",
+      pitch: ""
+    },
     search: { query: "" }
   };
 }
@@ -3087,7 +3106,10 @@ function createDraftFromDom() {
     },
     voice: {
       text: $("#voice-text").value,
-      speed: $("#voice-speed").value
+      speed: $("#voice-speed").value,
+      voice_id: document.querySelector("#voice-id")?.value ?? "English_expressive_narrator",
+      volume: document.querySelector("#voice-volume")?.value ?? "",
+      pitch: document.querySelector("#voice-pitch")?.value ?? ""
     },
     search: { query: $("#search-query").value }
   };
@@ -3099,6 +3121,12 @@ function applyCreateDraft(draft) {
   $("#music-lyrics").value = draft.music.lyrics;
   $("#voice-text").value = draft.voice.text;
   $("#voice-speed").value = draft.voice.speed;
+  const voiceId = document.querySelector("#voice-id");
+  const voiceVolume = document.querySelector("#voice-volume");
+  const voicePitch = document.querySelector("#voice-pitch");
+  if (voiceId) voiceId.value = draft.voice.voice_id ?? "English_expressive_narrator";
+  if (voiceVolume) voiceVolume.value = draft.voice.volume ?? "";
+  if (voicePitch) voicePitch.value = draft.voice.pitch ?? "";
   $("#search-query").value = draft.search.query;
 }
 function isCreateDraft(value) {
@@ -3499,6 +3527,9 @@ function init() {
   const musicLyricsInput = $("#music-lyrics");
   const voiceTextInput = $("#voice-text");
   const voiceSpeedInput = $("#voice-speed");
+  const voiceIdInput = document.querySelector("#voice-id");
+  const voiceVolumeInput = document.querySelector("#voice-volume");
+  const voicePitchInput = document.querySelector("#voice-pitch");
   const searchQueryInput = $("#search-query");
   const persistCreateDraft = debounce(() => void putDraft("create", createDraftFromDom()), 200);
   const persistChatDraft = debounce(() => void putDraft("chat", { text: input.value }), 200);
@@ -3515,6 +3546,10 @@ function init() {
     } else if (item.kind === "voice") {
       voiceTextInput.value = String(inputData.text ?? "");
       voiceSpeedInput.value = String(inputData.speed ?? "1.0");
+      if (voiceIdInput)
+        voiceIdInput.value = String(inputData.voice_id ?? "English_expressive_narrator");
+      if (voiceVolumeInput) voiceVolumeInput.value = String(inputData.volume ?? "");
+      if (voicePitchInput) voicePitchInput.value = String(inputData.pitch ?? "");
       setCreateTab("voice");
     } else if (item.kind === "search") {
       searchQueryInput.value = String(inputData.query ?? inputData.prompt ?? "");
@@ -3581,8 +3616,13 @@ function init() {
     musicLyricsInput,
     voiceTextInput,
     voiceSpeedInput,
+    voiceIdInput,
+    voiceVolumeInput,
+    voicePitchInput,
     searchQueryInput
-  ].forEach((el) => {
+  ].filter(
+    (el) => Boolean(el)
+  ).forEach((el) => {
     el.addEventListener("input", persistCreateDraft);
     el.addEventListener("change", persistCreateDraft);
   });
@@ -3647,11 +3687,15 @@ Tool params: lyrics=${lyrics}`;
     e.preventDefault();
     const text = voiceTextInput.value.trim();
     const speed = voiceSpeedInput.value;
+    const params = [`speed=${speed}`];
+    if (voiceIdInput?.value.trim()) params.push(`voice_id=${voiceIdInput.value.trim()}`);
+    if (voiceVolumeInput?.value.trim()) params.push(`volume=${voiceVolumeInput.value.trim()}`);
+    if (voicePitchInput?.value.trim()) params.push(`pitch=${voicePitchInput.value.trim()}`);
     if (text) {
       closeCreateModal();
       sendMessage(
         `Use text_to_speech with text: ${text}
-Tool params: speed=${speed}`,
+Tool params: ${params.join(",")}`,
         "create"
       );
     }

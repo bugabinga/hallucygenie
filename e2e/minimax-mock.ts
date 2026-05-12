@@ -4,6 +4,14 @@
 const MINIMAX_BASE = "https://api.minimax.io";
 let previousFetch: typeof fetch | null = null;
 
+export interface MinimaxMockCall {
+    url: string;
+    method: string;
+    body: string;
+}
+
+const minimaxMockCalls: MinimaxMockCall[] = [];
+
 /**
  * Build an Anthropic-format SSE response body for a simple text reply.
  * The agent loop in agent.ts expects this specific SSE event structure.
@@ -75,9 +83,9 @@ function minimaxResponse(url: URL): Response | null {
         case "/v1/image_generation":
             return jsonResponse({
                 data: {
-                    image_url: "https://example.com/generated/test.png",
-                    prompt: "test image",
+                    image_urls: ["https://example.com/generated/test.png"],
                 },
+                base_resp: { status_code: 0 },
             });
 
         case "/v1/t2a_v2":
@@ -164,11 +172,30 @@ export function setupMinimaxMocks(): void {
     globalThis.fetch = async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
         const url = new URL(input instanceof Request ? input.url : String(input));
         if (url.href.startsWith(MINIMAX_BASE)) {
+            minimaxMockCalls.push({
+                url: url.href,
+                method: init?.method ?? "GET",
+                body: typeof init?.body === "string" ? init.body : "",
+            });
             const response = minimaxResponse(url);
             if (response) return response;
         }
+        if (url.href === "https://example.com/generated/test.png") {
+            return new Response(new Uint8Array([137, 80, 78, 71, 13, 10, 26, 10]), {
+                status: 200,
+                headers: { "Content-Type": "image/png" },
+            });
+        }
         return previousFetch!(input, init);
     };
+}
+
+export function resetMinimaxMockCalls(): void {
+    minimaxMockCalls.length = 0;
+}
+
+export function getMinimaxMockCalls(): MinimaxMockCall[] {
+    return minimaxMockCalls.slice();
 }
 
 /** Clean up all fetch interceptors. */
@@ -176,4 +203,5 @@ export function cleanupMinimaxMocks(): void {
     if (!previousFetch) return;
     globalThis.fetch = previousFetch;
     previousFetch = null;
+    resetMinimaxMockCalls();
 }

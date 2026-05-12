@@ -740,6 +740,12 @@ describe("SSE streaming from Anthropic endpoint", () => {
 
             const db = getDb()!;
             const rows = getMessages(db, "explicit-direct-session");
+            assert.equal(
+                rows.some(
+                    (row) => row.role === "user" && row.content.includes("Use generate_image"),
+                ),
+                false,
+            );
             assert.equal(rows.at(-2)?.tool_calls_json?.includes("generate_image"), true);
             assert.equal(rows.at(-1)?.role, "tool");
             assert.ok(rows.at(-1)?.content.includes("/asset/"));
@@ -1606,6 +1612,43 @@ describe("Integration: chat with agent loop + persistence", () => {
             assert.ok(userMsgs.length >= 1);
             assert.ok(assistantMsgs.length >= 1);
             assert.ok(assistantMsgs[assistantMsgs.length - 1].content.includes("Cool idea"));
+        } finally {
+            globalThis.fetch = originalFetch;
+        }
+    });
+
+    it("persists fallback instead of empty thinking-only assistant response", async () => {
+        const sessionId = "thinking-only-session-" + Date.now();
+        const sseChunks = [
+            'event: message_start\ndata: {"type":"message_start","message":{}}\n\n',
+            'event: content_block_start\ndata: {"type":"content_block_start","index":0,"content_block":{"type":"thinking","thinking":""}}\n\n',
+            'event: content_block_delta\ndata: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":"plan only"}}\n\n',
+            'event: content_block_stop\ndata: {"type":"content_block_stop","index":0}\n\n',
+            'event: message_delta\ndata: {"type":"message_delta","delta":{"stop_reason":"end_turn"},"usage":{}}\n\n',
+            'event: message_stop\ndata: {"type":"message_stop"}\n\n',
+        ];
+
+        const originalFetch = globalThis.fetch;
+        globalThis.fetch = async () => anthropicResponse(sseChunks);
+
+        try {
+            const req = makeRequest(
+                "POST",
+                "/api/chat",
+                { messages: [{ role: "user", content: "think only" }] },
+                { "X-Session-Id": sessionId },
+            );
+            const resp = await handleChat(req, "test-key", sessionId);
+            const body = await readBody(resp);
+            await new Promise((r) => setTimeout(r, 100));
+
+            const assistantRows = getMessages(getDb()!, sessionId).filter(
+                (row) => row.role === "assistant",
+            );
+            assert.ok(body.includes("event: thinking"));
+            assert.equal(assistantRows.length, 1);
+            assert.match(assistantRows[0].content, /empty final answer/i);
+            assert.equal(assistantRows[0].thinking, "plan only");
         } finally {
             globalThis.fetch = originalFetch;
         }

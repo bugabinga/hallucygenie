@@ -737,6 +737,11 @@ export async function runAgentLoop(
         }
 
         // stop_reason is "end_turn" or no more tool calls
+        if (!textContent && thinkingContent.trim()) {
+            textContent = "I got an empty final answer. Please try again.";
+            await onEvent({ type: "text", content: textContent });
+        }
+
         // Check for steer messages at text turn boundary
         if (steerQueue) {
             const steerMessages = drainSteer(steerQueue);

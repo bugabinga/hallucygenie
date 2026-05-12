@@ -873,12 +873,12 @@ describe("renderMarkdown", () => {
         assert.ok(result.includes("&lt;script&gt;"));
     });
 
-    it("renders markdown images with safe class and lazy loading", () => {
+    it("rewrites markdown images to safe links", () => {
         const result = renderMarkdown("![cat](https://example.com/cat.png)");
-        assert.ok(result.includes('class="markdown-image"'));
-        assert.ok(result.includes('loading="lazy"'));
-        assert.ok(result.includes('referrerpolicy="no-referrer"'));
-        assert.ok(result.includes('src="https://example.com/cat.png"'));
+        assert.ok(!result.includes("<img"));
+        assert.ok(result.includes("[image: cat]"));
+        assert.ok(result.includes('href="https://example.com/cat.png"'));
+        assert.ok(result.includes('rel="noopener nofollow"'));
     });
 
     it("normalizes excessive blank lines before rendering", () => {

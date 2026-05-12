@@ -33,9 +33,8 @@ marked.use({
         },
         image({ href, title, text }: { href: string; title?: string | null; text: string }) {
             const safeHref = escapeHtml(href);
-            const safeAlt = escapeHtml(text || "Generated image");
-            const titleAttr = title ? ` title="${escapeHtml(title)}"` : "";
-            return `<img class="markdown-image" src="${safeHref}" alt="${safeAlt}"${titleAttr} loading="lazy" referrerpolicy="no-referrer">`;
+            const safeText = escapeHtml(text || title || "image");
+            return `<a href="${safeHref}" target="_blank" rel="noopener nofollow">[image: ${safeText}]</a>`;
         },
         html({ text }: { text: string }) {
             return escapeHtml(text);
