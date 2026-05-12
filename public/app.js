@@ -2880,7 +2880,6 @@ async function sendMessage(content) {
     await sendSteerMessage(content);
     return;
   }
-  await deleteDraft("chat");
   const messageList = $("#message-list");
   const userMsg = renderUserMessage(content);
   messageList.appendChild(userMsg);
@@ -2899,7 +2898,9 @@ async function sendMessage(content) {
   } catch (err) {
     showError("Connection lost. Check your internet? \u{1F4E1}");
     finishStreaming();
+    return;
   }
+  await deleteDraft("chat");
 }
 async function sendSteerMessage(content) {
   if (!content.trim() || !isStreaming) return;
@@ -3236,7 +3237,7 @@ function init() {
       content = searchQueryInput.value;
     }
     if (content.trim()) {
-      saveDraftDebounced("create", content);
+      void flushDraft("create", content);
     } else {
       void deleteDraft("create");
     }

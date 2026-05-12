@@ -987,10 +987,6 @@ export async function sendMessage(content: string): Promise<void> {
         return;
     }
 
-    // Clear chat draft on submit (spec: clear only after stream done with no error)
-    // We flush and delete here because we're about to send
-    await deleteDraft("chat");
-
     const messageList = $("#message-list");
 
     // Render user message
@@ -1018,7 +1014,10 @@ export async function sendMessage(content: string): Promise<void> {
     } catch (err) {
         showError("Connection lost. Check your internet? 📡");
         finishStreaming();
+        return;
     }
+    // Clear chat draft only after stream completes successfully (spec requirement)
+    await deleteDraft("chat");
 }
 
 // ── Steer Message ────────────────────────────────────────────────────
@@ -1465,7 +1464,7 @@ export function init(): void {
             content = searchQueryInput.value;
         }
         if (content.trim()) {
-            saveDraftDebounced("create", content);
+            void flushDraft("create", content);
         } else {
             void deleteDraft("create");
         }

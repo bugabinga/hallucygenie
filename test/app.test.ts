@@ -2586,11 +2586,12 @@ describe("updateQuotaBadge", () => {
 describe("loadAssets", () => {
     it("fetches /assets without session header and uses asset API URLs", async () => {
         const { doc } = setupDOM();
-        let requestOpts: RequestInit | undefined;
+        let assetRequestOpts: RequestInit | undefined;
 
         (globalThis as any).fetch = (url: string, opts?: RequestInit) => {
-            requestOpts = opts;
+            // Only track /assets requests — ignore draft saves which are async and debounced
             if (url.includes("/assets")) {
+                assetRequestOpts = opts;
                 return Promise.resolve(
                     new Response(
                         JSON.stringify({
@@ -2637,7 +2638,7 @@ describe("loadAssets", () => {
         // Wait for async fetch + render
         await new Promise((r) => setTimeout(r, 50));
 
-        assert.equal(requestOpts, undefined);
+        assert.equal(assetRequestOpts, undefined);
 
         const cards = doc.querySelectorAll(".asset-card");
         assert.equal(cards.length, 2, "should render both asset cards");
