@@ -59,7 +59,7 @@ jobs:
             - name: Mutation tests
               run: just test-mutation
             - name: Upload mutation reports
-              if: ${{ always() && !env.ACT }}
+              if: ${{ always() }}
               uses: actions/upload-artifact@v7.0.1
               with:
                   name: mutation-reports
@@ -73,8 +73,4 @@ jobs:
         steps:
             - uses: actions/checkout@v6.0.2
             - name: Build container
-              if: ${{ !env.ACT }}
               run: docker build -f deploy/Dockerfile -t hallucygenie:ci .
-            - name: Skip nested container build under act
-              if: ${{ env.ACT }}
-              run: echo "act + Podman cannot run nested BuildKit here; use just container-build"

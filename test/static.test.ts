@@ -21,7 +21,6 @@ const strykerAgent = readFileSync("test/stryker.config.mjs", "utf-8");
 const strykerTools = readFileSync("test/stryker-tools.mjs", "utf-8");
 const strykerDb = readFileSync("test/stryker-db.mjs", "utf-8");
 const deployDockerfile = readFileSync("deploy/Dockerfile", "utf-8");
-const actDockerfile = readFileSync("deploy/act/Dockerfile", "utf-8");
 const agentsMd = readFileSync("AGENTS.md", "utf-8");
 const issuePrompt = readFileSync(".pi/prompts/issue.md", "utf-8");
 const minimaxResearchPrompt = readFileSync(".pi/prompts/minimax-research.md", "utf-8");
@@ -597,7 +596,8 @@ describe("lefthook health", () => {
         assert.match(justfile, /hook-post-merge:/);
         assert.match(justfile, /git branch --show-current/);
         assert.match(justfile, /\$branch" != "trunk"/);
-        assert.match(justfile, /just ci-act/);
+        assert.match(justfile, /just ci-test-all && just test-e2e/);
+        assert.doesNotMatch(justfile, /just ci-act/);
     });
 });
 
@@ -673,7 +673,7 @@ describe("GitHub Actions health", () => {
         assert.match(ciYml, /path: ~\/\.bun\/install\/cache/);
         assert.match(ciYml, /hashFiles\('bun\.lock'\)/);
         assert.match(ciYml, /actions\/upload-artifact@v7\.0\.1/);
-        assert.match(ciYml, /if: \$\{\{ always\(\) && !env\.ACT \}\}/);
+        assert.match(ciYml, /if: \$\{\{ always\(\) \}\}/);
         assert.match(ciYml, /name: mutation-reports/);
         assert.match(ciYml, /path: reports\/mutation\//);
         assert.match(strykerAgent, /reporters: \["clear-text", "progress", "html"\]/);
@@ -684,9 +684,9 @@ describe("GitHub Actions health", () => {
 
     it("builds container and checks dependency updates", () => {
         assert.match(ciYml, /container:/);
-        assert.match(ciYml, /if: \$\{\{ !env\.ACT \}\}/);
         assert.match(ciYml, /docker build -f deploy\/Dockerfile -t hallucygenie:ci \./);
-        assert.match(ciYml, /act \+ Podman cannot run nested BuildKit here/);
+        assert.doesNotMatch(ciYml, /env\.ACT/);
+        assert.doesNotMatch(ciYml, /act \+ Podman/);
         assert.match(updatesYml, /schedule:/);
         assert.match(updatesYml, /workflow_dispatch:/);
         assert.match(updatesYml, /run: just update-check/);
@@ -696,22 +696,14 @@ describe("GitHub Actions health", () => {
         assert.match(justfile, /bun outdated --latest/);
     });
 
-    it("has fast local act recipes", () => {
-        assert.match(justfile, /--pull=false/);
-        assert.match(justfile, /--action-offline-mode/);
-        assert.match(justfile, /--artifact-server-path \.artifacts/);
-        assert.match(justfile, /--cache-server-path \.act-cache/);
-        assert.match(justfile, /ACT_IMAGE := "localhost\/hallucygenie-act:local"/);
-        assert.match(justfile, /ci-act-image:/);
-        assert.match(justfile, /ci-act: ci-act-image/);
-        assert.match(justfile, /ci-act-test: ci-act-image/);
-        assert.match(justfile, /ci-act-mutation: ci-act-image/);
-        assert.match(justfile, /ci-act-container: ci-act-image container-build/);
-        assert.match(justfile, /ci-act-updates: ci-act-image/);
-        assert.match(actDockerfile, /FROM docker\.io\/catthehacker\/ubuntu:act-latest/);
-        assert.match(actDockerfile, /git-core-ubuntu-ppa-noble\.sources/);
-        assert.match(gitignore, /\.artifacts\//);
-        assert.match(gitignore, /\.act-cache\//);
+    it("has no local act runner recipes", () => {
+        assert.doesNotMatch(justfile, /\bACT_/);
+        assert.doesNotMatch(justfile, /\bci-act(?:\b|-)/);
+        assert.doesNotMatch(justfile, /\bagent-(?:spec|bugs|deslop|all)\b/);
+        assert.doesNotMatch(justfile, /\bact\b/);
+        assert.equal(existsSync("deploy/act/Dockerfile"), false);
+        assert.doesNotMatch(gitignore, /\.artifacts\//);
+        assert.doesNotMatch(gitignore, /\.act-cache\//);
     });
 
     it("prepare installs hooks only inside a git repo", () => {
@@ -753,8 +745,6 @@ describe("layout health", () => {
             "data",
             "logs",
             ".stryker-tmp",
-            ".artifacts",
-            ".act-cache",
             "public/app.js",
             "test-data*",
         ]) {

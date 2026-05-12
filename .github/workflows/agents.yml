@@ -77,10 +77,6 @@ jobs:
               run: |
                   git config user.name "hallucygenie-agent-bot[bot]"
                   git config user.email "${{ secrets.AGENT_BOT_APP_ID }}+hallucygenie-agent-bot[bot]@users.noreply.github.com"
-                  if ! git rev-parse --git-dir >/dev/null 2>&1; then
-                      echo "No git repo (act local run) — skipping PR"
-                      exit 0
-                  fi
                   if git diff --quiet; then
                       echo "No drift — spec matches code"
                       exit 0
@@ -164,10 +160,6 @@ jobs:
               run: |
                   git config user.name "hallucygenie-agent-bot[bot]"
                   git config user.email "${{ secrets.AGENT_BOT_APP_ID }}+hallucygenie-agent-bot[bot]@users.noreply.github.com"
-                  if ! git rev-parse --git-dir >/dev/null 2>&1; then
-                      echo "No git repo (act local run) — skipping PR"
-                      exit 0
-                  fi
                   if git diff --quiet; then
                       echo "No bugs found"
                       exit 0
@@ -250,10 +242,6 @@ jobs:
               run: |
                   git config user.name "hallucygenie-agent-bot[bot]"
                   git config user.email "${{ secrets.AGENT_BOT_APP_ID }}+hallucygenie-agent-bot[bot]@users.noreply.github.com"
-                  if ! git rev-parse --git-dir >/dev/null 2>&1; then
-                      echo "No git repo (act local run) — skipping PR"
-                      exit 0
-                  fi
                   if git diff --quiet; then
                       echo "No slop found"
                       exit 0
@@ -332,10 +320,6 @@ jobs:
               run: |
                   git config user.name "hallucygenie-agent-bot[bot]"
                   git config user.email "${{ secrets.AGENT_BOT_APP_ID }}+hallucygenie-agent-bot[bot]@users.noreply.github.com"
-                  if ! git rev-parse --git-dir >/dev/null 2>&1; then
-                      echo "No git repo (act local run) — skipping PR"
-                      exit 0
-                  fi
                   if git diff --quiet; then
                       echo "No issue fix"
                       exit 0

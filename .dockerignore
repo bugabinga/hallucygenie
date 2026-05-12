@@ -9,8 +9,6 @@ dist
 data
 logs
 .stryker-tmp
-.artifacts
-.act-cache
 .pi
 .pi-lens
 .system/chrome-profile

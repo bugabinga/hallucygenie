@@ -29,8 +29,6 @@ reports/
 
 # Test artifacts
 test-data*/
-.artifacts/
-.act-cache/
 
 # Screenshots (local only)
 public/screenshot-*.png
