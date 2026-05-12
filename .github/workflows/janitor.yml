@@ -2,14 +2,8 @@ name: Agent Janitor
 
 on:
     schedule:
-        - cron: "17 11 * * *"
+        - cron: "47 */2 * * *"
     workflow_dispatch:
-        inputs:
-            request_copilot:
-                description: "Allow janitor to request Copilot reviews when policy says yes"
-                required: false
-                type: boolean
-                default: false
 
 permissions:
     contents: read
@@ -47,4 +41,3 @@ jobs:
               env:
                   GH_TOKEN: ${{ steps.app-token.outputs.token }}
                   ZAI_API_KEY: ${{ secrets.ZAI_API_KEY }}
-                  JANITOR_REQUEST_COPILOT: ${{ inputs.request_copilot == true && 'true' || 'false' }}

@@ -178,7 +178,7 @@ export function prepareExistingPr(
     const probe = gh(["auth", "status"], { allowFail: true });
     if (probe.status !== 0) return undefined;
 
-    const prs = ghJson<ExistingPrListItem[]>([
+    const candidates = ghJson<ExistingPrListItem[]>([
         "pr",
         "list",
         "--state",
@@ -187,9 +187,8 @@ export function prepareExistingPr(
         "number,title,headRefName,headRefOid,author,isDraft,updatedAt",
         "--limit",
         "50",
-    ]).filter((pr) => pr.headRefName.startsWith(branchPrefix) && BOT_AUTHORS.has(pr.author.login));
-
-    const candidates = prs
+    ])
+        .filter((pr) => pr.headRefName.startsWith(branchPrefix) && BOT_AUTHORS.has(pr.author.login))
         .map((pr) => {
             const comments = ghJson<IssueComment[]>([
                 "api",
@@ -199,23 +198,33 @@ export function prepareExistingPr(
             const sticky = findJanitorComment(comments)?.body || "";
             return { pr, comments, sticky, status: janitorStatus(sticky) };
         })
-        .filter((item) => item.status === "needs-fix")
         .sort((a, b) => a.pr.updatedAt.localeCompare(b.pr.updatedAt));
 
-    const selected = candidates[0];
-    if (!selected) return undefined;
+    const repair = candidates.find((item) => item.status === "needs-fix");
+    if (repair) {
+        console.log(
+            `Repairing existing ${agentName} PR #${repair.pr.number} (${repair.pr.headRefName}) from janitor checklist`,
+        );
+        checkoutBranch(repair.pr.headRefName);
 
-    console.log(
-        `Repairing existing ${agentName} PR #${selected.pr.number} (${selected.pr.headRefName}) from janitor checklist`,
-    );
-    checkoutBranch(selected.pr.headRefName);
+        const contextPath = "/tmp/pi-agent-pr-context.md";
+        writeFileSync(contextPath, buildExistingPrContext(repair.pr, repair.comments));
+        writeFileSync("/tmp/pi-agent-existing-pr-number", String(repair.pr.number));
+        writeFileSync("/tmp/pi-agent-existing-pr-branch", repair.pr.headRefName);
 
-    const contextPath = "/tmp/pi-agent-pr-context.md";
-    writeFileSync(contextPath, buildExistingPrContext(selected.pr, selected.comments));
-    writeFileSync("/tmp/pi-agent-existing-pr-number", String(selected.pr.number));
-    writeFileSync("/tmp/pi-agent-existing-pr-branch", selected.pr.headRefName);
+        return { number: repair.pr.number, branch: repair.pr.headRefName, contextPath };
+    }
 
-    return { number: selected.pr.number, branch: selected.pr.headRefName, contextPath };
+    const blocker = candidates[0];
+    if (blocker) {
+        const status = blocker.status || "awaiting-janitor";
+        const message = `${agentName}: open PR #${blocker.pr.number} (${blocker.pr.headRefName}) is ${status}; skipping new work to keep one open PR per agent.\n`;
+        console.log(message.trim());
+        writeFileSync("/tmp/pi-agent-pr-body.md", message);
+        process.exit(0);
+    }
+
+    return undefined;
 }
 
 export function runPi(role: PiRole, args: string[], timeout: number): void {

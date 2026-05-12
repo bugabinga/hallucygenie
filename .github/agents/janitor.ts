@@ -93,7 +93,9 @@ function listOpenBotPrs() {
 
 function failedRunLogs(statusCheckRollup: any[]) {
     const urls = statusCheckRollup
-        .filter((check) => ["FAILURE", "TIMED_OUT", "CANCELLED"].includes(check.conclusion))
+        .filter((check) =>
+            ["FAILURE", "TIMED_OUT", "CANCELLED", "ACTION_REQUIRED"].includes(check.conclusion),
+        )
         .map((check) => String(check.detailsUrl || ""))
         .filter(Boolean);
 
@@ -213,14 +215,24 @@ function upsertStickyComment(number: number, body: string) {
     }
 }
 
-function maybeRequestCopilot(number: number, commentBody: string) {
-    if (process.env.JANITOR_REQUEST_COPILOT !== "true") return;
-    if (!/Request-Copilot:\s*yes/i.test(commentBody)) return;
-    const result = gh(["pr", "edit", String(number), "--add-reviewer", "@copilot"], {
-        allowFail: true,
-    });
-    if (result.status === 0) console.log(`Requested Copilot review for PR #${number}`);
-    else console.log(`Could not request Copilot for PR #${number}: ${result.stderr.trim()}`);
+function normalizeCommentBody(body: string) {
+    let normalized = body.trim();
+    if (!normalized.includes(MARKER)) normalized = `${MARKER}\n\n${normalized}`;
+    normalized = normalized.replace(/^Request-Copilot:.*\n?/gim, "");
+
+    const status = normalized
+        .match(/## Janitor status:\s*([^\n]+)/i)?.[1]
+        ?.trim()
+        .toLowerCase();
+    const hasUncheckedItems = /^- \[ \]/m.test(normalized);
+    if (status === "ready" && hasUncheckedItems) {
+        normalized = normalized.replace(
+            /## Janitor status:\s*ready/i,
+            "## Janitor status: needs-fix",
+        );
+    }
+
+    return normalized.trim();
 }
 
 function buildContext(pr: PrListItem) {
@@ -335,8 +347,6 @@ ${MARKER}
 
 ## Janitor status: needs-fix | ready | needs-human | waiting-for-ci
 
-Request-Copilot: yes | no
-
 ## Checklist
 - [ ] ...
 - [x] ...
@@ -348,12 +358,14 @@ Request-Copilot: yes | no
 ...
 
 Decision rules:
-- waiting-for-ci: latest checks are pending or missing.
+- waiting-for-ci: latest required checks are pending or missing.
 - needs-fix: CI failed or review/comment issues need code changes.
-- ready: CI green and no actionable unresolved issues.
-- needs-human: conflict, security/auth/deploy/workflow risk, broad unclear change, or human decision needed.
-- Request-Copilot yes only when CI is green, no Copilot review exists for current head SHA, and PR is small/medium. Otherwise no.
-- Convert Copilot/review findings into checklist items. Do not mention resolving GitHub review threads.
+- ready: CI green, branch is current/mergeable, and no actionable unresolved issues.
+- needs-human: action_required check, conflict, branch behind trunk, security/auth/deploy/workflow risk, broad unclear change, duplicate PR, or human decision needed.
+- If status is ready, every checklist item must be checked.
+- Use unchecked checklist items only for issues that block ready status.
+- Do not request or mention Copilot review.
+- Convert review findings into checklist items. Do not mention resolving GitHub review threads.
 - Address owning agent directly. Tell it to fix only current PR scope.
 
 No extra output. Just write the file.`,
@@ -362,11 +374,10 @@ No extra output. Just write the file.`,
     );
 
     if (!existsSync(outputPath)) throw new Error(`Janitor did not write ${outputPath}`);
-    const body = readFileSync(outputPath, "utf-8").trim();
+    const body = normalizeCommentBody(readFileSync(outputPath, "utf-8"));
     if (!body.includes(MARKER))
         throw new Error(`Janitor output missing marker for PR #${pr.number}`);
     upsertStickyComment(pr.number, body);
-    maybeRequestCopilot(pr.number, body);
 }
 
 const prs = listOpenBotPrs();
