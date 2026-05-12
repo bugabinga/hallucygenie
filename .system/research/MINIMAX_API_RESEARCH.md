@@ -5,6 +5,30 @@ Live tested with a real Plus-Highspeed Token Plan API key.
 
 ---
 
+## 2026-05-12 docs addendum
+
+Fetched current docs from `https://platform.minimax.io/docs/llms.txt` into `~/.pi/research/pages/`.
+Cross-checked `MiniMax-AI/MiniMax-Coding-Plan-MCP` source.
+
+Changed/clarified facts:
+
+- Token Plan docs now say Standard Plus has `speech-2.8` 4,000 chars/day and `image-01` 50 images/day; Plus-Highspeed remains `speech-2.8` 9,000 chars/day and `image-01` 100 images/day.
+- Anthropic OpenAPI enum currently lists `MiniMax-M2.7`, `MiniMax-M2.7-highspeed`, `MiniMax-M2.5`, `MiniMax-M2.1`; models/rate-limit pages still mention legacy/highspeed variants.
+- TTS enum includes `speech-01-hd` and `speech-01-turbo`; HallucyGenie plan availability for those is untested.
+- TTS `voice_setting` now includes `text_normalization` and `latex_read` booleans.
+- Public Token Plan MCP docs still describe `understand_image(prompt, image_url)` and support HTTP/HTTPS URLs/local files.
+- Direct VLM endpoint `/v1/coding_plan/vlm` is not exposed as a stable OpenAPI page in current docs.
+- Official Coding Plan MCP implementation converts HTTP/HTTPS URLs and local files to `data:image/{jpeg|png|webp};base64,...` before posting `{ prompt, image_url }` to `/v1/coding_plan/vlm`.
+- Therefore the old statement “Vision works with raw public URL in `image_url`” is incomplete. Direct VLM likely expects a data URL; raw public URLs can fail with `2013 invalid image URL`.
+
+Project impact:
+
+- `src/tools.ts analyzeImage()` should download/validate image input, convert to a data URL in memory, call `/v1/coding_plan/vlm`, and never persist/log raw bytes.
+- `scripts/minimax-test.ts` now includes a VLM smoke using a tiny downloaded image converted to data URL.
+- Create UI can add Analyze Image after spec approval; history should store URL/ref + prompt only, not base64.
+
+---
+
 ## Auth Header — CRITICAL FINDING
 
 **Live test results:**
@@ -127,7 +151,7 @@ Returns: { organic: [{ title, link, snippet }] }
 
 Code in `tools.ts webSearch()`: ✅ Fixed auth, correct endpoint.
 
-### Vision ✅ WORKS
+### Vision ⚠️ DIRECT CONTRACT DRIFT
 
 ```
 POST https://api.minimax.io/v1/coding_plan/vlm
@@ -136,7 +160,9 @@ Params: { prompt, image_url }
 Returns: { content: "..." }
 ```
 
-Code in `tools.ts analyzeImage()`: ✅ Fixed auth, correct endpoint.
+Direct endpoint docs are not stable. Current MCP source posts `image_url` as a data URL. Raw public URLs can fail with `2013 invalid image URL`.
+
+Code in `tools.ts analyzeImage()`: ❌ correct auth and endpoint, stale raw URL payload.
 
 ---
 

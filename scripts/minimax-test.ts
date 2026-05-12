@@ -27,6 +27,25 @@ export function imageUrlSummary(urls: unknown): string {
     }
 }
 
+export function dataUrlSummary(value: unknown): string {
+    if (typeof value !== "string") return "missing";
+    const match = value.match(/^data:(image\/(?:jpeg|png|webp|gif));base64,([A-Za-z0-9+/=]+)$/);
+    if (!match) return "missing";
+    return `present (${match[1]}, ${match[2].length} base64 chars)`;
+}
+
+export function textSummary(value: unknown): string {
+    if (typeof value !== "string" || value.length === 0) return "missing";
+    return `present (${value.length} chars)`;
+}
+
+export function vlmPayload(imageUrl: string): JsonObject {
+    return {
+        prompt: "Describe this image in one short sentence.",
+        image_url: imageUrl,
+    };
+}
+
 function apiKey(): string {
     const key = process.env.MINIMAX_API_KEY;
     if (!key) throw new Error("MINIMAX_API_KEY is missing");
@@ -66,6 +85,34 @@ async function getJson(path: string): Promise<{ http: number; data: JsonObject }
         },
     });
     return { http: resp.status, data: await readJson(resp) };
+}
+
+function imageMime(url: string, contentType: string | null): string {
+    const lowerType = (contentType ?? "").toLowerCase();
+    if (lowerType.includes("image/jpeg") || lowerType.includes("image/jpg")) return "image/jpeg";
+    if (lowerType.includes("image/png")) return "image/png";
+    if (lowerType.includes("image/webp")) return "image/webp";
+    if (lowerType.includes("image/gif")) return "image/gif";
+
+    const lowerUrl = url.toLowerCase();
+    if (lowerUrl.endsWith(".png")) return "image/png";
+    if (lowerUrl.endsWith(".webp")) return "image/webp";
+    if (lowerUrl.endsWith(".gif")) return "image/gif";
+    if (lowerUrl.endsWith(".jpg") || lowerUrl.endsWith(".jpeg")) return "image/jpeg";
+
+    throw new Error(`Unsupported image content type: ${contentType ?? "unknown"}`);
+}
+
+async function imageDataUrlFromUrl(url: string): Promise<string> {
+    const resp = await fetch(url, { headers: { "User-Agent": "hallucygenie/1.0" } });
+    if (!resp.ok) throw new Error(`Image download failed: HTTP ${resp.status}`);
+
+    const mime = imageMime(url, resp.headers.get("content-type"));
+    const bytes = new Uint8Array(await resp.arrayBuffer());
+    if (bytes.length === 0) throw new Error("Image download returned no bytes");
+    if (bytes.length > 20 * 1024 * 1024) throw new Error("Image exceeds VLM 20MB limit");
+
+    return `data:${mime};base64,${Buffer.from(bytes).toString("base64")}`;
 }
 
 function printSection(title: string): void {
@@ -134,6 +181,16 @@ async function testMusic(): Promise<void> {
     console.log(`audio: ${hexSummary(data?.audio)}`);
 }
 
+async function testVlm(): Promise<void> {
+    printSection("VLM /v1/coding_plan/vlm");
+    const imageUrl = "https://www.gstatic.com/webp/gallery/1.jpg";
+    const imageDataUrl = await imageDataUrlFromUrl(imageUrl);
+    console.log(`image: ${dataUrlSummary(imageDataUrl)}`);
+    const result = await postJson("/v1/coding_plan/vlm", vlmPayload(imageDataUrl));
+    printResult(result);
+    console.log(`content: ${textSummary(result.data.content)}`);
+}
+
 export async function main(): Promise<void> {
     console.log("MiniMax live API smoke test");
     console.log("Raw media omitted from output.");
@@ -141,6 +198,7 @@ export async function main(): Promise<void> {
     await testTts();
     await testImage();
     await testMusic();
+    await testVlm();
 }
 
 if (import.meta.main) {

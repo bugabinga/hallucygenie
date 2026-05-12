@@ -5,7 +5,7 @@ description: MiniMax API integration for HallucyGenie. Use when working with Min
 
 # MiniMax API — HallucyGenie
 
-Current docs crawl: 2026-05-11 from `https://platform.minimax.io/docs/llms.txt` into `~/.pi/research/pages/`.
+Current docs crawl: 2026-05-12 from `https://platform.minimax.io/docs/llms.txt` into `~/.pi/research/pages/`. Cross-checked `MiniMax-AI/MiniMax-Coding-Plan-MCP` source via `git_clone_safe`.
 
 ## Base URLs
 
@@ -28,7 +28,7 @@ Current docs crawl: 2026-05-11 from `https://platform.minimax.io/docs/llms.txt` 
 ### Anthropic-compatible chat
 
 - `POST /anthropic/v1/messages`
-- Models: `MiniMax-M2.7-highspeed`, `MiniMax-M2.7`, `MiniMax-M2.5-highspeed`, `MiniMax-M2.5`, `MiniMax-M2.1-highspeed`, `MiniMax-M2.1`, `MiniMax-M2`
+- Models: `MiniMax-M2.7-highspeed`, `MiniMax-M2.7`, `MiniMax-M2.5-highspeed`, `MiniMax-M2.5`, `MiniMax-M2.1-highspeed`, `MiniMax-M2.1`, `MiniMax-M2`. Current Anthropic OpenAPI enum lists `MiniMax-M2.7`, `MiniMax-M2.7-highspeed`, `MiniMax-M2.5`, `MiniMax-M2.1`; models/rate-limit pages still mention legacy/highspeed variants.
 - Context window: 204,800 tokens. Max token count means input + output.
 - `max_tokens` request max is now documented as 204,800 tokens.
 - Highspeed output: ~100 tps. Standard: ~60 tps.
@@ -63,7 +63,7 @@ Current docs crawl: 2026-05-11 from `https://platform.minimax.io/docs/llms.txt` 
 - Pause markers: `<#1.5#>` range `[0.01, 99.99]`, between speakable segments, no consecutive pauses.
 - Inline pronunciation: wrap pinyin tone numbers or IPA in half-width parentheses, e.g. `(he2)` or `(lɪv)`.
 - Speech-2.8 interjection tags: `(laughs)`, `(chuckle)`, `(coughs)`, `(clear-throat)`, `(groans)`, `(breath)`, `(pant)`, `(inhale)`, `(exhale)`, `(gasps)`, `(sniffs)`, `(sighs)`, `(snorts)`, `(burps)`, `(lip-smacking)`, `(humming)`, `(hissing)`, `(emm)`, `(sneezes)`.
-- `voice_setting`: `voice_id`, `speed` `[0.5,2]`, `vol` `(0,10]`, `pitch` `[-12,12]`, `emotion`.
+- `voice_setting`: `voice_id`, `speed` `[0.5,2]`, `vol` `(0,10]`, `pitch` `[-12,12]`, `emotion`, plus newer booleans `text_normalization` and `latex_read`.
 - `audio_setting`: `sample_rate` `8000|16000|22050|24000|32000|44100`, `bitrate` `32000|64000|128000|256000`, `format` `mp3|pcm|flac|wav|pcmu_raw|pcmu_wav|opus`, `channel` `1|2`, `force_cbr` for streamed MP3.
 - `voice_modify`: `pitch/intensity/timbre` `[-100,100]`, `sound_effects`: `spacious_echo|auditorium_echo|lofi_telephone|robotic`.
 - `language_boost`: 40 language values or `auto`.
@@ -136,8 +136,10 @@ Unsupported TTS models returned `{"base_resp":{"status_code":2061,"status_msg":"
 - HallucyGenie uses direct internal endpoints:
   - `POST /v1/coding_plan/search` with `{ q }` → organic results.
   - `POST /v1/coding_plan/vlm` with `{ prompt, image_url }` → text description.
-- Docs describe MCP tool schema, not these direct HTTP endpoints.
-- `understand_image` supports JPEG/PNG/GIF/WebP, max 20MB, HTTP/HTTPS URL or local file path in MCP.
+- Current public docs describe MCP tool schema, not a stable OpenAPI contract for direct HTTP search/VLM endpoints.
+- `understand_image` docs accept `prompt` + `image_url`; docs say JPEG/PNG/GIF/WebP, max 20MB, HTTP/HTTPS URL or local file path in MCP.
+- Official `MiniMax-Coding-Plan-MCP` source currently normalizes `understand_image` input before the direct VLM call: HTTP/HTTPS URLs are downloaded, local files are read, existing data URLs pass through, and `/v1/coding_plan/vlm` receives `image_url` as a `data:image/{jpeg|png|webp};base64,...` URL. Raw public URLs can return `2013 invalid image URL` on the direct endpoint.
+- HallucyGenie must never persist or log raw image data. If it calls VLM directly, convert image bytes in memory only, send to provider only, and store compact text/history only.
 
 ## Video Generation
 
@@ -231,8 +233,8 @@ curl -s -X POST "https://api.minimax.io/v1/music_generation" \
   -H "Authorization: Bearer $MINIMAX_API_KEY" \
   -d '{"model":"music-2.6","prompt":"upbeat gaming intro","is_instrumental":true,"output_format":"hex"}'
 
-# Check quota (docs currently show www.minimax.io; api.minimax.io also used by project notes)
-curl -s "https://www.minimax.io/v1/token_plan/remains" \
+# Check quota
+curl -s "https://api.minimax.io/v1/token_plan/remains" \
   -H "Authorization: Bearer $MINIMAX_API_KEY" \
   -H "Content-Type: application/json"
 ```
