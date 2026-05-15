@@ -921,6 +921,7 @@ function handleSSEEvent(event: SSEEvent): void {
             }
             activeToolCards.delete(parsed.id);
             scrollToBottom();
+            if (parsed.result.type === "error") streamHadError = true;
             // Refresh quota badge and assets tab after tool execution
             streamHadToolResult = true;
             updateQuotaBadge();
@@ -1018,7 +1019,10 @@ function finishStreaming(): void {
     activeToolCards.clear();
     rawTextBuffer = "";
     thinkingBuffer = "";
-    if (clearDraftAfterDone && !streamHadError) void clearDraft(clearDraftAfterDone);
+    const shouldClearDraft =
+        clearDraftAfterDone === "chat" || (clearDraftAfterDone === "create" && streamHadToolResult);
+    if (clearDraftAfterDone && shouldClearDraft && !streamHadError)
+        void clearDraft(clearDraftAfterDone);
     if (!streamHadError) refreshSessionsAfterDone?.();
     if (streamHadToolResult) void updateQuotaBadge();
     clearDraftAfterDone = null;

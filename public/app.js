@@ -2836,6 +2836,7 @@ function handleSSEEvent(event) {
       }
       activeToolCards.delete(parsed.id);
       scrollToBottom();
+      if (parsed.result.type === "error") streamHadError = true;
       streamHadToolResult = true;
       updateQuotaBadge();
       if ($("#create-modal")?.dataset.tabOpen === "assets") loadAssets();
@@ -2908,7 +2909,9 @@ function finishStreaming() {
   activeToolCards.clear();
   rawTextBuffer = "";
   thinkingBuffer = "";
-  if (clearDraftAfterDone && !streamHadError) void clearDraft(clearDraftAfterDone);
+  const shouldClearDraft = clearDraftAfterDone === "chat" || clearDraftAfterDone === "create" && streamHadToolResult;
+  if (clearDraftAfterDone && shouldClearDraft && !streamHadError)
+    void clearDraft(clearDraftAfterDone);
   if (!streamHadError) refreshSessionsAfterDone?.();
   if (streamHadToolResult) void updateQuotaBadge();
   clearDraftAfterDone = null;

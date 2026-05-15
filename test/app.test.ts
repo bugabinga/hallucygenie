@@ -1444,6 +1444,99 @@ describe("streamChat SSE processing", () => {
         );
     });
 
+    it("create draft clears only after successful tool result", async () => {
+        const { doc: newDoc } = setupDOM();
+        doc = newDoc;
+        const sessionSelect = doc.createElement("select");
+        sessionSelect.id = "session-select";
+        doc.body.appendChild(sessionSelect);
+        const calls: Array<{ url: string; method: string }> = [];
+        const chunks = [
+            sseEvent("tool_start", JSON.stringify({ id: "tool-ok", name: "text_to_speech" })),
+            sseEvent(
+                "tool_result",
+                JSON.stringify({
+                    id: "tool-ok",
+                    name: "text_to_speech",
+                    result: { type: "audio", content: "/asset/voice.mp3" },
+                }),
+            ),
+            sseDone(),
+        ];
+        (globalThis as any).fetch = (url: string, init?: RequestInit) => {
+            calls.push({ url: String(url), method: init?.method ?? "GET" });
+            if (String(url) === "/api/chat") return Promise.resolve(createSSEResponse(chunks));
+            return Promise.resolve(new Response("{}", { status: 200 }));
+        };
+
+        await sendMessage("Use text_to_speech with text: hello", "create");
+        await new Promise((resolve) => setTimeout(resolve, 0));
+
+        assert.equal(
+            calls.some((call) => call.url === "/api/draft/create" && call.method === "DELETE"),
+            true,
+        );
+    });
+
+    it("create draft survives when stream has no tool success", async () => {
+        const { doc: newDoc } = setupDOM();
+        doc = newDoc;
+        const sessionSelect = doc.createElement("select");
+        sessionSelect.id = "session-select";
+        doc.body.appendChild(sessionSelect);
+        const calls: Array<{ url: string; method: string }> = [];
+        (globalThis as any).fetch = (url: string, init?: RequestInit) => {
+            calls.push({ url: String(url), method: init?.method ?? "GET" });
+            if (String(url) === "/api/chat") {
+                return Promise.resolve(createSSEResponse([sseText("no tool"), sseDone()]));
+            }
+            return Promise.resolve(new Response("{}", { status: 200 }));
+        };
+
+        await sendMessage("write only", "create");
+        await new Promise((resolve) => setTimeout(resolve, 0));
+
+        assert.equal(
+            calls.some((call) => call.url === "/api/draft/create" && call.method === "DELETE"),
+            false,
+        );
+    });
+
+    it("tool result error preserves create draft after done", async () => {
+        const { doc: newDoc } = setupDOM();
+        doc = newDoc;
+        const sessionSelect = doc.createElement("select");
+        sessionSelect.id = "session-select";
+        doc.body.appendChild(sessionSelect);
+        const calls: Array<{ url: string; method: string }> = [];
+        const chunks = [
+            sseEvent("tool_start", JSON.stringify({ id: "tool-err", name: "text_to_speech" })),
+            sseEvent(
+                "tool_result",
+                JSON.stringify({
+                    id: "tool-err",
+                    name: "text_to_speech",
+                    result: { type: "error", content: "bad text" },
+                }),
+            ),
+            sseDone(),
+        ];
+        (globalThis as any).fetch = (url: string, init?: RequestInit) => {
+            calls.push({ url: String(url), method: init?.method ?? "GET" });
+            if (String(url) === "/api/chat") return Promise.resolve(createSSEResponse(chunks));
+            return Promise.resolve(new Response("{}", { status: 200 }));
+        };
+
+        await sendMessage("Use text_to_speech with text: bad", "create");
+        await new Promise((resolve) => setTimeout(resolve, 0));
+
+        assert.equal(
+            calls.some((call) => call.url === "/api/draft/create" && call.method === "DELETE"),
+            false,
+        );
+        assert.ok(doc.querySelector(".tool-card")?.textContent?.includes("bad text"));
+    });
+
     it("tool card persists when thinking arrives after tool result", async () => {
         const { doc: newDoc } = setupDOM();
         doc = newDoc;
