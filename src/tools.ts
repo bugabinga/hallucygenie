@@ -245,8 +245,7 @@ export async function executeTool(
             );
         case "web_search":
             return webSearch(args.query as string, apiKey);
-        case "analyze_image":
-            return analyzeImage(args.image_url as string, apiKey);
+
         default:
             return { type: "error", content: `Unknown tool: ${name}` };
     }

@@ -946,47 +946,6 @@ describe("executeTool web_search", () => {
     });
 });
 
-// ── analyze_image via executeTool ───────────────────────────────────
-
-describe("executeTool analyze_image", () => {
-    const API_KEY = "test-key";
-
-    it("returns text description on success", async () => {
-        globalThis.fetch = async () =>
-            jsonResponse({ content: "A colorful gaming logo with neon lights" });
-        const result = await executeTool(
-            "analyze_image",
-            { image_url: "https://example.com/img.png" },
-            API_KEY,
-        );
-        assert.equal(result.type, "text");
-        assert.ok(result.content.includes("gaming logo"));
-    });
-
-    it("returns error on HTTP failure", async () => {
-        globalThis.fetch = async () => new Response(null, { status: 400 });
-        const result = await executeTool(
-            "analyze_image",
-            { image_url: "https://example.com/img.png" },
-            API_KEY,
-        );
-        assert.equal(result.type, "error");
-        assert.ok(result.content.includes("400"));
-    });
-
-    it("returns error on API error response", async () => {
-        globalThis.fetch = async () =>
-            jsonResponse({ base_resp: { status_code: 1001, status_msg: "invalid image" } });
-        const result = await executeTool(
-            "analyze_image",
-            { image_url: "https://example.com/bad.png" },
-            API_KEY,
-        );
-        assert.equal(result.type, "error");
-        assert.ok(result.content.includes("invalid image"));
-    });
-});
-
 // ── MINIMAX_BASE constant ───────────────────────────────────────────
 
 describe("MINIMAX_BASE", () => {
@@ -1337,18 +1296,5 @@ describe("getToolDefinitions schema content", () => {
         )) as ToolResult;
         assert.equal(result.type, "error");
         assert.ok((result.content as string).includes("Network timeout"));
-    });
-
-    it("analyze_image returns error on network failure", async () => {
-        globalThis.fetch = async () => {
-            throw new Error("Connection reset");
-        };
-        const result = (await executeTool(
-            "analyze_image",
-            { image_url: "https://example.com/img.jpg" },
-            "fake-key",
-        )) as ToolResult;
-        assert.equal(result.type, "error");
-        assert.ok((result.content as string).includes("Connection reset"));
     });
 });
