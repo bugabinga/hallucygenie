@@ -667,6 +667,9 @@ function handleExplicitToolDirective(
                 name: directive.name,
                 result: saved,
             });
+            if (sessionId && saved.type !== "error") {
+                deleteDraft(database, sessionId, "create");
+            }
             await writer.write(encoder.encode("data: [DONE]\n\n"));
 
             if (sessionId) {

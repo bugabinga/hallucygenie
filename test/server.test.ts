@@ -19,7 +19,14 @@ import { MINIMAX_MODEL } from "../src/agent.ts";
 import { existsSync, rmSync, mkdirSync } from "node:fs";
 import { join } from "node:path";
 import http from "node:http";
-import { getMessages, getAssets, getUsageToday } from "../src/db.ts";
+import {
+    getMessages,
+    getAssets,
+    getUsageToday,
+    saveDraft,
+    getDraft,
+    createSession,
+} from "../src/db.ts";
 import {
     trackUsage,
     saveMessage,
@@ -755,6 +762,69 @@ describe("SSE streaming from Anthropic endpoint", () => {
                 model: "image-01",
                 prompt: "cat",
                 aspect_ratio: "16:9",
+            });
+        } finally {
+            globalThis.fetch = originalFetch;
+        }
+    });
+
+    it("clears create draft after successful explicit tool directive", async () => {
+        const sessionId = "explicit-create-draft-success-session";
+        const db = getDb()!;
+        createSession(db, sessionId, "Draft Success");
+        saveDraft(db, sessionId, "create", { selectedTab: "voice", voice: { text: "hello" } });
+
+        const originalFetch = globalThis.fetch;
+        globalThis.fetch = async () =>
+            new Response(JSON.stringify({ data: { audio: "ff" } }), {
+                status: 200,
+                headers: { "Content-Type": "application/json" },
+            });
+
+        try {
+            const req = makeRequest(
+                "POST",
+                "/api/chat",
+                { messages: [{ role: "user", content: "Use text_to_speech with text: hello" }] },
+                { "X-Session-Id": sessionId },
+            );
+            const resp = await handleChat(req, "test-key", sessionId);
+            const body = await readBody(resp);
+
+            assert.ok(body.includes("tool_result"));
+            assert.equal(getDraft(db, sessionId, "create"), null);
+        } finally {
+            globalThis.fetch = originalFetch;
+        }
+    });
+
+    it("preserves create draft after failed explicit tool directive", async () => {
+        const sessionId = "explicit-create-draft-fail-session";
+        const db = getDb()!;
+        createSession(db, sessionId, "Draft Failure");
+        saveDraft(db, sessionId, "create", { selectedTab: "voice", voice: { text: "hello" } });
+
+        const originalFetch = globalThis.fetch;
+        globalThis.fetch = async () =>
+            new Response(
+                JSON.stringify({ base_resp: { status_code: 2013, status_msg: "bad text" } }),
+                { status: 200, headers: { "Content-Type": "application/json" } },
+            );
+
+        try {
+            const req = makeRequest(
+                "POST",
+                "/api/chat",
+                { messages: [{ role: "user", content: "Use text_to_speech with text: hello" }] },
+                { "X-Session-Id": sessionId },
+            );
+            const resp = await handleChat(req, "test-key", sessionId);
+            const body = await readBody(resp);
+
+            assert.ok(body.includes("Couldn't generate voice audio"));
+            assert.deepEqual(JSON.parse(getDraft(db, sessionId, "create")!.value_json), {
+                selectedTab: "voice",
+                voice: { text: "hello" },
             });
         } finally {
             globalThis.fetch = originalFetch;
