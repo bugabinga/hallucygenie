@@ -39,12 +39,12 @@ function jsonResponse(data: unknown, status = 200): Response {
 // ── Tool definitions ─────────────────────────────────────────────────
 
 describe("getToolDefinitions", () => {
-    it("returns five live-safe tool definitions", () => {
+    it("returns six live-safe tool definitions", () => {
         const defs = getToolDefinitions();
-        assert.equal(defs.length, 5);
+        assert.equal(defs.length, 6);
         assert.equal(
             defs.some((tool) => tool.name === "analyze_image"),
-            false,
+            true,
         );
     });
 
@@ -1158,6 +1158,32 @@ describe("webSearch HTTP request structure", () => {
 
 // ── analyzeImage HTTP structure ─────────────────────────────────────
 
+function mockAnalyzeImageFetch(vlmResponse: Response): {
+    capturedVlmUrl: string;
+    capturedVlmInit: RequestInit | undefined;
+    capturedDownloadUrl: string;
+} {
+    const captured = {
+        capturedVlmUrl: "",
+        capturedVlmInit: undefined as RequestInit | undefined,
+        capturedDownloadUrl: "",
+    };
+    globalThis.fetch = async (url: string | URL | Request, init?: RequestInit) => {
+        const urlStr = url.toString();
+        if (urlStr.includes("/v1/coding_plan/vlm")) {
+            captured.capturedVlmUrl = urlStr;
+            captured.capturedVlmInit = init;
+            return vlmResponse;
+        }
+        captured.capturedDownloadUrl = urlStr;
+        return new Response(Buffer.from([0x89, 0x50, 0x4e, 0x47]), {
+            status: 200,
+            headers: { "Content-Type": "image/png" },
+        });
+    };
+    return captured;
+}
+
 describe("analyzeImage HTTP request structure", () => {
     beforeEach(() => {
         originalFetch = globalThis.fetch;
@@ -1167,65 +1193,104 @@ describe("analyzeImage HTTP request structure", () => {
         globalThis.fetch = originalFetch;
     });
 
-    it("POSTs to correct endpoint", async () => {
-        let capturedUrl = "";
-        let capturedInit: RequestInit | undefined;
-        globalThis.fetch = async (url: string | URL | Request, init?: RequestInit) => {
-            capturedUrl = url.toString();
-            capturedInit = init;
-            return jsonResponse({ content: "A cat" });
-        };
-
+    it("downloads image then POSTs to VLM endpoint", async () => {
+        const cap = mockAnalyzeImageFetch(jsonResponse({ content: "A cat" }));
         await analyzeImage("https://example.com/photo.png", API_KEY);
 
-        assert.ok(capturedUrl.includes("/v1/coding_plan/vlm"), "should call VLM endpoint");
-        assert.equal(capturedInit?.method, "POST", "should use POST method");
+        assert.ok(
+            cap.capturedDownloadUrl.includes("example.com/photo.png"),
+            "should download the image first",
+        );
+        assert.ok(cap.capturedVlmUrl.includes("/v1/coding_plan/vlm"), "should call VLM endpoint");
+        assert.equal(cap.capturedVlmInit?.method, "POST", "should use POST method");
     });
 
-    it("sends Authorization Bearer header", async () => {
-        let capturedHeaders: Record<string, string> = {};
-        globalThis.fetch = async (_url: string | URL | Request, init?: RequestInit) => {
-            capturedHeaders = init?.headers as Record<string, string>;
-            return jsonResponse({ content: "A cat" });
-        };
-
+    it("sends Authorization Bearer header to VLM endpoint", async () => {
+        const cap = mockAnalyzeImageFetch(jsonResponse({ content: "A cat" }));
         await analyzeImage("https://example.com/img.jpg", API_KEY);
 
+        const headers = cap.capturedVlmInit!.headers as Record<string, string>;
         assert.ok(
-            capturedHeaders["Authorization"]?.includes(API_KEY),
+            headers["Authorization"]?.includes(API_KEY),
             "Authorization header should contain API key",
         );
     });
 
-    it("sends prompt and image_url in request body", async () => {
-        let capturedBody = "";
-        globalThis.fetch = async (_url: string | URL | Request, init?: RequestInit) => {
-            capturedBody = init?.body as string;
-            return jsonResponse({ content: "A gaming logo" });
-        };
-
+    it("sends data URL in image_url field, not raw HTTP URL", async () => {
+        const cap = mockAnalyzeImageFetch(jsonResponse({ content: "A gaming logo" }));
         await analyzeImage("https://cdn.example.com/logo.png", API_KEY);
 
-        const body = JSON.parse(capturedBody);
+        const body = JSON.parse(cap.capturedVlmInit!.body as string);
         assert.ok(body.prompt, "should have prompt field");
+        assert.ok(
+            body.image_url.startsWith("data:image/png;base64,"),
+            "should send data URL, not raw HTTP URL",
+        );
         assert.equal(
-            body.image_url,
-            "https://cdn.example.com/logo.png",
-            "should include image URL",
+            body.image_url.includes("cdn.example.com"),
+            false,
+            "should not contain original URL",
         );
     });
 
+    it("passes through data URLs without downloading", async () => {
+        const cap = mockAnalyzeImageFetch(jsonResponse({ content: "A JPEG image" }));
+        const dataUrl = "data:image/jpeg;base64,/9j/4AAQ";
+        await analyzeImage(dataUrl, API_KEY);
+
+        // Should NOT have downloaded anything — download URL stays empty
+        assert.equal(cap.capturedDownloadUrl, "", "should skip download for data URLs");
+        const body = JSON.parse(cap.capturedVlmInit!.body as string);
+        assert.equal(body.image_url, dataUrl, "should pass data URL through");
+    });
+
     it("returns description on success", async () => {
-        globalThis.fetch = async () =>
-            jsonResponse({ content: "A colorful gaming logo with neon lights" });
+        mockAnalyzeImageFetch(jsonResponse({ content: "A colorful gaming logo with neon lights" }));
 
         const result = await analyzeImage("https://example.com/img.png", API_KEY);
         assert.equal(result.type, "text");
         assert.ok(result.content.includes("gaming logo"));
     });
 
-    it("returns error on HTTP failure", async () => {
-        globalThis.fetch = async () => new Response(null, { status: 502 });
+    it("returns error when image download fails", async () => {
+        globalThis.fetch = async (url: string | URL | Request) => {
+            if (!url.toString().includes("/v1/coding_plan/vlm")) {
+                return new Response(null, { status: 404 });
+            }
+            return jsonResponse({ content: "irrelevant" });
+        };
+
+        const result = await analyzeImage("https://example.com/bad.png", API_KEY);
+        assert.equal(result.type, "error");
+        assert.ok(result.content.includes("couldn't download image"));
+    });
+
+    it("returns error when download returns non-image content", async () => {
+        globalThis.fetch = async (url: string | URL | Request) => {
+            if (!url.toString().includes("/v1/coding_plan/vlm")) {
+                return new Response("<html>not an image</html>", {
+                    status: 200,
+                    headers: { "Content-Type": "text/html" },
+                });
+            }
+            return jsonResponse({ content: "irrelevant" });
+        };
+
+        const result = await analyzeImage("https://example.com/notimage.html", API_KEY);
+        assert.equal(result.type, "error");
+        assert.ok(result.content.includes("non-image content"));
+    });
+
+    it("returns error on VLM HTTP failure", async () => {
+        globalThis.fetch = async (url: string | URL | Request) => {
+            if (url.toString().includes("/v1/coding_plan/vlm")) {
+                return new Response(null, { status: 502 });
+            }
+            return new Response(Buffer.from([0x89, 0x50]), {
+                status: 200,
+                headers: { "Content-Type": "image/png" },
+            });
+        };
 
         const result = await analyzeImage("https://example.com/bad.png", API_KEY);
         assert.equal(result.type, "error");
@@ -1233,8 +1298,9 @@ describe("analyzeImage HTTP request structure", () => {
     });
 
     it("returns error on base_resp status_code != 0", async () => {
-        globalThis.fetch = async () =>
-            jsonResponse({ base_resp: { status_code: 1004, status_msg: "login fail" } });
+        mockAnalyzeImageFetch(
+            jsonResponse({ base_resp: { status_code: 1004, status_msg: "login fail" } }),
+        );
 
         const result = await analyzeImage("https://example.com/img.png", API_KEY);
         assert.equal(result.type, "error");
@@ -1252,7 +1318,7 @@ describe("analyzeImage HTTP request structure", () => {
     });
 
     it("handles empty content field gracefully", async () => {
-        globalThis.fetch = async () => jsonResponse({ content: "" });
+        mockAnalyzeImageFetch(jsonResponse({ content: "" }));
 
         const result = await analyzeImage("https://example.com/empty.png", API_KEY);
         assert.equal(result.type, "text");
@@ -1260,11 +1326,23 @@ describe("analyzeImage HTTP request structure", () => {
     });
 
     it("handles missing content field gracefully", async () => {
-        globalThis.fetch = async () => jsonResponse({});
+        mockAnalyzeImageFetch(jsonResponse({}));
 
         const result = await analyzeImage("https://example.com/no-content.png", API_KEY);
         assert.equal(result.type, "text");
         assert.equal(result.content, "No description returned.");
+    });
+
+    it("executeTool dispatches analyze_image", async () => {
+        mockAnalyzeImageFetch(jsonResponse({ content: "A mountain landscape" }));
+
+        const result = await executeTool(
+            "analyze_image",
+            { image_url: "https://example.com/mountain.png" },
+            API_KEY,
+        );
+        assert.equal(result.type, "text");
+        assert.ok(result.content.includes("mountain landscape"));
     });
 });
 
@@ -1296,5 +1374,12 @@ describe("getToolDefinitions schema content", () => {
         )) as ToolResult;
         assert.equal(result.type, "error");
         assert.ok((result.content as string).includes("Network timeout"));
+    });
+
+    it("analyze_image schema has required image_url field", async () => {
+        const tool = getToolDefinitions().find((t) => t.name === "analyze_image");
+        assert.ok(tool, "analyze_image tool should exist");
+        assert.ok(tool.input_schema.properties?.image_url, "should have image_url property");
+        assert.deepEqual(tool.input_schema.required, ["image_url"]);
     });
 });

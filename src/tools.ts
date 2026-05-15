@@ -186,6 +186,21 @@ export function getToolDefinitions(): ToolDefinition[] {
                 required: ["query"],
             },
         },
+        {
+            name: "analyze_image",
+            description:
+                "Analyze an image at a URL and describe what you see. Returns a text description of the image contents.",
+            input_schema: {
+                type: "object",
+                properties: {
+                    image_url: {
+                        type: "string",
+                        description: "HTTPS URL of the image to analyze (JPG, PNG, GIF, or WebP).",
+                    },
+                },
+                required: ["image_url"],
+            },
+        },
     ];
 }
 
@@ -245,6 +260,9 @@ export async function executeTool(
             );
         case "web_search":
             return webSearch(args.query as string, apiKey);
+
+        case "analyze_image":
+            return analyzeImage(args.image_url as string, apiKey);
 
         default:
             return { type: "error", content: `Unknown tool: ${name}` };
@@ -617,13 +635,51 @@ export async function webSearch(query: string, apiKey: string): Promise<ToolResu
 
 export async function analyzeImage(imageUrl: string, apiKey: string): Promise<ToolResult> {
     try {
+        // VLM endpoint requires data:image/...;base64,... URLs, not raw HTTP/HTTPS URLs.
+        // Download the image and convert to a data URL before calling the endpoint.
+        let vlmImageUrl: string;
+        if (imageUrl.startsWith("data:")) {
+            vlmImageUrl = imageUrl;
+        } else {
+            const downloadResp = await fetch(imageUrl);
+            if (!downloadResp.ok) {
+                return {
+                    type: "error",
+                    content: `Image analysis failed: couldn't download image (HTTP ${downloadResp.status})`,
+                };
+            }
+            const contentType = downloadResp.headers
+                .get("Content-Type")
+                ?.split(";")[0]
+                ?.trim()
+                .toLowerCase();
+            if (!contentType || !contentType.startsWith("image/")) {
+                return {
+                    type: "error",
+                    content: `Image analysis failed: URL returned non-image content (${contentType || "unknown"})`,
+                };
+            }
+            const buffer = Buffer.from(await downloadResp.arrayBuffer());
+            if (buffer.byteLength > 20 * 1024 * 1024) {
+                return {
+                    type: "error",
+                    content: "Image analysis failed: image too large (max 20 MB)",
+                };
+            }
+            const base64 = buffer.toString("base64");
+            vlmImageUrl = `data:${contentType};base64,${base64}`;
+        }
+
         const resp = await fetch(`${MINIMAX_BASE}/v1/coding_plan/vlm`, {
             method: "POST",
             headers: {
                 Authorization: `Bearer ${apiKey}`,
                 "Content-Type": "application/json",
             },
-            body: JSON.stringify({ prompt: "Describe this image in detail.", image_url: imageUrl }),
+            body: JSON.stringify({
+                prompt: "Describe this image in detail.",
+                image_url: vlmImageUrl,
+            }),
         });
         if (!resp.ok) {
             return { type: "error", content: `Image analysis failed: HTTP ${resp.status}` };

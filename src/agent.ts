@@ -121,6 +121,12 @@ export function safeToolResultForUser(toolName: string, result: ToolResult): Too
             content: "Couldn't generate music. Try a shorter prompt or lyrics.",
         };
     }
+    if (toolName === "analyze_image") {
+        return {
+            type: "error",
+            content: "Couldn't analyze that image. Try a different image URL.",
+        };
+    }
     return { type: "error", content: "Tool failed. Try again." };
 }
 

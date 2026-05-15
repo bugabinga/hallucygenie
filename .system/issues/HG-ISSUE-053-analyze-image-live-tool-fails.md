@@ -1,5 +1,5 @@
 ---
-{ "status": "open", "specs": ["HG-SPEC-006", "HG-SPEC-008", "HG-SPEC-011"] }
+{ "status": "fixed", "specs": ["HG-SPEC-006", "HG-SPEC-008", "HG-SPEC-011"] }
 ---
 
 # HG-ISSUE-053: Live analyze_image tool fails and triggers MiniMax tool-id error

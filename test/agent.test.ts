@@ -668,6 +668,16 @@ describe("runAgentLoop", () => {
         assert.ok(result.content.includes("Couldn't generate music"));
     });
 
+    it("replaces analyze_image errors with kid-safe text", () => {
+        const result = safeToolResultForUser("analyze_image", {
+            type: "error",
+            content: "base_resp status_code=2013 invalid image URL",
+        });
+        assert.equal(result.type, "error");
+        assert.equal(result.content.includes("base_resp"), false);
+        assert.ok(result.content.includes("Couldn't analyze that image"));
+    });
+
     it("maps MiniMax API errors to user-safe text", () => {
         assert.equal(
             apiErrorMessageForUser(401),
