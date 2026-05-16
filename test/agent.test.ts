@@ -668,6 +668,16 @@ describe("runAgentLoop", () => {
         assert.ok(result.content.includes("Couldn't generate music"));
     });
 
+    it("generates kid-safe error for generate_lyrics failures", () => {
+        const result = safeToolResultForUser("generate_lyrics", {
+            type: "error",
+            content: '{"base_resp":{"status_code":2001,"status_msg":"invalid prompt"}}',
+        });
+        assert.equal(result.type, "error");
+        assert.equal(result.content.includes("base_resp"), false);
+        assert.ok(result.content.includes("Couldn't generate lyrics"));
+    });
+
     it("maps MiniMax API errors to user-safe text", () => {
         assert.equal(
             apiErrorMessageForUser(401),
@@ -1547,6 +1557,7 @@ describe("System Prompt", () => {
     it("SYSTEM_PROMPT forces media generation through tools", () => {
         assert.ok(SYSTEM_PROMPT.includes("MUST call generate_image"));
         assert.ok(SYSTEM_PROMPT.includes("MUST call generate_music"));
+        assert.ok(SYSTEM_PROMPT.includes("MUST call generate_lyrics"));
         assert.ok(SYSTEM_PROMPT.includes("MUST call text_to_speech"));
         assert.ok(SYSTEM_PROMPT.includes("Never claim media was generated"));
         assert.ok(SYSTEM_PROMPT.includes("Never output fake placeholders"));
@@ -2861,5 +2872,95 @@ describe("SSE parser error paths", () => {
         };
         assert.ok(toolResult);
         assert.equal(toolResult.prompt, "space jazz");
+    });
+
+    it("calls generate_lyrics when user asks for lyrics", async () => {
+        const first = anthropicResponse(
+            toolUseResponse("tu_lyrics", "generate_lyrics", '{"prompt":"happy song"}'),
+        );
+        const second = anthropicResponse(textResponse(["Here are the lyrics!"]));
+        let n = 0;
+        globalThis.fetch = async (url: string | URL | Request) => {
+            if (url.toString().includes("/anthropic/v1/messages"))
+                return ++n === 1 ? first : second;
+            return new Response(
+                JSON.stringify({
+                    lyrics: "Verse: Happy birthday to you\nChorus: Happy birthday!",
+                }),
+                { status: 200, headers: { "Content-Type": "application/json" } },
+            );
+        };
+        const { events, onEvent } = collectEvents();
+        await runAgentLoop(
+            [{ role: "user", content: "write me some lyrics for a happy song" }],
+            "test-key",
+            onEvent,
+        );
+        const toolStart = events.find(
+            (e) => e.type === "tool_start" && e.name === "generate_lyrics",
+        );
+        const toolResult = events.find(
+            (e) => e.type === "tool_result" && e.name === "generate_lyrics",
+        );
+        assert.ok(toolStart, "should emit tool_start for generate_lyrics");
+        assert.ok(toolResult, "should emit tool_result for generate_lyrics");
+        assert.equal(toolResult.result?.type, "text");
+        assert.ok(toolResult.result?.content.includes("Happy birthday"));
+    });
+
+    it("agent sequences generate_lyrics then generate_music in one turn", async () => {
+        // Simulate agent asking to first get lyrics then generate music
+        const first = anthropicResponse(
+            toolUseResponse("tu_1", "generate_lyrics", '{"prompt":"epic adventure song"}'),
+        );
+        const second = anthropicResponse(
+            toolUseResponse(
+                "tu_2",
+                "generate_music",
+                '{"prompt":"epic adventure song","lyrics":"[Verse]\nWe are heroes"}',
+            ),
+        );
+        const third = anthropicResponse(textResponse(["Done!"]));
+        let n = 0;
+        globalThis.fetch = async (url: string | URL | Request) => {
+            if (url.toString().includes("/anthropic/v1/messages")) {
+                const resp = ++n === 1 ? first : n === 2 ? second : third;
+                return resp;
+            }
+            if (url.toString().includes("/v1/lyrics_generation")) {
+                return new Response(
+                    JSON.stringify({ lyrics: "[Verse]\nWe are heroes\n[Verse]\nWe win today" }),
+                    { status: 200, headers: { "Content-Type": "application/json" } },
+                );
+            }
+            return new Response(JSON.stringify({ data: { audio: "4d75736963" } }), {
+                status: 200,
+                headers: { "Content-Type": "application/json" },
+            });
+        };
+        const { events, onEvent } = collectEvents();
+        await runAgentLoop(
+            [{ role: "user", content: "write me lyrics then generate the music" }],
+            "test-key",
+            onEvent,
+        );
+        const lyricsToolStart = events.filter(
+            (e) => e.type === "tool_start" && e.name === "generate_lyrics",
+        );
+        const musicToolStart = events.filter(
+            (e) => e.type === "tool_start" && e.name === "generate_music",
+        );
+        const lyricsResult = events.find(
+            (e) => e.type === "tool_result" && e.name === "generate_lyrics",
+        );
+        const musicResult = events.find(
+            (e) => e.type === "tool_result" && e.name === "generate_music",
+        );
+        assert.ok(lyricsToolStart.length >= 1, "should call generate_lyrics");
+        assert.ok(musicToolStart.length >= 1, "should call generate_music");
+        assert.ok(lyricsResult, "should return lyrics result");
+        assert.equal(lyricsResult.result?.type, "text");
+        assert.ok(musicResult, "should return music result");
+        assert.equal(musicResult.result?.type, "audio");
     });
 });
