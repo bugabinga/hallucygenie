@@ -612,34 +612,3 @@ export async function webSearch(query: string, apiKey: string): Promise<ToolResu
         return { type: "error", content: `Search failed: ${String(err)}` };
     }
 }
-
-// ── Image Analysis (Vision) ───────────────────────────────────────
-
-export async function analyzeImage(imageUrl: string, apiKey: string): Promise<ToolResult> {
-    try {
-        const resp = await fetch(`${MINIMAX_BASE}/v1/coding_plan/vlm`, {
-            method: "POST",
-            headers: {
-                Authorization: `Bearer ${apiKey}`,
-                "Content-Type": "application/json",
-            },
-            body: JSON.stringify({ prompt: "Describe this image in detail.", image_url: imageUrl }),
-        });
-        if (!resp.ok) {
-            return { type: "error", content: `Image analysis failed: HTTP ${resp.status}` };
-        }
-        const data = (await resp.json()) as {
-            content?: string;
-            base_resp?: { status_code: number; status_msg: string };
-        };
-        if (data.base_resp && data.base_resp.status_code !== 0) {
-            return {
-                type: "error",
-                content: `Image analysis failed: ${data.base_resp.status_msg}`,
-            };
-        }
-        return { type: "text", content: data.content || "No description returned." };
-    } catch (err) {
-        return { type: "error", content: `Image analysis failed: ${String(err)}` };
-    }
-}
