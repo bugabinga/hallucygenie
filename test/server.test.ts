@@ -14,6 +14,7 @@ import {
     resolveSessionId,
     parseExplicitToolDirective,
     sanitizeAssistantMediaMarkup,
+    parseLimitOffset,
 } from "../src/server.ts";
 import { MINIMAX_MODEL } from "../src/agent.ts";
 import { existsSync, rmSync, mkdirSync } from "node:fs";
@@ -2949,5 +2950,56 @@ describe("GET /api/quota", () => {
             if (prevKey) process.env.MINIMAX_API_KEY = prevKey;
             else delete process.env.MINIMAX_API_KEY;
         }
+    });
+});
+
+describe("parseLimitOffset", () => {
+    it("returns defaults when params are missing", () => {
+        const url = new URL("http://localhost/api/assets");
+        assert.deepEqual(parseLimitOffset(url), { limit: 20, offset: 0 });
+    });
+
+    it("clamps limit to 0-50 range", () => {
+        const below = new URL("http://localhost/api/assets?limit=-5");
+        assert.equal(parseLimitOffset(below).limit, 0);
+
+        const above = new URL("http://localhost/api/assets?limit=100");
+        assert.equal(parseLimitOffset(above).limit, 50);
+
+        const valid = new URL("http://localhost/api/assets?limit=25");
+        assert.equal(parseLimitOffset(valid).limit, 25);
+    });
+
+    it("clamps offset to minimum 0", () => {
+        const negative = new URL("http://localhost/api/assets?offset=-10");
+        assert.equal(parseLimitOffset(negative).offset, 0);
+
+        const valid = new URL("http://localhost/api/assets?offset=5");
+        assert.equal(parseLimitOffset(valid).offset, 5);
+    });
+
+    it("falls back to defaults for invalid values", () => {
+        const invalidLimit = new URL("http://localhost/api/assets?limit=abc");
+        assert.equal(parseLimitOffset(invalidLimit).limit, 20);
+
+        const invalidOffset = new URL("http://localhost/api/assets?offset=xyz");
+        assert.equal(parseLimitOffset(invalidOffset).offset, 0);
+
+        const bothInvalid = new URL("http://localhost/api/assets?limit=abc&offset=xyz");
+        assert.deepEqual(parseLimitOffset(bothInvalid), { limit: 20, offset: 0 });
+    });
+
+    it("handles NaN from Number() conversion", () => {
+        const nanLimit = new URL("http://localhost/api/assets?limit=abc");
+        assert.equal(parseLimitOffset(nanLimit).limit, 20);
+
+        const nanOffset = new URL("http://localhost/api/assets?offset=xyz");
+        assert.equal(parseLimitOffset(nanOffset).offset, 0);
+
+        const emptyLimit = new URL("http://localhost/api/assets?limit=");
+        assert.equal(parseLimitOffset(emptyLimit).limit, 0);
+
+        const emptyOffset = new URL("http://localhost/api/assets?offset=");
+        assert.equal(parseLimitOffset(emptyOffset).offset, 0);
     });
 });

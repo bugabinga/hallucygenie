@@ -843,6 +843,19 @@ describe("consumeQuota", () => {
         releaseQuota(db, "image");
         assert.equal(checkQuota(db, "image").used, 0);
     });
+
+    it("rejects consumption when remaining quota is insufficient", () => {
+        // Simulate existing usage: 97 used out of 100 limit (3 remaining)
+        db.prepare(
+            "INSERT INTO daily_usage (date, feature, count) VALUES (date('now'), 'image', 97)",
+        ).run();
+        assert.equal(checkQuota(db, "image").used, 97);
+
+        // Trying to consume 5 when only 3 remaining should fail
+        assert.equal(consumeQuota(db, "image", 5), null);
+        // Count should remain 97, not 102 (which would exceed limit of 100)
+        assert.equal(checkQuota(db, "image").used, 97);
+    });
 });
 
 // ── Assets ─────────────────────────────────────────────────────────

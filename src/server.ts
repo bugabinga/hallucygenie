@@ -764,11 +764,12 @@ function parseJsonObject(input: unknown, label: string): Record<string, unknown>
     return input as Record<string, unknown>;
 }
 
-function parseLimitOffset(url: URL): { limit: number; offset: number } {
-    return {
-        limit: Number(url.searchParams.get("limit") ?? 20),
-        offset: Number(url.searchParams.get("offset") ?? 0),
-    };
+export function parseLimitOffset(url: URL): { limit: number; offset: number } {
+    const rawLimit = Number(url.searchParams.get("limit") ?? 20);
+    const rawOffset = Number(url.searchParams.get("offset") ?? 0);
+    const limit = Number.isNaN(rawLimit) ? 20 : Math.min(Math.max(rawLimit, 0), 50);
+    const offset = Number.isNaN(rawOffset) ? 0 : Math.max(rawOffset, 0);
+    return { limit, offset };
 }
 
 function isAvatarImageMime(mime: string): boolean {
