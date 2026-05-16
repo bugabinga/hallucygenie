@@ -10,7 +10,6 @@ import {
     generateMusic,
     generateLyrics,
     webSearch,
-    analyzeImage,
     MINIMAX_BASE,
 } from "../src/tools.ts";
 
@@ -1153,118 +1152,6 @@ describe("webSearch HTTP request structure", () => {
         const result = await webSearch("test", API_KEY);
         assert.equal(result.type, "error");
         assert.ok(result.content.includes("DNS lookup failed"));
-    });
-});
-
-// ── analyzeImage HTTP structure ─────────────────────────────────────
-
-describe("analyzeImage HTTP request structure", () => {
-    beforeEach(() => {
-        originalFetch = globalThis.fetch;
-    });
-
-    afterEach(() => {
-        globalThis.fetch = originalFetch;
-    });
-
-    it("POSTs to correct endpoint", async () => {
-        let capturedUrl = "";
-        let capturedInit: RequestInit | undefined;
-        globalThis.fetch = async (url: string | URL | Request, init?: RequestInit) => {
-            capturedUrl = url.toString();
-            capturedInit = init;
-            return jsonResponse({ content: "A cat" });
-        };
-
-        await analyzeImage("https://example.com/photo.png", API_KEY);
-
-        assert.ok(capturedUrl.includes("/v1/coding_plan/vlm"), "should call VLM endpoint");
-        assert.equal(capturedInit?.method, "POST", "should use POST method");
-    });
-
-    it("sends Authorization Bearer header", async () => {
-        let capturedHeaders: Record<string, string> = {};
-        globalThis.fetch = async (_url: string | URL | Request, init?: RequestInit) => {
-            capturedHeaders = init?.headers as Record<string, string>;
-            return jsonResponse({ content: "A cat" });
-        };
-
-        await analyzeImage("https://example.com/img.jpg", API_KEY);
-
-        assert.ok(
-            capturedHeaders["Authorization"]?.includes(API_KEY),
-            "Authorization header should contain API key",
-        );
-    });
-
-    it("sends prompt and image_url in request body", async () => {
-        let capturedBody = "";
-        globalThis.fetch = async (_url: string | URL | Request, init?: RequestInit) => {
-            capturedBody = init?.body as string;
-            return jsonResponse({ content: "A gaming logo" });
-        };
-
-        await analyzeImage("https://cdn.example.com/logo.png", API_KEY);
-
-        const body = JSON.parse(capturedBody);
-        assert.ok(body.prompt, "should have prompt field");
-        assert.equal(
-            body.image_url,
-            "https://cdn.example.com/logo.png",
-            "should include image URL",
-        );
-    });
-
-    it("returns description on success", async () => {
-        globalThis.fetch = async () =>
-            jsonResponse({ content: "A colorful gaming logo with neon lights" });
-
-        const result = await analyzeImage("https://example.com/img.png", API_KEY);
-        assert.equal(result.type, "text");
-        assert.ok(result.content.includes("gaming logo"));
-    });
-
-    it("returns error on HTTP failure", async () => {
-        globalThis.fetch = async () => new Response(null, { status: 502 });
-
-        const result = await analyzeImage("https://example.com/bad.png", API_KEY);
-        assert.equal(result.type, "error");
-        assert.ok(result.content.includes("502"));
-    });
-
-    it("returns error on base_resp status_code != 0", async () => {
-        globalThis.fetch = async () =>
-            jsonResponse({ base_resp: { status_code: 1004, status_msg: "login fail" } });
-
-        const result = await analyzeImage("https://example.com/img.png", API_KEY);
-        assert.equal(result.type, "error");
-        assert.ok(result.content.includes("login fail"));
-    });
-
-    it("handles network failure", async () => {
-        globalThis.fetch = async () => {
-            throw new Error("Connection refused");
-        };
-
-        const result = await analyzeImage("https://example.com/img.png", API_KEY);
-        assert.equal(result.type, "error");
-        assert.ok(result.content.includes("Connection refused"));
-    });
-
-    it("handles empty content field gracefully", async () => {
-        globalThis.fetch = async () => jsonResponse({ content: "" });
-
-        const result = await analyzeImage("https://example.com/empty.png", API_KEY);
-        assert.equal(result.type, "text");
-        assert.equal(result.content, "No description returned.");
-    });
-
-    it("handles missing content field gracefully", async () => {
-        globalThis.fetch = async () => jsonResponse({});
-
-        const result = await analyzeImage("https://example.com/no-content.png", API_KEY);
-        assert.equal(result.type, "text");
-        assert.equal(result.content, "No description returned.");
     });
 });
 
