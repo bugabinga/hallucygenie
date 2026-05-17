@@ -1670,6 +1670,76 @@ describe("streamChat SSE processing", () => {
         assert.ok(events.some((e) => e.event === "tool_result"));
     });
 
+    it("keeps bottom-follow when image tool result grows after load", async () => {
+        const { doc: newDoc } = setupDOM();
+        doc = newDoc;
+        const messageList = doc.querySelector("#message-list");
+        let scrollTop = 500;
+        let scrollHeight = 1000;
+        Object.defineProperties(messageList, {
+            scrollTop: {
+                get: () => scrollTop,
+                set: (value) => (scrollTop = value),
+                configurable: true,
+            },
+            scrollHeight: { get: () => scrollHeight, configurable: true },
+            clientHeight: { get: () => 500, configurable: true },
+        });
+        const chunks = [
+            sseEvent("tool_start", JSON.stringify({ id: "tool-grow", name: "generate_image" })),
+            sseEvent(
+                "tool_result",
+                JSON.stringify({
+                    id: "tool-grow",
+                    name: "generate_image",
+                    result: { type: "image", content: "https://example.com/big.png" },
+                }),
+            ),
+            sseDone(),
+        ];
+        (globalThis as any).fetch = () => Promise.resolve(createSSEResponse(chunks));
+
+        await streamChat([{ role: "user", content: "draw" }]);
+        assert.equal(scrollTop, 1000);
+
+        scrollHeight = 1600;
+        doc.querySelector(".tool-result-image")?.dispatchEvent(new Event("load"));
+        assert.equal(scrollTop, 1600);
+    });
+
+    it("does not force-scroll orphan tool results when user scrolled up", async () => {
+        const { doc: newDoc } = setupDOM();
+        doc = newDoc;
+        const messageList = doc.querySelector("#message-list");
+        let scrollTop = 100;
+        Object.defineProperties(messageList, {
+            scrollTop: {
+                get: () => scrollTop,
+                set: (value) => (scrollTop = value),
+                configurable: true,
+            },
+            scrollHeight: { get: () => 1000, configurable: true },
+            clientHeight: { get: () => 500, configurable: true },
+        });
+        const chunks = [
+            sseEvent(
+                "tool_result",
+                JSON.stringify({
+                    id: "orphan-grow",
+                    name: "generate_image",
+                    result: { type: "image", content: "https://example.com/orphan.png" },
+                }),
+            ),
+            sseDone(),
+        ];
+        (globalThis as any).fetch = () => Promise.resolve(createSSEResponse(chunks));
+
+        await streamChat([{ role: "user", content: "draw" }]);
+        doc.querySelector(".tool-result-image")?.dispatchEvent(new Event("load"));
+
+        assert.equal(scrollTop, 100);
+    });
+
     it("[DONE] signal → stream finishes", async () => {
         const events: SSEEvent[] = [];
         const chunks = [sseText("hi"), sseEvent("message", "[DONE]")];

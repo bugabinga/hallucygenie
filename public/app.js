@@ -2836,13 +2836,14 @@ function handleSSEEvent(event) {
       }
       const loadingCard = activeToolCards.get(parsed.id);
       const resultCard = renderToolResult(parsed.name, parsed.result);
+      const shouldFollowToolResize = isMessageListNearBottom();
       if (loadingCard?.isConnected) {
         loadingCard.replaceWith(resultCard);
       } else {
         ensureAssistantContent().appendChild(resultCard);
       }
       activeToolCards.delete(parsed.id);
-      scrollToBottom();
+      keepToolResultInView(resultCard, shouldFollowToolResize);
       if (parsed.result.type === "error") streamHadError = true;
       streamHadToolResult = true;
       updateQuotaBadge();
@@ -2934,6 +2935,22 @@ function scrollToBottom() {
   const list2 = $("#message-list");
   requestAnimationFrame(() => {
     list2.scrollTop = list2.scrollHeight;
+  });
+}
+function isMessageListNearBottom(threshold = 80) {
+  const list2 = $("#message-list");
+  return list2.scrollHeight - list2.clientHeight - list2.scrollTop <= threshold;
+}
+function keepToolResultInView(card, shouldFollow) {
+  if (!shouldFollow) return;
+  scrollToBottom();
+  card.querySelectorAll("img.tool-result-image").forEach((img) => {
+    img.addEventListener("load", scrollToBottom, { once: true });
+    img.addEventListener("error", scrollToBottom, { once: true });
+  });
+  card.querySelectorAll("audio.tool-result-audio").forEach((audio) => {
+    audio.addEventListener("loadedmetadata", scrollToBottom, { once: true });
+    audio.addEventListener("loadeddata", scrollToBottom, { once: true });
   });
 }
 function unwrapStreamChunks(root) {

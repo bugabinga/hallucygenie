@@ -929,6 +929,7 @@ function handleSSEEvent(event: SSEEvent): void {
             }
             const loadingCard = activeToolCards.get(parsed.id);
             const resultCard = renderToolResult(parsed.name, parsed.result);
+            const shouldFollowToolResize = isMessageListNearBottom();
             if (loadingCard?.isConnected) {
                 // Replace loading card with result
                 loadingCard.replaceWith(resultCard);
@@ -937,7 +938,7 @@ function handleSSEEvent(event: SSEEvent): void {
                 ensureAssistantContent().appendChild(resultCard);
             }
             activeToolCards.delete(parsed.id);
-            scrollToBottom();
+            keepToolResultInView(resultCard, shouldFollowToolResize);
             if (parsed.result.type === "error") streamHadError = true;
             // Refresh quota badge and assets tab after tool execution
             streamHadToolResult = true;
@@ -1052,6 +1053,24 @@ function scrollToBottom(): void {
     const list = $("#message-list");
     requestAnimationFrame(() => {
         list.scrollTop = list.scrollHeight;
+    });
+}
+
+function isMessageListNearBottom(threshold = 80): boolean {
+    const list = $("#message-list");
+    return list.scrollHeight - list.clientHeight - list.scrollTop <= threshold;
+}
+
+function keepToolResultInView(card: HTMLElement, shouldFollow: boolean): void {
+    if (!shouldFollow) return;
+    scrollToBottom();
+    card.querySelectorAll<HTMLImageElement>("img.tool-result-image").forEach((img) => {
+        img.addEventListener("load", scrollToBottom, { once: true });
+        img.addEventListener("error", scrollToBottom, { once: true });
+    });
+    card.querySelectorAll<HTMLAudioElement>("audio.tool-result-audio").forEach((audio) => {
+        audio.addEventListener("loadedmetadata", scrollToBottom, { once: true });
+        audio.addEventListener("loadeddata", scrollToBottom, { once: true });
     });
 }
 

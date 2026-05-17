@@ -1,5 +1,5 @@
 ---
-{ "status": "open", "specs": ["HG-SPEC-004", "HG-SPEC-011", "HG-SPEC-012"] }
+{ "status": "fixed", "specs": ["HG-SPEC-004", "HG-SPEC-011", "HG-SPEC-012"] }
 ---
 
 # HG-ISSUE-074: Tool result height change does not update scroll state
@@ -34,3 +34,10 @@ Fix:
 - After rendering the tool result, re-scroll to bottom only if it was near bottom.
 - For media cards, also handle late layout changes from image/audio load/metadata events.
 - Add regression tests for loading-card → taller result-card replacement preserving bottom-follow state.
+
+Resolution 2026-05-18:
+
+- Tool result replacement now checks whether the message list was near bottom before replacing/adding the result card.
+- If the user was following the conversation, the list scrolls after replacement and again on late image/audio layout events.
+- If the user scrolled up, orphan/final tool results do not force-scroll.
+- Added regression coverage for image result growth after `load` and for not forcing scroll when the user is away from bottom.
