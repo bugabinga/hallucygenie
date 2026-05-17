@@ -227,8 +227,22 @@ describe("index.html health", () => {
         );
         assert.match(
             styleCss,
+            /@media \(max-width: 560px\) \{[\s\S]*\.session-switcher \{[\s\S]*width: 100%;/,
+        );
+        assert.match(
+            styleCss,
             /@media \(max-width: 560px\) \{[\s\S]*\.session-select \{[\s\S]*width: 100%;/,
         );
+        assert.match(styleCss, /\.header-title \{[^}]*text-overflow: ellipsis;/);
+        assert.match(styleCss, /\.header-title \{[^}]*white-space: nowrap;/);
+        assert.match(styleCss, /\.header-right \{[^}]*min-width: 0;/);
+        assert.match(styleCss, /\.session-switcher \{[^}]*min-width: 0;/);
+        assert.match(styleCss, /\.session-select \{[^}]*text-overflow: ellipsis;/);
+        for (const selector of [".session-switcher", ".session-select", ".session-new"]) {
+            const escaped = selector.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+            assert.match(styleCss, new RegExp(`${escaped} \\{[^}]*min-height: 32px;`));
+        }
+        assert.match(styleCss, /\.create-btn,\n\.profile-btn \{[^}]*min-height: 32px;/);
     });
 
     it("create panels have recent history containers", () => {

@@ -1,5 +1,5 @@
 ---
-{ "status": "open", "specs": ["HG-SPEC-009", "HG-SPEC-014", "HG-SPEC-015"] }
+{ "status": "fixed", "specs": ["HG-SPEC-009", "HG-SPEC-014", "HG-SPEC-015"] }
 ---
 
 Repro:
@@ -25,3 +25,11 @@ Fix:
 - Make title and session selector truncate within their own zones; no overlap.
 - Normalize header control height, padding, line-height, and alignment.
 - Add E2E/static checks at small widths and long session names.
+
+Resolution 2026-05-17:
+
+- Header now uses responsive grid/flex layout with a mobile action grid below the identity row.
+- Session switcher is integrated, full-width on narrow screens, and truncates inside its own control.
+- Header title and session selector use ellipsis/no-wrap rules with zero-min-width containers.
+- Header controls share a 32px minimum height and align in Chrome at mobile width.
+- Verified in Chrome at 375px with a forced long session name: no horizontal overflow, visible title, constrained session select, aligned controls.
