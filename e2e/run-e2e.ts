@@ -677,6 +677,60 @@ async function runE2ETests(): Promise<void> {
     );
 
     await runTest(
+        "profile avatar generation shows loading state",
+        async () => {
+            const page = await browser!.newPage();
+            await waitForApp(page, { dismissOnboarding: true });
+            await page.route("**/api/profile/avatar/generate", async (route) => {
+                await page.waitForTimeout(300);
+                await route.fulfill({
+                    status: 500,
+                    contentType: "application/json",
+                    body: JSON.stringify({ error: "delayed test failure" }),
+                });
+            });
+
+            const initialProfileLoad = page.waitForResponse(
+                (res) => res.url().includes("/api/profile") && res.request().method() === "GET",
+            );
+            await page.click("#profile-btn");
+            await expectVisible(page, "#profile-modal");
+            await initialProfileLoad;
+
+            const generateResponse = page.waitForResponse(
+                (res) =>
+                    res.url().includes("/api/profile/avatar/generate") &&
+                    res.request().method() === "POST",
+            );
+            await page.click("#profile-generate");
+            await expectDisabled(page.locator("#profile-generate"));
+            await expectVisible(page, "#profile-avatar-preview.is-pending .profile-avatar-spinner");
+            assertEqual(
+                await page.locator("#profile-avatar-preview").getAttribute("aria-busy"),
+                "true",
+                "Avatar preview marked busy",
+            );
+            assertEqual(
+                await page.locator("#profile-avatar-status").textContent(),
+                "Generating avatar.",
+                "Avatar status text while pending",
+            );
+
+            await generateResponse;
+            await expectEnabled(page.locator("#profile-generate"));
+            await expectHidden(page, "#profile-avatar-preview.is-pending");
+            assertEqual(
+                await page.locator("#profile-avatar-preview").getAttribute("aria-busy"),
+                "false",
+                "Avatar preview no longer busy",
+            );
+            await page.unroute("**/api/profile/avatar/generate");
+            await page.close();
+        },
+        results,
+    );
+
+    await runTest(
         "profile generates avatar asset, persists, and uses it in chat",
         async () => {
             const page = await browser!.newPage();

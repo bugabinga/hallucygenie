@@ -212,6 +212,18 @@ describe("index.html health", () => {
         assert.equal(indexHtml.toLowerCase().includes("email"), false);
     });
 
+    it("profile avatar generation has visible and accessible pending state", () => {
+        const doc = parseIndex();
+        const status = doc.querySelector("#profile-avatar-status") as HTMLElement | null;
+        assert.equal(status?.getAttribute("role"), "status");
+        assert.equal(status?.getAttribute("aria-live"), "polite");
+        assert.match(appTs, /profileAvatarPreview\.classList\.toggle\("is-pending", pending\)/);
+        assert.match(appTs, /profileAvatarPreview\.setAttribute\("aria-busy"/);
+        assert.match(appTs, /profileAvatarStatus\.textContent = pending/);
+        assert.match(styleCss, /\.profile-avatar-preview\.is-pending \.profile-avatar-spinner/);
+        assert.match(styleCss, /prefers-reduced-motion: reduce[\s\S]*\.profile-avatar-spinner/);
+    });
+
     it("connection status exposes accessible status", () => {
         const doc = parseIndex();
         const status = doc.querySelector("#connection-status") as HTMLElement | null;

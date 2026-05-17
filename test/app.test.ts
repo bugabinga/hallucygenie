@@ -1062,6 +1062,7 @@ function setupDOM(): { win: any; doc: any; errors: string[] } {
             <img id="profile-avatar-img" hidden />
             <span class="profile-avatar-spinner"></span>
           </button>
+          <span id="profile-avatar-status" role="status" aria-live="polite">Avatar ready.</span>
           <input id="profile-avatar-asset" type="hidden" />
           <input id="profile-avatar-upload" type="file" />
           <button type="submit">Save</button>
@@ -2611,6 +2612,114 @@ describe("init accessibility behavior", () => {
 
         const status = doc.querySelector("#connection-status") as HTMLElement;
         assert.equal(status.getAttribute("aria-label"), "Connection status: Connected");
+    });
+
+    it("shows avatar generation pending state and clears on success", async () => {
+        const { doc } = setupDOM();
+        let resolveGenerate: ((response: Response) => void) | undefined;
+        const profile = {
+            version: 1,
+            username: "GamerKid",
+            interests: "Minecraft",
+            hates: "gore",
+            favorites: "blue fire",
+            avatar: { type: "asset", value: "" },
+            updatedAt: 1,
+        };
+        (globalThis as any).fetch = (input: string | Request) => {
+            const url = input.toString();
+            if (url.includes("/api/profile/avatar/generate")) {
+                return new Promise<Response>((resolve) => {
+                    resolveGenerate = resolve;
+                });
+            }
+            if (url.includes("/api/profile")) {
+                return Promise.resolve(
+                    new Response(JSON.stringify(profile), {
+                        status: 200,
+                        headers: { "Content-Type": "application/json" },
+                    }),
+                );
+            }
+            return Promise.resolve(
+                new Response(JSON.stringify({ messages: [], sessions: [], items: [] }), {
+                    status: 200,
+                    headers: { "Content-Type": "application/json" },
+                }),
+            );
+        };
+
+        init();
+        (doc.querySelector("#profile-generate") as HTMLButtonElement).click();
+        await Promise.resolve();
+
+        const preview = doc.querySelector("#profile-avatar-preview") as HTMLButtonElement;
+        const status = doc.querySelector("#profile-avatar-status") as HTMLElement;
+        assert.equal(preview.classList.contains("is-pending"), true);
+        assert.equal(preview.getAttribute("aria-busy"), "true");
+        assert.equal(status.textContent, "Generating avatar.");
+
+        resolveGenerate?.(
+            new Response(
+                JSON.stringify({
+                    profile: {
+                        ...profile,
+                        avatar: {
+                            type: "asset",
+                            value: "asset_12345678-1234-1234-1234-123456789abc",
+                        },
+                    },
+                }),
+                { status: 200, headers: { "Content-Type": "application/json" } },
+            ),
+        );
+        await new Promise((resolve) => setTimeout(resolve, 0));
+
+        assert.equal(preview.classList.contains("is-pending"), false);
+        assert.equal(preview.getAttribute("aria-busy"), "false");
+        assert.equal(status.textContent, "Avatar ready.");
+    });
+
+    it("clears avatar generation pending state on error", async () => {
+        const { doc } = setupDOM();
+        let resolveGenerate: ((response: Response) => void) | undefined;
+        (globalThis as any).fetch = (input: string | Request) => {
+            const url = input.toString();
+            if (url.includes("/api/profile/avatar/generate")) {
+                return new Promise<Response>((resolve) => {
+                    resolveGenerate = resolve;
+                });
+            }
+            return Promise.resolve(
+                new Response(
+                    JSON.stringify({
+                        version: 1,
+                        username: "",
+                        interests: "",
+                        hates: "",
+                        favorites: "",
+                        avatar: { type: "asset", value: "" },
+                        updatedAt: 1,
+                    }),
+                    { status: 200, headers: { "Content-Type": "application/json" } },
+                ),
+            );
+        };
+
+        init();
+        (doc.querySelector("#profile-generate") as HTMLButtonElement).click();
+        await Promise.resolve();
+
+        const preview = doc.querySelector("#profile-avatar-preview") as HTMLButtonElement;
+        const status = doc.querySelector("#profile-avatar-status") as HTMLElement;
+        assert.equal(preview.classList.contains("is-pending"), true);
+
+        resolveGenerate?.(new Response(JSON.stringify({ error: "fail" }), { status: 500 }));
+        await new Promise((resolve) => setTimeout(resolve, 0));
+
+        assert.equal(preview.classList.contains("is-pending"), false);
+        assert.equal(preview.getAttribute("aria-busy"), "false");
+        assert.equal(status.textContent, "Avatar ready.");
     });
 
     it("opens and closes create modal with focus restore", () => {

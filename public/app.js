@@ -3272,14 +3272,17 @@ function init() {
   const profileAvatarPreview = $("#profile-avatar-preview");
   const profileAvatarImg = $("#profile-avatar-img");
   const profileAvatarFallback = $("#profile-avatar-fallback");
+  const profileAvatarStatus = $("#profile-avatar-status");
   const profileGenerate = $("#profile-generate");
   let profileModalReturnFocus = null;
   function setProfileAvatarPending(pending) {
     profileAvatarPreview.classList.toggle("is-pending", pending);
+    profileAvatarPreview.setAttribute("aria-busy", pending ? "true" : "false");
     profileAvatarPreview.setAttribute(
       "aria-label",
-      pending ? "Generating avatar" : "Current avatar. Click to upload image"
+      pending ? "Generating avatar. Please wait." : "Current avatar. Click to upload image"
     );
+    profileAvatarStatus.textContent = pending ? "Generating avatar." : "Avatar ready.";
   }
   function updateProfileAvatarPreview(profile) {
     if (profile.avatar.value) {
