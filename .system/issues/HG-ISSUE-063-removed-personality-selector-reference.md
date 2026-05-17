@@ -1,5 +1,5 @@
 ---
-{ "status": "open", "specs": ["HG-SPEC-011", "HG-SPEC-003"] }
+{ "status": "fixed", "specs": ["HG-SPEC-011", "HG-SPEC-003"] }
 ---
 
 Repro:
@@ -21,3 +21,8 @@ Fix:
 - Remove `personality` / `personality-select` references from codebase, including tests.
 - Replace with current contract names if a regression is still useful.
 - Add static assertion that no `personality` tokens remain in tracked source.
+
+Resolution 2026-05-17:
+
+- Replaced stale `profile-style-select` bundle guard with a current no-personality-token source/bundle guard.
+- Confirmed no runtime UI/API/source references remain.

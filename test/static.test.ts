@@ -897,10 +897,11 @@ describe("layout health", () => {
     });
 });
 
-describe("bundle staleness guard", () => {
-    it("generated bundle has no removed profile selector id", () => {
-        if (!existsSync("public/app.js")) return;
-        const bundle = readFileSync("public/app.js", "utf-8");
-        assert.equal(bundle.includes("profile-style-select"), false);
+describe("removed profile UI cleanup", () => {
+    it("has no stale personality selector references in source or generated bundle", () => {
+        const sourceFiles = [indexHtml, styleCss, appTs, serverTs, appJs];
+        for (const text of sourceFiles) {
+            assert.equal(/personality/i.test(text), false);
+        }
     });
 });
