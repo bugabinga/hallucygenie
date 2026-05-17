@@ -2205,6 +2205,18 @@ describe("/api/profile", () => {
         assert.match(body.error, /data URL not allowed/);
     });
 
+    it("PUT rejects editable emoji avatar payloads", async () => {
+        const resp = await handleRequest(
+            makeRequest("PUT", "/api/profile", {
+                username: "GamerKid",
+                avatar: { type: "emoji", value: "🦊" },
+            }),
+        );
+        assert.equal(resp.status, 400);
+        const body = (await readJson(resp)) as { error: string };
+        assert.match(body.error, /avatar type invalid/);
+    });
+
     it("DELETE resets profile", async () => {
         saveUserProfile(getDb()!, {
             username: "GamerKid",

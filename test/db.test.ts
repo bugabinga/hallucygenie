@@ -318,6 +318,14 @@ describe("User profile state", () => {
                 }),
             /avatar asset id invalid/,
         );
+        assert.throws(
+            () =>
+                saveUserProfile(db, {
+                    username: "x",
+                    avatar: { type: "emoji", value: "🦊" },
+                }),
+            /avatar type invalid/,
+        );
     });
 
     it("delete resets profile to default", () => {

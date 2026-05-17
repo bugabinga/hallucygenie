@@ -1,5 +1,5 @@
 ---
-{ "status": "open", "specs": ["HG-SPEC-003", "HG-SPEC-015"] }
+{ "status": "fixed", "specs": ["HG-SPEC-003", "HG-SPEC-015"] }
 ---
 
 Repro:
@@ -32,3 +32,10 @@ Fix:
 - Keep `🎮` only as no-asset fallback display, not editable profile state.
 - Update API validation, DB normalization, prompt exclusion tests, app tests, E2E.
 - Add static contract test: no `Avatar emoji`, `#profile-avatar`, or emoji avatar payload support remains if spec is asset-only.
+
+Resolution 2026-05-17:
+
+- Kept `🎮` as the non-editable fallback avatar when no asset ref exists.
+- Removed stale E2E coverage that edited `#profile-avatar` as an emoji input.
+- Replaced prompt-context tests with asset-ref-only profile avatars and verified avatar refs stay out of the system prompt.
+- Added DB/server/static coverage rejecting `{ type: "emoji" }` avatar payloads.

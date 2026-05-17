@@ -150,7 +150,9 @@ test("profile saves through DB and survives reload/localStorage clearing", async
     await expect(page.locator("#profile-modal")).toBeVisible();
     await page.locator("#profile-username").fill("GamerKid");
     await page.locator("#profile-interests").fill("Minecraft");
-    await page.locator("#profile-avatar").fill("🦊");
+    await expect(page.locator("#profile-avatar")).toHaveCount(0);
+    await expect(page.locator("#profile-avatar-fallback")).toHaveText("🎮");
+    await expect(page.locator("#profile-avatar-asset")).toHaveValue("");
     await page.locator("#profile-form button[type='submit']").click();
     await expect(page.locator("#profile-modal")).toBeHidden();
 
@@ -160,7 +162,9 @@ test("profile saves through DB and survives reload/localStorage clearing", async
     await page.locator("#profile-btn").click();
     await expect(page.locator("#profile-username")).toHaveValue("GamerKid");
     await expect(page.locator("#profile-interests")).toHaveValue("Minecraft");
-    await expect(page.locator("#profile-avatar")).toHaveValue("🦊");
+    await expect(page.locator("#profile-avatar")).toHaveCount(0);
+    await expect(page.locator("#profile-avatar-fallback")).toHaveText("🎮");
+    await expect(page.locator("#profile-avatar-asset")).toHaveValue("");
 
     await page.locator("#profile-reset").click();
     await expect(page.locator("#profile-modal")).toBeHidden();

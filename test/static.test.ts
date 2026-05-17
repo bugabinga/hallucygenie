@@ -12,6 +12,10 @@ const appTs = readFileSync("public/app.ts", "utf-8");
 const appJs = readFileSync("public/app.js", "utf-8");
 const justfile = readFileSync("justfile", "utf-8");
 const serverTs = readFileSync("src/server.ts", "utf-8");
+const agentTest = readFileSync("test/agent.test.ts", "utf-8");
+const dbTest = readFileSync("test/db.test.ts", "utf-8");
+const e2eChatSpec = readFileSync("e2e/chat.spec.ts", "utf-8");
+const serverTest = readFileSync("test/server.test.ts", "utf-8");
 const gitignore = readFileSync(".gitignore", "utf-8");
 const dockerignore = readFileSync(".dockerignore", "utf-8");
 const lefthookYml = readFileSync("lefthook.yml", "utf-8");
@@ -274,9 +278,20 @@ describe("index.html health", () => {
         assert.equal(doc.querySelector("#profile-avatar"), null);
         assert.equal(indexHtml.includes("Avatar emoji"), false);
         assert.ok(doc.querySelector("#profile-avatar-preview"));
+        assert.equal(doc.querySelector("#profile-avatar-fallback")?.textContent, "🎮");
         assert.ok(doc.querySelector("#profile-avatar-img"));
         assert.equal(doc.querySelector("#profile-avatar-upload")?.getAttribute("type"), "file");
         assert.equal(indexHtml.toLowerCase().includes("email"), false);
+        assert.equal(appTs.includes('type: "emoji"'), false);
+        assert.equal(serverTs.includes('type: "emoji"'), false);
+        assert.equal(agentTest.includes('type: "emoji"'), false);
+        assert.equal(e2eChatSpec.includes('fill("#profile-avatar")'), false);
+        assert.equal(e2eChatSpec.includes('toHaveValue("🦊")'), false);
+        assert.match(dbTest, /avatar: \{ type: "emoji", value: "🦊" \}[\s\S]*avatar type invalid/);
+        assert.match(
+            serverTest,
+            /avatar: \{ type: "emoji", value: "🦊" \}[\s\S]*avatar type invalid/,
+        );
     });
 
     it("profile avatar changes repaint current user message avatars", () => {
