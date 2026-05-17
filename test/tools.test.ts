@@ -36,6 +36,12 @@ function jsonResponse(data: unknown, status = 200): Response {
     });
 }
 
+function imageResponse(type = "image/png", bytes = new Uint8Array([1, 2, 3])): Response {
+    return new Response(bytes, {
+        headers: { "Content-Type": type, "Content-Length": String(bytes.byteLength) },
+    });
+}
+
 // ── Tool definitions ─────────────────────────────────────────────────
 
 describe("getToolDefinitions", () => {
@@ -1167,11 +1173,13 @@ describe("analyzeImage HTTP request structure", () => {
         globalThis.fetch = originalFetch;
     });
 
-    it("POSTs to correct endpoint", async () => {
+    it("downloads image then POSTs provider-only data URL to VLM endpoint", async () => {
         let capturedUrl = "";
         let capturedInit: RequestInit | undefined;
         globalThis.fetch = async (url: string | URL | Request, init?: RequestInit) => {
-            capturedUrl = url.toString();
+            const urlText = url.toString();
+            if (!urlText.includes("/v1/coding_plan/vlm")) return imageResponse("image/png");
+            capturedUrl = urlText;
             capturedInit = init;
             return jsonResponse({ content: "A cat" });
         };
@@ -1184,7 +1192,8 @@ describe("analyzeImage HTTP request structure", () => {
 
     it("sends Authorization Bearer header", async () => {
         let capturedHeaders: Record<string, string> = {};
-        globalThis.fetch = async (_url: string | URL | Request, init?: RequestInit) => {
+        globalThis.fetch = async (url: string | URL | Request, init?: RequestInit) => {
+            if (!url.toString().includes("/v1/coding_plan/vlm")) return imageResponse("image/jpeg");
             capturedHeaders = init?.headers as Record<string, string>;
             return jsonResponse({ content: "A cat" });
         };
@@ -1197,9 +1206,11 @@ describe("analyzeImage HTTP request structure", () => {
         );
     });
 
-    it("sends prompt and image_url in request body", async () => {
+    it("sends prompt and normalized data image_url in request body", async () => {
         let capturedBody = "";
-        globalThis.fetch = async (_url: string | URL | Request, init?: RequestInit) => {
+        globalThis.fetch = async (url: string | URL | Request, init?: RequestInit) => {
+            if (!url.toString().includes("/v1/coding_plan/vlm"))
+                return imageResponse("image/png", new Uint8Array([1, 2, 3]));
             capturedBody = init?.body as string;
             return jsonResponse({ content: "A gaming logo" });
         };
@@ -1208,24 +1219,25 @@ describe("analyzeImage HTTP request structure", () => {
 
         const body = JSON.parse(capturedBody);
         assert.ok(body.prompt, "should have prompt field");
-        assert.equal(
-            body.image_url,
-            "https://cdn.example.com/logo.png",
-            "should include image URL",
-        );
+        assert.equal(body.image_url, "data:image/png;base64,AQID");
     });
 
     it("returns description on success", async () => {
-        globalThis.fetch = async () =>
-            jsonResponse({ content: "A colorful gaming logo with neon lights" });
+        globalThis.fetch = async (url: string | URL | Request) => {
+            if (!url.toString().includes("/v1/coding_plan/vlm")) return imageResponse("image/png");
+            return jsonResponse({ content: "A colorful gaming logo with neon lights" });
+        };
 
         const result = await analyzeImage("https://example.com/img.png", API_KEY);
         assert.equal(result.type, "text");
         assert.ok(result.content.includes("gaming logo"));
     });
 
-    it("returns error on HTTP failure", async () => {
-        globalThis.fetch = async () => new Response(null, { status: 502 });
+    it("returns error on provider HTTP failure", async () => {
+        globalThis.fetch = async (url: string | URL | Request) => {
+            if (!url.toString().includes("/v1/coding_plan/vlm")) return imageResponse("image/png");
+            return new Response(null, { status: 502 });
+        };
 
         const result = await analyzeImage("https://example.com/bad.png", API_KEY);
         assert.equal(result.type, "error");
@@ -1233,8 +1245,10 @@ describe("analyzeImage HTTP request structure", () => {
     });
 
     it("returns error on base_resp status_code != 0", async () => {
-        globalThis.fetch = async () =>
-            jsonResponse({ base_resp: { status_code: 1004, status_msg: "login fail" } });
+        globalThis.fetch = async (url: string | URL | Request) => {
+            if (!url.toString().includes("/v1/coding_plan/vlm")) return imageResponse("image/png");
+            return jsonResponse({ base_resp: { status_code: 1004, status_msg: "login fail" } });
+        };
 
         const result = await analyzeImage("https://example.com/img.png", API_KEY);
         assert.equal(result.type, "error");
@@ -1251,8 +1265,24 @@ describe("analyzeImage HTTP request structure", () => {
         assert.ok(result.content.includes("Connection refused"));
     });
 
+    it("rejects user-supplied data URLs", async () => {
+        const result = await analyzeImage("data:image/png;base64,AQID", API_KEY);
+        assert.equal(result.type, "error");
+        assert.ok(result.content.includes("data URLs are not allowed"));
+    });
+
+    it("rejects unsupported image content types", async () => {
+        globalThis.fetch = async () => imageResponse("image/gif");
+        const result = await analyzeImage("https://example.com/no-content.gif", API_KEY);
+        assert.equal(result.type, "error");
+        assert.ok(result.content.includes("unsupported image type"));
+    });
+
     it("handles empty content field gracefully", async () => {
-        globalThis.fetch = async () => jsonResponse({ content: "" });
+        globalThis.fetch = async (url: string | URL | Request) => {
+            if (!url.toString().includes("/v1/coding_plan/vlm")) return imageResponse("image/png");
+            return jsonResponse({ content: "" });
+        };
 
         const result = await analyzeImage("https://example.com/empty.png", API_KEY);
         assert.equal(result.type, "text");
@@ -1260,7 +1290,10 @@ describe("analyzeImage HTTP request structure", () => {
     });
 
     it("handles missing content field gracefully", async () => {
-        globalThis.fetch = async () => jsonResponse({});
+        globalThis.fetch = async (url: string | URL | Request) => {
+            if (!url.toString().includes("/v1/coding_plan/vlm")) return imageResponse("image/png");
+            return jsonResponse({});
+        };
 
         const result = await analyzeImage("https://example.com/no-content.png", API_KEY);
         assert.equal(result.type, "text");

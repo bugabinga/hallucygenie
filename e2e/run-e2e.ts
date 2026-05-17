@@ -614,7 +614,6 @@ async function runE2ETests(): Promise<void> {
             await initialProfileLoad;
             await page.fill("#profile-username", "GamerKid");
             await page.fill("#profile-interests", "Minecraft");
-            await page.fill("#profile-avatar", "🦊");
             await page.click("#profile-form button[type='submit']");
             await expectHidden(page, "#profile-modal");
 
@@ -634,10 +633,11 @@ async function runE2ETests(): Promise<void> {
             await reloadedProfileLoad;
             const username = await page.locator("#profile-username").inputValue();
             const interests = await page.locator("#profile-interests").inputValue();
-            const avatar = await page.locator("#profile-avatar").inputValue();
+            const avatarAsset = await page.locator("#profile-avatar-asset").inputValue();
             assertEqual(username, "GamerKid", "Profile username persisted");
             assertEqual(interests, "Minecraft", "Profile interests persisted");
-            assertEqual(avatar, "🦊", "Profile avatar persisted");
+            assertEqual(avatarAsset, "", "Default profile avatar persisted as no asset");
+            await expectVisible(page, "#profile-avatar-fallback");
 
             await page.click("#profile-reset");
             await expectHidden(page, "#profile-modal");

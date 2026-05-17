@@ -185,7 +185,7 @@ describe("index.html health", () => {
         assert.equal(doc.querySelector("#profile-generate")?.hasAttribute("disabled"), false);
     });
 
-    it("profile fields have distinct guidance and avatar image controls", () => {
+    it("profile fields have distinct guidance and asset avatar controls", () => {
         const doc = parseIndex();
         assert.equal(
             doc.querySelector('label[for="profile-interests"]')?.textContent,
@@ -195,11 +195,9 @@ describe("index.html health", () => {
             doc.querySelector('label[for="profile-favorites"]')?.textContent,
             "Style favorites",
         );
-        assert.equal(
-            doc.querySelector("#profile-avatar")?.getAttribute("placeholder"),
-            "Type an emoji",
-        );
-        assert.equal(doc.querySelector("#profile-avatar")?.getAttribute("autocomplete"), "off");
+        assert.equal(doc.querySelector("#profile-avatar"), null);
+        assert.equal(indexHtml.includes("Avatar emoji"), false);
+        assert.ok(doc.querySelector("#profile-avatar-preview"));
         assert.ok(doc.querySelector("#profile-avatar-img"));
         assert.equal(doc.querySelector("#profile-avatar-upload")?.getAttribute("type"), "file");
         assert.equal(indexHtml.toLowerCase().includes("email"), false);
@@ -776,9 +774,9 @@ describe("layout health", () => {
 });
 
 describe("bundle staleness guard", () => {
-    it("generated bundle, when present, does not contain removed personality selector", () => {
+    it("generated bundle has no removed profile selector id", () => {
         if (!existsSync("public/app.js")) return;
         const bundle = readFileSync("public/app.js", "utf-8");
-        assert.equal(bundle.includes("personality-select"), false);
+        assert.equal(bundle.includes("profile-style-select"), false);
     });
 });

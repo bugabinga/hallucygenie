@@ -277,28 +277,28 @@ describe("User profile state", () => {
             interests: " Minecraft ",
             hates: " spam ",
             favorites: "redstone",
-            avatar: { type: "emoji", value: "🦊" },
+            avatar: { type: "asset", value: "asset_123abc" },
         });
 
         assert.equal(saved.username, "GamerKid");
         assert.equal(saved.interests, "Minecraft");
-        assert.deepEqual(getUserProfile(db).avatar, { type: "emoji", value: "🦊" });
+        assert.deepEqual(getUserProfile(db).avatar, { type: "asset", value: "asset_123abc" });
     });
 
-    it("trims oversized fields and emoji avatar", () => {
+    it("trims oversized profile fields", () => {
         const saved = saveUserProfile(db, {
             username: "x".repeat(50),
             interests: "i".repeat(350),
             hates: "h".repeat(350),
             favorites: "f".repeat(350),
-            avatar: { type: "emoji", value: "🎮🔥✨🧞🚀" },
+            avatar: { type: "asset", value: "" },
         });
 
         assert.equal(saved.username.length, 40);
         assert.equal(saved.interests.length, 300);
         assert.equal(saved.hates.length, 300);
         assert.equal(saved.favorites.length, 300);
-        assert.equal(Array.from(saved.avatar.value).length, 4);
+        assert.deepEqual(saved.avatar, { type: "asset", value: "" });
     });
 
     it("rejects raw asset data and invalid asset avatar refs", () => {
@@ -306,7 +306,7 @@ describe("User profile state", () => {
             () =>
                 saveUserProfile(db, {
                     username: "x",
-                    avatar: { type: "emoji", value: "data:image/png;base64,abc" },
+                    avatar: { type: "asset", value: "data:image/png;base64,abc" },
                 }),
             /data URL not allowed/,
         );
@@ -321,9 +321,12 @@ describe("User profile state", () => {
     });
 
     it("delete resets profile to default", () => {
-        saveUserProfile(db, { username: "GamerKid", avatar: { type: "emoji", value: "🦊" } });
+        saveUserProfile(db, {
+            username: "GamerKid",
+            avatar: { type: "asset", value: "asset_123abc" },
+        });
         const reset = deleteUserProfile(db);
-        assert.equal(reset.avatar.value, "🎮");
+        assert.deepEqual(reset.avatar, { type: "asset", value: "" });
         assert.equal(getUserProfile(db).username, "");
     });
 });

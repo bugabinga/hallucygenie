@@ -1056,9 +1056,11 @@ function setupDOM(): { win: any; doc: any; errors: string[] } {
           <textarea id="profile-interests"></textarea>
           <textarea id="profile-hates"></textarea>
           <textarea id="profile-favorites"></textarea>
-          <span id="profile-avatar-emoji-preview">🎮</span>
-          <img id="profile-avatar-img" hidden />
-          <input id="profile-avatar" />
+          <button id="profile-avatar-preview" type="button" aria-label="Current avatar. Click to upload image">
+            <span id="profile-avatar-fallback">🎮</span>
+            <img id="profile-avatar-img" hidden />
+            <span class="profile-avatar-spinner"></span>
+          </button>
           <input id="profile-avatar-asset" type="hidden" />
           <input id="profile-avatar-upload" type="file" />
           <button type="submit">Save</button>
@@ -1091,6 +1093,11 @@ function setupDOM(): { win: any; doc: any; errors: string[] } {
                 <option value="16:9" selected>16:9</option>
               </select>
             </div>
+            <input id="img-count" type="number" />
+            <input id="img-seed" type="number" />
+            <input id="img-width" type="number" />
+            <input id="img-height" type="number" />
+            <input id="img-prompt-optimizer" type="checkbox" />
           </form>
           <form id="create-music-form" class="create-panel" data-panel="music" hidden>
             <div class="form-group">
@@ -1741,16 +1748,15 @@ describe("profile frontend helpers", () => {
             interests: " Minecraft ",
             hates: " spam ",
             favorites: "redstone",
-            avatar: "🦊",
         });
 
         assert.equal(profile.username, "GamerKid");
         assert.equal(profile.interests, "Minecraft");
-        assert.equal(profile.avatar.value, "🦊");
+        assert.deepEqual(profile.avatar, { type: "asset", value: "" });
         assert.equal((globalThis as any).localStorage.length, before);
     });
 
-    it("rejects data URL avatar before save", () => {
+    it("rejects invalid avatar asset ids before save", () => {
         setupDOM();
         assert.throws(
             () =>
@@ -1759,9 +1765,9 @@ describe("profile frontend helpers", () => {
                     interests: "",
                     hates: "",
                     favorites: "",
-                    avatar: "data:image/png;base64,abc",
+                    avatarAsset: "data:image/png;base64,abc",
                 }),
-            /Avatar data URLs are not allowed/,
+            /Avatar asset id is invalid/,
         );
     });
 
@@ -1772,25 +1778,24 @@ describe("profile frontend helpers", () => {
             interests: "Minecraft",
             hates: "spam",
             favorites: "blue fire",
-            avatar: "🎮",
             avatarAsset: "asset_123abc",
         });
 
         assert.deepEqual(profile.avatar, { type: "asset", value: "asset_123abc" });
     });
 
-    it("renders emoji and asset avatars with fallback", () => {
+    it("renders fallback and asset avatars", () => {
         setupDOM();
-        const emoji = renderProfileAvatar({
+        const fallback = renderProfileAvatar({
             version: 1,
             username: "",
             interests: "",
             hates: "",
             favorites: "",
-            avatar: { type: "emoji", value: "🦊" },
+            avatar: { type: "asset", value: "" },
             updatedAt: 1,
         });
-        assert.equal(emoji.textContent, "🦊");
+        assert.equal(fallback.textContent, "🎮");
 
         const asset = renderProfileAvatar({
             version: 1,
@@ -1817,7 +1822,7 @@ describe("profile frontend helpers", () => {
                         interests: "",
                         hates: "",
                         favorites: "",
-                        avatar: { type: "emoji", value: "🎮" },
+                        avatar: { type: "asset", value: "" },
                         updatedAt: 1,
                     }),
                     { status: 200, headers: { "Content-Type": "application/json" } },
@@ -1832,7 +1837,6 @@ describe("profile frontend helpers", () => {
                 interests: "",
                 hates: "",
                 favorites: "",
-                avatar: "🎮",
             }),
         );
         await deleteProfile();
@@ -2623,11 +2627,11 @@ describe("init accessibility behavior", () => {
 
         const createBtn = doc.querySelector("#create-btn") as HTMLButtonElement;
         const closeBtn = doc.querySelector("#create-close") as HTMLButtonElement;
-        const imgRatio = doc.querySelector("#img-ratio") as HTMLSelectElement;
+        const promptOptimizer = doc.querySelector("#img-prompt-optimizer") as HTMLInputElement;
         const modal = doc.querySelector("#create-modal") as HTMLElement;
 
         createBtn.click();
-        imgRatio.focus();
+        promptOptimizer.focus();
         modal.dispatchEvent(
             new win.KeyboardEvent("keydown", { key: "Tab", bubbles: true, cancelable: true }),
         );

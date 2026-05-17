@@ -226,12 +226,24 @@ function normalizeCommentBody(body: string) {
         .toLowerCase();
     const hasUncheckedItems = /^- \[ \]/m.test(normalized);
     const hasHumanOnlyUncheckedItems =
-        /^- \[ \].*(action_required|behind|rebase|merge state|PR body|metadata|manual|human)/im.test(
+        /^- \[ \].*(action_required|conflict|branch behind|behind trunk|rebase|unknown merge state|manual approval|human decision|\bsecurity\b|\bauth\b|\bdeploy\b|workflow risk|duplicate PR)/im.test(
             normalized,
         );
+    const hasAgentRepairableUncheckedItems =
+        /^- \[ \].*(PR body|metadata|CI|check|test|code|fix|frontmatter|logs?)/im.test(normalized);
     if (status === "ready" && hasUncheckedItems) {
         normalized = normalized.replace(
             /## Janitor status:\s*ready/i,
+            "## Janitor status: needs-fix",
+        );
+    }
+    if (
+        status === "needs-human" &&
+        hasAgentRepairableUncheckedItems &&
+        !hasHumanOnlyUncheckedItems
+    ) {
+        normalized = normalized.replace(
+            /## Janitor status:\s*needs-human/i,
             "## Janitor status: needs-fix",
         );
     }
@@ -369,9 +381,9 @@ ${MARKER}
 
 Decision rules:
 - waiting-for-ci: latest required checks are pending or missing.
-- needs-fix: CI failed or review/comment issues require repo code/test changes the owning agent can make.
+- needs-fix: CI failed or code/test/PR body/metadata issues require changes the owning agent can make.
 - ready: CI green, branch is current/mergeable, and no actionable unresolved issues.
-- needs-human: action_required check, conflict, branch behind trunk, unknown merge state, PR metadata/body-only issue, security/auth/deploy/workflow risk, broad unclear change, duplicate PR, or human decision needed.
+- needs-human: action_required check, conflict, branch behind trunk, unknown merge state, security/auth/deploy/workflow risk, broad unclear change, duplicate PR, or human decision needed.
 - If status is ready, every checklist item must be checked.
 - Use unchecked checklist items only for issues that block ready status.
 - Do not request or mention Copilot review.

@@ -337,8 +337,10 @@ export async function generateImage(
             payload.seed = options.seed;
         const width = clampIntegerParam(options.width, 512, 2048);
         const height = clampIntegerParam(options.height, 512, 2048);
-        if (width !== undefined) payload.width = width - (width % 8);
-        if (height !== undefined) payload.height = height - (height % 8);
+        if (width !== undefined && height !== undefined) {
+            payload.width = width - (width % 8);
+            payload.height = height - (height % 8);
+        }
         if (typeof options.prompt_optimizer === "boolean")
             payload.prompt_optimizer = options.prompt_optimizer;
 
@@ -615,15 +617,45 @@ export async function webSearch(query: string, apiKey: string): Promise<ToolResu
 
 // ── Image Analysis (Vision) ───────────────────────────────────────
 
+const MAX_ANALYZE_IMAGE_BYTES = 20 * 1024 * 1024;
+
+function vlmMime(contentType: string): "jpeg" | "png" | "webp" {
+    const mime = contentType.split(";")[0]!.trim().toLowerCase();
+    if (mime === "image/jpeg" || mime === "image/jpg") return "jpeg";
+    if (mime === "image/png") return "png";
+    if (mime === "image/webp") return "webp";
+    throw new Error(`unsupported image type: ${mime || "unknown"}`);
+}
+
+async function imageUrlToDataUrl(imageUrl: string): Promise<string> {
+    const url = new URL(imageUrl);
+    if (url.protocol !== "https:" && url.protocol !== "http:") {
+        throw new Error("image URL must be http(s)");
+    }
+    const resp = await fetch(url);
+    if (!resp.ok) throw new Error(`image download failed: HTTP ${resp.status}`);
+    const mime = vlmMime(resp.headers.get("Content-Type") ?? "");
+    const contentLength = Number(resp.headers.get("Content-Length") ?? "0");
+    if (contentLength > MAX_ANALYZE_IMAGE_BYTES) throw new Error("image too large");
+    const bytes = new Uint8Array(await resp.arrayBuffer());
+    if (bytes.byteLength > MAX_ANALYZE_IMAGE_BYTES) throw new Error("image too large");
+    return `data:image/${mime};base64,${Buffer.from(bytes).toString("base64")}`;
+}
+
 export async function analyzeImage(imageUrl: string, apiKey: string): Promise<ToolResult> {
     try {
+        if (/^data:/i.test(imageUrl)) throw new Error("image data URLs are not allowed");
+        const dataUrl = await imageUrlToDataUrl(imageUrl);
         const resp = await fetch(`${MINIMAX_BASE}/v1/coding_plan/vlm`, {
             method: "POST",
             headers: {
                 Authorization: `Bearer ${apiKey}`,
                 "Content-Type": "application/json",
             },
-            body: JSON.stringify({ prompt: "Describe this image in detail.", image_url: imageUrl }),
+            body: JSON.stringify({
+                prompt: "Describe this image in detail.",
+                image_url: dataUrl,
+            }),
         });
         if (!resp.ok) {
             return { type: "error", content: `Image analysis failed: HTTP ${resp.status}` };

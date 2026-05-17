@@ -2,7 +2,7 @@
 { "status": "open", "specs": ["HG-SPEC-006", "HG-SPEC-008", "HG-SPEC-011"] }
 ---
 
-# HG-ISSUE-053: Live analyze_image tool fails and triggers MiniMax tool-id error
+# HG-ISSUE-053: analyze_image needs data-URL VLM adapter and first-class Create path
 
 Repro:
 
@@ -33,26 +33,36 @@ Regression evidence 2026-05-12:
 - `getToolDefinitions()` omits `analyze_image`, while `executeTool()` still dispatches it. Half-hidden tool.
 - Logs show Create history requests for `kind=image` and `kind=music`, but no analyze-image path.
 
+Research update 2026-05-15:
+
+- MiniMax public docs still describe MCP `understand_image` as accepting HTTP/HTTPS URLs, local paths, or data URLs.
+- Direct endpoint `/v1/coding_plan/vlm` is not a stable public OpenAPI contract.
+- `MiniMax-AI/MiniMax-Coding-Plan-MCP` currently downloads HTTP/HTTPS image URLs or reads local files, then sends `image_url` to `/v1/coding_plan/vlm` as `data:image/{jpeg|png|webp};base64,...`.
+- Direct public URL → `/v1/coding_plan/vlm` can return `2013 invalid image URL`.
+- HallucyGenie may adapt by downloading bytes in memory only, sending provider a data URL, and storing only compact text/history. Never persist/log raw image bytes outside asset storage.
+
 Expected:
 
-- `analyze_image` works for a valid HTTPS JPG/PNG URL, or the tool is fully absent.
-- If present, `analyze_image` has first-class Create UI, history, tests, and kid-safe output like other tools.
+- `analyze_image` works for a valid HTTPS JPG/PNG/WebP URL by normalizing to a provider-only data URL in memory.
+- `analyze_image` rejects unsupported schemes, non-image content types, >20MB downloads, and raw data URLs from user/model input.
+- `analyze_image` result is text only; no raw image data in prompts, context, chat history, logs, or `tool_input_history`.
+- If present in live tools, `analyze_image` has first-class Create UI/history/tests and kid-safe output like other tools.
 - Failed tool result must not create a second MiniMax protocol error.
 
 Cause:
 
-- VLM direct endpoint contract appears drifted or stricter than tool schema/docs.
+- HallucyGenie direct VLM call passed raw public URL to `/v1/coding_plan/vlm` instead of MCP-style data URL normalization.
 - Failed tool-result replay path still can trigger Anthropic-compatible tool-result ID rejection.
-- Prior resolution removed `analyze_image` from live model definitions, but not from execution/history paths.
-- User clarified approved spec should explicitly add Analyze Image to Create.
-- Spec file still needs human edit; agents cannot write specs.
+- Prior resolution removed `analyze_image` from live model definitions, but stale execution/history paths still expose partial behavior.
 
 Fix:
 
-- Re-research current MiniMax VLM endpoint contract.
+- Implement `analyze_image` adapter: fetch HTTPS image, validate `Content-Type`, cap byte size ≤20MB, derive `jpeg|png|webp`, base64 encode in memory, call `/v1/coding_plan/vlm` with provider-only data URL.
+- Reject user/model supplied `data:` URLs; only internal adapter may create data URLs.
+- Keep result compact text; redact URL query strings and never log raw image data.
+- Add unit tests for URL normalization, content-type/size rejection, provider payload shape, no raw data persistence.
 - Add live-smoke covered by `just minimax-test` or a gated recipe.
-- After human spec edit, elevate `analyze_image` to first-class Create tool.
-- Add Create tab/form, direct server action, `tool_input_history`, tests, and safe output rendering.
+- Decide scope: either keep `analyze_image` absent from live model definitions, or elevate it to first-class Create tool with tab/form/history/tests.
 - Add regression: failed tool result must not send invalid `tool_result` to next LLM call.
 - Cross-ref HG-ISSUE-047, HG-ISSUE-043.
 

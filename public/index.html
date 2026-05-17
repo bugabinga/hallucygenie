@@ -213,29 +213,30 @@
                             ></textarea>
                         </div>
                         <div class="profile-avatar-editor">
-                            <div class="profile-avatar-preview" aria-label="Current avatar preview">
-                                <span id="profile-avatar-emoji-preview" aria-hidden="true">🎮</span>
+                            <button
+                                id="profile-avatar-preview"
+                                class="profile-avatar-preview"
+                                type="button"
+                                aria-label="Current avatar. Click to upload image"
+                            >
+                                <span id="profile-avatar-fallback" aria-hidden="true">🎮</span>
                                 <img id="profile-avatar-img" alt="Current avatar" hidden />
-                            </div>
+                                <span class="profile-avatar-overlay" aria-hidden="true"
+                                    >Upload</span
+                                >
+                                <span class="profile-avatar-spinner" aria-hidden="true"></span>
+                            </button>
                             <div class="profile-avatar-fields">
-                                <div class="form-group">
-                                    <label for="profile-avatar">Avatar emoji</label>
-                                    <input
-                                        id="profile-avatar"
-                                        maxlength="16"
-                                        placeholder="Type an emoji"
-                                        autocomplete="off"
-                                    />
-                                    <input id="profile-avatar-asset" type="hidden" />
-                                </div>
-                                <div class="form-group">
-                                    <label for="profile-avatar-upload">Upload avatar image</label>
-                                    <input
-                                        id="profile-avatar-upload"
-                                        type="file"
-                                        accept="image/png,image/jpeg,image/webp,image/gif"
-                                    />
-                                </div>
+                                <input id="profile-avatar-asset" type="hidden" />
+                                <input
+                                    id="profile-avatar-upload"
+                                    class="sr-only"
+                                    type="file"
+                                    accept="image/png,image/jpeg,image/webp,image/gif"
+                                    aria-label="Upload avatar image"
+                                />
+                                <!-- prettier-ignore -->
+                                <p class="profile-avatar-help">Click the avatar to upload an image.</p>
                             </div>
                         </div>
                         <!-- prettier-ignore -->
@@ -299,6 +300,40 @@
                                     <option value="21:9">21:9</option>
                                 </select>
                             </div>
+                            <div class="form-row">
+                                <div class="form-group">
+                                    <label for="img-count">Count</label>
+                                    <input id="img-count" type="number" min="1" max="9" step="1" />
+                                </div>
+                                <div class="form-group">
+                                    <label for="img-seed">Seed</label>
+                                    <input id="img-seed" type="number" step="1" />
+                                </div>
+                            </div>
+                            <div class="form-row">
+                                <div class="form-group">
+                                    <label for="img-width">Width</label>
+                                    <input
+                                        id="img-width"
+                                        type="number"
+                                        min="512"
+                                        max="2048"
+                                        step="8"
+                                    />
+                                </div>
+                                <div class="form-group">
+                                    <label for="img-height">Height</label>
+                                    <input
+                                        id="img-height"
+                                        type="number"
+                                        min="512"
+                                        max="2048"
+                                        step="8"
+                                    />
+                                </div>
+                            </div>
+                            <!-- prettier-ignore -->
+                            <label class="checkbox-row" for="img-prompt-optimizer"><input id="img-prompt-optimizer" type="checkbox" /> Optimize prompt</label>
                             <button type="submit" class="btn-primary">Generate image 🎨</button>
                         </form>
                         <form id="create-music-form" class="create-panel" data-panel="music" hidden>

@@ -5,7 +5,7 @@ description: MiniMax API integration for HallucyGenie. Use when working with Min
 
 # MiniMax API — HallucyGenie
 
-Current docs crawl: 2026-05-12 from `https://platform.minimax.io/docs/llms.txt` into `~/.pi/research/pages/`. Cross-checked `MiniMax-AI/MiniMax-Coding-Plan-MCP` source via `git_clone_safe`.
+Current docs crawl: 2026-05-15 from `https://platform.minimax.io/docs/llms.txt` into `~/.pi/research/pages/`. Cross-checked `MiniMax-AI/MiniMax-Coding-Plan-MCP` source via `git_clone_safe`.
 
 ## Base URLs
 
@@ -21,7 +21,10 @@ Current docs crawl: 2026-05-12 from `https://platform.minimax.io/docs/llms.txt` 
 - CRITICAL: `/anthropic/v1/messages` docs now specify `X-Api-Key`; earlier project testing found both `Authorization: Bearer` and `x-api-key` accepted in practice.
 - All other endpoints (TTS, image, music, web search, VLM, video, file mgmt) **ONLY** accept `Authorization: Bearer`.
 - Using `x-api-key` on other endpoints returns `{"base_resp":{"status_code":1004}}`.
-- Token Plan API keys are separate from pay-as-you-go keys.
+- Token Plan Keys are separate from pay-as-you-go API keys.
+- Token Plan Keys now also spend prepaid Credits. Credits use Token Plan Key auth, not pay-as-you-go API key auth.
+- Each user has a dedicated Token Plan Key per Team. The key can exist with no usable paid resources until a Token Plan seat or Credits access is available.
+- If Token Plan quota and Credits both apply, MiniMax consumes Token Plan quota first, then Credits automatically.
 
 ## Text / Chat
 
@@ -61,7 +64,7 @@ Current docs crawl: 2026-05-12 from `https://platform.minimax.io/docs/llms.txt` 
 - Output: `output_format: "hex"` by default. Convert with `Buffer.from(hex, "hex").toString("base64")` → data URL.
 - Text >3,000 chars: streaming recommended.
 - Pause markers: `<#1.5#>` range `[0.01, 99.99]`, between speakable segments, no consecutive pauses.
-- Inline pronunciation: wrap pinyin tone numbers or IPA in half-width parentheses, e.g. `(he2)` or `(lɪv)`.
+- Inline pronunciation: wrap Mandarin pinyin tone numbers, IPA, or Cantonese Jyutping tone numbers in half-width parentheses, e.g. `(he2)`, `(lɪv)`, `(sung3)`.
 - Speech-2.8 interjection tags: `(laughs)`, `(chuckle)`, `(coughs)`, `(clear-throat)`, `(groans)`, `(breath)`, `(pant)`, `(inhale)`, `(exhale)`, `(gasps)`, `(sniffs)`, `(sighs)`, `(snorts)`, `(burps)`, `(lip-smacking)`, `(humming)`, `(hissing)`, `(emm)`, `(sneezes)`.
 - `voice_setting`: `voice_id`, `speed` `[0.5,2]`, `vol` `(0,10]`, `pitch` `[-12,12]`, `emotion`, plus newer booleans `text_normalization` and `latex_read`.
 - `audio_setting`: `sample_rate` `8000|16000|22050|24000|32000|44100`, `bitrate` `32000|64000|128000|256000`, `format` `mp3|pcm|flac|wav|pcmu_raw|pcmu_wav|opus`, `channel` `1|2`, `force_cbr` for streamed MP3.
@@ -70,6 +73,7 @@ Current docs crawl: 2026-05-12 from `https://platform.minimax.io/docs/llms.txt` 
 - `subtitle_enable`: returns `subtitle_file` URL.
 - `subtitle_type`: `sentence` (default), `word`, `word_streaming` (only valid with `stream=true`).
 - System voices: docs list `English_expressive_narrator` and many others; latest list also via `GET /v1/voice/get`.
+- Cantonese system voices now documented: `Cantonese_GentleLady`, `Cantonese_podacast_host_1`; set `language_boost` to `Chinese,Yue`.
 
 ### Async long TTS
 
@@ -181,6 +185,8 @@ Token Plan quotas:
 
 - Text resets on rolling 5-hour window.
 - Non-text resets daily.
+- Credits can automatically cover usage after Token Plan quota is exhausted, or covered resources outside the current subscription quota.
+- Credits usage is shown separately from Token Plan usage and expires after its validity period.
 - Weekly text quota may apply to users purchased from 2026-03-23 onward: 10× 5-hour quota.
 - Peak dynamic limits: Starter/Plus ~1 continuous agent, Max ~2, Ultra ~4.
 

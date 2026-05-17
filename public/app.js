@@ -2182,7 +2182,7 @@ var currentProfile = {
   interests: "",
   hates: "",
   favorites: "",
-  avatar: { type: "emoji", value: DEFAULT_USER_AVATAR },
+  avatar: { type: "asset", value: "" },
   updatedAt: 0
 };
 function clearLegacySessionId() {
@@ -2308,24 +2308,20 @@ async function deleteCreateHistoryItem(id) {
     headers: createApiHeaders()
   });
 }
-function avatarEmoji(value) {
-  const trimmed = Array.from(value.trim()).slice(0, 4).join("");
-  if (!trimmed || /^data:/i.test(trimmed)) return DEFAULT_USER_AVATAR;
+function normalizeAvatarAsset(value) {
+  const trimmed = value.trim();
+  if (!trimmed) return "";
+  if (!/^asset_[0-9a-f-]+$/i.test(trimmed)) throw new Error("Avatar asset id is invalid");
   return trimmed;
 }
 function normalizedProfileFromForm(form) {
-  const avatarAsset = form.avatarAsset?.trim() ?? "";
-  if (/^data:/i.test(form.avatar.trim())) throw new Error("Avatar data URLs are not allowed");
-  if (avatarAsset && !/^asset_[0-9a-f-]+$/i.test(avatarAsset)) {
-    throw new Error("Avatar asset id is invalid");
-  }
   return {
     version: 1,
     username: Array.from(form.username.trim()).slice(0, 40).join(""),
     interests: Array.from(form.interests.trim()).slice(0, 300).join(""),
     hates: Array.from(form.hates.trim()).slice(0, 300).join(""),
     favorites: Array.from(form.favorites.trim()).slice(0, 300).join(""),
-    avatar: avatarAsset ? { type: "asset", value: avatarAsset } : { type: "emoji", value: avatarEmoji(form.avatar) },
+    avatar: { type: "asset", value: normalizeAvatarAsset(form.avatarAsset ?? "") },
     updatedAt: Date.now()
   };
 }
@@ -2333,9 +2329,14 @@ function setCurrentProfile(profile) {
   currentProfile = profile;
   const btn = document.querySelector("#profile-btn");
   if (!btn) return;
-  const label = profile.avatar.type === "emoji" ? profile.avatar.value : "\u{1F5BC}\uFE0F";
+  const label = profile.avatar.value ? "\u{1F5BC}\uFE0F" : DEFAULT_USER_AVATAR;
   btn.dataset.avatar = label;
   btn.textContent = `${label} Profile`;
+}
+function repaintCurrentUserAvatars() {
+  document.querySelectorAll(".message--user:not(.message--steer) .message-avatar").forEach((avatar) => {
+    avatar.replaceWith(renderProfileAvatar());
+  });
 }
 function parseSSELine(line) {
   if (line.startsWith("event:")) {
@@ -2395,7 +2396,7 @@ function createElement(tag2, attrs, children) {
 }
 function renderProfileAvatar(profile = currentProfile) {
   const avatar = createElement("div", { class: "message-avatar" });
-  if (profile.avatar.type === "asset" && /^asset_[0-9a-f-]+$/i.test(profile.avatar.value)) {
+  if (/^asset_[0-9a-f-]+$/i.test(profile.avatar.value)) {
     const img = createElement("img", {
       class: "profile-avatar-img",
       src: `/asset/${profile.avatar.value}`,
@@ -2408,7 +2409,7 @@ function renderProfileAvatar(profile = currentProfile) {
     avatar.appendChild(img);
     return avatar;
   }
-  avatar.textContent = avatarEmoji(profile.avatar.value);
+  avatar.textContent = DEFAULT_USER_AVATAR;
   return avatar;
 }
 function renderUserMessage(content) {
@@ -3084,7 +3085,15 @@ function clearChatUi() {
 function defaultCreateDraft() {
   return {
     selectedTab: "image",
-    image: { prompt: "", aspect_ratio: "16:9" },
+    image: {
+      prompt: "",
+      aspect_ratio: "16:9",
+      n: "",
+      seed: "",
+      width: "",
+      height: "",
+      prompt_optimizer: false
+    },
     music: { prompt: "", lyrics: "" },
     voice: {
       text: "",
@@ -3101,7 +3110,12 @@ function createDraftFromDom() {
     selectedTab: $("#create-modal").dataset.tabOpen || "image",
     image: {
       prompt: $("#img-prompt").value,
-      aspect_ratio: $("#img-ratio").value
+      aspect_ratio: $("#img-ratio").value,
+      n: $("#img-count").value,
+      seed: $("#img-seed").value,
+      width: $("#img-width").value,
+      height: $("#img-height").value,
+      prompt_optimizer: $("#img-prompt-optimizer").checked
     },
     music: {
       prompt: $("#music-prompt").value,
@@ -3120,6 +3134,13 @@ function createDraftFromDom() {
 function applyCreateDraft(draft) {
   $("#img-prompt").value = draft.image.prompt;
   $("#img-ratio").value = draft.image.aspect_ratio;
+  $("#img-count").value = draft.image.n ?? "";
+  $("#img-seed").value = draft.image.seed ?? "";
+  $("#img-width").value = draft.image.width ?? "";
+  $("#img-height").value = draft.image.height ?? "";
+  $("#img-prompt-optimizer").checked = Boolean(
+    draft.image.prompt_optimizer
+  );
   $("#music-prompt").value = draft.music.prompt;
   $("#music-lyrics").value = draft.music.lyrics;
   $("#voice-text").value = draft.voice.text;
@@ -3238,24 +3259,31 @@ function init() {
   const profileInterests = $("#profile-interests");
   const profileHates = $("#profile-hates");
   const profileFavorites = $("#profile-favorites");
-  const profileAvatar = $("#profile-avatar");
   const profileAvatarAsset = $("#profile-avatar-asset");
   const profileAvatarUpload = $("#profile-avatar-upload");
+  const profileAvatarPreview = $("#profile-avatar-preview");
   const profileAvatarImg = $("#profile-avatar-img");
-  const profileAvatarEmojiPreview = $("#profile-avatar-emoji-preview");
+  const profileAvatarFallback = $("#profile-avatar-fallback");
   const profileGenerate = $("#profile-generate");
   let profileModalReturnFocus = null;
+  function setProfileAvatarPending(pending) {
+    profileAvatarPreview.classList.toggle("is-pending", pending);
+    profileAvatarPreview.setAttribute(
+      "aria-label",
+      pending ? "Generating avatar" : "Current avatar. Click to upload image"
+    );
+  }
   function updateProfileAvatarPreview(profile) {
-    if (profile.avatar.type === "asset") {
+    if (profile.avatar.value) {
       profileAvatarImg.src = `/asset/${profile.avatar.value}`;
       profileAvatarImg.hidden = false;
-      profileAvatarEmojiPreview.hidden = true;
+      profileAvatarFallback.hidden = true;
       return;
     }
     profileAvatarImg.hidden = true;
     profileAvatarImg.removeAttribute("src");
-    profileAvatarEmojiPreview.hidden = false;
-    profileAvatarEmojiPreview.textContent = avatarEmoji(profile.avatar.value);
+    profileAvatarFallback.hidden = false;
+    profileAvatarFallback.textContent = DEFAULT_USER_AVATAR;
   }
   function profileFromCurrentForm() {
     return normalizedProfileFromForm({
@@ -3263,7 +3291,6 @@ function init() {
       interests: profileInterests.value,
       hates: profileHates.value,
       favorites: profileFavorites.value,
-      avatar: profileAvatar.value,
       avatarAsset: profileAvatarAsset.value
     });
   }
@@ -3272,8 +3299,7 @@ function init() {
     profileInterests.value = profile.interests;
     profileHates.value = profile.hates;
     profileFavorites.value = profile.favorites;
-    profileAvatar.value = profile.avatar.type === "emoji" ? profile.avatar.value : DEFAULT_USER_AVATAR;
-    profileAvatarAsset.value = profile.avatar.type === "asset" ? profile.avatar.value : "";
+    profileAvatarAsset.value = profile.avatar.value;
     updateProfileAvatarPreview(profile);
   }
   async function loadProfileIntoForm() {
@@ -3317,10 +3343,7 @@ function init() {
   profileClose.addEventListener("click", closeProfileModal);
   profileBackdrop.addEventListener("click", closeProfileModal);
   profileModal.addEventListener("keydown", trapProfileModalFocus);
-  profileAvatar.addEventListener("input", () => {
-    profileAvatarAsset.value = "";
-    updateProfileAvatarPreview(profileFromCurrentForm());
-  });
+  profileAvatarPreview.addEventListener("click", () => profileAvatarUpload.click());
   profileAvatarUpload.addEventListener("change", () => {
     const file = profileAvatarUpload.files?.[0];
     if (!file) return;
@@ -3332,12 +3355,15 @@ function init() {
       return;
     }
     profileAvatarUpload.disabled = true;
+    setProfileAvatarPending(true);
     void uploadProfileAvatar(file, profile).then((saved) => {
       setCurrentProfile(saved);
+      repaintCurrentUserAvatars();
       fillProfileForm(saved);
     }).catch(() => showError("Failed to upload avatar \u{1F615}")).finally(() => {
       profileAvatarUpload.disabled = false;
       profileAvatarUpload.value = "";
+      setProfileAvatarPending(false);
     });
   });
   profileGenerate.addEventListener("click", () => {
@@ -3350,12 +3376,15 @@ function init() {
     }
     profileGenerate.disabled = true;
     profileGenerate.textContent = "Generating... \u2728";
+    setProfileAvatarPending(true);
     void generateProfileAvatar(profile).then((saved) => {
       setCurrentProfile(saved);
+      repaintCurrentUserAvatars();
       fillProfileForm(saved);
     }).catch(() => showError("Failed to generate avatar \u{1F615}")).finally(() => {
       profileGenerate.disabled = false;
       profileGenerate.textContent = "Generate avatar \u{1F3A8}";
+      setProfileAvatarPending(false);
     });
   });
   profileForm.addEventListener("submit", (e) => {
@@ -3369,6 +3398,7 @@ function init() {
     }
     void putProfile(profile).then((saved) => {
       setCurrentProfile(saved);
+      repaintCurrentUserAvatars();
       fillProfileForm(saved);
       closeProfileModal();
     }).catch(() => showError("Failed to save profile \u{1F615}"));
@@ -3376,6 +3406,7 @@ function init() {
   profileReset.addEventListener("click", () => {
     void deleteProfile().then((profile) => {
       setCurrentProfile(profile);
+      repaintCurrentUserAvatars();
       fillProfileForm(profile);
       closeProfileModal();
     }).catch(() => showError("Failed to reset profile \u{1F615}"));
@@ -3526,6 +3557,11 @@ function init() {
   const createSearchForm = $("#create-search-form");
   const imgPromptInput = $("#img-prompt");
   const imgRatioInput = $("#img-ratio");
+  const imgCountInput = $("#img-count");
+  const imgSeedInput = $("#img-seed");
+  const imgWidthInput = $("#img-width");
+  const imgHeightInput = $("#img-height");
+  const imgPromptOptimizerInput = $("#img-prompt-optimizer");
   const musicPromptInput = $("#music-prompt");
   const musicLyricsInput = $("#music-lyrics");
   const voiceTextInput = $("#voice-text");
@@ -3541,6 +3577,11 @@ function init() {
     if (item.kind === "image") {
       imgPromptInput.value = String(inputData.prompt ?? "");
       imgRatioInput.value = String(inputData.aspect_ratio ?? "16:9");
+      imgCountInput.value = String(inputData.n ?? "");
+      imgSeedInput.value = String(inputData.seed ?? "");
+      imgWidthInput.value = String(inputData.width ?? "");
+      imgHeightInput.value = String(inputData.height ?? "");
+      imgPromptOptimizerInput.checked = inputData.prompt_optimizer === true;
       setCreateTab("image");
     } else if (item.kind === "music") {
       musicPromptInput.value = String(inputData.prompt ?? "");
@@ -3615,6 +3656,11 @@ function init() {
   [
     imgPromptInput,
     imgRatioInput,
+    imgCountInput,
+    imgSeedInput,
+    imgWidthInput,
+    imgHeightInput,
+    imgPromptOptimizerInput,
     musicPromptInput,
     musicLyricsInput,
     voiceTextInput,
@@ -3646,11 +3692,19 @@ function init() {
     e.preventDefault();
     const prompt = imgPromptInput.value.trim();
     const ratio = imgRatioInput.value;
+    const params = [`aspect_ratio=${ratio}`];
+    if (imgCountInput.value.trim()) params.push(`n=${imgCountInput.value.trim()}`);
+    if (imgSeedInput.value.trim()) params.push(`seed=${imgSeedInput.value.trim()}`);
+    if (imgWidthInput.value.trim() && imgHeightInput.value.trim()) {
+      params.push(`width=${imgWidthInput.value.trim()}`);
+      params.push(`height=${imgHeightInput.value.trim()}`);
+    }
+    if (imgPromptOptimizerInput.checked) params.push("prompt_optimizer=true");
     if (prompt) {
       closeCreateModal();
       sendMessage(
         `Use generate_image with prompt: ${prompt}
-Tool params: aspect_ratio=${ratio}`,
+Tool params: ${params.join(",")}`,
         "create"
       );
     }

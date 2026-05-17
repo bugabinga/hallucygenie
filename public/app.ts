@@ -44,7 +44,15 @@ interface SessionRow {
 
 interface CreateDraft {
     selectedTab: string;
-    image: { prompt: string; aspect_ratio: string };
+    image: {
+        prompt: string;
+        aspect_ratio: string;
+        n: string;
+        seed: string;
+        width: string;
+        height: string;
+        prompt_optimizer: boolean;
+    };
     music: { prompt: string; lyrics: string };
     voice: { text: string; speed: string; voice_id: string; volume: string; pitch: string };
     search: { query: string };
@@ -65,7 +73,7 @@ export interface UserProfile {
     interests: string;
     hates: string;
     favorites: string;
-    avatar: { type: "emoji" | "asset"; value: string };
+    avatar: { type: "asset"; value: string };
     updatedAt: number;
 }
 
@@ -92,7 +100,7 @@ let currentProfile: UserProfile = {
     interests: "",
     hates: "",
     favorites: "",
-    avatar: { type: "emoji", value: DEFAULT_USER_AVATAR },
+    avatar: { type: "asset", value: "" },
     updatedAt: 0,
 };
 
@@ -237,9 +245,10 @@ async function deleteCreateHistoryItem(id: string): Promise<void> {
     });
 }
 
-function avatarEmoji(value: string): string {
-    const trimmed = Array.from(value.trim()).slice(0, 4).join("");
-    if (!trimmed || /^data:/i.test(trimmed)) return DEFAULT_USER_AVATAR;
+function normalizeAvatarAsset(value: string): string {
+    const trimmed = value.trim();
+    if (!trimmed) return "";
+    if (!/^asset_[0-9a-f-]+$/i.test(trimmed)) throw new Error("Avatar asset id is invalid");
     return trimmed;
 }
 
@@ -248,23 +257,15 @@ export function normalizedProfileFromForm(form: {
     interests: string;
     hates: string;
     favorites: string;
-    avatar: string;
     avatarAsset?: string;
 }): UserProfile {
-    const avatarAsset = form.avatarAsset?.trim() ?? "";
-    if (/^data:/i.test(form.avatar.trim())) throw new Error("Avatar data URLs are not allowed");
-    if (avatarAsset && !/^asset_[0-9a-f-]+$/i.test(avatarAsset)) {
-        throw new Error("Avatar asset id is invalid");
-    }
     return {
         version: 1,
         username: Array.from(form.username.trim()).slice(0, 40).join(""),
         interests: Array.from(form.interests.trim()).slice(0, 300).join(""),
         hates: Array.from(form.hates.trim()).slice(0, 300).join(""),
         favorites: Array.from(form.favorites.trim()).slice(0, 300).join(""),
-        avatar: avatarAsset
-            ? { type: "asset", value: avatarAsset }
-            : { type: "emoji", value: avatarEmoji(form.avatar) },
+        avatar: { type: "asset", value: normalizeAvatarAsset(form.avatarAsset ?? "") },
         updatedAt: Date.now(),
     };
 }
@@ -273,9 +274,17 @@ function setCurrentProfile(profile: UserProfile): void {
     currentProfile = profile;
     const btn = document.querySelector<HTMLElement>("#profile-btn");
     if (!btn) return;
-    const label = profile.avatar.type === "emoji" ? profile.avatar.value : "🖼️";
+    const label = profile.avatar.value ? "🖼️" : DEFAULT_USER_AVATAR;
     btn.dataset.avatar = label;
     btn.textContent = `${label} Profile`;
+}
+
+function repaintCurrentUserAvatars(): void {
+    document
+        .querySelectorAll<HTMLElement>(".message--user:not(.message--steer) .message-avatar")
+        .forEach((avatar) => {
+            avatar.replaceWith(renderProfileAvatar());
+        });
 }
 
 // ── SSE Parsing ──────────────────────────────────────────────────────
@@ -360,7 +369,7 @@ export function createElement(
 
 export function renderProfileAvatar(profile = currentProfile): HTMLElement {
     const avatar = createElement("div", { class: "message-avatar" });
-    if (profile.avatar.type === "asset" && /^asset_[0-9a-f-]+$/i.test(profile.avatar.value)) {
+    if (/^asset_[0-9a-f-]+$/i.test(profile.avatar.value)) {
         const img = createElement("img", {
             class: "profile-avatar-img",
             src: `/asset/${profile.avatar.value}`,
@@ -373,7 +382,7 @@ export function renderProfileAvatar(profile = currentProfile): HTMLElement {
         avatar.appendChild(img);
         return avatar;
     }
-    avatar.textContent = avatarEmoji(profile.avatar.value);
+    avatar.textContent = DEFAULT_USER_AVATAR;
     return avatar;
 }
 
@@ -1262,7 +1271,15 @@ function clearChatUi(): void {
 function defaultCreateDraft(): CreateDraft {
     return {
         selectedTab: "image",
-        image: { prompt: "", aspect_ratio: "16:9" },
+        image: {
+            prompt: "",
+            aspect_ratio: "16:9",
+            n: "",
+            seed: "",
+            width: "",
+            height: "",
+            prompt_optimizer: false,
+        },
         music: { prompt: "", lyrics: "" },
         voice: {
             text: "",
@@ -1281,6 +1298,11 @@ function createDraftFromDom(): CreateDraft {
         image: {
             prompt: ($("#img-prompt") as HTMLTextAreaElement).value,
             aspect_ratio: ($("#img-ratio") as HTMLSelectElement).value,
+            n: ($("#img-count") as HTMLInputElement).value,
+            seed: ($("#img-seed") as HTMLInputElement).value,
+            width: ($("#img-width") as HTMLInputElement).value,
+            height: ($("#img-height") as HTMLInputElement).value,
+            prompt_optimizer: ($("#img-prompt-optimizer") as HTMLInputElement).checked,
         },
         music: {
             prompt: ($("#music-prompt") as HTMLTextAreaElement).value,
@@ -1303,6 +1325,13 @@ function createDraftFromDom(): CreateDraft {
 function applyCreateDraft(draft: CreateDraft): void {
     ($("#img-prompt") as HTMLTextAreaElement).value = draft.image.prompt;
     ($("#img-ratio") as HTMLSelectElement).value = draft.image.aspect_ratio;
+    ($("#img-count") as HTMLInputElement).value = draft.image.n ?? "";
+    ($("#img-seed") as HTMLInputElement).value = draft.image.seed ?? "";
+    ($("#img-width") as HTMLInputElement).value = draft.image.width ?? "";
+    ($("#img-height") as HTMLInputElement).value = draft.image.height ?? "";
+    ($("#img-prompt-optimizer") as HTMLInputElement).checked = Boolean(
+        draft.image.prompt_optimizer,
+    );
     ($("#music-prompt") as HTMLTextAreaElement).value = draft.music.prompt;
     ($("#music-lyrics") as HTMLTextAreaElement).value = draft.music.lyrics;
     ($("#voice-text") as HTMLTextAreaElement).value = draft.voice.text;
@@ -1449,25 +1478,33 @@ export function init(): void {
     const profileInterests = $("#profile-interests") as HTMLTextAreaElement;
     const profileHates = $("#profile-hates") as HTMLTextAreaElement;
     const profileFavorites = $("#profile-favorites") as HTMLTextAreaElement;
-    const profileAvatar = $("#profile-avatar") as HTMLInputElement;
     const profileAvatarAsset = $("#profile-avatar-asset") as HTMLInputElement;
     const profileAvatarUpload = $("#profile-avatar-upload") as HTMLInputElement;
+    const profileAvatarPreview = $("#profile-avatar-preview") as HTMLButtonElement;
     const profileAvatarImg = $("#profile-avatar-img") as HTMLImageElement;
-    const profileAvatarEmojiPreview = $("#profile-avatar-emoji-preview") as HTMLElement;
+    const profileAvatarFallback = $("#profile-avatar-fallback") as HTMLElement;
     const profileGenerate = $("#profile-generate") as HTMLButtonElement;
     let profileModalReturnFocus: HTMLElement | null = null;
 
+    function setProfileAvatarPending(pending: boolean): void {
+        profileAvatarPreview.classList.toggle("is-pending", pending);
+        profileAvatarPreview.setAttribute(
+            "aria-label",
+            pending ? "Generating avatar" : "Current avatar. Click to upload image",
+        );
+    }
+
     function updateProfileAvatarPreview(profile: UserProfile): void {
-        if (profile.avatar.type === "asset") {
+        if (profile.avatar.value) {
             profileAvatarImg.src = `/asset/${profile.avatar.value}`;
             profileAvatarImg.hidden = false;
-            profileAvatarEmojiPreview.hidden = true;
+            profileAvatarFallback.hidden = true;
             return;
         }
         profileAvatarImg.hidden = true;
         profileAvatarImg.removeAttribute("src");
-        profileAvatarEmojiPreview.hidden = false;
-        profileAvatarEmojiPreview.textContent = avatarEmoji(profile.avatar.value);
+        profileAvatarFallback.hidden = false;
+        profileAvatarFallback.textContent = DEFAULT_USER_AVATAR;
     }
 
     function profileFromCurrentForm(): UserProfile {
@@ -1476,7 +1513,6 @@ export function init(): void {
             interests: profileInterests.value,
             hates: profileHates.value,
             favorites: profileFavorites.value,
-            avatar: profileAvatar.value,
             avatarAsset: profileAvatarAsset.value,
         });
     }
@@ -1486,9 +1522,7 @@ export function init(): void {
         profileInterests.value = profile.interests;
         profileHates.value = profile.hates;
         profileFavorites.value = profile.favorites;
-        profileAvatar.value =
-            profile.avatar.type === "emoji" ? profile.avatar.value : DEFAULT_USER_AVATAR;
-        profileAvatarAsset.value = profile.avatar.type === "asset" ? profile.avatar.value : "";
+        profileAvatarAsset.value = profile.avatar.value;
         updateProfileAvatarPreview(profile);
     }
 
@@ -1538,10 +1572,7 @@ export function init(): void {
     profileClose.addEventListener("click", closeProfileModal);
     profileBackdrop.addEventListener("click", closeProfileModal);
     profileModal.addEventListener("keydown", trapProfileModalFocus);
-    profileAvatar.addEventListener("input", () => {
-        profileAvatarAsset.value = "";
-        updateProfileAvatarPreview(profileFromCurrentForm());
-    });
+    profileAvatarPreview.addEventListener("click", () => profileAvatarUpload.click());
     profileAvatarUpload.addEventListener("change", () => {
         const file = profileAvatarUpload.files?.[0];
         if (!file) return;
@@ -1553,15 +1584,18 @@ export function init(): void {
             return;
         }
         profileAvatarUpload.disabled = true;
+        setProfileAvatarPending(true);
         void uploadProfileAvatar(file, profile)
             .then((saved) => {
                 setCurrentProfile(saved);
+                repaintCurrentUserAvatars();
                 fillProfileForm(saved);
             })
             .catch(() => showError("Failed to upload avatar 😕"))
             .finally(() => {
                 profileAvatarUpload.disabled = false;
                 profileAvatarUpload.value = "";
+                setProfileAvatarPending(false);
             });
     });
     profileGenerate.addEventListener("click", () => {
@@ -1574,15 +1608,18 @@ export function init(): void {
         }
         profileGenerate.disabled = true;
         profileGenerate.textContent = "Generating... ✨";
+        setProfileAvatarPending(true);
         void generateProfileAvatar(profile)
             .then((saved) => {
                 setCurrentProfile(saved);
+                repaintCurrentUserAvatars();
                 fillProfileForm(saved);
             })
             .catch(() => showError("Failed to generate avatar 😕"))
             .finally(() => {
                 profileGenerate.disabled = false;
                 profileGenerate.textContent = "Generate avatar 🎨";
+                setProfileAvatarPending(false);
             });
     });
     profileForm.addEventListener("submit", (e) => {
@@ -1597,6 +1634,7 @@ export function init(): void {
         void putProfile(profile)
             .then((saved) => {
                 setCurrentProfile(saved);
+                repaintCurrentUserAvatars();
                 fillProfileForm(saved);
                 closeProfileModal();
             })
@@ -1606,6 +1644,7 @@ export function init(): void {
         void deleteProfile()
             .then((profile) => {
                 setCurrentProfile(profile);
+                repaintCurrentUserAvatars();
                 fillProfileForm(profile);
                 closeProfileModal();
             })
@@ -1804,6 +1843,11 @@ export function init(): void {
     const createSearchForm = $("#create-search-form") as HTMLFormElement;
     const imgPromptInput = $("#img-prompt") as HTMLTextAreaElement;
     const imgRatioInput = $("#img-ratio") as HTMLSelectElement;
+    const imgCountInput = $("#img-count") as HTMLInputElement;
+    const imgSeedInput = $("#img-seed") as HTMLInputElement;
+    const imgWidthInput = $("#img-width") as HTMLInputElement;
+    const imgHeightInput = $("#img-height") as HTMLInputElement;
+    const imgPromptOptimizerInput = $("#img-prompt-optimizer") as HTMLInputElement;
     const musicPromptInput = $("#music-prompt") as HTMLTextAreaElement;
     const musicLyricsInput = $("#music-lyrics") as HTMLTextAreaElement;
     const voiceTextInput = $("#voice-text") as HTMLTextAreaElement;
@@ -1820,6 +1864,11 @@ export function init(): void {
         if (item.kind === "image") {
             imgPromptInput.value = String(inputData.prompt ?? "");
             imgRatioInput.value = String(inputData.aspect_ratio ?? "16:9");
+            imgCountInput.value = String(inputData.n ?? "");
+            imgSeedInput.value = String(inputData.seed ?? "");
+            imgWidthInput.value = String(inputData.width ?? "");
+            imgHeightInput.value = String(inputData.height ?? "");
+            imgPromptOptimizerInput.checked = inputData.prompt_optimizer === true;
             setCreateTab("image");
         } else if (item.kind === "music") {
             musicPromptInput.value = String(inputData.prompt ?? "");
@@ -1898,6 +1947,11 @@ export function init(): void {
     [
         imgPromptInput,
         imgRatioInput,
+        imgCountInput,
+        imgSeedInput,
+        imgWidthInput,
+        imgHeightInput,
+        imgPromptOptimizerInput,
         musicPromptInput,
         musicLyricsInput,
         voiceTextInput,
@@ -1933,10 +1987,18 @@ export function init(): void {
         e.preventDefault();
         const prompt = imgPromptInput.value.trim();
         const ratio = imgRatioInput.value;
+        const params = [`aspect_ratio=${ratio}`];
+        if (imgCountInput.value.trim()) params.push(`n=${imgCountInput.value.trim()}`);
+        if (imgSeedInput.value.trim()) params.push(`seed=${imgSeedInput.value.trim()}`);
+        if (imgWidthInput.value.trim() && imgHeightInput.value.trim()) {
+            params.push(`width=${imgWidthInput.value.trim()}`);
+            params.push(`height=${imgHeightInput.value.trim()}`);
+        }
+        if (imgPromptOptimizerInput.checked) params.push("prompt_optimizer=true");
         if (prompt) {
             closeCreateModal();
             sendMessage(
-                `Use generate_image with prompt: ${prompt}\nTool params: aspect_ratio=${ratio}`,
+                `Use generate_image with prompt: ${prompt}\nTool params: ${params.join(",")}`,
                 "create",
             );
         }

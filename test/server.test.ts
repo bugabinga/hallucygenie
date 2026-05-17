@@ -673,7 +673,7 @@ describe("SSE streaming from Anthropic endpoint", () => {
             saveUserProfile(getDb()!, {
                 username: "GamerKid",
                 interests: "Minecraft",
-                avatar: { type: "emoji", value: "🦊" },
+                avatar: { type: "asset", value: "asset_123abc" },
             });
             const req = makeRequest("POST", "/api/chat", {
                 messages: [{ role: "user", content: "hi" }],
@@ -2155,9 +2155,12 @@ describe("/api/profile", () => {
     it("GET returns default profile", async () => {
         const resp = await handleRequest(makeRequest("GET", "/api/profile"));
         assert.equal(resp.status, 200);
-        const body = (await readJson(resp)) as { avatar: { value: string }; username: string };
+        const body = (await readJson(resp)) as {
+            avatar: { type: string; value: string };
+            username: string;
+        };
         assert.equal(body.username, "");
-        assert.equal(body.avatar.value, "🎮");
+        assert.deepEqual(body.avatar, { type: "asset", value: "" });
     });
 
     it("PUT stores normalized profile", async () => {
@@ -2167,20 +2170,20 @@ describe("/api/profile", () => {
                 interests: " Minecraft ",
                 hates: "",
                 favorites: "redstone",
-                avatar: { type: "emoji", value: "🦊" },
+                avatar: { type: "asset", value: "asset_123abc" },
             }),
         );
         assert.equal(resp.status, 200);
         const body = (await readJson(resp)) as { username: string; avatar: { value: string } };
         assert.equal(body.username, "GamerKid");
-        assert.equal(body.avatar.value, "🦊");
+        assert.equal(body.avatar.value, "asset_123abc");
     });
 
     it("PUT rejects data URL avatar", async () => {
         const resp = await handleRequest(
             makeRequest("PUT", "/api/profile", {
                 username: "GamerKid",
-                avatar: { type: "emoji", value: "data:image/png;base64,abc" },
+                avatar: { type: "asset", value: "data:image/png;base64,abc" },
             }),
         );
         assert.equal(resp.status, 400);
@@ -2189,12 +2192,15 @@ describe("/api/profile", () => {
     });
 
     it("DELETE resets profile", async () => {
-        saveUserProfile(getDb()!, { username: "GamerKid", avatar: { type: "emoji", value: "🦊" } });
+        saveUserProfile(getDb()!, {
+            username: "GamerKid",
+            avatar: { type: "asset", value: "asset_123abc" },
+        });
         const resp = await handleRequest(makeRequest("DELETE", "/api/profile"));
         assert.equal(resp.status, 200);
         const body = (await readJson(resp)) as { username: string; avatar: { value: string } };
         assert.equal(body.username, "");
-        assert.equal(body.avatar.value, "🎮");
+        assert.equal(body.avatar.value, "");
     });
 });
 
@@ -2730,7 +2736,7 @@ describe("Session, draft, and create-history APIs", () => {
                 interests: "Minecraft",
                 hates: "spam",
                 favorites: "blue fire",
-                avatar: { type: "emoji", value: "🎮" },
+                avatar: { type: "asset", value: "" },
                 updatedAt: 1,
             }),
         );
@@ -2794,7 +2800,7 @@ describe("Session, draft, and create-history APIs", () => {
                         interests: "Minecraft",
                         hates: "spam",
                         favorites: "blue fire",
-                        avatar: { type: "emoji", value: "🎮" },
+                        avatar: { type: "asset", value: "" },
                         updatedAt: 1,
                     }),
                 }),

@@ -86,6 +86,9 @@ jobs:
                       BRANCH=$(cat /tmp/pi-agent-existing-pr-branch)
                       just fmt || true
                       git add -A
+                      if [ -f /tmp/pi-agent-pr-update-body.md ]; then
+                          gh pr edit "${PR_NUMBER}" --body-file /tmp/pi-agent-pr-update-body.md
+                      fi
                       if git diff --cached --quiet; then
                           echo "No repair changes for existing PR #${PR_NUMBER}"
                           exit 0
@@ -169,6 +172,9 @@ jobs:
                       BRANCH=$(cat /tmp/pi-agent-existing-pr-branch)
                       just fmt || true
                       git add -A
+                      if [ -f /tmp/pi-agent-pr-update-body.md ]; then
+                          gh pr edit "${PR_NUMBER}" --body-file /tmp/pi-agent-pr-update-body.md
+                      fi
                       if git diff --cached --quiet; then
                           echo "No repair changes for existing PR #${PR_NUMBER}"
                           exit 0
@@ -251,6 +257,9 @@ jobs:
                       BRANCH=$(cat /tmp/pi-agent-existing-pr-branch)
                       just fmt || true
                       git add -A
+                      if [ -f /tmp/pi-agent-pr-update-body.md ]; then
+                          gh pr edit "${PR_NUMBER}" --body-file /tmp/pi-agent-pr-update-body.md
+                      fi
                       if git diff --cached --quiet; then
                           echo "No repair changes for existing PR #${PR_NUMBER}"
                           exit 0
@@ -329,6 +338,9 @@ jobs:
                       BRANCH=$(cat /tmp/pi-agent-existing-pr-branch)
                       just fmt || true
                       git add -A
+                      if [ -f /tmp/pi-agent-pr-update-body.md ]; then
+                          gh pr edit "${PR_NUMBER}" --body-file /tmp/pi-agent-pr-update-body.md
+                      fi
                       if git diff --cached --quiet; then
                           echo "No repair changes for existing PR #${PR_NUMBER}"
                           exit 0

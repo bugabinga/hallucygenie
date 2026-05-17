@@ -55,9 +55,11 @@ Read ${existingPr.contextPath}.
 
 Fix unchecked janitor checklist items and actionable review/comment findings.
 Keep current PR scope. Add/update tests. Only touch src/ and test/.
-Run relevant tests. Write PR body/update notes to /tmp/pi-agent-pr-body.md.
+Run relevant tests. Write repair summary/update notes to /tmp/pi-agent-pr-body.md.
+If janitor asks for PR body/metadata changes, write the complete replacement PR body to /tmp/pi-agent-pr-update-body.md.
+Use /tmp/pi-agent-pr-body.md only for run summary/update notes.
 
-No talk. Repair. Test. Write PR body. Done.`,
+No talk. Repair. Test. Write notes. Done.`,
         ],
         0,
     );

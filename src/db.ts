@@ -110,7 +110,7 @@ export interface UserProfile {
     interests: string;
     hates: string;
     favorites: string;
-    avatar: { type: "emoji" | "asset"; value: string };
+    avatar: { type: "asset"; value: string };
     updatedAt: number;
 }
 
@@ -120,7 +120,7 @@ export const DEFAULT_USER_PROFILE: UserProfile = {
     interests: "",
     hates: "",
     favorites: "",
-    avatar: { type: "emoji", value: "🎮" },
+    avatar: { type: "asset", value: "" },
     updatedAt: 0,
 };
 
@@ -189,17 +189,12 @@ function normalizeProfileAvatar(value: unknown): UserProfile["avatar"] {
     if (typeof value !== "object" || Array.isArray(value))
         throw new Error("avatar must be an object");
     const avatar = value as Record<string, unknown>;
-    if (avatar.type !== "emoji" && avatar.type !== "asset") throw new Error("avatar type invalid");
+    if (avatar.type !== "asset") throw new Error("avatar type invalid");
     if (typeof avatar.value !== "string") throw new Error("avatar value must be a string");
     const trimmed = avatar.value.trim();
+    if (!trimmed) return DEFAULT_USER_PROFILE.avatar;
     if (/^data:/i.test(trimmed)) throw new Error("avatar data URL not allowed");
     assertNoRawAssetDataInMessage(trimmed);
-    if (avatar.type === "emoji") {
-        if (!trimmed) return DEFAULT_USER_PROFILE.avatar;
-        const emoji = truncateCodepoints(trimmed, 4);
-        if (!emoji) return DEFAULT_USER_PROFILE.avatar;
-        return { type: "emoji", value: emoji };
-    }
     if (!/^asset_[0-9a-f-]+$/i.test(trimmed)) throw new Error("avatar asset id invalid");
     return { type: "asset", value: trimmed };
 }
