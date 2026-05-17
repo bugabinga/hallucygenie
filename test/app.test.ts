@@ -2680,6 +2680,74 @@ describe("init accessibility behavior", () => {
         assert.equal(status.textContent, "Avatar ready.");
     });
 
+    it("repaints visible user avatars when profile avatar changes", async () => {
+        const { doc } = setupDOM();
+        const defaultProfile = {
+            version: 1,
+            username: "GamerKid",
+            interests: "Minecraft",
+            hates: "gore",
+            favorites: "blue fire",
+            avatar: { type: "asset", value: "" },
+            updatedAt: 1,
+        };
+        const savedProfile = {
+            ...defaultProfile,
+            avatar: { type: "asset", value: "asset_12345678-1234-1234-1234-123456789abc" },
+            updatedAt: 2,
+        };
+        (globalThis as any).fetch = (input: string | Request, init?: RequestInit) => {
+            const url = input.toString();
+            if (url.includes("/api/profile") && init?.method === "PUT") {
+                return Promise.resolve(
+                    new Response(JSON.stringify(savedProfile), {
+                        status: 200,
+                        headers: { "Content-Type": "application/json" },
+                    }),
+                );
+            }
+            if (url.includes("/api/profile")) {
+                return Promise.resolve(
+                    new Response(JSON.stringify(defaultProfile), {
+                        status: 200,
+                        headers: { "Content-Type": "application/json" },
+                    }),
+                );
+            }
+            return Promise.resolve(
+                new Response(JSON.stringify({ messages: [], sessions: [], items: [] }), {
+                    status: 200,
+                    headers: { "Content-Type": "application/json" },
+                }),
+            );
+        };
+
+        init();
+        await new Promise((resolve) => setTimeout(resolve, 0));
+        const messageList = doc.querySelector("#message-list") as HTMLElement;
+        messageList.appendChild(renderUserMessage("Existing message"));
+        const originalAvatar = messageList.querySelector(
+            ".message--user .message-avatar",
+        ) as HTMLElement;
+        assert.equal(originalAvatar.textContent, "🎮");
+        assert.equal(originalAvatar.querySelector("img"), null);
+
+        (doc.querySelector("#profile-avatar-asset") as HTMLInputElement).value =
+            "asset_12345678-1234-1234-1234-123456789abc";
+        (doc.querySelector("#profile-form") as HTMLFormElement).dispatchEvent(
+            new Event("submit", { bubbles: true, cancelable: true }),
+        );
+        await new Promise((resolve) => setTimeout(resolve, 0));
+
+        const repaintedAvatar = messageList.querySelector(
+            ".message--user .message-avatar .profile-avatar-img",
+        ) as HTMLImageElement | null;
+        assert.equal(
+            repaintedAvatar?.getAttribute("src"),
+            "/asset/asset_12345678-1234-1234-1234-123456789abc",
+        );
+    });
+
     it("clears avatar generation pending state on error", async () => {
         const { doc } = setupDOM();
         let resolveGenerate: ((response: Response) => void) | undefined;

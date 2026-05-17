@@ -2328,10 +2328,12 @@ function normalizedProfileFromForm(form) {
 function setCurrentProfile(profile) {
   currentProfile = profile;
   const btn = document.querySelector("#profile-btn");
-  if (!btn) return;
-  const label = profile.avatar.value ? "\u{1F5BC}\uFE0F" : DEFAULT_USER_AVATAR;
-  btn.dataset.avatar = label;
-  btn.textContent = `${label} Profile`;
+  if (btn) {
+    const label = profile.avatar.value ? "\u{1F5BC}\uFE0F" : DEFAULT_USER_AVATAR;
+    btn.dataset.avatar = label;
+    btn.textContent = `${label} Profile`;
+  }
+  repaintCurrentUserAvatars();
 }
 function repaintCurrentUserAvatars() {
   document.querySelectorAll(".message--user:not(.message--steer) .message-avatar").forEach((avatar) => {
@@ -3369,7 +3371,6 @@ function init() {
     setProfileAvatarPending(true);
     void uploadProfileAvatar(file, profile).then((saved) => {
       setCurrentProfile(saved);
-      repaintCurrentUserAvatars();
       fillProfileForm(saved);
     }).catch(() => showError("Failed to upload avatar \u{1F615}")).finally(() => {
       profileAvatarUpload.disabled = false;
@@ -3390,7 +3391,6 @@ function init() {
     setProfileAvatarPending(true);
     void generateProfileAvatar(profile).then((saved) => {
       setCurrentProfile(saved);
-      repaintCurrentUserAvatars();
       fillProfileForm(saved);
     }).catch(() => showError("Failed to generate avatar \u{1F615}")).finally(() => {
       profileGenerate.disabled = false;
@@ -3409,7 +3409,6 @@ function init() {
     }
     void putProfile(profile).then((saved) => {
       setCurrentProfile(saved);
-      repaintCurrentUserAvatars();
       fillProfileForm(saved);
       closeProfileModal();
     }).catch(() => showError("Failed to save profile \u{1F615}"));
@@ -3417,7 +3416,6 @@ function init() {
   profileReset.addEventListener("click", () => {
     void deleteProfile().then((profile) => {
       setCurrentProfile(profile);
-      repaintCurrentUserAvatars();
       fillProfileForm(profile);
       closeProfileModal();
     }).catch(() => showError("Failed to reset profile \u{1F615}"));

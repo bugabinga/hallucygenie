@@ -212,6 +212,13 @@ describe("index.html health", () => {
         assert.equal(indexHtml.toLowerCase().includes("email"), false);
     });
 
+    it("profile avatar changes repaint current user message avatars", () => {
+        assert.match(appTs, /function repaintCurrentUserAvatars\(\): void/);
+        assert.match(appTs, /\.message--user:not\(\.message--steer\) \.message-avatar/);
+        assert.match(appTs, /avatar\.replaceWith\(renderProfileAvatar\(\)\)/);
+        assert.match(appTs, /function setCurrentProfile[\s\S]*repaintCurrentUserAvatars\(\);/);
+    });
+
     it("profile avatar generation has visible and accessible pending state", () => {
         const doc = parseIndex();
         const status = doc.querySelector("#profile-avatar-status") as HTMLElement | null;

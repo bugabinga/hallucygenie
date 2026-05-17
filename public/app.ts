@@ -274,10 +274,12 @@ export function normalizedProfileFromForm(form: {
 function setCurrentProfile(profile: UserProfile): void {
     currentProfile = profile;
     const btn = document.querySelector<HTMLElement>("#profile-btn");
-    if (!btn) return;
-    const label = profile.avatar.value ? "🖼️" : DEFAULT_USER_AVATAR;
-    btn.dataset.avatar = label;
-    btn.textContent = `${label} Profile`;
+    if (btn) {
+        const label = profile.avatar.value ? "🖼️" : DEFAULT_USER_AVATAR;
+        btn.dataset.avatar = label;
+        btn.textContent = `${label} Profile`;
+    }
+    repaintCurrentUserAvatars();
 }
 
 function repaintCurrentUserAvatars(): void {
@@ -1601,7 +1603,6 @@ export function init(): void {
         void uploadProfileAvatar(file, profile)
             .then((saved) => {
                 setCurrentProfile(saved);
-                repaintCurrentUserAvatars();
                 fillProfileForm(saved);
             })
             .catch(() => showError("Failed to upload avatar 😕"))
@@ -1625,7 +1626,6 @@ export function init(): void {
         void generateProfileAvatar(profile)
             .then((saved) => {
                 setCurrentProfile(saved);
-                repaintCurrentUserAvatars();
                 fillProfileForm(saved);
             })
             .catch(() => showError("Failed to generate avatar 😕"))
@@ -1647,7 +1647,6 @@ export function init(): void {
         void putProfile(profile)
             .then((saved) => {
                 setCurrentProfile(saved);
-                repaintCurrentUserAvatars();
                 fillProfileForm(saved);
                 closeProfileModal();
             })
@@ -1657,7 +1656,6 @@ export function init(): void {
         void deleteProfile()
             .then((profile) => {
                 setCurrentProfile(profile);
-                repaintCurrentUserAvatars();
                 fillProfileForm(profile);
                 closeProfileModal();
             })

@@ -1,5 +1,5 @@
 ---
-{ "status": "open", "specs": ["HG-SPEC-003", "HG-SPEC-009"] }
+{ "status": "fixed", "specs": ["HG-SPEC-003", "HG-SPEC-009"] }
 ---
 
 Repro:
@@ -27,3 +27,9 @@ Fix:
 - After profile avatar update/save/generate/upload, repaint existing current-session user avatars or rerender current history from state.
 - Add E2E: change avatar while messages are visible; visible current-session bubbles update without reload/session switch.
 - Preserve raw asset bytes in asset storage only.
+
+Resolution 2026-05-17:
+
+- `setCurrentProfile()` now repaints current-session user avatar nodes whenever the profile changes.
+- Upload, generate, save, reset, and initial profile load share that single repaint path.
+- Added app/static/E2E coverage so existing visible user bubbles update without reload/session switch.

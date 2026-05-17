@@ -737,6 +737,18 @@ async function runE2ETests(): Promise<void> {
             await waitForApp(page, { dismissOnboarding: true });
             resetMinimaxMockCalls();
 
+            const chatResponse = page.waitForResponse(
+                (res) => res.url().includes("/api/chat") && res.request().method() === "POST",
+            );
+            await page.fill("#chat-input", "Existing avatar should repaint");
+            await page.press("#chat-input", "Enter");
+            await chatResponse;
+            const existingAvatar = page.locator(".message--user .message-avatar").first();
+            await existingAvatar.waitFor({ state: "attached", timeout: 5000 });
+            if (await existingAvatar.locator(".profile-avatar-img").count()) {
+                throw new Error("Expected existing user bubble to start with fallback avatar");
+            }
+
             const initialProfileLoad = page.waitForResponse(
                 (res) => res.url().includes("/api/profile") && res.request().method() === "GET",
             );
@@ -774,6 +786,14 @@ async function runE2ETests(): Promise<void> {
                 "🖼️",
                 "Profile button shows image avatar",
             );
+            const repaintedAvatar = page.locator(".message--user .profile-avatar-img").first();
+            await repaintedAvatar.waitFor({ state: "attached", timeout: 5000 });
+            const repaintedAvatarSrc = (await repaintedAvatar.getAttribute("src")) ?? "";
+            if (!repaintedAvatarSrc.includes(`/asset/${assetId}`)) {
+                throw new Error(
+                    `Existing user bubble did not repaint avatar: ${repaintedAvatarSrc}`,
+                );
+            }
 
             const profile = await page.evaluate(async () => {
                 return (await (await fetch("/api/profile")).json()) as {
