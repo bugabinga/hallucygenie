@@ -288,6 +288,51 @@ describe("index.html health", () => {
         assert.match(styleCss, /backdrop-filter: blur\(10px\)/);
     });
 
+    it("all intentional scroll owners share consistent custom scrollbar styling", () => {
+        // Scroll owners that need custom scrollbar aesthetics
+        const scrollOwners = ["#message-list", ".modal-content", ".create-panels"];
+
+        for (const owner of scrollOwners) {
+            // Firefox scrollbar-width/color applied via shared rule
+            assert.match(
+                styleCss,
+                new RegExp(
+                    `${owner.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}[^{]*\\{[^}]*scrollbar-width: thin`,
+                ),
+                `${owner} missing scrollbar-width: thin`,
+            );
+            assert.match(
+                styleCss,
+                new RegExp(
+                    `${owner.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}[^{]*\\{[^}]*scrollbar-color`,
+                ),
+                `${owner} missing scrollbar-color`,
+            );
+            // WebKit scrollbar pseudo-elements applied via shared rules
+            for (const pseudo of [
+                "::-webkit-scrollbar",
+                "::-webkit-scrollbar-track",
+                "::-webkit-scrollbar-thumb",
+            ]) {
+                assert.match(
+                    styleCss,
+                    new RegExp(
+                        `${owner.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}${pseudo.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}`,
+                    ),
+                    `${owner}${pseudo} missing`,
+                );
+            }
+            // Hover state for thumb
+            assert.match(
+                styleCss,
+                new RegExp(
+                    `${owner.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}::-webkit-scrollbar-thumb:hover`,
+                ),
+                `${owner} missing ::-webkit-scrollbar-thumb:hover`,
+            );
+        }
+    });
+
     it("create form controls have visible left borders", () => {
         assert.match(styleCss, /\.create-panels \{[^}]*padding: 0 2px;/);
         assert.match(

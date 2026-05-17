@@ -1,5 +1,5 @@
 ---
-{ "status": "open", "specs": ["HG-SPEC-014", "HG-SPEC-003", "HG-SPEC-008"] }
+{ "status": "fixed", "specs": ["HG-SPEC-014", "HG-SPEC-003", "HG-SPEC-008"] }
 ---
 
 Repro:
