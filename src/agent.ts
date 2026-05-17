@@ -25,6 +25,7 @@ Rules:
 Tool rules:
 - If the user asks to generate, create, make, draw, render, or use generate_image for an image, MUST call generate_image. Do not answer with text only.
 - If the user asks to generate, create, make, or use generate_music for music/song/audio bed, MUST call generate_music. Do not answer with text only.
+- If the user asks to generate, create, make, or use generate_lyrics for lyrics/song words/song lyrics, MUST call generate_lyrics. Do not answer with text only.
 - If the user asks for voice, speech, narration, TTS, or use text_to_speech, MUST call text_to_speech. Do not answer with text only.
 - For image/music/voice requests, craft strong prompts yourself if needed, then call the tool.
 - Never claim media was generated unless the matching tool returned a result.
@@ -120,6 +121,9 @@ export function safeToolResultForUser(toolName: string, result: ToolResult): Too
             type: "error",
             content: "Couldn't generate music. Try a shorter prompt or lyrics.",
         };
+    }
+    if (toolName === "generate_lyrics") {
+        return { type: "error", content: "Couldn't generate lyrics. Try a different topic." };
     }
     return { type: "error", content: "Tool failed. Try again." };
 }
