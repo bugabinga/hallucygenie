@@ -160,23 +160,29 @@ describe("index.html health", () => {
         assert.ok(doc.querySelector("#session-new"));
     });
 
-    it("themes the session switcher as app chrome", () => {
+    it("themes the session switcher as integrated app chrome", () => {
         assert.match(styleCss, /--color-bg-card: rgba\(255, 255, 255, 0\.06\);/);
         assert.match(styleCss, /--color-border: rgba\(255, 255, 255, 0\.14\);/);
-        assert.match(styleCss, /\.session-select \{[^}]*appearance: none;/);
-        assert.match(styleCss, /\.session-select \{[^}]*border-radius: var\(--radius-full\);/);
+        assert.match(styleCss, /\.session-switcher \{[^}]*gap: 0;/);
+        assert.match(styleCss, /\.session-switcher \{[^}]*overflow: hidden;/);
+        assert.match(styleCss, /\.session-switcher \{[^}]*border-radius: var\(--radius-full\);/);
         assert.match(
             styleCss,
-            /\.session-select \{[^}]*linear-gradient\(135deg, rgba\(255, 255, 255, 0\.1\), var\(--color-bg-card\)\)/,
+            /\.session-switcher \{[^}]*linear-gradient\(135deg, rgba\(255, 255, 255, 0\.1\), var\(--color-bg-card\)\)/,
         );
+        assert.match(styleCss, /\.session-select \{[^}]*appearance: none;/);
+        assert.match(styleCss, /\.session-select \{[^}]*border: 0;/);
+        assert.match(styleCss, /\.session-select \{[^}]*M4 6l4 4 4-4/);
         assert.match(
             styleCss,
             /\.session-select option \{[^}]*background: var\(--color-surface\);/,
         );
         assert.match(
             styleCss,
-            /\.session-new \{[^}]*background: linear-gradient\(135deg, var\(--color-tertiary\), var\(--color-primary-light\)\);/,
+            /\.session-new \{[^}]*border-left: 1px solid var\(--color-border\);/,
         );
+        assert.match(styleCss, /\.session-new \{[^}]*background: transparent;/);
+        assert.doesNotMatch(styleCss, /\.session-new \{[^}]*linear-gradient/);
     });
 
     it("create panels have recent history containers", () => {
