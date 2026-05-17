@@ -1,9 +1,5 @@
 ---
-{
-  "status": "open",
-  "specs":
-    ["HG-SPEC-004", "HG-SPEC-006", "HG-SPEC-008", "HG-SPEC-011", "HG-SPEC-012"],
-}
+{ "status": "open", "specs": ["HG-SPEC-004", "HG-SPEC-006", "HG-SPEC-008", "HG-SPEC-011", "HG-SPEC-012"] }
 ---
 
 # HG-ISSUE-066: MiniMax tool parameter coverage gaps

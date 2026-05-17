@@ -1,8 +1,5 @@
 ---
-{
-  "status": "fixed",
-  "specs": ["HG-SPEC-005", "HG-SPEC-008", "HG-SPEC-011", "HG-SPEC-012"],
-}
+{ "status": "fixed", "specs": ["HG-SPEC-005", "HG-SPEC-008", "HG-SPEC-011", "HG-SPEC-012"] }
 ---
 
 # HG-ISSUE-047: MiniMax API contract drift lacks tests
