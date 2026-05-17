@@ -160,6 +160,25 @@ describe("index.html health", () => {
         assert.ok(doc.querySelector("#session-new"));
     });
 
+    it("orders header controls by identity, session, then actions", () => {
+        const doc = parseIndex();
+        const headerLeft = doc.querySelector(".header-left");
+        const headerRight = doc.querySelector(".header-right");
+        assert.deepEqual(
+            Array.from(headerLeft?.children ?? []).map((el) => `#${el.id}.${el.className}`),
+            ["#.header-emoji", "#.header-title", "#connection-status.status-dot"],
+        );
+        assert.deepEqual(
+            Array.from(headerRight?.children ?? []).map((el) => `#${el.id}.${el.className}`),
+            [
+                "#.session-switcher",
+                "#profile-btn.profile-btn",
+                "#create-btn.create-btn",
+                "#quota-badge.quota-badge",
+            ],
+        );
+    });
+
     it("themes the session switcher as integrated app chrome", () => {
         assert.match(styleCss, /--color-bg-card: rgba\(255, 255, 255, 0\.06\);/);
         assert.match(styleCss, /--color-border: rgba\(255, 255, 255, 0\.14\);/);
@@ -196,7 +215,7 @@ describe("index.html health", () => {
         );
         assert.match(
             styleCss,
-            /grid-template-areas:[\s\S]*"sessions status profile create"[\s\S]*"quota quota quota quota"/,
+            /grid-template-areas:[\s\S]*"sessions sessions sessions"[\s\S]*"profile create quota"/,
         );
         assert.match(
             styleCss,

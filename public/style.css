@@ -1833,10 +1833,10 @@ textarea,
 
     .header-right {
         display: grid;
-        grid-template-columns: minmax(76px, 1fr) auto auto auto;
+        grid-template-columns: auto auto minmax(0, 1fr);
         grid-template-areas:
-            "sessions status profile create"
-            "quota quota quota quota";
+            "sessions sessions sessions"
+            "profile create quota";
         gap: var(--space-xs);
         width: 100%;
     }
@@ -1848,12 +1848,6 @@ textarea,
 
     .session-select {
         width: 100%;
-    }
-
-    .status-dot {
-        grid-area: status;
-        align-self: center;
-        justify-self: center;
     }
 
     .quota-badge {

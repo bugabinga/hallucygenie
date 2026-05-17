@@ -18,6 +18,13 @@
                 <div class="header-left">
                     <span class="header-emoji" aria-hidden="true">🧞</span>
                     <h1 class="header-title">HallucyGenie</h1>
+                    <span
+                        id="connection-status"
+                        class="status-dot"
+                        title="Connected"
+                        role="status"
+                        aria-label="Connection status: Connected"
+                    ></span>
                 </div>
                 <div class="header-right">
                     <div class="session-switcher" aria-label="Sessions">
@@ -30,19 +37,12 @@
                         <!-- prettier-ignore -->
                         <button id="session-new" class="session-new" type="button" aria-label="New chat">＋</button>
                     </div>
-                    <span
-                        id="connection-status"
-                        class="status-dot"
-                        title="Connected"
-                        role="status"
-                        aria-label="Connection status: Connected"
-                    ></span>
-                    <!-- prettier-ignore -->
-                    <span id="quota-badge" class="quota-badge" title="Images, voice, music, and lyrics remaining today" role="status" aria-label="Images, voice, music, and lyrics remaining today"><span class="quota-item" data-type="image" title="Images">🎨 <span class="quota-used">—</span></span><span class="quota-item" data-type="speech" title="Voice">🎙️ <span class="quota-used">—</span></span><span class="quota-item" data-type="music" title="Music">🎵 <span class="quota-used">—</span></span><span class="quota-item" data-type="lyrics" title="Lyrics">📝 <span class="quota-used">—</span></span></span>
                     <!-- prettier-ignore -->
                     <button id="profile-btn" class="profile-btn" title="Profile" aria-label="Open profile" data-avatar="🎮">🎮 Profile</button>
                     <!-- prettier-ignore -->
                     <button id="create-btn" class="create-btn" title="Create something" aria-label="Create media">✨ Create</button>
+                    <!-- prettier-ignore -->
+                    <span id="quota-badge" class="quota-badge" title="Images, voice, music, and lyrics remaining today" role="status" aria-label="Images, voice, music, and lyrics remaining today"><span class="quota-item" data-type="image" title="Images">🎨 <span class="quota-used">—</span></span><span class="quota-item" data-type="speech" title="Voice">🎙️ <span class="quota-used">—</span></span><span class="quota-item" data-type="music" title="Music">🎵 <span class="quota-used">—</span></span><span class="quota-item" data-type="lyrics" title="Lyrics">📝 <span class="quota-used">—</span></span></span>
                 </div>
             </header>
 
