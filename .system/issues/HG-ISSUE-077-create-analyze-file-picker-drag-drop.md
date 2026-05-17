@@ -1,5 +1,5 @@
 ---
-{ "status": "open", "specs": ["HG-SPEC-004", "HG-SPEC-011", "HG-SPEC-015"] }
+{ "status": "open", "specs": ["HG-SPEC-004", "HG-SPEC-011", "HG-SPEC-015", "HG-SPEC-016"] }
 ---
 
 # HG-ISSUE-077: Create Analyze needs file picker and drag/drop image input
