@@ -1397,7 +1397,7 @@ describe("streamChat SSE processing", () => {
         assert.ok(events.some((e) => e.data.includes("Hello")));
     });
 
-    it("streaming chunks animate before final markdown replaces them", async () => {
+    it("renders markdown during streaming before final done", async () => {
         const { doc: newDoc } = setupDOM();
         doc = newDoc;
         const enc = new TextEncoder();
@@ -1413,19 +1413,39 @@ describe("streamChat SSE processing", () => {
             );
 
         const promise = sendMessage("stream markdown");
-        controller.enqueue(enc.encode(sseText("**hi")));
+        controller.enqueue(enc.encode(sseText("## Thumbnail Ideas\n\n")));
         await new Promise((r) => setTimeout(r, 25));
 
-        assert.equal(doc.querySelectorAll(".stream-chunk").length, 1);
-        assert.equal(doc.querySelector(".assistant-text-region")?.textContent, "**hi");
+        const region = doc.querySelector(".assistant-text-region");
+        assert.ok(region?.classList.contains("is-streaming"));
+        assert.ok(doc.querySelector(".assistant-text-region h2 .stream-chunk"));
+        assert.equal(region?.classList.contains("stream-render-tick"), false);
+        assert.equal(region?.textContent?.includes("##"), false);
 
-        controller.enqueue(enc.encode(sseText("**")));
+        controller.enqueue(enc.encode(sseText("- **Big Sparkle Face** with `OMG!` text\n")));
+        await new Promise((r) => setTimeout(r, 25));
+
+        assert.ok(doc.querySelector(".assistant-text-region strong"));
+        assert.ok(doc.querySelector(".assistant-text-region code"));
+        assert.ok(doc.querySelector(".assistant-text-region li .stream-chunk"));
+        assert.equal(
+            doc.querySelector(".assistant-text-region")?.textContent?.includes("**"),
+            false,
+        );
+        assert.equal(
+            doc.querySelector(".assistant-text-region")?.textContent?.includes("`"),
+            false,
+        );
+
         controller.enqueue(enc.encode(sseDone()));
         controller.close();
         await promise;
 
-        assert.equal(doc.querySelectorAll(".stream-chunk").length, 0);
         assert.ok(doc.querySelector(".assistant-text-region strong"));
+        assert.equal(
+            doc.querySelector(".assistant-text-region")?.classList.contains("is-streaming"),
+            false,
+        );
     });
 
     it("tool result card persists when text arrives after tool result", async () => {
@@ -1658,6 +1678,32 @@ describe("streamChat SSE processing", () => {
         await streamChat([{ role: "user", content: "hi" }], (e) => events.push(e));
         // Stream should complete without error
         assert.ok(true);
+    });
+
+    it("closed stream without DONE removes streaming caret state", async () => {
+        const { doc: newDoc } = setupDOM();
+        doc = newDoc;
+        (globalThis as any).fetch = () => Promise.resolve(createSSEResponse([sseText("**hi**")]));
+
+        await sendMessage("stream closes early");
+
+        assert.ok(doc.querySelector(".assistant-text-region strong"));
+        assert.equal(doc.querySelectorAll(".assistant-text-region.is-streaming").length, 0);
+        assert.equal(doc.querySelectorAll(".stream-chunk").length, 0);
+    });
+
+    it("stream completion clears stale caret state from previous messages", async () => {
+        const { doc: newDoc } = setupDOM();
+        doc = newDoc;
+        const messageList = doc.querySelector("#message-list");
+        messageList.innerHTML = `<div class="message message--assistant"><div class="message-bubble"><div class="message-content"><div class="assistant-text-region is-streaming"><span class="stream-chunk">old done</span></div></div></div></div>`;
+        (globalThis as any).fetch = () => Promise.resolve(createSSEResponse([sseDone()]));
+
+        await sendMessage("next turn");
+
+        assert.equal(doc.querySelectorAll(".assistant-text-region.is-streaming").length, 0);
+        assert.equal(doc.querySelectorAll(".stream-chunk").length, 0);
+        assert.ok(doc.querySelector(".assistant-text-region")?.textContent?.includes("old done"));
     });
 
     it("[DONE] signal converts steer bubbles to normal user bubbles", async () => {

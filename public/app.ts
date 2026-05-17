@@ -761,6 +761,7 @@ let isStreaming = false;
 let currentAssistantEl: HTMLElement | null = null;
 let currentAssistantContent: HTMLElement | null = null;
 let activeToolCards = new Map<string, HTMLElement>();
+let renderedStreamTextLength = 0;
 let rawTextBuffer = ""; // raw text for markdown re-rendering
 let thinkingBuffer = ""; // accumulated thinking text from thinking events
 let lyricsWriteResolve: ((value: string) => void) | null = null; // set when "Write lyrics" is active
@@ -839,6 +840,8 @@ export async function streamChat(
             handleSSEEvent(event);
         }
     }
+
+    if (isStreaming) finishStreaming();
 }
 
 function ensureAssistantContent(): HTMLElement {
@@ -860,6 +863,7 @@ function handleSSEEvent(event: SSEEvent): void {
             currentAssistantContent = null;
             activeToolCards.clear();
             rawTextBuffer = "";
+            renderedStreamTextLength = 0;
             thinkingBuffer = "";
         }
         return;
@@ -979,6 +983,44 @@ function getOrCreateContentRegion(
     return region;
 }
 
+function renderedTextNodes(root: HTMLElement): Text[] {
+    const textNodes: Text[] = [];
+    const collectTextNodes = (node: Node): void => {
+        if (node.nodeType === 3) {
+            if (node.textContent?.trim()) textNodes.push(node as Text);
+            return;
+        }
+        node.childNodes.forEach(collectTextNodes);
+    };
+    collectTextNodes(root);
+    return textNodes;
+}
+
+function renderedTextLength(textNodes: Text[]): number {
+    return textNodes.reduce((total, node) => total + (node.textContent?.length ?? 0), 0);
+}
+
+function animateRenderedTextTail(textNodes: Text[], charCount: number): void {
+    if (charCount <= 0) return;
+
+    let remaining = charCount;
+    for (let i = textNodes.length - 1; i >= 0 && remaining > 0; i--) {
+        const node = textNodes[i]!;
+        const text = node.textContent ?? "";
+        const take = Math.min(remaining, text.length);
+        const start = text.length - take;
+        const before = text.slice(0, start);
+        const animated = text.slice(start);
+        const fragment = document.createDocumentFragment();
+        if (before) fragment.appendChild(document.createTextNode(before));
+        const span = createElement("span", { class: "stream-chunk" });
+        span.textContent = animated;
+        fragment.appendChild(span);
+        node.parentNode?.replaceChild(fragment, node);
+        remaining -= take;
+    }
+}
+
 function appendText(text: string): void {
     if (!currentAssistantContent) return;
 
@@ -987,9 +1029,11 @@ function appendText(text: string): void {
     if (!textRegion) return;
 
     textRegion.classList.add("is-streaming");
-    const chunk = createElement("span", { class: "stream-chunk" });
-    chunk.textContent = text;
-    textRegion.appendChild(chunk);
+    textRegion.innerHTML = renderMarkdown(rawTextBuffer);
+    const textNodes = renderedTextNodes(textRegion);
+    const visibleTextLength = renderedTextLength(textNodes);
+    animateRenderedTextTail(textNodes, visibleTextLength - renderedStreamTextLength);
+    renderedStreamTextLength = visibleTextLength;
     scrollToBottom();
 }
 
@@ -1011,6 +1055,12 @@ function scrollToBottom(): void {
     });
 }
 
+function unwrapStreamChunks(root: ParentNode): void {
+    root.querySelectorAll<HTMLElement>(".stream-chunk").forEach((el) => {
+        el.replaceWith(document.createTextNode(el.textContent ?? ""));
+    });
+}
+
 function finishStreaming(): void {
     // If "Write lyrics for me" was active, populate the textarea and skip chat display
     if (lyricsWriteResolve && capturedLyricsText !== null) {
@@ -1023,6 +1073,10 @@ function finishStreaming(): void {
             el.innerHTML = renderMarkdown(rawTextBuffer);
             el.classList.remove("is-streaming");
         });
+    document.querySelectorAll<HTMLElement>(".assistant-text-region.is-streaming").forEach((el) => {
+        unwrapStreamChunks(el);
+        el.classList.remove("is-streaming");
+    });
     document
         .querySelectorAll(".message--steer")
         .forEach((el) => el.classList.remove("message--steer"));
@@ -1031,6 +1085,7 @@ function finishStreaming(): void {
     currentAssistantContent = null;
     activeToolCards.clear();
     rawTextBuffer = "";
+    renderedStreamTextLength = 0;
     thinkingBuffer = "";
     const shouldClearDraft =
         clearDraftAfterDone === "chat" || (clearDraftAfterDone === "create" && streamHadToolResult);

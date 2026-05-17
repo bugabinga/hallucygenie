@@ -2708,6 +2708,7 @@ var isStreaming = false;
 var currentAssistantEl = null;
 var currentAssistantContent = null;
 var activeToolCards = /* @__PURE__ */ new Map();
+var renderedStreamTextLength = 0;
 var rawTextBuffer = "";
 var thinkingBuffer = "";
 var lyricsWriteResolve = null;
@@ -2767,6 +2768,7 @@ async function streamChat(messages, onEvent) {
       handleSSEEvent(event);
     }
   }
+  if (isStreaming) finishStreaming();
 }
 function ensureAssistantContent() {
   if (currentAssistantContent) return currentAssistantContent;
@@ -2785,6 +2787,7 @@ function handleSSEEvent(event) {
       currentAssistantContent = null;
       activeToolCards.clear();
       rawTextBuffer = "";
+      renderedStreamTextLength = 0;
       thinkingBuffer = "";
     }
     return;
@@ -2872,15 +2875,51 @@ function getOrCreateContentRegion(className, position) {
   }
   return region;
 }
+function renderedTextNodes(root) {
+  const textNodes = [];
+  const collectTextNodes = (node) => {
+    if (node.nodeType === 3) {
+      if (node.textContent?.trim()) textNodes.push(node);
+      return;
+    }
+    node.childNodes.forEach(collectTextNodes);
+  };
+  collectTextNodes(root);
+  return textNodes;
+}
+function renderedTextLength(textNodes) {
+  return textNodes.reduce((total, node) => total + (node.textContent?.length ?? 0), 0);
+}
+function animateRenderedTextTail(textNodes, charCount) {
+  if (charCount <= 0) return;
+  let remaining = charCount;
+  for (let i = textNodes.length - 1; i >= 0 && remaining > 0; i--) {
+    const node = textNodes[i];
+    const text = node.textContent ?? "";
+    const take = Math.min(remaining, text.length);
+    const start = text.length - take;
+    const before = text.slice(0, start);
+    const animated = text.slice(start);
+    const fragment = document.createDocumentFragment();
+    if (before) fragment.appendChild(document.createTextNode(before));
+    const span = createElement("span", { class: "stream-chunk" });
+    span.textContent = animated;
+    fragment.appendChild(span);
+    node.parentNode?.replaceChild(fragment, node);
+    remaining -= take;
+  }
+}
 function appendText(text) {
   if (!currentAssistantContent) return;
   rawTextBuffer += text;
   const textRegion = getOrCreateContentRegion("assistant-text-region", "end");
   if (!textRegion) return;
   textRegion.classList.add("is-streaming");
-  const chunk = createElement("span", { class: "stream-chunk" });
-  chunk.textContent = text;
-  textRegion.appendChild(chunk);
+  textRegion.innerHTML = renderMarkdown(rawTextBuffer);
+  const textNodes = renderedTextNodes(textRegion);
+  const visibleTextLength = renderedTextLength(textNodes);
+  animateRenderedTextTail(textNodes, visibleTextLength - renderedStreamTextLength);
+  renderedStreamTextLength = visibleTextLength;
   scrollToBottom();
 }
 function appendThinking(text) {
@@ -2897,6 +2936,11 @@ function scrollToBottom() {
     list2.scrollTop = list2.scrollHeight;
   });
 }
+function unwrapStreamChunks(root) {
+  root.querySelectorAll(".stream-chunk").forEach((el) => {
+    el.replaceWith(document.createTextNode(el.textContent ?? ""));
+  });
+}
 function finishStreaming() {
   if (lyricsWriteResolve && capturedLyricsText !== null) {
     lyricsWriteResolve(capturedLyricsText);
@@ -2906,12 +2950,17 @@ function finishStreaming() {
     el.innerHTML = renderMarkdown(rawTextBuffer);
     el.classList.remove("is-streaming");
   });
+  document.querySelectorAll(".assistant-text-region.is-streaming").forEach((el) => {
+    unwrapStreamChunks(el);
+    el.classList.remove("is-streaming");
+  });
   document.querySelectorAll(".message--steer").forEach((el) => el.classList.remove("message--steer"));
   isStreaming = false;
   currentAssistantEl = null;
   currentAssistantContent = null;
   activeToolCards.clear();
   rawTextBuffer = "";
+  renderedStreamTextLength = 0;
   thinkingBuffer = "";
   const shouldClearDraft = clearDraftAfterDone === "chat" || clearDraftAfterDone === "create" && streamHadToolResult;
   if (clearDraftAfterDone && shouldClearDraft && !streamHadError)

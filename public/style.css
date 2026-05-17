@@ -686,7 +686,6 @@ textarea,
 .stream-chunk {
     display: inline-block;
     vertical-align: baseline;
-    white-space: pre-wrap;
     animation: stream-chunk-in 180ms steps(8, end);
 }
 

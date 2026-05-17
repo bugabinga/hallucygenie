@@ -410,6 +410,7 @@ describe("index.html health", () => {
         );
         assert.match(styleCss, /\.stream-chunk \{[^}]*steps\(8, end\)/);
         assert.doesNotMatch(styleCss, /\.stream-char/);
+        assert.doesNotMatch(styleCss, /\.stream-render-tick/);
     });
 
     it("create modal has stable shell and scroll region", () => {
