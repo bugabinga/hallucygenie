@@ -403,7 +403,9 @@ describe("index.html health", () => {
     it("shell is full-width with constrained content and useful input overflow", () => {
         assert.doesNotMatch(styleCss, /#app \{[^}]*max-width:/);
         assert.match(styleCss, /--content-max-width: 720px/);
+        assert.match(styleCss, /--header-content-max-width: 1040px/);
         assert.match(styleCss, /#header \{[^}]*padding-inline: max/);
+        assert.match(styleCss, /#header \{[^}]*var\(--header-content-max-width\)/);
         assert.match(styleCss, /#message-list \{[^}]*padding-inline: max/);
         assert.match(styleCss, /#chat-form \{[^}]*max-width: var\(--content-max-width\)/);
         assert.match(styleCss, /#chat-input \{[^}]*overflow-y: hidden/);

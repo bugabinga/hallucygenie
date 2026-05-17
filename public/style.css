@@ -101,6 +101,7 @@
     --font-sans: var(--font-ui);
     --font-mono: "SF Mono", "Fira Code", "Cascadia Code", ui-monospace, monospace;
     --content-max-width: 720px;
+    --header-content-max-width: 1040px;
 }
 
 /* ── Reset + Base ───────────────────────────────────────────────────── */
@@ -180,7 +181,7 @@ textarea,
     padding-block: var(--space-md);
     padding-inline: max(
         var(--space-lg),
-        calc((100vw - var(--content-max-width)) / 2 + var(--space-lg))
+        calc((100vw - var(--header-content-max-width)) / 2 + var(--space-lg))
     );
     background: linear-gradient(135deg, var(--color-surface) 0%, var(--color-surface-raised) 100%);
     border-bottom: 1px solid rgba(255, 255, 255, 0.04);
