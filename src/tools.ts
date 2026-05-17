@@ -678,9 +678,8 @@ async function imageUrlToDataUrl(imageUrl: string): Promise<string> {
 export async function analyzeImage(
     input: string | AnalyzeImageOptions,
     apiKey: string,
-    prompt?: string,
 ): Promise<ToolResult> {
-    const options = typeof input === "string" ? { image_url: input, prompt } : input;
+    const options = typeof input === "string" ? { image_url: input } : input;
     try {
         if (/^data:/i.test(options.image_url)) throw new Error("image data URLs are not allowed");
         const dataUrl = await imageUrlToDataUrl(options.image_url);
