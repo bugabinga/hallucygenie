@@ -185,6 +185,29 @@ describe("index.html health", () => {
         assert.doesNotMatch(styleCss, /\.session-new \{[^}]*linear-gradient/);
     });
 
+    it("keeps mobile header title visible while actions wrap below", () => {
+        assert.match(
+            styleCss,
+            /@media \(max-width: 560px\) \{[\s\S]*#header \{[\s\S]*grid-template-columns: minmax\(0, 1fr\);/,
+        );
+        assert.match(
+            styleCss,
+            /@media \(max-width: 560px\) \{[\s\S]*\.header-right \{[\s\S]*display: grid;/,
+        );
+        assert.match(
+            styleCss,
+            /grid-template-areas:[\s\S]*"sessions status profile create"[\s\S]*"quota quota quota quota"/,
+        );
+        assert.match(
+            styleCss,
+            /@media \(max-width: 560px\) \{[\s\S]*\.session-switcher \{[\s\S]*grid-area: sessions;/,
+        );
+        assert.match(
+            styleCss,
+            /@media \(max-width: 560px\) \{[\s\S]*\.session-select \{[\s\S]*width: 100%;/,
+        );
+    });
+
     it("create panels have recent history containers", () => {
         const doc = parseIndex();
         for (const kind of ["image", "music", "voice", "analyze", "search"]) {

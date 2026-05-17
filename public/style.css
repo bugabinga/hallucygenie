@@ -1819,6 +1819,59 @@ textarea,
 
 /* ── Responsive ─────────────────────────────────────────────────────── */
 
+@media (max-width: 560px) {
+    #header {
+        grid-template-columns: minmax(0, 1fr);
+        align-items: stretch;
+        gap: var(--space-xs);
+        padding-block: var(--space-sm);
+    }
+
+    .header-left {
+        width: 100%;
+    }
+
+    .header-right {
+        display: grid;
+        grid-template-columns: minmax(76px, 1fr) auto auto auto;
+        grid-template-areas:
+            "sessions status profile create"
+            "quota quota quota quota";
+        gap: var(--space-xs);
+        width: 100%;
+    }
+
+    .session-switcher {
+        grid-area: sessions;
+        width: 100%;
+    }
+
+    .session-select {
+        width: 100%;
+    }
+
+    .status-dot {
+        grid-area: status;
+        align-self: center;
+        justify-self: center;
+    }
+
+    .quota-badge {
+        grid-area: quota;
+        justify-self: start;
+        max-width: 100%;
+        overflow: hidden;
+    }
+
+    .profile-btn {
+        grid-area: profile;
+    }
+
+    .create-btn {
+        grid-area: create;
+    }
+}
+
 @media (max-width: 480px) {
     .create-modal-content {
         width: min(94vw, 560px);
