@@ -160,6 +160,25 @@ describe("index.html health", () => {
         assert.ok(doc.querySelector("#session-new"));
     });
 
+    it("themes the session switcher as app chrome", () => {
+        assert.match(styleCss, /--color-bg-card: rgba\(255, 255, 255, 0\.06\);/);
+        assert.match(styleCss, /--color-border: rgba\(255, 255, 255, 0\.14\);/);
+        assert.match(styleCss, /\.session-select \{[^}]*appearance: none;/);
+        assert.match(styleCss, /\.session-select \{[^}]*border-radius: var\(--radius-full\);/);
+        assert.match(
+            styleCss,
+            /\.session-select \{[^}]*linear-gradient\(135deg, rgba\(255, 255, 255, 0\.1\), var\(--color-bg-card\)\)/,
+        );
+        assert.match(
+            styleCss,
+            /\.session-select option \{[^}]*background: var\(--color-surface\);/,
+        );
+        assert.match(
+            styleCss,
+            /\.session-new \{[^}]*background: linear-gradient\(135deg, var\(--color-tertiary\), var\(--color-primary-light\)\);/,
+        );
+    });
+
     it("create panels have recent history containers", () => {
         const doc = parseIndex();
         for (const kind of ["image", "music", "voice", "analyze", "search"]) {
