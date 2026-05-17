@@ -1,5 +1,5 @@
 // HallucyGenie — Tool definitions and execution
-// Implements generate_image, text_to_speech, generate_lyrics, generate_music
+// Implements generate_image, text_to_speech, generate_lyrics, generate_music, analyze_image
 
 // ── Types ────────────────────────────────────────────────────────────
 
@@ -42,6 +42,11 @@ export interface GenerateLyricsOptions {
 export interface GenerateMusicOptions {
     prompt: string;
     lyrics?: string;
+}
+
+export interface AnalyzeImageOptions {
+    image_url: string;
+    prompt?: string;
 }
 
 // ── Configuration ────────────────────────────────────────────────────
@@ -173,6 +178,26 @@ export function getToolDefinitions(): ToolDefinition[] {
             },
         },
         {
+            name: "analyze_image",
+            description:
+                "Analyze an HTTPS image URL and answer a prompt about what is visible. Returns text only.",
+            input_schema: {
+                type: "object",
+                properties: {
+                    image_url: {
+                        type: "string",
+                        description: "HTTPS URL of a JPG, PNG, or WebP image to analyze.",
+                    },
+                    prompt: {
+                        type: "string",
+                        description:
+                            "Question or instruction about the image. Defaults to a concise description.",
+                    },
+                },
+                required: ["image_url"],
+            },
+        },
+        {
             name: "web_search",
             description: "Search the web for information. Returns formatted search results.",
             input_schema: {
@@ -240,6 +265,14 @@ export async function executeTool(
                 {
                     prompt: args.prompt as string,
                     lyrics: args.lyrics as string | undefined,
+                },
+                apiKey,
+            );
+        case "analyze_image":
+            return analyzeImage(
+                {
+                    image_url: args.image_url as string,
+                    prompt: args.prompt as string | undefined,
                 },
                 apiKey,
             );
@@ -642,10 +675,15 @@ async function imageUrlToDataUrl(imageUrl: string): Promise<string> {
     return `data:image/${mime};base64,${Buffer.from(bytes).toString("base64")}`;
 }
 
-export async function analyzeImage(imageUrl: string, apiKey: string): Promise<ToolResult> {
+export async function analyzeImage(
+    input: string | AnalyzeImageOptions,
+    apiKey: string,
+    prompt?: string,
+): Promise<ToolResult> {
+    const options = typeof input === "string" ? { image_url: input, prompt } : input;
     try {
-        if (/^data:/i.test(imageUrl)) throw new Error("image data URLs are not allowed");
-        const dataUrl = await imageUrlToDataUrl(imageUrl);
+        if (/^data:/i.test(options.image_url)) throw new Error("image data URLs are not allowed");
+        const dataUrl = await imageUrlToDataUrl(options.image_url);
         const resp = await fetch(`${MINIMAX_BASE}/v1/coding_plan/vlm`, {
             method: "POST",
             headers: {
@@ -653,7 +691,7 @@ export async function analyzeImage(imageUrl: string, apiKey: string): Promise<To
                 "Content-Type": "application/json",
             },
             body: JSON.stringify({
-                prompt: "Describe this image in detail.",
+                prompt: options.prompt?.trim() || "Describe this image in detail.",
                 image_url: dataUrl,
             }),
         });

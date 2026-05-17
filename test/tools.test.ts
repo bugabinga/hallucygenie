@@ -45,12 +45,12 @@ function imageResponse(type = "image/png", bytes = new Uint8Array([1, 2, 3])): R
 // ── Tool definitions ─────────────────────────────────────────────────
 
 describe("getToolDefinitions", () => {
-    it("returns five live-safe tool definitions", () => {
+    it("returns six live tool definitions", () => {
         const defs = getToolDefinitions();
-        assert.equal(defs.length, 5);
+        assert.equal(defs.length, 6);
         assert.equal(
             defs.some((tool) => tool.name === "analyze_image"),
-            false,
+            true,
         );
     });
 
@@ -130,6 +130,21 @@ describe("getToolDefinitions", () => {
         assert.deepEqual(schema.required, ["prompt"]);
     });
 
+    it("defines analyze_image with correct schema", () => {
+        const defs = getToolDefinitions();
+        const analyze = defs.find((d) => d.name === "analyze_image");
+        assert.ok(analyze, "analyze_image tool should exist");
+        const schema = analyze.input_schema as {
+            type: string;
+            properties: Record<string, unknown>;
+            required: string[];
+        };
+        assert.equal(schema.type, "object");
+        assert.ok(schema.properties.image_url);
+        assert.ok(schema.properties.prompt);
+        assert.deepEqual(schema.required, ["image_url"]);
+    });
+
     it("all definitions have descriptions", () => {
         const defs = getToolDefinitions();
         for (const def of defs) {
@@ -191,6 +206,24 @@ describe("executeTool", () => {
         const result = await executeTool("generate_lyrics", { prompt: "a happy song" }, API_KEY);
         assert.equal(result.type, "text");
         assert.ok(result.content.includes("Hello world"));
+    });
+
+    it("dispatches to analyze_image", async () => {
+        let capturedBody = "";
+        globalThis.fetch = async (url: string | URL | Request, init?: RequestInit) => {
+            if (!url.toString().includes("/v1/coding_plan/vlm")) return imageResponse("image/png");
+            capturedBody = init?.body as string;
+            return jsonResponse({ content: "A mountain" });
+        };
+
+        const result = await executeTool(
+            "analyze_image",
+            { image_url: "https://example.com/mountain.png", prompt: "one thing" },
+            API_KEY,
+        );
+        assert.equal(result.type, "text");
+        assert.equal(result.content, "A mountain");
+        assert.equal(JSON.parse(capturedBody).prompt, "one thing");
     });
 
     it("returns error for unknown tool", async () => {
@@ -1215,10 +1248,13 @@ describe("analyzeImage HTTP request structure", () => {
             return jsonResponse({ content: "A gaming logo" });
         };
 
-        await analyzeImage("https://cdn.example.com/logo.png", API_KEY);
+        await analyzeImage(
+            { image_url: "https://cdn.example.com/logo.png", prompt: "Find the logo" },
+            API_KEY,
+        );
 
         const body = JSON.parse(capturedBody);
-        assert.ok(body.prompt, "should have prompt field");
+        assert.equal(body.prompt, "Find the logo");
         assert.equal(body.image_url, "data:image/png;base64,AQID");
     });
 

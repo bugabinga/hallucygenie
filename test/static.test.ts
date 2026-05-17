@@ -162,9 +162,18 @@ describe("index.html health", () => {
 
     it("create panels have recent history containers", () => {
         const doc = parseIndex();
-        for (const kind of ["image", "music", "voice", "search"]) {
+        for (const kind of ["image", "music", "voice", "analyze", "search"]) {
             assert.ok(doc.querySelector(`.create-recent[data-kind="${kind}"]`), kind);
         }
+    });
+
+    it("create modal exposes analyze image as a first-class tool", () => {
+        const doc = parseIndex();
+        assert.ok(doc.querySelector('.create-tab[data-tab="analyze"]'));
+        assert.ok(doc.querySelector('#create-analyze-form[data-panel="analyze"]'));
+        assert.ok(doc.querySelector('label[for="analyze-url"]'));
+        assert.ok(doc.querySelector('label[for="analyze-prompt"]'));
+        assert.match(appTs, /Use analyze_image with image_url:/);
     });
 
     it("lightbox is an accessible dialog", () => {

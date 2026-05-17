@@ -55,6 +55,7 @@ interface CreateDraft {
     };
     music: { prompt: string; lyrics: string };
     voice: { text: string; speed: string; voice_id: string; volume: string; pitch: string };
+    analyze: { image_url: string; prompt: string };
     search: { query: string };
 }
 
@@ -428,6 +429,7 @@ const TOOL_EMOJIS: Record<string, string> = {
     text_to_speech: "🎙️",
     generate_music: "🎵",
     generate_lyrics: "📝",
+    analyze_image: "🔎",
 };
 
 export function getToolEmoji(name: string): string {
@@ -1288,6 +1290,7 @@ function defaultCreateDraft(): CreateDraft {
             volume: "",
             pitch: "",
         },
+        analyze: { image_url: "", prompt: "What do you see?" },
         search: { query: "" },
     };
 }
@@ -1318,6 +1321,10 @@ function createDraftFromDom(): CreateDraft {
                 (document.querySelector("#voice-volume") as HTMLInputElement | null)?.value ?? "",
             pitch: (document.querySelector("#voice-pitch") as HTMLInputElement | null)?.value ?? "",
         },
+        analyze: {
+            image_url: ($("#analyze-url") as HTMLInputElement).value,
+            prompt: ($("#analyze-prompt") as HTMLTextAreaElement).value,
+        },
         search: { query: ($("#search-query") as HTMLTextAreaElement).value },
     };
 }
@@ -1342,6 +1349,9 @@ function applyCreateDraft(draft: CreateDraft): void {
     if (voiceId) voiceId.value = draft.voice.voice_id ?? "English_expressive_narrator";
     if (voiceVolume) voiceVolume.value = draft.voice.volume ?? "";
     if (voicePitch) voicePitch.value = draft.voice.pitch ?? "";
+    ($("#analyze-url") as HTMLInputElement).value = draft.analyze?.image_url ?? "";
+    ($("#analyze-prompt") as HTMLTextAreaElement).value =
+        draft.analyze?.prompt ?? "What do you see?";
     ($("#search-query") as HTMLTextAreaElement).value = draft.search.query;
 }
 
@@ -1840,6 +1850,7 @@ export function init(): void {
     const createImgForm = $("#create-image-form") as HTMLFormElement;
     const createMusicForm = $("#create-music-form") as HTMLFormElement;
     const createVoiceForm = $("#create-voice-form") as HTMLFormElement;
+    const createAnalyzeForm = $("#create-analyze-form") as HTMLFormElement;
     const createSearchForm = $("#create-search-form") as HTMLFormElement;
     const imgPromptInput = $("#img-prompt") as HTMLTextAreaElement;
     const imgRatioInput = $("#img-ratio") as HTMLSelectElement;
@@ -1855,6 +1866,8 @@ export function init(): void {
     const voiceIdInput = document.querySelector<HTMLInputElement>("#voice-id");
     const voiceVolumeInput = document.querySelector<HTMLInputElement>("#voice-volume");
     const voicePitchInput = document.querySelector<HTMLInputElement>("#voice-pitch");
+    const analyzeUrlInput = $("#analyze-url") as HTMLInputElement;
+    const analyzePromptInput = $("#analyze-prompt") as HTMLTextAreaElement;
     const searchQueryInput = $("#search-query") as HTMLTextAreaElement;
     const persistCreateDraft = debounce(() => void putDraft("create", createDraftFromDom()), 200);
     const persistChatDraft = debounce(() => void putDraft("chat", { text: input.value }), 200);
@@ -1882,6 +1895,10 @@ export function init(): void {
             if (voiceVolumeInput) voiceVolumeInput.value = String(inputData.volume ?? "");
             if (voicePitchInput) voicePitchInput.value = String(inputData.pitch ?? "");
             setCreateTab("voice");
+        } else if (item.kind === "analyze") {
+            analyzeUrlInput.value = String(inputData.image_url ?? "");
+            analyzePromptInput.value = String(inputData.prompt ?? "What do you see?");
+            setCreateTab("analyze");
         } else if (item.kind === "search") {
             searchQueryInput.value = String(inputData.query ?? inputData.prompt ?? "");
             setCreateTab("search");
@@ -1959,6 +1976,8 @@ export function init(): void {
         voiceIdInput,
         voiceVolumeInput,
         voicePitchInput,
+        analyzeUrlInput,
+        analyzePromptInput,
         searchQueryInput,
     ]
         .filter((el): el is HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement =>
@@ -2049,6 +2068,19 @@ export function init(): void {
             closeCreateModal();
             sendMessage(
                 `Use text_to_speech with text: ${text}\nTool params: ${params.join(",")}`,
+                "create",
+            );
+        }
+    });
+
+    createAnalyzeForm.addEventListener("submit", (e) => {
+        e.preventDefault();
+        const imageUrl = analyzeUrlInput.value.trim();
+        const prompt = analyzePromptInput.value.trim() || "What do you see?";
+        if (imageUrl) {
+            closeCreateModal();
+            sendMessage(
+                `Use analyze_image with image_url: ${imageUrl}\nTool params: prompt=${prompt}`,
                 "create",
             );
         }

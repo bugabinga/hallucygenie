@@ -509,6 +509,7 @@ async function runE2ETests(): Promise<void> {
             await expectVisible(page, ".create-tab[data-tab='image']");
             await expectVisible(page, ".create-tab[data-tab='music']");
             await expectVisible(page, ".create-tab[data-tab='voice']");
+            await expectVisible(page, ".create-tab[data-tab='analyze']");
             await expectVisible(page, ".create-tab[data-tab='search']");
 
             await page.close();

@@ -89,6 +89,7 @@ const TOOL_EMOJIS: Record<string, string> = {
     generate_image: "🎨",
     text_to_speech: "🎙️",
     generate_music: "🎵",
+    analyze_image: "🔎",
 };
 
 function getToolEmoji(name: string): string {
@@ -1080,6 +1081,7 @@ function setupDOM(): { win: any; doc: any; errors: string[] } {
           <button class="create-tab active" data-tab="image">🎨 Image</button>
           <button class="create-tab" data-tab="music">🎵 Music</button>
           <button class="create-tab" data-tab="voice">🎤 Voice</button>
+          <button class="create-tab" data-tab="analyze">🔎 Analyze</button>
           <button class="create-tab" data-tab="search">🔍 Search</button>
         </div>
         <div class="create-panels">
@@ -1115,6 +1117,14 @@ function setupDOM(): { win: any; doc: any; errors: string[] } {
               <select id="voice-speed">
                 <option value="1.0" selected>1.0x</option>
               </select>
+            </div>
+          </form>
+          <form id="create-analyze-form" class="create-panel" data-panel="analyze" hidden>
+            <div class="form-group">
+              <input id="analyze-url" />
+            </div>
+            <div class="form-group">
+              <textarea id="analyze-prompt">What do you see?</textarea>
             </div>
           </form>
           <form id="create-search-form" class="create-panel" data-panel="search" hidden>

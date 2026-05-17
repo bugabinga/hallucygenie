@@ -85,7 +85,12 @@ export interface ChatRequestBody {
 }
 
 export interface ExplicitToolDirective {
-    name: "generate_image" | "generate_music" | "text_to_speech" | "generate_lyrics";
+    name:
+        | "generate_image"
+        | "generate_music"
+        | "text_to_speech"
+        | "generate_lyrics"
+        | "analyze_image";
     args: Record<string, unknown>;
     prompt: string | null;
 }
@@ -554,7 +559,7 @@ function parseToolParams(raw: string | undefined, allowed: Set<string>): Record<
 
 export function parseExplicitToolDirective(content: string): ExplicitToolDirective | null {
     const match = content.match(
-        /^Use\s+(generate_image|generate_music|text_to_speech|generate_lyrics)\s+with\s+(prompt|text):\s*([\s\S]*?)(?:\nTool params:\s*([\s\S]*))?$/i,
+        /^Use\s+(generate_image|generate_music|text_to_speech|generate_lyrics|analyze_image)\s+with\s+(prompt|text|image_url):\s*([\s\S]*?)(?:\nTool params:\s*([\s\S]*))?$/i,
     );
     if (!match) return null;
 
@@ -575,12 +580,19 @@ export function parseExplicitToolDirective(content: string): ExplicitToolDirecti
         generate_music: new Set(["lyrics"]),
         text_to_speech: new Set(["voice_id", "speed", "volume", "pitch"]),
         generate_lyrics: new Set(["mode", "lyrics", "title"]),
+        analyze_image: new Set(["prompt"]),
     };
     const args = parseToolParams(match[4], allowedParams[name]);
 
     if (name === "text_to_speech") {
         args.text = value;
         return { name, args, prompt: value };
+    }
+
+    if (name === "analyze_image") {
+        if (field !== "image_url") return null;
+        args.image_url = value;
+        return { name, args, prompt: typeof args.prompt === "string" ? args.prompt : value };
     }
 
     if (field !== "prompt") return null;

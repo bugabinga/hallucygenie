@@ -2448,7 +2448,8 @@ var TOOL_EMOJIS = {
   generate_image: "\u{1F3A8}",
   text_to_speech: "\u{1F399}\uFE0F",
   generate_music: "\u{1F3B5}",
-  generate_lyrics: "\u{1F4DD}"
+  generate_lyrics: "\u{1F4DD}",
+  analyze_image: "\u{1F50E}"
 };
 function getToolEmoji(name) {
   return TOOL_EMOJIS[name] ?? "\u{1F527}";
@@ -3102,6 +3103,7 @@ function defaultCreateDraft() {
       volume: "",
       pitch: ""
     },
+    analyze: { image_url: "", prompt: "What do you see?" },
     search: { query: "" }
   };
 }
@@ -3128,6 +3130,10 @@ function createDraftFromDom() {
       volume: document.querySelector("#voice-volume")?.value ?? "",
       pitch: document.querySelector("#voice-pitch")?.value ?? ""
     },
+    analyze: {
+      image_url: $("#analyze-url").value,
+      prompt: $("#analyze-prompt").value
+    },
     search: { query: $("#search-query").value }
   };
 }
@@ -3151,6 +3157,8 @@ function applyCreateDraft(draft) {
   if (voiceId) voiceId.value = draft.voice.voice_id ?? "English_expressive_narrator";
   if (voiceVolume) voiceVolume.value = draft.voice.volume ?? "";
   if (voicePitch) voicePitch.value = draft.voice.pitch ?? "";
+  $("#analyze-url").value = draft.analyze?.image_url ?? "";
+  $("#analyze-prompt").value = draft.analyze?.prompt ?? "What do you see?";
   $("#search-query").value = draft.search.query;
 }
 function isCreateDraft(value) {
@@ -3554,6 +3562,7 @@ function init() {
   const createImgForm = $("#create-image-form");
   const createMusicForm = $("#create-music-form");
   const createVoiceForm = $("#create-voice-form");
+  const createAnalyzeForm = $("#create-analyze-form");
   const createSearchForm = $("#create-search-form");
   const imgPromptInput = $("#img-prompt");
   const imgRatioInput = $("#img-ratio");
@@ -3569,6 +3578,8 @@ function init() {
   const voiceIdInput = document.querySelector("#voice-id");
   const voiceVolumeInput = document.querySelector("#voice-volume");
   const voicePitchInput = document.querySelector("#voice-pitch");
+  const analyzeUrlInput = $("#analyze-url");
+  const analyzePromptInput = $("#analyze-prompt");
   const searchQueryInput = $("#search-query");
   const persistCreateDraft = debounce(() => void putDraft("create", createDraftFromDom()), 200);
   const persistChatDraft = debounce(() => void putDraft("chat", { text: input.value }), 200);
@@ -3595,6 +3606,10 @@ function init() {
       if (voiceVolumeInput) voiceVolumeInput.value = String(inputData.volume ?? "");
       if (voicePitchInput) voicePitchInput.value = String(inputData.pitch ?? "");
       setCreateTab("voice");
+    } else if (item.kind === "analyze") {
+      analyzeUrlInput.value = String(inputData.image_url ?? "");
+      analyzePromptInput.value = String(inputData.prompt ?? "What do you see?");
+      setCreateTab("analyze");
     } else if (item.kind === "search") {
       searchQueryInput.value = String(inputData.query ?? inputData.prompt ?? "");
       setCreateTab("search");
@@ -3668,6 +3683,8 @@ function init() {
     voiceIdInput,
     voiceVolumeInput,
     voicePitchInput,
+    analyzeUrlInput,
+    analyzePromptInput,
     searchQueryInput
   ].filter(
     (el) => Boolean(el)
@@ -3753,6 +3770,19 @@ Tool params: lyrics=${lyrics}`;
       sendMessage(
         `Use text_to_speech with text: ${text}
 Tool params: ${params.join(",")}`,
+        "create"
+      );
+    }
+  });
+  createAnalyzeForm.addEventListener("submit", (e) => {
+    e.preventDefault();
+    const imageUrl = analyzeUrlInput.value.trim();
+    const prompt = analyzePromptInput.value.trim() || "What do you see?";
+    if (imageUrl) {
+      closeCreateModal();
+      sendMessage(
+        `Use analyze_image with image_url: ${imageUrl}
+Tool params: prompt=${prompt}`,
         "create"
       );
     }

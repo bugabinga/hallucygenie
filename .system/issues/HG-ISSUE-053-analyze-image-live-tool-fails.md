@@ -1,5 +1,5 @@
 ---
-{ "status": "open", "specs": ["HG-SPEC-006", "HG-SPEC-008", "HG-SPEC-011"] }
+{ "status": "fixed", "specs": ["HG-SPEC-006", "HG-SPEC-008", "HG-SPEC-011"] }
 ---
 
 # HG-ISSUE-053: analyze_image needs data-URL VLM adapter and first-class Create path
@@ -66,7 +66,11 @@ Fix:
 - Add regression: failed tool result must not send invalid `tool_result` to next LLM call.
 - Cross-ref HG-ISSUE-047, HG-ISSUE-043.
 
-Prior resolution:
+Resolution 2026-05-17:
 
-- `analyze_image` was removed from live model tool definitions until the MiniMax VLM endpoint contract is reliable.
-- Direct implementation tests remained, but stale execution/history paths still expose the broken tool.
+- `analyze_image` is a live tool definition with `image_url` + optional `prompt` schema.
+- Agent prompt requires `analyze_image` for image URL analysis/inspection requests.
+- `executeTool()` dispatches `analyze_image` to the VLM adapter.
+- Create modal has first-class Analyze tab/form, explicit directive path, draft state, and create-history kind `analyze`.
+- VLM adapter keeps MCP-style provider-only data URL normalization and rejects user-supplied raw data URLs.
+- Regression tests cover schema, dispatcher, explicit directive parsing, Create UI, history kind mapping, and E2E tab visibility.

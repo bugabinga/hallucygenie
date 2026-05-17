@@ -408,7 +408,7 @@ export function kindForTool(toolName: string): string {
     if (toolName === "generate_music" || toolName === "generate_lyrics") return "music";
     if (toolName === "text_to_speech") return "voice";
     if (toolName === "web_search") return "search";
-    if (toolName === "analyze_image") return "image";
+    if (toolName === "analyze_image") return "analyze";
     return "other";
 }
 

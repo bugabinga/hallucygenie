@@ -272,6 +272,8 @@
                         <button class="create-tab" data-tab="music" type="button">🎵 Music</button>
                         <button class="create-tab" data-tab="voice" type="button">🎤 Voice</button>
                         <!-- prettier-ignore -->
+                        <button class="create-tab" data-tab="analyze" type="button">🔎 Analyze</button>
+                        <!-- prettier-ignore -->
                         <button class="create-tab" data-tab="search" type="button">🔍 Search</button>
                         <!-- prettier-ignore -->
                         <button class="create-tab" data-tab="assets" type="button">📁 Assets</button>
@@ -397,6 +399,32 @@
                                 <input id="voice-pitch" type="number" min="-12" max="12" step="1" />
                             </div>
                             <button type="submit" class="btn-primary">Read it to me 🎤</button>
+                        </form>
+                        <form
+                            id="create-analyze-form"
+                            class="create-panel"
+                            data-panel="analyze"
+                            hidden
+                        >
+                            <div class="create-recent" data-kind="analyze"></div>
+                            <div class="form-group">
+                                <label for="analyze-url">Image URL</label>
+                                <input
+                                    id="analyze-url"
+                                    type="url"
+                                    inputmode="url"
+                                    placeholder="https://example.com/image.png"
+                                />
+                            </div>
+                            <div class="form-group">
+                                <label for="analyze-prompt">What should I look for?</label>
+                                <textarea
+                                    id="analyze-prompt"
+                                    rows="3"
+                                    placeholder="What do you see?"
+                                ></textarea>
+                            </div>
+                            <button type="submit" class="btn-primary">Analyze image 🔎</button>
                         </form>
                         <form
                             id="create-search-form"

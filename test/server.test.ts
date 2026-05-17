@@ -203,6 +203,20 @@ describe("Explicit Create directives", () => {
         });
     });
 
+    it("parses analyze image directive with prompt param", () => {
+        const directive = parseExplicitToolDirective(
+            "Use analyze_image with image_url: https://example.com/cat.png\nTool params: prompt=Tell me one thing you see",
+        );
+        assert.deepEqual(directive, {
+            name: "analyze_image",
+            args: {
+                image_url: "https://example.com/cat.png",
+                prompt: "Tell me one thing you see",
+            },
+            prompt: "Tell me one thing you see",
+        });
+    });
+
     it("sanitizes assistant media markup before history replay", () => {
         assert.equal(
             sanitizeAssistantMediaMarkup(

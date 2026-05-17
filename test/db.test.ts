@@ -1045,7 +1045,7 @@ describe("Mutation-strength DB invariants", () => {
     it("validates tool history status and maps kinds", () => {
         const cases = [
             ["generate_image", "image"],
-            ["analyze_image", "image"],
+            ["analyze_image", "analyze"],
             ["generate_music", "music"],
             ["generate_lyrics", "music"],
             ["text_to_speech", "voice"],
