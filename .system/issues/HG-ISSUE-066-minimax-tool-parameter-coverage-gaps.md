@@ -1,5 +1,5 @@
 ---
-{ "status": "open", "specs": ["HG-SPEC-004", "HG-SPEC-006", "HG-SPEC-008", "HG-SPEC-011", "HG-SPEC-012"] }
+{ "status": "fixed", "specs": ["HG-SPEC-004", "HG-SPEC-006", "HG-SPEC-008", "HG-SPEC-011", "HG-SPEC-012"] }
 ---
 
 # HG-ISSUE-066: MiniMax tool parameter coverage gaps
@@ -40,3 +40,11 @@ Fix:
 - Expose kid-useful low-risk params first: Image `n/seed/size/prompt_optimizer` in UI; TTS `emotion/language_boost/audio format/sample rate/subtitles`; Music `lyrics_optimizer/explicit instrumental/audio format`.
 - Keep hazardous/raw params fixed or rejected with tests: image `response_format=base64`, TTS/music streaming unless implemented, music `audio_base64`, user-supplied data URLs.
 - Decide separate scope for image-to-image and music-cover tools.
+
+Resolution 2026-05-17:
+
+- Added MiniMax parameter contract tests covering each live tool schema.
+- Added request-payload regression tests that keep raw/base64/stream/cover/image-to-image params omitted.
+- Added explicit directive allowlist regression tests for Image, TTS, and Music params.
+- Added Create UI static regression coverage for exposed kid-safe params and forbidden raw/advanced controls.
+- Current intentional contract: image supports `n`, `seed`, paired custom `width`/`height`, and `prompt_optimizer`; TTS supports voice/speed/volume/pitch only; music derives `is_instrumental` from lyrics and forbids cover/raw params; lyrics still requires a prompt in HallucyGenie UI/tool schema.

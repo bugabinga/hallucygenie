@@ -217,6 +217,37 @@ describe("Explicit Create directives", () => {
         });
     });
 
+    it("ignores MiniMax params outside the explicit kid-safe allowlist", () => {
+        const image = parseExplicitToolDirective(
+            "Use generate_image with prompt: cat\nTool params: aspect_ratio=1:1, n=2, seed=7, width=1024, height=1024, prompt_optimizer=true, response_format=base64, subject_reference=https://example.com/cat.png",
+        );
+        assert.deepEqual(image?.args, {
+            prompt: "cat",
+            aspect_ratio: "1:1",
+            n: 2,
+            seed: 7,
+            width: 1024,
+            height: 1024,
+            prompt_optimizer: true,
+        });
+
+        const tts = parseExplicitToolDirective(
+            "Use text_to_speech with text: hello\nTool params: voice_id=English_expressive_narrator, speed=1.1, volume=2, pitch=1, emotion=happy, language_boost=English, subtitle_enable=true, output_format=wav, stream=true",
+        );
+        assert.deepEqual(tts?.args, {
+            text: "hello",
+            voice_id: "English_expressive_narrator",
+            speed: 1.1,
+            volume: 2,
+            pitch: 1,
+        });
+
+        const music = parseExplicitToolDirective(
+            "Use generate_music with prompt: boss fight\nTool params: lyrics=boom boom, is_instrumental=false, lyrics_optimizer=true, audio_base64=AAAA, output_format=wav, stream=true",
+        );
+        assert.deepEqual(music?.args, { prompt: "boss fight", lyrics: "boom boom" });
+    });
+
     it("sanitizes assistant media markup before history replay", () => {
         assert.equal(
             sanitizeAssistantMediaMarkup(

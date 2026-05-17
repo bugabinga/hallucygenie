@@ -42,6 +42,12 @@ function imageResponse(type = "image/png", bytes = new Uint8Array([1, 2, 3])): R
     });
 }
 
+function schemaFor(toolName: string): { properties: Record<string, unknown>; required: string[] } {
+    const tool = getToolDefinitions().find((def) => def.name === toolName);
+    assert.ok(tool, `missing tool schema: ${toolName}`);
+    return tool.input_schema as { properties: Record<string, unknown>; required: string[] };
+}
+
 // ── Tool definitions ─────────────────────────────────────────────────
 
 describe("getToolDefinitions", () => {
@@ -149,6 +155,199 @@ describe("getToolDefinitions", () => {
         const defs = getToolDefinitions();
         for (const def of defs) {
             assert.ok(def.description.length > 0);
+        }
+    });
+});
+
+// ── MiniMax parameter contract ───────────────────────────────────────
+
+describe("MiniMax parameter contract", () => {
+    beforeEach(() => {
+        originalFetch = globalThis.fetch;
+    });
+
+    afterEach(() => {
+        globalThis.fetch = originalFetch;
+    });
+
+    const contract: Record<
+        string,
+        { supported: string[]; forbidden: string[]; required: string[] }
+    > = {
+        generate_image: {
+            supported: [
+                "prompt",
+                "aspect_ratio",
+                "n",
+                "seed",
+                "width",
+                "height",
+                "prompt_optimizer",
+            ],
+            forbidden: ["response_format", "subject_reference", "image_url"],
+            required: ["prompt"],
+        },
+        text_to_speech: {
+            supported: ["text", "voice_id", "speed", "volume", "pitch"],
+            forbidden: [
+                "emotion",
+                "text_normalization",
+                "latex_read",
+                "audio_setting",
+                "pronunciation_dict",
+                "timbre_weights",
+                "language_boost",
+                "voice_modify",
+                "subtitle_enable",
+                "subtitle_type",
+                "stream",
+                "stream_options",
+                "output_format",
+            ],
+            required: ["text"],
+        },
+        generate_lyrics: {
+            supported: ["prompt", "mode", "lyrics", "title"],
+            forbidden: [],
+            required: ["prompt"],
+        },
+        generate_music: {
+            supported: ["prompt", "lyrics"],
+            forbidden: [
+                "is_instrumental",
+                "instrumental",
+                "lyrics_optimizer",
+                "audio_setting",
+                "stream",
+                "output_format",
+                "audio_url",
+                "audio_base64",
+                "cover_feature_id",
+            ],
+            required: ["prompt"],
+        },
+        analyze_image: {
+            supported: ["image_url", "prompt"],
+            forbidden: ["image_base64", "data_url"],
+            required: ["image_url"],
+        },
+        web_search: {
+            supported: ["query"],
+            forbidden: [],
+            required: ["query"],
+        },
+    };
+
+    for (const [toolName, { supported, forbidden, required }] of Object.entries(contract)) {
+        it(`${toolName} schema matches covered MiniMax parameter subset`, () => {
+            const schema = schemaFor(toolName);
+            assert.deepEqual(Object.keys(schema.properties).sort(), [...supported].sort());
+            assert.deepEqual(schema.required, required);
+            for (const param of forbidden) {
+                assert.equal(param in schema.properties, false, `${toolName} exposes ${param}`);
+            }
+        });
+    }
+
+    it("keeps image raw response and image-to-image params out of request payloads", async () => {
+        let capturedBody = "";
+        globalThis.fetch = async (_url: string | URL | Request, init?: RequestInit) => {
+            capturedBody = init?.body as string;
+            return jsonResponse({ data: { image_urls: ["https://example.com/custom.png"] } });
+        };
+
+        await generateImage(
+            {
+                prompt: "cat",
+                width: 1024,
+                response_format: "base64",
+                subject_reference: "https://example.com/cat.png",
+            } as unknown as Parameters<typeof generateImage>[0],
+            API_KEY,
+        );
+        const body = JSON.parse(capturedBody);
+        for (const key of [
+            "response_format",
+            "subject_reference",
+            "image_url",
+            "height",
+            "width",
+        ]) {
+            assert.equal(key in body, false, `${key} should stay omitted`);
+        }
+    });
+
+    it("keeps unsupported TTS extras and raw streaming params out of request payloads", async () => {
+        let capturedBody = "";
+        globalThis.fetch = async (_url: string | URL | Request, init?: RequestInit) => {
+            capturedBody = init?.body as string;
+            return jsonResponse({ data: { audio: "48656c6c6f" } });
+        };
+
+        await textToSpeech(
+            {
+                text: "hello",
+                emotion: "happy",
+                language_boost: "English",
+                subtitle_enable: true,
+                audio_setting: { sample_rate: 32000 },
+                output_format: "wav",
+                stream: true,
+            } as unknown as Parameters<typeof textToSpeech>[0],
+            API_KEY,
+        );
+        const body = JSON.parse(capturedBody);
+        for (const key of [
+            "emotion",
+            "language_boost",
+            "subtitle_enable",
+            "audio_setting",
+            "output_format",
+            "stream",
+            "stream_options",
+        ]) {
+            assert.equal(key in body, false, `${key} should stay omitted`);
+            assert.equal(key in body.voice_setting, false, `${key} should not be voice_setting`);
+        }
+    });
+
+    it("keeps music cover/raw params out and derives instrumental state", async () => {
+        let capturedBody = "";
+        globalThis.fetch = async (_url: string | URL | Request, init?: RequestInit) => {
+            capturedBody = init?.body as string;
+            return jsonResponse({ data: { audio: "4d75736963" } });
+        };
+
+        await generateMusic(
+            {
+                prompt: "boss fight",
+                lyrics: "   ",
+                is_instrumental: false,
+                instrumental: false,
+                lyrics_optimizer: true,
+                audio_setting: { sample_rate: 44100 },
+                output_format: "wav",
+                audio_url: "https://example.com/ref.mp3",
+                audio_base64: "AAAA",
+                cover_feature_id: "cover-1",
+                stream: true,
+            } as unknown as Parameters<typeof generateMusic>[0],
+            API_KEY,
+        );
+        const body = JSON.parse(capturedBody);
+        assert.equal(body.is_instrumental, true);
+        assert.equal("lyrics" in body, false);
+        for (const key of [
+            "instrumental",
+            "lyrics_optimizer",
+            "audio_setting",
+            "output_format",
+            "audio_url",
+            "audio_base64",
+            "cover_feature_id",
+            "stream",
+        ]) {
+            assert.equal(key in body, false, `${key} should stay omitted`);
         }
     });
 });
@@ -1340,6 +1539,14 @@ describe("analyzeImage HTTP request structure", () => {
 // ── Schema content validation ───────────────────────────────────────
 
 describe("getToolDefinitions schema content", () => {
+    beforeEach(() => {
+        originalFetch = globalThis.fetch;
+    });
+
+    afterEach(() => {
+        globalThis.fetch = originalFetch;
+    });
+
     it("generate_image schema has required prompt field", async () => {
         const tool = getToolDefinitions().find((t) => t.name === "generate_image");
         assert.ok(tool, "generate_image tool should exist");

@@ -137,6 +137,44 @@ describe("index.html health", () => {
         assert.equal(doc.querySelector("#music-instrumental"), null);
     });
 
+    it("keeps Create UI on the kid-safe MiniMax parameter subset", () => {
+        const doc = parseIndex();
+        for (const id of [
+            "#img-count",
+            "#img-seed",
+            "#img-width",
+            "#img-height",
+            "#img-prompt-optimizer",
+            "#voice-id",
+            "#voice-speed",
+            "#voice-volume",
+            "#voice-pitch",
+        ]) {
+            assert.ok(doc.querySelector(id), id);
+        }
+        for (const forbiddenId of [
+            "#img-response-format",
+            "#img-subject-reference",
+            "#voice-emotion",
+            "#voice-language-boost",
+            "#voice-output-format",
+            "#voice-subtitle-enable",
+            "#music-instrumental",
+            "#music-lyrics-optimizer",
+            "#music-output-format",
+            "#music-audio-base64",
+            "#music-audio-url",
+            "#music-cover-feature-id",
+        ]) {
+            assert.equal(doc.querySelector(forbiddenId), null, forbiddenId);
+        }
+        assert.match(appTs, /params\.push\(`n=\$\{imgCountInput\.value\.trim\(\)\}`\)/);
+        assert.match(appTs, /params\.push\(`seed=\$\{imgSeedInput\.value\.trim\(\)\}`\)/);
+        assert.match(appTs, /params\.push\(`width=\$\{imgWidthInput\.value\.trim\(\)\}`\)/);
+        assert.match(appTs, /params\.push\(`height=\$\{imgHeightInput\.value\.trim\(\)\}`\)/);
+        assert.doesNotMatch(appTs, /response_format|audio_base64|lyrics_optimizer/);
+    });
+
     it("has a 'Write lyrics for me' button in the music form", () => {
         const doc = parseIndex();
         const btn = doc.querySelector("#write-lyrics-btn");
