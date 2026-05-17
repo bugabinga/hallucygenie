@@ -1,5 +1,5 @@
 ---
-{ "status": "open", "specs": ["HG-SPEC-014", "HG-SPEC-003", "HG-SPEC-008"] }
+{ "status": "fixed", "specs": ["HG-SPEC-014", "HG-SPEC-003", "HG-SPEC-008"] }
 ---
 
 Repro:
@@ -23,3 +23,8 @@ Fix:
 - Extract chat scrollbar style to shared scrollbar class or selector list.
 - Apply to `#message-list`, `.modal-content`, `.create-panels`, and any intentional scroll owner.
 - Add static CSS contract test: all intended scroll owners are covered by shared scrollbar styling.
+
+Resolution 2026-05-17:
+
+- Verified chat, modal, and create panel scroll owners share the thin custom scrollbar selector list.
+- Added a static contract test for shared scrollbar rules on `#message-list`, `.modal-content`, and `.create-panels`.

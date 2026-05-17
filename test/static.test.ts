@@ -288,6 +288,18 @@ describe("index.html health", () => {
         assert.match(styleCss, /backdrop-filter: blur\(10px\)/);
     });
 
+    it("intentional scroll regions share custom scrollbar styling", () => {
+        const escapeRegExp = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+        for (const selector of ["#message-list", ".modal-content", ".create-panels"]) {
+            const escaped = escapeRegExp(selector);
+            assert.match(styleCss, new RegExp(`${escaped}[\\s\\S]*scrollbar-width: thin;`));
+            assert.match(styleCss, new RegExp(`${escaped}::\\-webkit-scrollbar`));
+            assert.match(styleCss, new RegExp(`${escaped}::\\-webkit-scrollbar-thumb`));
+        }
+        assert.match(styleCss, /\.modal-content \{[^}]*overflow-y: auto;/);
+        assert.match(styleCss, /\.create-panels \{[^}]*overflow-y: auto;/);
+    });
+
     it("create form controls have visible left borders", () => {
         assert.match(styleCss, /\.create-panels \{[^}]*padding: 0 2px;/);
         assert.match(
