@@ -653,6 +653,37 @@ describe("runAgentLoop", () => {
         assert.ok(compact.includes("Generated audio"));
     });
 
+    it("compacts image tool results before model replay", () => {
+        const compact = compactToolResultForModel("generate_image", {
+            type: "image",
+            content: "https://hailuo-image.example/evil-cat.png",
+        });
+        assert.equal(compact.includes("https://"), false);
+        assert.equal(compact.includes("evil-cat"), false);
+        assert.ok(compact.includes("Generated image with generate_image"));
+        assert.ok(compact.includes("tool card"));
+    });
+
+    it("returns text tool result unchanged when under 4000 chars", () => {
+        const text = "Here are the lyrics:\n🎵 verse one \n🎵 verse two \n🎵 chorus";
+        const compact = compactToolResultForModel("generate_lyrics", {
+            type: "text",
+            content: text,
+        });
+        assert.equal(compact, text);
+    });
+
+    it("truncates text tool result at 4000 chars for model context", () => {
+        const long = "x".repeat(5000);
+        const compact = compactToolResultForModel("generate_lyrics", {
+            type: "text",
+            content: long,
+        });
+        assert.equal(compact.length, 4000 + "\n[Tool result truncated for context]".length);
+        assert.equal(compact.slice(0, 4000), long.slice(0, 4000));
+        assert.ok(compact.includes("[Tool result truncated for context]"));
+    });
+
     it("strips model control placeholders", () => {
         assert.equal(stripModelControlPlaceholders("<end_turn>"), "");
         assert.equal(stripModelControlPlaceholders("ok\n<image>"), "ok");
