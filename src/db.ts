@@ -657,21 +657,26 @@ export function consumeQuota(db: Database, feature: string, amount = 1): number 
     if (limit === 0) return 0;
     if (amount > limit) return null;
 
-    const result = db
-        .prepare(
-            `INSERT INTO daily_usage (date, feature, count)
-             VALUES (date('now'), ?, ?)
-             ON CONFLICT(date, feature) DO UPDATE SET count = count + ?
-             WHERE daily_usage.count + ? <= ?`,
-        )
-        .run(feature, amount, amount, amount, limit);
+    return db.transaction(() => {
+        const row = db
+            .prepare("SELECT count FROM daily_usage WHERE date = date('now') AND feature = ?")
+            .get(feature) as { count: number } | undefined;
+        const currentCount = row?.count ?? 0;
 
-    if (result.changes === 0) return null;
+        if (currentCount + amount > limit) return null;
 
-    const row = db
-        .prepare("SELECT count FROM daily_usage WHERE date = date('now') AND feature = ?")
-        .get(feature) as { count: number } | undefined;
-    return row?.count ?? amount;
+        if (row) {
+            db.prepare(
+                "UPDATE daily_usage SET count = count + ? WHERE date = date('now') AND feature = ?",
+            ).run(amount, feature);
+        } else {
+            db.prepare(
+                "INSERT INTO daily_usage (date, feature, count) VALUES (date('now'), ?, ?)",
+            ).run(feature, amount);
+        }
+
+        return currentCount + amount;
+    })();
 }
 
 /**
