@@ -1,3 +1,23 @@
+// Helper to derive draft kind from path
+const draftKind = (path: string): "chat" | "create" | null =>
+    path === "/api/draft/chat" ? "chat" : path === "/api/draft/create" ? "create" : null;
+
+// Helper to map model remain entry to quota response slice
+const quotaEntry = (
+    m: {
+        current_interval_usage_count: number;
+        current_interval_total_count: number;
+        remains_time: number;
+    } | null,
+) =>
+    m
+        ? {
+              used: m.current_interval_usage_count,
+              total: m.current_interval_total_count,
+              resetsInMs: m.remains_time,
+          }
+        : null;
+
 // HallucyGenie — HTTP server with SSE chat proxy
 // Target: Node.js runtime
 
@@ -920,41 +940,11 @@ export async function handleRequest(req: Request): Promise<Response> {
             const music = find("music-2.6");
             const lyrics = find("lyrics-01") ?? find("lyrics");
             return jsonResponse({
-                chat: m2
-                    ? {
-                          used: m2.current_interval_usage_count,
-                          total: m2.current_interval_total_count,
-                          resetsInMs: m2.remains_time,
-                      }
-                    : null,
-                speech: speech
-                    ? {
-                          used: speech.current_interval_usage_count,
-                          total: speech.current_interval_total_count,
-                          resetsInMs: speech.remains_time,
-                      }
-                    : null,
-                image: image
-                    ? {
-                          used: image.current_interval_usage_count,
-                          total: image.current_interval_total_count,
-                          resetsInMs: image.remains_time,
-                      }
-                    : null,
-                music: music
-                    ? {
-                          used: music.current_interval_usage_count,
-                          total: music.current_interval_total_count,
-                          resetsInMs: music.remains_time,
-                      }
-                    : null,
-                lyrics: lyrics
-                    ? {
-                          used: lyrics.current_interval_usage_count,
-                          total: lyrics.current_interval_total_count,
-                          resetsInMs: lyrics.remains_time,
-                      }
-                    : null,
+                chat: quotaEntry(m2),
+                speech: quotaEntry(speech),
+                image: quotaEntry(image),
+                music: quotaEntry(music),
+                lyrics: quotaEntry(lyrics),
             });
         } catch (err) {
             log.error("quota api error", { error: String(err) });
@@ -1057,20 +1047,23 @@ export async function handleRequest(req: Request): Promise<Response> {
             }
         }
 
-        if ((path === "/api/draft/chat" || path === "/api/draft/create") && method === "GET") {
-            const kind = path.endsWith("/chat") ? "chat" : "create";
+        if (draftKind(path) && method === "GET") {
+            const kind = draftKind(path)!;
             const row = getDraft(database, resolveSessionId(req, database), kind);
             return jsonResponse({ draft: row ? JSON.parse(row.value_json) : null });
         }
 
-        if ((path === "/api/draft/chat" || path === "/api/draft/create") && method === "PUT") {
-            const kind = path.endsWith("/chat") ? "chat" : "create";
+        if (draftKind(path) && method === "PUT") {
             try {
                 const value = await req.json();
                 return jsonResponse({
                     draft: JSON.parse(
-                        saveDraft(database, resolveSessionId(req, database), kind, value)
-                            .value_json,
+                        saveDraft(
+                            database,
+                            resolveSessionId(req, database),
+                            draftKind(path)!,
+                            value,
+                        ).value_json,
                     ),
                 });
             } catch (err) {
@@ -1081,9 +1074,8 @@ export async function handleRequest(req: Request): Promise<Response> {
             }
         }
 
-        if ((path === "/api/draft/chat" || path === "/api/draft/create") && method === "DELETE") {
-            const kind = path.endsWith("/chat") ? "chat" : "create";
-            deleteDraft(database, resolveSessionId(req, database), kind);
+        if (draftKind(path) && method === "DELETE") {
+            deleteDraft(database, resolveSessionId(req, database), draftKind(path)!);
             return jsonResponse({ ok: true });
         }
 
