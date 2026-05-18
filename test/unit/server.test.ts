@@ -217,6 +217,93 @@ describe("Explicit Create directives", () => {
         });
     });
 
+    it("uploads local analyze image files as assets", async () => {
+        const db = getDb()!;
+        const session = createSession(db);
+        setActiveSessionId(db, session.id);
+        const body = new FormData();
+        body.set(
+            "image",
+            new File([new Uint8Array([137, 80, 78, 71])], "tiny.png", { type: "image/png" }),
+        );
+        const resp = await handleRequest(
+            new Request("http://localhost/api/analyze-image", { method: "POST", body }),
+        );
+        assert.equal(resp.status, 200);
+        const json = (await readJson(resp)) as { assetId: string; assetUrl: string };
+        assert.match(json.assetId, /^asset_[0-9a-f-]+$/i);
+        assert.equal(json.assetUrl, `/asset/${json.assetId}`);
+        const asset = getAssets(db, session.id).find((item) => item.id === json.assetId);
+        assert.equal(asset?.tool_name, "analyze_image");
+        assert.equal(asset?.mime_type, "image/png");
+    });
+
+    it("rejects unsupported local analyze image files", async () => {
+        const body = new FormData();
+        body.set("image", new File([new Uint8Array([1, 2, 3])], "bad.gif", { type: "image/gif" }));
+        const resp = await handleRequest(
+            new Request("http://localhost/api/analyze-image", { method: "POST", body }),
+        );
+        assert.equal(resp.status, 400);
+        const json = (await readJson(resp)) as { error: string };
+        assert.match(json.error, /PNG, JPG, or WebP/);
+    });
+
+    it("analyzes uploaded assets without storing raw data URLs", async () => {
+        const originalKey = process.env.MINIMAX_API_KEY;
+        const originalFetch = globalThis.fetch;
+        process.env.MINIMAX_API_KEY = "test-key";
+        const db = getDb()!;
+        const session = createSession(db);
+        setActiveSessionId(db, session.id);
+        const body = new FormData();
+        body.set(
+            "image",
+            new File([new Uint8Array([137, 80, 78, 71])], "tiny.png", { type: "image/png" }),
+        );
+        const uploadResp = await handleRequest(
+            new Request("http://localhost/api/analyze-image", { method: "POST", body }),
+        );
+        const upload = (await readJson(uploadResp)) as { assetUrl: string };
+        let vlmPayload = "";
+        globalThis.fetch = async (_url: string | URL | Request, init?: RequestInit) => {
+            vlmPayload = String(init?.body ?? "");
+            return new Response(JSON.stringify({ content: "local image looks safe" }), {
+                status: 200,
+                headers: { "Content-Type": "application/json" },
+            });
+        };
+
+        try {
+            const chatResp = await handleRequest(
+                new Request("http://localhost/api/chat", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                        messages: [
+                            {
+                                role: "user",
+                                content: `Use analyze_image with image_url: ${upload.assetUrl}\nTool params: prompt=What is this?`,
+                            },
+                        ],
+                    }),
+                }),
+            );
+            const sse = await readBody(chatResp);
+            assert.match(vlmPayload, /data:image\/png;base64,/);
+            assert.match(sse, /local image looks safe/);
+            assert.doesNotMatch(sse, /data:image\/png;base64/);
+            const stored = getMessages(db, session.id)
+                .map((msg) => msg.content)
+                .join("\n");
+            assert.doesNotMatch(stored, /data:image\/png;base64|;base64,/);
+        } finally {
+            globalThis.fetch = originalFetch;
+            if (originalKey === undefined) delete process.env.MINIMAX_API_KEY;
+            else process.env.MINIMAX_API_KEY = originalKey;
+        }
+    });
+
     it("ignores MiniMax params outside the explicit kid-safe allowlist", () => {
         const image = parseExplicitToolDirective(
             "Use generate_image with prompt: cat\nTool params: aspect_ratio=1:1, n=2, seed=7, width=1024, height=1024, prompt_optimizer=true, response_format=base64, subject_reference=https://example.com/cat.png",
@@ -2986,6 +3073,7 @@ describe("Session, draft, and create-history APIs", () => {
                 }),
             );
             assert.equal(resp.status, 200);
+            await readBody(resp);
 
             // Verify the tool history was recorded with origin=chat
             const history = db

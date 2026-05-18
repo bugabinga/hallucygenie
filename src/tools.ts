@@ -47,6 +47,7 @@ export interface GenerateMusicOptions {
 export interface AnalyzeImageOptions {
     image_url: string;
     prompt?: string;
+    allow_data_url?: boolean;
 }
 
 // ── Configuration ────────────────────────────────────────────────────
@@ -273,6 +274,7 @@ export async function executeTool(
                 {
                     image_url: args.image_url as string,
                     prompt: args.prompt as string | undefined,
+                    allow_data_url: args.allow_data_url === true,
                 },
                 apiKey,
             );
@@ -675,14 +677,25 @@ async function imageUrlToDataUrl(imageUrl: string): Promise<string> {
     return `data:image/${mime};base64,${Buffer.from(bytes).toString("base64")}`;
 }
 
+function validateAnalyzeDataUrl(value: string): string {
+    const match = value.match(/^data:image\/(jpeg|png|webp);base64,([A-Za-z0-9+/=]+)$/);
+    if (!match) throw new Error("unsupported image data URL");
+    const bytes = Buffer.from(match[2]!, "base64");
+    if (bytes.byteLength > MAX_ANALYZE_IMAGE_BYTES) throw new Error("image too large");
+    return value;
+}
+
 export async function analyzeImage(
     input: string | AnalyzeImageOptions,
     apiKey: string,
 ): Promise<ToolResult> {
     const options = typeof input === "string" ? { image_url: input } : input;
     try {
-        if (/^data:/i.test(options.image_url)) throw new Error("image data URLs are not allowed");
-        const dataUrl = await imageUrlToDataUrl(options.image_url);
+        if (/^data:/i.test(options.image_url) && !options.allow_data_url)
+            throw new Error("image data URLs are not allowed");
+        const dataUrl = /^data:/i.test(options.image_url)
+            ? validateAnalyzeDataUrl(options.image_url)
+            : await imageUrlToDataUrl(options.image_url);
         const resp = await fetch(`${MINIMAX_BASE}/v1/coding_plan/vlm`, {
             method: "POST",
             headers: {

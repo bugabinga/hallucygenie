@@ -637,6 +637,45 @@ function quotaAmountForTool(name: string, args: Record<string, unknown>): number
     return Math.max(1, Array.from(text).length);
 }
 
+function analyzeDataMime(mime: string): "jpeg" | "png" | "webp" {
+    if (mime === "image/jpeg") return "jpeg";
+    if (mime === "image/png") return "png";
+    if (mime === "image/webp") return "webp";
+    throw new Error("analyze image type invalid");
+}
+
+async function localAnalyzeAssetDataUrl(
+    database: Database,
+    sessionId: string,
+    imageUrl: string,
+): Promise<string> {
+    const match = imageUrl.match(/^\/asset\/(asset_[0-9a-f-]+)$/i);
+    if (!match) return imageUrl;
+    const asset = getAsset(database, match[1]!);
+    if (!asset || asset.session_id !== sessionId) throw new Error("analyze image asset not found");
+    if (!isAnalyzeImageMime(asset.mime_type)) throw new Error("analyze image type invalid");
+    if (asset.size_bytes > 20 * 1024 * 1024) throw new Error("analyze image too large");
+    const file = await readFile(`data/assets/${asset.session_id}/${asset.filename}`);
+    if (file.byteLength > 20 * 1024 * 1024) throw new Error("analyze image too large");
+    return `data:image/${analyzeDataMime(asset.mime_type)};base64,${Buffer.from(file).toString("base64")}`;
+}
+
+async function explicitExecutionArgs(
+    directive: ExplicitToolDirective,
+    database: Database,
+    sessionId?: string,
+): Promise<Record<string, unknown>> {
+    if (directive.name !== "analyze_image") return directive.args;
+    const imageUrl = directive.args.image_url;
+    if (typeof imageUrl !== "string" || !imageUrl.startsWith("/asset/")) return directive.args;
+    if (!sessionId) throw new Error("analyze image asset requires a session");
+    return {
+        ...directive.args,
+        image_url: await localAnalyzeAssetDataUrl(database, sessionId, imageUrl),
+        allow_data_url: true,
+    };
+}
+
 function handleExplicitToolDirective(
     directive: ExplicitToolDirective,
     apiKey: string,
@@ -662,11 +701,14 @@ function handleExplicitToolDirective(
             const quotaBlocked = feature
                 ? consumeQuota(database, feature, quotaAmount) === null
                 : false;
+            const executionArgs = quotaBlocked
+                ? directive.args
+                : await explicitExecutionArgs(directive, database, sessionId);
             const result = quotaBlocked
                 ? { type: "error" as const, content: `Daily ${feature} quota is used up.` }
                 : safeToolResultForUser(
                       directive.name,
-                      await executeToolSafely(directive.name, directive.args, apiKey),
+                      await executeToolSafely(directive.name, executionArgs, apiKey),
                   );
             const saved = sessionId
                 ? await saveAssetFile(
@@ -810,6 +852,10 @@ function isAvatarImageMime(mime: string): boolean {
     return ["image/png", "image/jpeg", "image/webp", "image/gif"].includes(mime);
 }
 
+function isAnalyzeImageMime(mime: string): boolean {
+    return ["image/png", "image/jpeg", "image/webp"].includes(mime);
+}
+
 function profileAvatarPrompt(profile: ReturnType<typeof getUserProfile>): string {
     const parts = [
         profile.username ? `username: ${profile.username}` : "kid gamer creator",
@@ -860,6 +906,32 @@ async function handleProfileAvatarUpload(req: Request, database: Database): Prom
         if (!assetId) throw new Error("avatar asset save failed");
         const profile = saveProfileAvatar(database, profileInput, assetId);
         return jsonResponse({ profile, assetUrl: saved.content });
+    } catch (err) {
+        return jsonResponse({ error: String(err instanceof Error ? err.message : err) }, 400);
+    }
+}
+
+async function handleAnalyzeImageUpload(req: Request, database: Database): Promise<Response> {
+    try {
+        const sessionId = resolveSessionId(req, database);
+        const form = await req.formData();
+        const file = form.get("image");
+        if (!(file instanceof File)) return jsonResponse({ error: "image file required" }, 400);
+        if (!isAnalyzeImageMime(file.type))
+            return jsonResponse({ error: "image type must be PNG, JPG, or WebP" }, 400);
+        if (file.size > 20 * 1024 * 1024) return jsonResponse({ error: "image too large" }, 400);
+        const saved = saveAssetBuffer(
+            "image",
+            Buffer.from(await file.arrayBuffer()),
+            file.type,
+            sessionId,
+            "analyze_image",
+            "Uploaded image for analysis",
+            { source: "upload" },
+        );
+        const assetId = assetIdFromToolResult(saved);
+        if (!assetId) throw new Error("analyze image asset save failed");
+        return jsonResponse({ assetId, assetUrl: saved.content });
     } catch (err) {
         return jsonResponse({ error: String(err instanceof Error ? err.message : err) }, 400);
     }
@@ -979,6 +1051,10 @@ export async function handleRequest(req: Request): Promise<Response> {
 
         if (path === "/api/profile/avatar/generate" && method === "POST") {
             return handleProfileAvatarGenerate(req, database);
+        }
+
+        if (path === "/api/analyze-image" && method === "POST") {
+            return handleAnalyzeImageUpload(req, database);
         }
 
         if (path === "/api/profile" && method === "PUT") {

@@ -1506,6 +1506,21 @@ describe("analyzeImage HTTP request structure", () => {
         assert.ok(result.content.includes("data URLs are not allowed"));
     });
 
+    it("allows server-owned data URLs for uploaded analyze assets", async () => {
+        let capturedBody = "";
+        globalThis.fetch = async (_url: string | URL | Request, init?: RequestInit) => {
+            capturedBody = String(init?.body ?? "");
+            return jsonResponse({ content: "uploaded image description" });
+        };
+        const result = await analyzeImage(
+            { image_url: "data:image/png;base64,AQID", allow_data_url: true },
+            API_KEY,
+        );
+        assert.equal(result.type, "text");
+        assert.equal(result.content, "uploaded image description");
+        assert.match(capturedBody, /data:image\/png;base64,AQID/);
+    });
+
     it("rejects unsupported image content types", async () => {
         globalThis.fetch = async () => imageResponse("image/gif");
         const result = await analyzeImage("https://example.com/no-content.gif", API_KEY);

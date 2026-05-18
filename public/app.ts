@@ -166,6 +166,14 @@ async function uploadProfileAvatar(file: File, profile: UserProfile): Promise<Us
     return ((await resp.json()) as { profile: UserProfile }).profile;
 }
 
+async function uploadAnalyzeImage(file: File): Promise<{ assetId: string; assetUrl: string }> {
+    const body = new FormData();
+    body.set("image", file);
+    const resp = await fetch("/api/analyze-image", { method: "POST", body });
+    if (!resp.ok) throw new Error(`Failed to upload image: ${resp.status}`);
+    return (await resp.json()) as { assetId: string; assetUrl: string };
+}
+
 async function generateProfileAvatar(profile: UserProfile): Promise<UserProfile> {
     const resp = await fetch("/api/profile/avatar/generate", {
         method: "POST",
@@ -1943,9 +1951,14 @@ export function init(): void {
     const voiceIdInput = document.querySelector<HTMLInputElement>("#voice-id");
     const voiceVolumeInput = document.querySelector<HTMLInputElement>("#voice-volume");
     const voicePitchInput = document.querySelector<HTMLInputElement>("#voice-pitch");
+    const analyzeFileInput = document.querySelector<HTMLInputElement>("#analyze-file");
+    const analyzeDropzone = document.querySelector<HTMLButtonElement>("#analyze-dropzone");
+    const analyzeFileStatus = document.querySelector<HTMLElement>("#analyze-file-status");
+    const analyzeFilePreview = document.querySelector<HTMLElement>("#analyze-file-preview");
     const analyzeUrlInput = $("#analyze-url") as HTMLInputElement;
     const analyzePromptInput = $("#analyze-prompt") as HTMLTextAreaElement;
     const searchQueryInput = $("#search-query") as HTMLTextAreaElement;
+    let analyzeAssetUrl = "";
     const persistCreateDraft = debounce(() => void putDraft("create", createDraftFromDom()), 200);
     const persistChatDraft = debounce(() => void putDraft("chat", { text: input.value }), 200);
 
@@ -2022,6 +2035,50 @@ export function init(): void {
         await loadRecent(kind);
     }
 
+    function rejectBadAnalyzeFile(file: File): string | null {
+        if (!["image/png", "image/jpeg", "image/webp"].includes(file.type)) {
+            return "Use a PNG, JPG, or WebP image.";
+        }
+        if (file.size > 20 * 1024 * 1024) return "Image is too big. Max is 20 MB.";
+        return null;
+    }
+
+    async function selectAnalyzeFile(file: File): Promise<void> {
+        if (!analyzeFileInput || !analyzeDropzone || !analyzeFileStatus || !analyzeFilePreview)
+            return;
+        const error = rejectBadAnalyzeFile(file);
+        if (error) {
+            showError(error);
+            analyzeFileStatus.textContent = error;
+            analyzeFileInput.value = "";
+            return;
+        }
+        analyzeFileInput.disabled = true;
+        analyzeDropzone.disabled = true;
+        analyzeFileStatus.textContent = `Uploading ${file.name}...`;
+        try {
+            const uploaded = await uploadAnalyzeImage(file);
+            analyzeAssetUrl = uploaded.assetUrl;
+            analyzeFileStatus.textContent = `Selected ${file.name}`;
+            analyzeFilePreview.innerHTML = "";
+            const preview = document.createElement("img");
+            preview.src = uploaded.assetUrl;
+            preview.alt = `Selected image: ${file.name}`;
+            analyzeFilePreview.appendChild(preview);
+            analyzeFilePreview.hidden = false;
+        } catch {
+            analyzeAssetUrl = "";
+            analyzeFilePreview.hidden = true;
+            analyzeFilePreview.innerHTML = "";
+            analyzeFileStatus.textContent = "Upload failed.";
+            showError("Failed to upload image 😕");
+        } finally {
+            analyzeFileInput.disabled = false;
+            analyzeDropzone.disabled = false;
+            analyzeFileInput.value = "";
+        }
+    }
+
     async function restoreDrafts(): Promise<void> {
         const chatDraft = await getDraft("chat");
         if (chatDraft && typeof chatDraft === "object" && "text" in chatDraft) {
@@ -2078,6 +2135,34 @@ export function init(): void {
 
     void refreshSessions().catch(() => undefined);
     void restoreDrafts().catch(() => undefined);
+
+    if (analyzeDropzone && analyzeFileInput && analyzeFileStatus && analyzeFilePreview) {
+        analyzeDropzone.addEventListener("click", () => analyzeFileInput.click());
+        analyzeFileInput.addEventListener("change", () => {
+            const file = analyzeFileInput.files?.[0];
+            if (file) void selectAnalyzeFile(file);
+        });
+        analyzeDropzone.addEventListener("dragover", (e) => {
+            e.preventDefault();
+            analyzeDropzone.classList.add("is-dragging");
+        });
+        analyzeDropzone.addEventListener("dragleave", () => {
+            analyzeDropzone.classList.remove("is-dragging");
+        });
+        analyzeDropzone.addEventListener("drop", (e) => {
+            e.preventDefault();
+            analyzeDropzone.classList.remove("is-dragging");
+            const file = e.dataTransfer?.files?.[0];
+            if (file) void selectAnalyzeFile(file);
+        });
+        analyzeUrlInput.addEventListener("input", () => {
+            if (!analyzeUrlInput.value.trim()) return;
+            analyzeAssetUrl = "";
+            analyzeFilePreview.hidden = true;
+            analyzeFilePreview.innerHTML = "";
+            analyzeFileStatus.textContent = "Using image URL fallback.";
+        });
+    }
 
     createImgForm.addEventListener("submit", (e) => {
         e.preventDefault();
@@ -2152,15 +2237,18 @@ export function init(): void {
 
     createAnalyzeForm.addEventListener("submit", (e) => {
         e.preventDefault();
-        const imageUrl = analyzeUrlInput.value.trim();
+        const imageUrl = analyzeAssetUrl || analyzeUrlInput.value.trim();
         const prompt = analyzePromptInput.value.trim() || "What do you see?";
-        if (imageUrl) {
-            closeCreateModal();
-            sendMessage(
-                `Use analyze_image with image_url: ${imageUrl}\nTool params: prompt=${prompt}`,
-                "create",
-            );
+        if (!imageUrl) {
+            showError("Choose an image file or paste an image URL first 🔎");
+            analyzeDropzone?.focus();
+            return;
         }
+        closeCreateModal();
+        sendMessage(
+            `Use analyze_image with image_url: ${imageUrl}\nTool params: prompt=${prompt}`,
+            "create",
+        );
     });
 
     createSearchForm.addEventListener("submit", (e) => {

@@ -1246,6 +1246,44 @@ textarea,
     color: var(--color-text-dim);
 }
 
+.field-help {
+    margin: 6px 0 0;
+    color: var(--color-text-dim);
+    font-size: 0.75rem;
+}
+
+.analyze-dropzone {
+    width: 100%;
+    min-height: 92px;
+    padding: var(--space-md);
+    border: 2px dashed var(--color-border);
+    border-radius: var(--radius-lg);
+    background: var(--color-bg-card);
+    color: var(--color-text);
+    font: inherit;
+    cursor: pointer;
+}
+
+.analyze-dropzone:hover,
+.analyze-dropzone:focus-visible,
+.analyze-dropzone.is-dragging {
+    border-color: var(--color-primary);
+    box-shadow: 0 0 18px var(--color-primary-glow);
+}
+
+.analyze-preview {
+    margin-top: var(--space-sm);
+}
+
+.analyze-preview img {
+    display: block;
+    width: 100%;
+    max-height: 180px;
+    border-radius: var(--radius-md);
+    object-fit: contain;
+    background: var(--color-bg);
+}
+
 .checkbox-row {
     display: flex;
     align-items: center;

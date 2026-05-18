@@ -1,5 +1,5 @@
 ---
-{ "status": "open", "specs": ["HG-SPEC-004", "HG-SPEC-011", "HG-SPEC-015", "HG-SPEC-016"] }
+{ "status": "fixed", "specs": ["HG-SPEC-004", "HG-SPEC-011", "HG-SPEC-015", "HG-SPEC-016"] }
 ---
 
 # HG-ISSUE-077: Create Analyze needs file picker and drag/drop image input
@@ -33,9 +33,12 @@ Constraints:
 - Reject oversized/unsupported files with friendly UI errors.
 - Add tests for file input, drag/drop, unsupported file rejection, and no raw `data:` image leakage into messages/history.
 
-Possible fix:
+Fix:
 
-- Add Analyze panel drop zone and hidden `<input type="file" accept="image/png,image/jpeg,image/webp">`.
-- Add server endpoint or reuse asset upload path for analyze input.
-- Convert stored asset to provider payload server-side; send only asset refs through UI/chat where possible.
-- Keep URL analyze as existing option.
+- Added Analyze panel drop zone and hidden `<input type="file" accept="image/png,image/jpeg,image/webp">`.
+- Added `/api/analyze-image` upload endpoint.
+- Stored local image as asset first.
+- Sent `/asset/{id}` through UI/chat/history.
+- Converted asset bytes to provider-only VLM data URL server-side.
+- Preserved URL analyze fallback.
+- Added static, tool, and server tests for picker/drop support, type rejection, server-owned data URL use, and no raw data URL persistence.

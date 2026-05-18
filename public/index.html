@@ -417,7 +417,23 @@
                         >
                             <div class="create-recent" data-kind="analyze"></div>
                             <div class="form-group">
-                                <label for="analyze-url">Image URL</label>
+                                <label for="analyze-file">Image file</label>
+                                <input
+                                    id="analyze-file"
+                                    class="sr-only"
+                                    type="file"
+                                    accept="image/png,image/jpeg,image/webp"
+                                />
+                                <!-- prettier-ignore -->
+                                <button id="analyze-dropzone" class="analyze-dropzone" type="button" aria-describedby="analyze-file-help analyze-file-status">Drop a PNG, JPG, or WebP here — or choose a file 🖼️</button>
+                                <!-- prettier-ignore -->
+                                <p id="analyze-file-help" class="field-help">Genie stores the image safely, then analyzes the saved asset.</p>
+                                <!-- prettier-ignore -->
+                                <p id="analyze-file-status" class="field-help" role="status">No file selected.</p>
+                                <div id="analyze-file-preview" class="analyze-preview" hidden></div>
+                            </div>
+                            <div class="form-group">
+                                <label for="analyze-url">Image URL fallback</label>
                                 <input
                                     id="analyze-url"
                                     type="url"

@@ -2238,6 +2238,13 @@ async function uploadProfileAvatar(file, profile) {
   if (!resp.ok) throw new Error(`Failed to upload avatar: ${resp.status}`);
   return (await resp.json()).profile;
 }
+async function uploadAnalyzeImage(file) {
+  const body = new FormData();
+  body.set("image", file);
+  const resp = await fetch("/api/analyze-image", { method: "POST", body });
+  if (!resp.ok) throw new Error(`Failed to upload image: ${resp.status}`);
+  return await resp.json();
+}
 async function generateProfileAvatar(profile) {
   const resp = await fetch("/api/profile/avatar/generate", {
     method: "POST",
@@ -3647,9 +3654,14 @@ function init() {
   const voiceIdInput = document.querySelector("#voice-id");
   const voiceVolumeInput = document.querySelector("#voice-volume");
   const voicePitchInput = document.querySelector("#voice-pitch");
+  const analyzeFileInput = document.querySelector("#analyze-file");
+  const analyzeDropzone = document.querySelector("#analyze-dropzone");
+  const analyzeFileStatus = document.querySelector("#analyze-file-status");
+  const analyzeFilePreview = document.querySelector("#analyze-file-preview");
   const analyzeUrlInput = $("#analyze-url");
   const analyzePromptInput = $("#analyze-prompt");
   const searchQueryInput = $("#search-query");
+  let analyzeAssetUrl = "";
   const persistCreateDraft = debounce(() => void putDraft("create", createDraftFromDom()), 200);
   const persistChatDraft = debounce(() => void putDraft("chat", { text: input.value }), 200);
   function fillFormFromHistory(item) {
@@ -3722,6 +3734,48 @@ function init() {
     if (kind === "assets") return;
     await loadRecent(kind);
   }
+  function rejectBadAnalyzeFile(file) {
+    if (!["image/png", "image/jpeg", "image/webp"].includes(file.type)) {
+      return "Use a PNG, JPG, or WebP image.";
+    }
+    if (file.size > 20 * 1024 * 1024) return "Image is too big. Max is 20 MB.";
+    return null;
+  }
+  async function selectAnalyzeFile(file) {
+    if (!analyzeFileInput || !analyzeDropzone || !analyzeFileStatus || !analyzeFilePreview)
+      return;
+    const error = rejectBadAnalyzeFile(file);
+    if (error) {
+      showError(error);
+      analyzeFileStatus.textContent = error;
+      analyzeFileInput.value = "";
+      return;
+    }
+    analyzeFileInput.disabled = true;
+    analyzeDropzone.disabled = true;
+    analyzeFileStatus.textContent = `Uploading ${file.name}...`;
+    try {
+      const uploaded = await uploadAnalyzeImage(file);
+      analyzeAssetUrl = uploaded.assetUrl;
+      analyzeFileStatus.textContent = `Selected ${file.name}`;
+      analyzeFilePreview.innerHTML = "";
+      const preview = document.createElement("img");
+      preview.src = uploaded.assetUrl;
+      preview.alt = `Selected image: ${file.name}`;
+      analyzeFilePreview.appendChild(preview);
+      analyzeFilePreview.hidden = false;
+    } catch {
+      analyzeAssetUrl = "";
+      analyzeFilePreview.hidden = true;
+      analyzeFilePreview.innerHTML = "";
+      analyzeFileStatus.textContent = "Upload failed.";
+      showError("Failed to upload image \u{1F615}");
+    } finally {
+      analyzeFileInput.disabled = false;
+      analyzeDropzone.disabled = false;
+      analyzeFileInput.value = "";
+    }
+  }
   async function restoreDrafts() {
     const chatDraft = await getDraft("chat");
     if (chatDraft && typeof chatDraft === "object" && "text" in chatDraft) {
@@ -3774,6 +3828,33 @@ function init() {
   });
   void refreshSessions().catch(() => void 0);
   void restoreDrafts().catch(() => void 0);
+  if (analyzeDropzone && analyzeFileInput && analyzeFileStatus && analyzeFilePreview) {
+    analyzeDropzone.addEventListener("click", () => analyzeFileInput.click());
+    analyzeFileInput.addEventListener("change", () => {
+      const file = analyzeFileInput.files?.[0];
+      if (file) void selectAnalyzeFile(file);
+    });
+    analyzeDropzone.addEventListener("dragover", (e) => {
+      e.preventDefault();
+      analyzeDropzone.classList.add("is-dragging");
+    });
+    analyzeDropzone.addEventListener("dragleave", () => {
+      analyzeDropzone.classList.remove("is-dragging");
+    });
+    analyzeDropzone.addEventListener("drop", (e) => {
+      e.preventDefault();
+      analyzeDropzone.classList.remove("is-dragging");
+      const file = e.dataTransfer?.files?.[0];
+      if (file) void selectAnalyzeFile(file);
+    });
+    analyzeUrlInput.addEventListener("input", () => {
+      if (!analyzeUrlInput.value.trim()) return;
+      analyzeAssetUrl = "";
+      analyzeFilePreview.hidden = true;
+      analyzeFilePreview.innerHTML = "";
+      analyzeFileStatus.textContent = "Using image URL fallback.";
+    });
+  }
   createImgForm.addEventListener("submit", (e) => {
     e.preventDefault();
     const prompt = imgPromptInput.value.trim();
@@ -3845,16 +3926,19 @@ Tool params: ${params.join(",")}`,
   });
   createAnalyzeForm.addEventListener("submit", (e) => {
     e.preventDefault();
-    const imageUrl = analyzeUrlInput.value.trim();
+    const imageUrl = analyzeAssetUrl || analyzeUrlInput.value.trim();
     const prompt = analyzePromptInput.value.trim() || "What do you see?";
-    if (imageUrl) {
-      closeCreateModal();
-      sendMessage(
-        `Use analyze_image with image_url: ${imageUrl}
-Tool params: prompt=${prompt}`,
-        "create"
-      );
+    if (!imageUrl) {
+      showError("Choose an image file or paste an image URL first \u{1F50E}");
+      analyzeDropzone?.focus();
+      return;
     }
+    closeCreateModal();
+    sendMessage(
+      `Use analyze_image with image_url: ${imageUrl}
+Tool params: prompt=${prompt}`,
+      "create"
+    );
   });
   createSearchForm.addEventListener("submit", (e) => {
     e.preventDefault();
