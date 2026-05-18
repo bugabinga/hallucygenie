@@ -23,6 +23,7 @@ const dockerignore = readFileSync(".dockerignore", "utf-8");
 const lefthookYml = readFileSync("lefthook.yml", "utf-8");
 const ciYml = readFileSync(".github/workflows/ci.yml", "utf-8");
 const updatesYml = readFileSync(".github/workflows/updates.yml", "utf-8");
+const janitorAgent = readFileSync(".github/agents/janitor.ts", "utf-8");
 const strykerAgent = readFileSync("test/stryker.config.mjs", "utf-8");
 const strykerTools = readFileSync("test/stryker-tools.mjs", "utf-8");
 const strykerDb = readFileSync("test/stryker-db.mjs", "utf-8");
@@ -923,6 +924,24 @@ describe("GitHub Actions health", () => {
         assert.deepEqual(Object.keys(pkg.scripts), ["prepare"]);
         assert.match(pkg.scripts.prepare, /git rev-parse --git-dir/);
         assert.match(pkg.scripts.prepare, /lefthook install/);
+    });
+});
+
+describe("agent janitor health", () => {
+    it("syncs triage labels and requests human review on needs-human", () => {
+        for (const label of [
+            "janitor:needs-fix",
+            "janitor:ready",
+            "janitor:needs-human",
+            "janitor:waiting-for-ci",
+        ]) {
+            assert.match(janitorAgent, new RegExp(JSON.stringify(label).slice(1, -1)));
+        }
+        assert.match(janitorAgent, /syncJanitorLabels\(pr\.number, status\)/);
+        assert.match(janitorAgent, /requestHumanReview\(pr\.number, status\)/);
+        assert.match(janitorAgent, /status !== "needs-human"/);
+        assert.match(janitorAgent, /--add-reviewer/);
+        assert.match(janitorAgent, /JANITOR_HUMAN_REVIEWER/);
     });
 });
 

@@ -19,8 +19,25 @@ const REPO_NAME =
     (process.env.GITHUB_REPOSITORY || "bugabinga/hallucygenie").split("/")[1] || "hallucygenie";
 const REPO = `${OWNER}/${REPO_NAME}`;
 const MARKER = "<!-- hallucygenie-janitor -->";
+const HUMAN_REVIEWER = process.env.JANITOR_HUMAN_REVIEWER || OWNER;
 const timeout = 8 * 60 * 1000;
 const tmp = mkdtempSync(join(tmpdir(), "hg-janitor-"));
+
+const JANITOR_LABELS = {
+    "needs-fix": "janitor:needs-fix",
+    ready: "janitor:ready",
+    "needs-human": "janitor:needs-human",
+    "waiting-for-ci": "janitor:waiting-for-ci",
+} as const;
+
+const JANITOR_LABEL_META = {
+    "needs-fix": { color: "d73a4a", description: "Janitor found agent-repairable work" },
+    ready: { color: "0e8a16", description: "Janitor says bot PR is merge-ready" },
+    "needs-human": { color: "b60205", description: "Janitor needs human triage" },
+    "waiting-for-ci": { color: "fbca04", description: "Janitor is waiting for CI" },
+} as const;
+
+type JanitorStatus = keyof typeof JANITOR_LABELS;
 
 type PrListItem = {
     number: number;
@@ -215,15 +232,21 @@ function upsertStickyComment(number: number, body: string) {
     }
 }
 
+function janitorStatus(body: string): JanitorStatus | undefined {
+    const status = body
+        .match(/## Janitor status:\s*([^\n]+)/i)?.[1]
+        ?.trim()
+        .toLowerCase();
+    if (!status) return undefined;
+    return status in JANITOR_LABELS ? (status as JanitorStatus) : undefined;
+}
+
 function normalizeCommentBody(body: string) {
     let normalized = body.trim();
     if (!normalized.includes(MARKER)) normalized = `${MARKER}\n\n${normalized}`;
     normalized = normalized.replace(/^Request-Copilot:.*\n?/gim, "");
 
-    const status = normalized
-        .match(/## Janitor status:\s*([^\n]+)/i)?.[1]
-        ?.trim()
-        .toLowerCase();
+    const status = janitorStatus(normalized);
     const hasUncheckedItems = /^- \[ \]/m.test(normalized);
     const hasHumanOnlyUncheckedItems =
         /^- \[ \].*(action_required|unknown merge state|manual approval|human decision|\bsecurity\b|\bauth\b|\bdeploy\b|workflow risk|duplicate PR|(?:three|3) failed repair attempts|repeated (?:failed )?repair (?:attempts|failures?))/im.test(
@@ -257,6 +280,62 @@ function normalizeCommentBody(body: string) {
     }
 
     return normalized.trim();
+}
+
+function ensureLabel(status: JanitorStatus) {
+    const label = JANITOR_LABELS[status];
+    const meta = JANITOR_LABEL_META[status];
+    const result = gh(
+        [
+            "label",
+            "create",
+            label,
+            "--repo",
+            REPO,
+            "--color",
+            meta.color,
+            "--description",
+            meta.description,
+            "--force",
+        ],
+        { allowFail: true },
+    );
+    if (result.status !== 0) console.log(`Could not ensure label ${label}: ${result.stderr}`);
+}
+
+function syncJanitorLabels(number: number, status: JanitorStatus | undefined) {
+    if (!status) return;
+    const wanted = JANITOR_LABELS[status];
+    ensureLabel(status);
+    for (const label of Object.values(JANITOR_LABELS)) {
+        if (label === wanted) continue;
+        gh(
+            [
+                "api",
+                "--method",
+                "DELETE",
+                `/repos/${REPO}/issues/${number}/labels/${encodeURIComponent(label)}`,
+            ],
+            { allowFail: true },
+        );
+    }
+    const result = gh(
+        ["api", "--method", "POST", `/repos/${REPO}/issues/${number}/labels`, "--input", "-"],
+        { input: JSON.stringify({ labels: [wanted] }), allowFail: true },
+    );
+    if (result.status !== 0) console.log(`Could not add label ${wanted}: ${result.stderr}`);
+}
+
+function requestHumanReview(number: number, status: JanitorStatus | undefined) {
+    if (status !== "needs-human") return;
+    const result = gh(["pr", "edit", String(number), "--add-reviewer", HUMAN_REVIEWER], {
+        allowFail: true,
+    });
+    if (result.status !== 0) {
+        console.log(
+            `Could not request ${HUMAN_REVIEWER} review on PR #${number}: ${result.stderr}`,
+        );
+    }
 }
 
 function buildContext(pr: PrListItem) {
@@ -391,6 +470,7 @@ Decision rules:
 - Use unchecked checklist items only for issues that block ready status.
 - Do not request or mention Copilot review.
 - Convert review findings into checklist items. Do not mention resolving GitHub review threads.
+- Janitor syncs a janitor:* label from this status and requests ${HUMAN_REVIEWER} review for needs-human.
 - Address owning agent directly. Tell it to fix only current PR scope.
 
 No extra output. Just write the file.`,
@@ -403,6 +483,9 @@ No extra output. Just write the file.`,
     if (!body.includes(MARKER))
         throw new Error(`Janitor output missing marker for PR #${pr.number}`);
     upsertStickyComment(pr.number, body);
+    const status = janitorStatus(body);
+    syncJanitorLabels(pr.number, status);
+    requestHumanReview(pr.number, status);
 }
 
 const prs = listOpenBotPrs();
