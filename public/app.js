@@ -3001,13 +3001,13 @@ function setStreamingUI(streaming) {
     input.disabled = false;
     input.placeholder = "\u{1F4A1} Type to steer the response...";
     sendBtn.disabled = true;
-    typingIndicator.hidden = false;
+    typingIndicator.classList.add("typing-indicator--active");
     steerHint.hidden = true;
   } else {
     input.disabled = false;
     input.placeholder = "Type a message...";
     sendBtn.disabled = true;
-    typingIndicator.hidden = true;
+    typingIndicator.classList.remove("typing-indicator--active");
     steerHint.hidden = true;
     input.focus();
   }

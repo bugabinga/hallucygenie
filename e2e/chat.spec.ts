@@ -240,9 +240,11 @@ test("steer hint appears during streaming", async ({ page }) => {
     await input.press("Enter");
 
     // Wait for streaming to start (typing indicator visible)
-    await page.waitForSelector("#typing-indicator:not([hidden])", { timeout: 5000 }).catch(() => {
-        // Server might not be running
-    });
+    await page
+        .waitForSelector("#typing-indicator.typing-indicator--active", { timeout: 5000 })
+        .catch(() => {
+            // Server might not be running
+        });
 
     // Check if steer hint appears
     const steerHint = page.locator("#steer-hint");

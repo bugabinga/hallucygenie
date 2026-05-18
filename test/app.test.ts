@@ -1027,16 +1027,25 @@ function setupDOM(): { win: any; doc: any; errors: string[] } {
         </div>
       </div>
     </div>
-    <form id="chat-form">
-      <div class="input-wrapper">
-        <label for="chat-input" class="sr-only">Type your message</label>
-        <textarea id="chat-input"></textarea>
-        <button id="send-button" disabled></button>
+    <footer id="input-area">
+      <div id="typing-indicator" class="typing-indicator" role="status" aria-label="Assistant is thinking">
+        <div class="typing-dots" aria-hidden="true">
+          <span class="dot"></span>
+          <span class="dot"></span>
+          <span class="dot"></span>
+        </div>
+        <span class="sr-only">Assistant is thinking…</span>
       </div>
-    </form>
-    <div id="steer-hint" hidden></div>
+      <form id="chat-form">
+        <div class="input-wrapper">
+          <label for="chat-input" class="sr-only">Type your message</label>
+          <textarea id="chat-input"></textarea>
+          <button id="send-button" disabled></button>
+        </div>
+      </form>
+      <div id="steer-hint" hidden></div>
+    </footer>
     <div id="message-list"></div>
-    <div id="typing-indicator" hidden></div>
     <div id="lightbox" role="dialog" aria-modal="true" aria-label="Image preview" hidden>
       <div class="lightbox-backdrop"></div>
       <div class="lightbox-content"><img id="lightbox-img" /></div>
@@ -2488,9 +2497,12 @@ describe("setStreamingUI (via sendMessage)", () => {
 
         await sendMessage("test");
 
-        // After streaming finishes, typing indicator should be hidden
+        // After streaming finishes, typing indicator should not be active
         const typing = doc.querySelector("#typing-indicator");
-        assert.ok(typing.hidden, "typing indicator should be hidden after stream");
+        assert.ok(
+            !typing.classList.contains("typing-indicator--active"),
+            "typing indicator should not be active after stream",
+        );
     });
 
     it("enables input after streaming finishes", async () => {
@@ -2516,6 +2528,90 @@ describe("setStreamingUI (via sendMessage)", () => {
         await sendMessage("test");
 
         assert.equal(doc.querySelectorAll(".assistant-text-region.is-streaming").length, 0);
+    });
+});
+
+// ── HG-ISSUE-076: typing indicator is out of normal flow ────────────────
+
+describe("HG-ISSUE-076: typing indicator does not cause layout shift", () => {
+    let doc: any;
+
+    it("typing indicator is absolutely positioned (out of normal flow)", () => {
+        setupDOM();
+        doc = globalThis.document;
+
+        const typing = doc.querySelector("#typing-indicator");
+        assert.ok(typing, "typing indicator should exist");
+        // Must live inside #input-area for positioning context
+        const inputArea = doc.querySelector("#input-area");
+        assert.ok(inputArea.contains(typing), "typing indicator should be inside #input-area");
+    });
+
+    it("indicator uses opacity class, not hidden attribute", async () => {
+        setupDOM();
+        doc = globalThis.document;
+
+        const typing = doc.querySelector("#typing-indicator");
+        assert.ok(!typing.hasAttribute("hidden"), "should not use hidden attribute");
+        assert.ok(
+            !typing.classList.contains("typing-indicator--active"),
+            "should not be active initially",
+        );
+
+        (globalThis as any).fetch = () =>
+            Promise.resolve(createSSEResponse([sseText("reply"), sseDone()]));
+
+        await sendMessage("test");
+
+        // After stream finishes, should NOT be active (toggled off via class)
+        assert.ok(
+            !typing.classList.contains("typing-indicator--active"),
+            "should not be active after stream",
+        );
+        assert.ok(!typing.hasAttribute("hidden"), "should never use hidden attribute");
+    });
+
+    it("indicator toggle does not change message list height", async () => {
+        setupDOM();
+        doc = globalThis.document;
+
+        const messageList = doc.querySelector("#message-list");
+        const typing = doc.querySelector("#typing-indicator");
+
+        // Simulate fixed layout sizes
+        let messageListHeight = 500;
+        Object.defineProperty(messageList, "clientHeight", {
+            get: () => messageListHeight,
+            configurable: true,
+        });
+
+        // Measure before
+        const before = messageList.clientHeight;
+
+        // Toggle indicator active
+        typing.classList.add("typing-indicator--active");
+        const during = messageList.clientHeight;
+
+        // Toggle off
+        typing.classList.remove("typing-indicator--active");
+        const after = messageList.clientHeight;
+
+        assert.equal(before, during, "message list height should not change when indicator shown");
+        assert.equal(before, after, "message list height should not change when indicator hidden");
+    });
+
+    it("indicator has role=status and sr-only text for assistive tech", () => {
+        setupDOM();
+        doc = globalThis.document;
+
+        const typing = doc.querySelector("#typing-indicator");
+        assert.equal(typing.getAttribute("role"), "status");
+        assert.equal(typing.getAttribute("aria-label"), "Assistant is thinking");
+
+        // Should have sr-only fallback text
+        const srText = typing.querySelector(".sr-only");
+        assert.ok(srText, "should have sr-only text");
+        assert.ok(srText.textContent.includes("thinking"), "sr-only text should mention thinking");
     });
 });
 

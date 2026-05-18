@@ -1,5 +1,5 @@
 ---
-{ "status": "open", "specs": ["HG-SPEC-014", "HG-SPEC-015"] }
+{ "status": "fixed", "specs": ["HG-SPEC-014", "HG-SPEC-015"] }
 ---
 
 # HG-ISSUE-076: Thinking indicator causes chat layout shift

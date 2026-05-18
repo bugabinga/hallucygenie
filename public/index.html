@@ -97,15 +97,20 @@
                 </div>
             </main>
 
-            <div id="typing-indicator" class="typing-indicator" hidden>
-                <div class="typing-dots" aria-hidden="true">
-                    <span class="dot"></span>
-                    <span class="dot"></span>
-                    <span class="dot"></span>
-                </div>
-            </div>
-
             <footer id="input-area">
+                <div
+                    id="typing-indicator"
+                    class="typing-indicator"
+                    role="status"
+                    aria-label="Assistant is thinking"
+                >
+                    <div class="typing-dots" aria-hidden="true">
+                        <span class="dot"></span>
+                        <span class="dot"></span>
+                        <span class="dot"></span>
+                    </div>
+                    <span class="sr-only">Assistant is thinking…</span>
+                </div>
                 <form id="chat-form" autocomplete="off">
                     <div class="input-wrapper">
                         <label for="chat-input" class="sr-only">Type your message</label>
