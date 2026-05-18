@@ -2923,6 +2923,86 @@ describe("Session, draft, and create-history APIs", () => {
         );
         assert.equal(delResp.status, 200);
     });
+
+    it("create-history API response includes origin field", async () => {
+        const db = getDb()!;
+        const sessionId = resolveSessionId(new Request("http://localhost/api/state"), db);
+        saveMessage(db, sessionId, "user", "seed");
+        db.prepare(
+            `INSERT INTO tool_input_history (id, session_id, kind, origin, tool_name, input_json, status)
+             VALUES ('hist_origin_1', ?, 'image', 'chat', 'generate_image', '{"prompt":"dog"}', 'succeeded')`,
+        ).run(sessionId);
+        db.prepare(
+            `INSERT INTO tool_input_history (id, session_id, kind, origin, tool_name, input_json, status)
+             VALUES ('hist_origin_2', ?, 'image', 'agent', 'generate_image', '{"prompt":"bird"}', 'succeeded')`,
+        ).run(sessionId);
+        const listResp = await handleRequest(new Request("http://localhost/api/create-history"));
+        const list = (await listResp.json()) as {
+            items: Array<{ id: string; origin: string; input: unknown }>;
+        };
+        const chatItem = list.items.find((item) => item.id === "hist_origin_1");
+        const agentItem = list.items.find((item) => item.id === "hist_origin_2");
+        assert.ok(chatItem, "chat origin item should be present");
+        assert.equal(chatItem.origin, "chat");
+        assert.ok(agentItem, "agent origin item should be present");
+        assert.equal(agentItem.origin, "agent");
+    });
+
+    it("records explicit tool directive in chat with origin=chat", async () => {
+        const db = getDb()!;
+        const sessionId = resolveSessionId(new Request("http://localhost/api/state"), db);
+        saveMessage(db, sessionId, "user", "seed");
+
+        const prevFetch = globalThis.fetch;
+        globalThis.fetch = async () => {
+            return new Response(
+                JSON.stringify({
+                    data: {
+                        image_urls: ["https://example.com/img.png"],
+                    },
+                    base_resp: { status_code: 0 },
+                }),
+                { status: 200, headers: { "Content-Type": "application/json" } },
+            );
+        };
+
+        try {
+            // User types an explicit tool directive in chat
+            const resp = await handleRequest(
+                new Request("http://localhost/api/chat", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                        messages: [
+                            {
+                                role: "user",
+                                content:
+                                    "Use generate_image with prompt: a cute cat\nTool params: aspect_ratio=1:1",
+                            },
+                        ],
+                    }),
+                }),
+            );
+            assert.equal(resp.status, 200);
+
+            // Verify the tool history was recorded with origin=chat
+            const history = db
+                .prepare(
+                    `SELECT origin, tool_name FROM tool_input_history
+                     WHERE session_id = ? AND tool_name = 'generate_image'
+                     ORDER BY created_at DESC LIMIT 1`,
+                )
+                .get(sessionId) as { origin: string; tool_name: string } | undefined;
+            assert.ok(history, "tool history should be recorded");
+            assert.equal(
+                history.origin,
+                "chat",
+                "origin should be 'chat' for explicit directive in chat",
+            );
+        } finally {
+            globalThis.fetch = prevFetch;
+        }
+    });
 });
 
 describe("GET /api/quota", () => {

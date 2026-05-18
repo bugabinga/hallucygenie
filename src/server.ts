@@ -665,7 +665,7 @@ function handleExplicitToolDirective(
                 try {
                     recordToolInputHistory(database, {
                         session_id: sessionId,
-                        origin: "create",
+                        origin: "chat",
                         tool_name: directive.name,
                         input: directive.args,
                         status: saved.type === "error" ? "failed" : "succeeded",
