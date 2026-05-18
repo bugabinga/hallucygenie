@@ -1,5 +1,5 @@
 ---
-{ "status": "open", "specs": ["HG-SPEC-006", "HG-SPEC-008", "HG-SPEC-011"] }
+{ "status": "fixed", "specs": ["HG-SPEC-006", "HG-SPEC-008", "HG-SPEC-011"] }
 ---
 
 # HG-ISSUE-075: Tool result context lost after MiniMax tool-id rejection

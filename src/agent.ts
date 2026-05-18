@@ -521,6 +521,25 @@ export async function runAgentLoop(
                     status: resp.status,
                     error: truncateLogText(errorText),
                 });
+
+                // Preserve tool result context for future turns.
+                // MiniMax rejected the tool_result continuation, so the tool protocol
+                // rows (assistant+tool_calls, tool) will be skipped during DB replay.
+                // Append a plain assistant summary so the model knows tools ran.
+                const summaries: string[] = [];
+                for (let i = localMessages.length - 1; i >= 0; i--) {
+                    if (localMessages[i].role === "tool") {
+                        summaries.unshift(localMessages[i].content);
+                    } else {
+                        break;
+                    }
+                }
+                if (summaries.length > 0) {
+                    const summary = summaries.join("\n");
+                    await onEvent({ type: "text", content: summary });
+                    localMessages.push({ role: "assistant", content: summary });
+                }
+
                 await onEvent({ type: "done" });
                 return localMessages;
             }
