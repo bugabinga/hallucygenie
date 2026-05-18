@@ -27,6 +27,7 @@ type ExistingPrListItem = {
     title: string;
     headRefName: string;
     headRefOid: string;
+    baseRefName: string;
     author: { login: string };
     isDraft: boolean;
     updatedAt: string;
@@ -94,6 +95,27 @@ function findJanitorComment(comments: IssueComment[]) {
 function checkoutBranch(branch: string) {
     run("git", ["fetch", "origin", `+refs/heads/${branch}:refs/remotes/origin/${branch}`]);
     run("git", ["checkout", "-B", branch, `origin/${branch}`]);
+}
+
+function updateBranchWithBase(baseRefName: string) {
+    run("git", [
+        "fetch",
+        "origin",
+        `+refs/heads/${baseRefName}:refs/remotes/origin/${baseRefName}`,
+    ]);
+    const result = run("git", ["merge", "--no-edit", `origin/${baseRefName}`], {
+        allowFail: true,
+    });
+    if (result.status === 0) {
+        const output = `${result.stdout}${result.stderr}`.trim();
+        if (output) console.log(output);
+        return;
+    }
+
+    console.log(
+        `Automatic base update failed; leaving PR branch unchanged for agent repair.\nSTDOUT:\n${result.stdout}\nSTDERR:\n${result.stderr}`,
+    );
+    run("git", ["merge", "--abort"], { allowFail: true });
 }
 
 function buildExistingPrContext(pr: ExistingPrListItem, comments: IssueComment[]) {
@@ -184,7 +206,7 @@ export function prepareExistingPr(
         "--state",
         "open",
         "--json",
-        "number,title,headRefName,headRefOid,author,isDraft,updatedAt",
+        "number,title,headRefName,headRefOid,baseRefName,author,isDraft,updatedAt",
         "--limit",
         "50",
     ])
@@ -206,6 +228,7 @@ export function prepareExistingPr(
             `Repairing existing ${agentName} PR #${repair.pr.number} (${repair.pr.headRefName}) from janitor checklist`,
         );
         checkoutBranch(repair.pr.headRefName);
+        updateBranchWithBase(repair.pr.baseRefName);
 
         const contextPath = "/tmp/pi-agent-pr-context.md";
         writeFileSync(contextPath, buildExistingPrContext(repair.pr, repair.comments));

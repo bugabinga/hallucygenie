@@ -226,11 +226,13 @@ function normalizeCommentBody(body: string) {
         .toLowerCase();
     const hasUncheckedItems = /^- \[ \]/m.test(normalized);
     const hasHumanOnlyUncheckedItems =
-        /^- \[ \].*(action_required|conflict|branch behind|behind trunk|rebase|unknown merge state|manual approval|human decision|\bsecurity\b|\bauth\b|\bdeploy\b|workflow risk|duplicate PR)/im.test(
+        /^- \[ \].*(action_required|unknown merge state|manual approval|human decision|\bsecurity\b|\bauth\b|\bdeploy\b|workflow risk|duplicate PR|(?:three|3) failed repair attempts|repeated (?:failed )?repair (?:attempts|failures?))/im.test(
             normalized,
         );
     const hasAgentRepairableUncheckedItems =
-        /^- \[ \].*(PR body|metadata|CI|check|test|code|fix|frontmatter|logs?)/im.test(normalized);
+        /^- \[ \].*(PR body|metadata|CI|check|test|code|fix|frontmatter|logs?|branch behind|behind trunk|rebase|out[- ]of[- ]date|merge conflict|conflict)/im.test(
+            normalized,
+        );
     if (status === "ready" && hasUncheckedItems) {
         normalized = normalized.replace(
             /## Janitor status:\s*ready/i,
@@ -381,9 +383,10 @@ ${MARKER}
 
 Decision rules:
 - waiting-for-ci: latest required checks are pending or missing.
-- needs-fix: CI failed or code/test/PR body/metadata issues require changes the owning agent can make.
+- needs-fix: CI failed, branch is behind/out-of-date/rebase needed, merge conflicts need resolution, or code/test/PR body/metadata issues require changes the owning agent can make.
 - ready: CI green, branch is current/mergeable, and no actionable unresolved issues.
-- needs-human: action_required check, conflict, branch behind trunk, unknown merge state, security/auth/deploy/workflow risk, broad unclear change, duplicate PR, or human decision needed.
+- needs-human: three failed repair attempts on the same blocker, action_required check, unknown merge state, security/auth/deploy/workflow risk, broad unclear change, duplicate PR, or human decision needed.
+- Do not use needs-human for failed CI, branch behind/out-of-date, rebase needed, or merge conflicts until the owning agent has failed that same repair three times.
 - If status is ready, every checklist item must be checked.
 - Use unchecked checklist items only for issues that block ready status.
 - Do not request or mention Copilot review.
