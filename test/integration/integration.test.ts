@@ -7,9 +7,9 @@ import assert from "node:assert/strict";
 import { createServer } from "node:http";
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { connect } from "node:net";
-import { initDatabase, resetStateForTesting, handleNodeRequest, getDb } from "../src/server.ts";
+import { initDatabase, resetStateForTesting, handleNodeRequest, getDb } from "../../src/server.ts";
 import type { IncomingMessage, ServerResponse } from "node:http";
-import { getMessages, getOrCreateActiveSessionId, saveAsset } from "../src/db.ts";
+import { getMessages, getOrCreateActiveSessionId, saveAsset } from "../../src/db.ts";
 
 let server: ReturnType<typeof createServer>;
 let baseUrl: string;

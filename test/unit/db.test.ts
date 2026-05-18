@@ -42,12 +42,12 @@ import {
     listToolInputHistory,
     hideToolInputHistory,
     QUOTAS,
-} from "../src/db.ts";
+} from "../../src/db.ts";
 
 // Helper: create a fresh in-memory DB with migrations applied
 function freshDb(): Database {
     const db = new Database(":memory:");
-    const migrationsDir = join(import.meta.dirname ?? ".", "..", "migrations");
+    const migrationsDir = join(import.meta.dirname ?? ".", "..", "..", "migrations");
     runMigrations(db, migrationsDir);
     return db;
 }

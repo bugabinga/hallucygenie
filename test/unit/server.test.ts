@@ -15,8 +15,8 @@ import {
     parseExplicitToolDirective,
     sanitizeAssistantMediaMarkup,
     parseLimitOffset,
-} from "../src/server.ts";
-import { MINIMAX_MODEL } from "../src/agent.ts";
+} from "../../src/server.ts";
+import { MINIMAX_MODEL } from "../../src/agent.ts";
 import { existsSync, rmSync, mkdirSync } from "node:fs";
 import { join } from "node:path";
 import http from "node:http";
@@ -27,14 +27,14 @@ import {
     saveDraft,
     getDraft,
     createSession,
-} from "../src/db.ts";
+} from "../../src/db.ts";
 import {
     trackUsage,
     saveMessage,
     saveAsset,
     setActiveSessionId,
     saveUserProfile,
-} from "../src/db.ts";
+} from "../../src/db.ts";
 
 // -- Test helpers -----------------------------------------------------
 
@@ -2560,7 +2560,7 @@ describe("Node HTTP adapter and server lifecycle", () => {
         resetStateForTesting();
         initDatabase(join(import.meta.dirname ?? ".", "test-data", "test.db"));
 
-        const { startServer } = await import("../src/server.ts");
+        const { startServer } = await import("../../src/server.ts");
         const srv = startServer(0);
         await new Promise<void>((resolve) => srv.on("listening", resolve));
         const port = (srv.address() as any).port;
@@ -2582,7 +2582,7 @@ describe("Node HTTP adapter and server lifecycle", () => {
         const origKey = process.env.MINIMAX_API_KEY;
         delete process.env.MINIMAX_API_KEY;
 
-        const { startServer } = await import("../src/server.ts");
+        const { startServer } = await import("../../src/server.ts");
         const srv = startServer(0);
         await new Promise<void>((resolve) => srv.on("listening", resolve));
         const port = (srv.address() as any).port;
@@ -2604,7 +2604,7 @@ describe("Node HTTP adapter and server lifecycle", () => {
         resetStateForTesting();
         initDatabase(join(import.meta.dirname ?? ".", "test-data", "test.db"));
 
-        const { startServer } = await import("../src/server.ts");
+        const { startServer } = await import("../../src/server.ts");
         const srv = startServer(0);
         await new Promise<void>((resolve) => srv.on("listening", resolve));
         const port = (srv.address() as any).port;
@@ -2620,7 +2620,7 @@ describe("Node HTTP adapter and server lifecycle", () => {
         resetStateForTesting();
         initDatabase(join(import.meta.dirname ?? ".", "test-data", "test.db"));
 
-        const { startServer, shutdown, getDb } = await import("../src/server.ts");
+        const { startServer, shutdown, getDb } = await import("../../src/server.ts");
         const srv = startServer(0);
         await new Promise<void>((resolve) => srv.on("listening", resolve));
 
@@ -2641,7 +2641,7 @@ describe("Node HTTP adapter and server lifecycle", () => {
     it("resetStateForTesting cleans up", async () => {
         resetStateForTesting();
         initDatabase(join(import.meta.dirname ?? ".", "test-data", "test.db"));
-        const { startServer, getDb } = await import("../src/server.ts");
+        const { startServer, getDb } = await import("../../src/server.ts");
         const srv = startServer(0);
         await new Promise<void>((resolve) => srv.on("listening", resolve));
 
@@ -2655,7 +2655,7 @@ describe("Node HTTP adapter and server lifecycle", () => {
 
     it("isShuttingDown tracks state", async () => {
         resetStateForTesting();
-        const { shutdown, isShuttingDown } = await import("../src/server.ts");
+        const { shutdown, isShuttingDown } = await import("../../src/server.ts");
 
         assert.equal(isShuttingDown(), false);
         await shutdown();

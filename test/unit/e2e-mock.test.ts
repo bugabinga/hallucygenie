@@ -2,7 +2,7 @@
 
 import { describe, it, afterEach } from "node:test";
 import assert from "node:assert/strict";
-import { setupMinimaxMocks, cleanupMinimaxMocks } from "../e2e/minimax-mock.ts";
+import { setupMinimaxMocks, cleanupMinimaxMocks } from "../../e2e/minimax-mock.ts";
 
 describe("E2E MiniMax fetch mocks", () => {
     afterEach(() => cleanupMinimaxMocks());

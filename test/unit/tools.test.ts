@@ -12,7 +12,7 @@ import {
     webSearch,
     analyzeImage,
     MINIMAX_BASE,
-} from "../src/tools.ts";
+} from "../../src/tools.ts";
 
 // ── Test helpers ─────────────────────────────────────────────────────
 

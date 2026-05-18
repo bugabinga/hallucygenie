@@ -66,6 +66,8 @@ type GithubContent = {
 };
 
 type PreviousManifest = {
+    generated_at?: string;
+    source?: { commit?: string };
     fonts?: Array<{ id?: string; sha256?: string }>;
 };
 
@@ -126,12 +128,25 @@ function sha256(bytes: Uint8Array): string {
     return createHash("sha256").update(bytes).digest("hex");
 }
 
-function previousSha(id: string): string | undefined {
+function readPreviousManifest(): PreviousManifest | undefined {
     if (!existsSync("public/fonts/fonts.manifest.json")) return undefined;
-    const manifest = JSON.parse(
+    return JSON.parse(
         readFileSync("public/fonts/fonts.manifest.json", "utf-8"),
     ) as PreviousManifest;
-    return manifest.fonts?.find((font) => font.id === id)?.sha256;
+}
+
+function previousSha(id: string): string | undefined {
+    return readPreviousManifest()?.fonts?.find((font) => font.id === id)?.sha256;
+}
+
+function manifestTime(commit: string, fonts: Array<{ id: string; sha256: string }>): string {
+    const previous = readPreviousManifest();
+    const sameCommit = previous?.source?.commit === commit;
+    const sameFonts = fonts.every(
+        (font) => previous?.fonts?.find((old) => old.id === font.id)?.sha256 === font.sha256,
+    );
+    if (sameCommit && sameFonts && previous?.generated_at) return previous.generated_at;
+    return new Date().toISOString();
 }
 
 function convertToWoff2(inputPath: string, outputPath: string): void {
@@ -226,7 +241,7 @@ async function main(): Promise<void> {
 
         const manifest = {
             version: 1,
-            generated_at: new Date().toISOString(),
+            generated_at: manifestTime(commit, fonts),
             source: {
                 repo: GOOGLE_FONTS_REPO,
                 commit,

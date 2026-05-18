@@ -2,13 +2,13 @@ pre-commit:
     commands:
         gitleaks:
             run: gitleaks protect --staged --redact --verbose
-        check:
-            run: just hook-pre-commit
+        ready:
+            run: just ready
 
 pre-push:
     commands:
-        test-unit:
-            run: just hook-pre-push
+        ready:
+            run: just ready
 
 post-checkout:
     commands:
@@ -22,5 +22,5 @@ post-checkout:
 
 post-merge:
     commands:
-        ci-main:
-            run: just hook-post-merge
+        ready:
+            run: just ready

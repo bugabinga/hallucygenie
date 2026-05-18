@@ -1,10 +1,70 @@
-# HallucyGenie — `just --list` to see all recipes
+# HallucyGenie — one gate: `just ready`
 
 set dotenv-load
 set unstable
 
-BACKEND_TESTS := "test/server.test.ts test/agent.test.ts test/tools.test.ts test/db.test.ts"
-FRONTEND_TESTS := "test/app.test.ts test/static.test.ts test/e2e-mock.test.ts test/minimax-test-script.test.ts"
+# format, build-check, typecheck, unit, integration, e2e
+[group('check')]
+ready: fmt-check typecheck build-check unit integration e2e
+
+# format and rebuild tracked generated frontend
+[group('check')]
+fix:
+    just -f ./justfile --fmt
+    bunx prettier --write .
+    just build
+
+# check formatting without modifying files
+[group('check')]
+fmt-check:
+    just -f ./justfile --fmt --check
+    bunx prettier --check .
+
+# type check (tsc --noEmit)
+[group('check')]
+typecheck:
+    bunx tsc --noEmit
+
+# bundle tracked frontend
+[group('dev')]
+build:
+    bunx esbuild public/app.ts --outfile=public/app.js --bundle --format=esm --target=esnext
+
+# fail if tracked frontend bundle is stale
+[group('check')]
+build-check:
+    tmp="$(mktemp)"; \
+    trap 'rm -f "$tmp"' EXIT; \
+    bunx esbuild public/app.ts --outfile="$tmp" --bundle --format=esm --target=esnext; \
+    cmp -s "$tmp" public/app.js || { echo "public/app.js is stale; run: just fix"; exit 1; }
+
+# all unit tests; add new tests under test/unit/
+[group('test')]
+unit:
+    bun test test/unit
+
+# all integration tests; add new tests under test/integration/
+[group('test')]
+integration:
+    bun test test/integration
+
+# browser E2E against mocked MiniMax
+[group('test')]
+e2e: build-check
+    bun e2e/run-e2e.ts
+
+# mutation tests
+[group('test')]
+mutation: build-check
+    status=0; \
+    bunx stryker run test/stryker.config.mjs & agent=$!; \
+    bunx stryker run test/stryker-tools.mjs & tools=$!; \
+    bunx stryker run test/stryker-db.mjs & db=$!; \
+    wait "$agent" || status=$?; \
+    wait "$tools" || status=$?; \
+    wait "$db" || status=$?; \
+    exit "$status"
+
 # install dependencies
 [group('setup')]
 install:
@@ -14,11 +74,7 @@ install:
 [group('setup')]
 fonts-update commit="main":
     bun scripts/update-fonts.ts {{ commit }}
-
-# bundle frontend
-[group('dev')]
-build:
-    bunx esbuild public/app.ts --outfile=public/app.js --bundle --format=esm --target=esnext
+    bunx prettier --write public/fonts/fonts.manifest.json public/style.css
 
 # start dev server (port 3000)
 [group('dev')]
@@ -27,7 +83,7 @@ dev: build
 
 # stop old server, reset local DB/assets, then start dev server
 [group('dev')]
-fresh-dev: kill reset-db dev
+fresh: kill reset dev
 
 # stop HallucyGenie dev server on port 3000 (safe: only kills bun src/server.ts)
 [group('dev')]
@@ -46,7 +102,7 @@ kill:
 
 # open app in Chrome with remote debugging
 [group('dev')]
-dev-chrome:
+chrome:
     mkdir -p ${HOME}/.cache/hallucygenie/chrome-profile
     google-chrome-stable \
       --remote-debugging-port=9222 \
@@ -58,134 +114,16 @@ dev-chrome:
       --disable-features=Translate,SigninIntercept,SyncPromoAfterSigninIntercept \
       http://localhost:3000 &>/dev/null &
 
-# format code (just + prettier)
-[group('check')]
-fmt:
-    just -f ./justfile --fmt
-    bunx prettier --write .
-
-# check formatting without modifying files
-[group('check')]
-fmt-check:
-    just -f ./justfile --fmt --check
-    bunx prettier --check .
-
-# type check (tsc --noEmit)
-[group('check')]
-lint:
-    bunx tsc --noEmit
-
-# fmt + lint pre-flight
-[group('check')]
-check: fmt lint
-
-# CI check: no file mutation
-[group('check')]
-ci-check: fmt-check lint
-
-# pre-commit hook: no file mutation
-[group('check')]
-hook-pre-commit: fmt-check lint
-
-# pre-push hook
-[group('test')]
-hook-pre-push: test-unit
-
-# backend unit tests
-[group('test')]
-test-backend:
-    for file in {{ BACKEND_TESTS }}; do \
-      bun test "$file" || exit "$?"; \
-    done
-
-# all unit tests
-[group('test')]
-test-unit:
-    status=0; \
-    just test-backend & backend=$!; \
-    bun test {{ FRONTEND_TESTS }} & frontend=$!; \
-    wait "$backend" || status=$?; \
-    wait "$frontend" || status=$?; \
-    exit "$status"
-
-# integration (real server + in-memory DB)
-[group('test')]
-test-integration:
-    bun test test/integration.test.ts
-
-# mutation: agent only
-[group('test')]
-test-mutation-agent:
-    bunx stryker run test/stryker.config.mjs
-
-# mutation: tools only
-[group('test')]
-test-mutation-tools:
-    bunx stryker run test/stryker-tools.mjs
-
-# mutation: db only
-[group('test')]
-test-mutation-db:
-    bunx stryker run test/stryker-db.mjs
-
-# mutation: agent + tools + db, parallel
-[group('test')]
-test-mutation: build
-    status=0; \
-    just test-mutation-agent & agent=$!; \
-    just test-mutation-tools & tools=$!; \
-    just test-mutation-db & db=$!; \
-    wait "$agent" || status=$?; \
-    wait "$tools" || status=$?; \
-    wait "$db" || status=$?; \
-    exit "$status"
-
-# coverage (backend + frontend, parallel)
-[group('test')]
-test-coverage:
-    status=0; \
-    bun test --coverage {{ BACKEND_TESTS }} & backend=$!; \
-    bun test --coverage {{ FRONTEND_TESTS }} & frontend=$!; \
-    wait "$backend" || status=$?; \
-    wait "$frontend" || status=$?; \
-    exit "$status"
-
-# check + unit + integration
-[group('test')]
-test-all: check build test-unit test-integration
-
-# CI: check + unit + integration without formatting writes
-[group('test')]
-ci-test-all: ci-check build test-unit test-integration
-
-# run fast CI path after merging into trunk locally
-[group('test')]
-hook-post-merge:
-    branch="$(git branch --show-current)"; \
-    if [ "$branch" != "trunk" ]; then exit 0; fi; \
-    just ci-test-all && just test-e2e
-
 # build production container image locally
 [group('deploy')]
-container-build:
-    docker build -f deploy/Dockerfile -t hallucygenie:local .
+container image="hallucygenie:local":
+    docker build -f deploy/Dockerfile -t "{{ image }}" .
 
-# check dependency updates
-[group('check')]
-update-check:
-    bun outdated --latest
-
-# playwright E2E (real server + mocked MiniMax via nock)
-[group('test')]
-test-e2e: build
-    bun e2e/run-e2e.ts
-
-alias t := test-unit
-alias tb := test-backend
-alias ti := test-integration
-alias ta := test-all
-alias e2e := test-e2e
-alias verify := test-all
+# build and push production container image
+[group('deploy')]
+publish-container image:
+    case "{{ image }}" in ghcr.io/bugabinga/hallucygenie:*) ;; *) echo "image must be ghcr.io/bugabinga/hallucygenie:<tag>"; exit 1 ;; esac
+    docker buildx build -f deploy/Dockerfile -t "{{ image }}" --push .
 
 # test MiniMax API endpoints + check quota (real API; consumes TTS/image/music quota)
 [group('pi')]
@@ -199,10 +137,10 @@ clean:
 
 # reset local SQLite DB + generated assets
 [group('util')]
-reset-db:
+reset:
     rm -rf data
 
 # full local reset (keeps .env)
 [group('util')]
-nuke: clean
-    rm -rf node_modules data logs
+nuke: clean reset
+    rm -rf node_modules logs

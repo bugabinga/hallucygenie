@@ -7,8 +7,8 @@ import assert from "node:assert/strict";
 import { writeFileSync, mkdirSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
-import { renderMarkdown } from "../public/app.ts";
-import type { SSEEvent } from "../public/app.ts";
+import { renderMarkdown } from "../../public/app.ts";
+import type { SSEEvent } from "../../public/app.ts";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const SNAPSHOTS_DIR = join(__dirname, "__snapshots__");
@@ -973,7 +973,7 @@ import {
     init,
     updateQuotaBadge,
     loadAssets,
-} from "../public/app.ts";
+} from "../../public/app.ts";
 
 // ── DOM Setup Helpers ────────────────────────────────────────────────
 

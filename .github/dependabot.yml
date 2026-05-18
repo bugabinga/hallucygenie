@@ -1,0 +1,36 @@
+version: 2
+updates:
+    - package-ecosystem: bun
+      directory: /
+      schedule:
+          interval: weekly
+          day: monday
+          time: "05:23"
+          timezone: Etc/UTC
+      open-pull-requests-limit: 5
+      groups:
+          bun-dependencies:
+              patterns:
+                  - "*"
+
+    - package-ecosystem: github-actions
+      directory: /
+      schedule:
+          interval: weekly
+          day: monday
+          time: "05:23"
+          timezone: Etc/UTC
+      open-pull-requests-limit: 5
+      groups:
+          github-actions:
+              patterns:
+                  - "*"
+
+    - package-ecosystem: docker
+      directory: /deploy
+      schedule:
+          interval: weekly
+          day: monday
+          time: "05:23"
+          timezone: Etc/UTC
+      open-pull-requests-limit: 5

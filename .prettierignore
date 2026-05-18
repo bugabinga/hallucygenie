@@ -2,5 +2,6 @@ node_modules/
 data/
 logs/
 public/app.js
-test/__snapshots__/
-e2e/__snapshots__/
+test/**/__snapshots__/
+e2e/**/__snapshots__/
+.system/

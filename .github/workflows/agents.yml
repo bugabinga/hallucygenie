@@ -52,6 +52,12 @@ jobs:
             - uses: taiki-e/install-action@v2.75.28
               with:
                   tool: just
+            - uses: browser-actions/setup-chrome@v2.1.1
+              id: setup-chrome
+              with:
+                  install-dependencies: true
+            - name: Use Chrome for E2E
+              run: echo "CHROMIUM_PATH=${{ steps.setup-chrome.outputs.chrome-path }}" >> "$GITHUB_ENV"
             - name: Install gitleaks
               run: |
                   VERSION=$(curl -sL https://api.github.com/repos/gitleaks/gitleaks/releases/latest | jq -r '.tag_name' | tr -d 'v')
@@ -80,7 +86,8 @@ jobs:
                   if [ -f /tmp/pi-agent-existing-pr-branch ]; then
                       PR_NUMBER=$(cat /tmp/pi-agent-existing-pr-number)
                       BRANCH=$(cat /tmp/pi-agent-existing-pr-branch)
-                      just fmt || true
+                      just fix
+                      just ready
                       git add -A
                       if [ -f /tmp/pi-agent-pr-update-body.md ]; then
                           gh pr edit "${PR_NUMBER}" --body-file /tmp/pi-agent-pr-update-body.md
@@ -102,7 +109,8 @@ jobs:
                   SPEC_NAME=$(cat /tmp/pi-agent-spec-name 2>/dev/null || echo "unknown-spec")
                   BRANCH="agent/speck-ferkel-${SPEC_NAME}"
                   git checkout -b "${BRANCH}"
-                  just fmt || true
+                  just fix
+                  just ready
                   git add -A
                   git commit --no-verify -m "🐖 speck-ferkel: fix code to match spec ${SPEC_NAME}"
                   git push --no-verify origin "${BRANCH}"
@@ -140,6 +148,12 @@ jobs:
             - uses: taiki-e/install-action@v2.75.28
               with:
                   tool: just
+            - uses: browser-actions/setup-chrome@v2.1.1
+              id: setup-chrome
+              with:
+                  install-dependencies: true
+            - name: Use Chrome for E2E
+              run: echo "CHROMIUM_PATH=${{ steps.setup-chrome.outputs.chrome-path }}" >> "$GITHUB_ENV"
             - name: Install gitleaks
               run: |
                   VERSION=$(curl -sL https://api.github.com/repos/gitleaks/gitleaks/releases/latest | jq -r '.tag_name' | tr -d 'v')
@@ -168,7 +182,8 @@ jobs:
                   if [ -f /tmp/pi-agent-existing-pr-branch ]; then
                       PR_NUMBER=$(cat /tmp/pi-agent-existing-pr-number)
                       BRANCH=$(cat /tmp/pi-agent-existing-pr-branch)
-                      just fmt || true
+                      just fix
+                      just ready
                       git add -A
                       if [ -f /tmp/pi-agent-pr-update-body.md ]; then
                           gh pr edit "${PR_NUMBER}" --body-file /tmp/pi-agent-pr-update-body.md
@@ -189,7 +204,8 @@ jobs:
                   fi
                   BRANCH="agent/trouble-maker-$(date +%Y%m%d-%H%M%S)"
                   git checkout -b "${BRANCH}"
-                  just fmt || true
+                  just fix
+                  just ready
                   git add -A
                   git commit --no-verify -m "🔥 trouble-maker: fix bugs"
                   git push --no-verify origin "${BRANCH}"
@@ -227,6 +243,12 @@ jobs:
             - uses: taiki-e/install-action@v2.75.28
               with:
                   tool: just
+            - uses: browser-actions/setup-chrome@v2.1.1
+              id: setup-chrome
+              with:
+                  install-dependencies: true
+            - name: Use Chrome for E2E
+              run: echo "CHROMIUM_PATH=${{ steps.setup-chrome.outputs.chrome-path }}" >> "$GITHUB_ENV"
             - name: Install gitleaks
               run: |
                   VERSION=$(curl -sL https://api.github.com/repos/gitleaks/gitleaks/releases/latest | jq -r '.tag_name' | tr -d 'v')
@@ -255,7 +277,8 @@ jobs:
                   if [ -f /tmp/pi-agent-existing-pr-branch ]; then
                       PR_NUMBER=$(cat /tmp/pi-agent-existing-pr-number)
                       BRANCH=$(cat /tmp/pi-agent-existing-pr-branch)
-                      just fmt || true
+                      just fix
+                      just ready
                       git add -A
                       if [ -f /tmp/pi-agent-pr-update-body.md ]; then
                           gh pr edit "${PR_NUMBER}" --body-file /tmp/pi-agent-pr-update-body.md
@@ -276,7 +299,8 @@ jobs:
                   fi
                   BRANCH="agent/slop-chopper-$(date +%Y%m%d-%H%M%S)"
                   git checkout -b "${BRANCH}"
-                  just fmt || true
+                  just fix
+                  just ready
                   git add -A
                   git commit --no-verify -m "🪓 slop-chopper: remove slop"
                   git push --no-verify origin "${BRANCH}"
@@ -314,6 +338,12 @@ jobs:
             - uses: taiki-e/install-action@v2.75.28
               with:
                   tool: just
+            - uses: browser-actions/setup-chrome@v2.1.1
+              id: setup-chrome
+              with:
+                  install-dependencies: true
+            - name: Use Chrome for E2E
+              run: echo "CHROMIUM_PATH=${{ steps.setup-chrome.outputs.chrome-path }}" >> "$GITHUB_ENV"
             - run: npm install -g @mariozechner/pi-coding-agent
             - run: bun install --frozen-lockfile
             - run: bun run --bun .github/agents/robotnik.ts
@@ -338,7 +368,8 @@ jobs:
                   if [ -f /tmp/pi-agent-existing-pr-branch ]; then
                       PR_NUMBER=$(cat /tmp/pi-agent-existing-pr-number)
                       BRANCH=$(cat /tmp/pi-agent-existing-pr-branch)
-                      just fmt || true
+                      just fix
+                      just ready
                       git add -A
                       if [ -f /tmp/pi-agent-pr-update-body.md ]; then
                           gh pr edit "${PR_NUMBER}" --body-file /tmp/pi-agent-pr-update-body.md
@@ -361,7 +392,8 @@ jobs:
                   ISSUE_SLUG=$(cat /tmp/pi-agent-issue-slug 2>/dev/null || echo "issue")
                   BRANCH="agent/robotnik-${ISSUE_ID}-${ISSUE_SLUG}-$(date +%Y%m%d-%H%M%S)"
                   git checkout -b "${BRANCH}"
-                  just fmt || true
+                  just fix
+                  just ready
                   git add -A
                   git commit --no-verify -m "🤖 robotnik: fix ${ISSUE_ID}"
                   git push --no-verify origin "${BRANCH}"

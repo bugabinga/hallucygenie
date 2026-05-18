@@ -12,18 +12,21 @@ const appTs = readFileSync("public/app.ts", "utf-8");
 const appJs = readFileSync("public/app.js", "utf-8");
 const justfile = readFileSync("justfile", "utf-8");
 const serverTs = readFileSync("src/server.ts", "utf-8");
-const agentTest = readFileSync("test/agent.test.ts", "utf-8");
-const dbTest = readFileSync("test/db.test.ts", "utf-8");
+const agentTest = readFileSync("test/unit/agent.test.ts", "utf-8");
+const dbTest = readFileSync("test/unit/db.test.ts", "utf-8");
 const e2eChatSpec = readFileSync("e2e/chat.spec.ts", "utf-8");
 const e2eRunner = readFileSync("e2e/run-e2e.ts", "utf-8");
 const playwrightConfig = readFileSync("test/playwright.config.ts", "utf-8");
-const serverTest = readFileSync("test/server.test.ts", "utf-8");
+const serverTest = readFileSync("test/unit/server.test.ts", "utf-8");
 const gitignore = readFileSync(".gitignore", "utf-8");
 const dockerignore = readFileSync(".dockerignore", "utf-8");
+const prettierignore = readFileSync(".prettierignore", "utf-8");
 const lefthookYml = readFileSync("lefthook.yml", "utf-8");
 const ciYml = readFileSync(".github/workflows/ci.yml", "utf-8");
-const updatesYml = readFileSync(".github/workflows/updates.yml", "utf-8");
+const dependabotYml = readFileSync(".github/dependabot.yml", "utf-8");
+const agentsYml = readFileSync(".github/workflows/agents.yml", "utf-8");
 const janitorAgent = readFileSync(".github/agents/janitor.ts", "utf-8");
+const slopChopperAgent = readFileSync(".github/agents/slop-chopper.ts", "utf-8");
 const strykerAgent = readFileSync("test/stryker.config.mjs", "utf-8");
 const strykerTools = readFileSync("test/stryker-tools.mjs", "utf-8");
 const strykerDb = readFileSync("test/stryker-db.mjs", "utf-8");
@@ -31,6 +34,7 @@ const deployDockerfile = readFileSync("deploy/Dockerfile", "utf-8");
 const agentsMd = readFileSync("AGENTS.md", "utf-8");
 const issuePrompt = readFileSync(".pi/prompts/issue.md", "utf-8");
 const minimaxResearchPrompt = readFileSync(".pi/prompts/minimax-research.md", "utf-8");
+const updateFontsScript = readFileSync("scripts/update-fonts.ts", "utf-8");
 const readmeMd = readFileSync("README.md", "utf-8");
 const licenseMd = readFileSync("LICENSE", "utf-8");
 const rulesMd = readFileSync(".system/RULES.md", "utf-8");
@@ -741,10 +745,47 @@ describe("system metadata health", () => {
 });
 
 describe("justfile health", () => {
-    it("has build recipe, dev depends on build, and fresh-dev resets safely", () => {
+    it("has one obvious non-mutating gate", () => {
+        assert.match(justfile, /\nready: fmt-check typecheck build-check unit integration e2e\n/);
+        assert.match(
+            justfile,
+            /\nfix:\n\s+just -f \.\/justfile --fmt\n\s+bunx prettier --write \.\n\s+just build/,
+        );
+        assert.match(justfile, /\nbuild-check:\n\s+tmp="\$\(mktemp\)"/);
+        assert.match(justfile, /public\/app\.js is stale; run: just fix/);
+    });
+
+    it("runs every test from directories, not brittle file lists", () => {
+        assert.match(justfile, /\nunit:\n\s+bun test test\/unit/);
+        assert.match(justfile, /\nintegration:\n\s+bun test test\/integration/);
+        assert.match(justfile, /\ne2e: build-check\n\s+bun e2e\/run-e2e\.ts/);
+        assert.doesNotMatch(justfile, /BACKEND_TESTS|FRONTEND_TESTS/);
+        assert.deepEqual(
+            readdirSync("test").filter((name) => name.endsWith(".test.ts")),
+            [],
+        );
+        assert.equal(existsSync("test/unit/static.test.ts"), true);
+        assert.equal(existsSync("test/integration/integration.test.ts"), true);
+    });
+
+    it("keeps essential human commands simple", () => {
         assert.match(justfile, /\nbuild:\n\s+bunx esbuild public\/app\.ts/);
         assert.match(justfile, /\ndev: build\n\s+bun src\/server\.ts/);
-        assert.match(justfile, /\nfresh-dev: kill reset-db dev\n/);
+        assert.match(justfile, /\nfresh: kill reset dev\n/);
+        assert.match(justfile, /\nchrome:\n/);
+        assert.match(
+            justfile,
+            /\ncontainer image="hallucygenie:local":\n\s+docker build -f deploy\/Dockerfile -t "\{\{ image \}\}" \./,
+        );
+        assert.match(justfile, /image must be ghcr\.io\/bugabinga\/hallucygenie:<tag>/);
+        assert.match(
+            justfile,
+            /\npublish-container image:\n\s+case "\{\{ image \}\}" in ghcr\.io\/bugabinga\/hallucygenie:\*/,
+        );
+        assert.match(
+            justfile,
+            /docker buildx build -f deploy\/Dockerfile -t "\{\{ image \}\}" --push \./,
+        );
     });
 
     it("uses clear MiniMax smoke test script", () => {
@@ -756,9 +797,11 @@ describe("justfile health", () => {
     it("can update vendored fonts", () => {
         assert.match(
             justfile,
-            /\nfonts-update commit="main":\n\s+bun scripts\/update-fonts\.ts \{\{ commit \}\}/,
+            /\nfonts-update commit="main":\n\s+bun scripts\/update-fonts\.ts \{\{ commit \}\}\n\s+bunx prettier --write public\/fonts\/fonts\.manifest\.json public\/style\.css/,
         );
         assert.equal(existsSync("scripts/update-fonts.ts"), true);
+        assert.match(updateFontsScript, /function manifestTime/);
+        assert.match(updateFontsScript, /sameCommit && sameFonts && previous\?\.generated_at/);
     });
 
     it("does not use python, mobile package paths, Playwright allow flags, or test-name-pattern hacks", () => {
@@ -775,37 +818,26 @@ describe("justfile health", () => {
         assert.match(justfile, /clean:\n\s+rm -rf .*coverage/);
     });
 
-    it("does not define redundant list recipe", () => {
+    it("does not define redundant recipes or aliases", () => {
         assert.equal(/^list:/m.test(justfile), false);
-    });
-
-    it("defines hook recipes for lefthook", () => {
-        assert.match(justfile, /hook-pre-commit: fmt-check lint/);
-        assert.match(justfile, /hook-pre-push: test-unit/);
-        assert.match(justfile, /test-backend:/);
-        assert.match(justfile, /just test-backend & backend=\$!/);
-        assert.equal(/^test:/m.test(justfile), false);
-        assert.match(
+        assert.equal(/^alias\b/m.test(justfile), false);
+        assert.doesNotMatch(justfile, /hook-pre-commit|hook-pre-push|hook-post-merge/);
+        assert.doesNotMatch(
             justfile,
-            /fmt-check:\n\s+just -f \.\/justfile --fmt --check\n\s+bunx prettier --check \./,
+            /ci-test-all|test-all|test-unit|test-backend|test-integration|test-e2e/,
         );
     });
 });
 
 describe("lefthook health", () => {
-    it("runs pre-commit checks, gitleaks, pre-push unit tests, and post-merge main CI", () => {
+    it("runs the same ready gate as humans and agents", () => {
         assert.match(lefthookYml, /pre-commit:/);
-        assert.match(lefthookYml, /run: just hook-pre-commit/);
         assert.match(lefthookYml, /gitleaks:/);
         assert.match(lefthookYml, /gitleaks protect --staged --redact --verbose/);
         assert.match(lefthookYml, /pre-push:/);
-        assert.match(lefthookYml, /run: just hook-pre-push/);
         assert.match(lefthookYml, /post-merge:/);
-        assert.match(lefthookYml, /run: just hook-post-merge/);
-        assert.match(justfile, /hook-post-merge:/);
-        assert.match(justfile, /git branch --show-current/);
-        assert.match(justfile, /\$branch" != "trunk"/);
-        assert.match(justfile, /just ci-test-all && just test-e2e/);
+        assert.equal((lefthookYml.match(/run: just ready/g) ?? []).length, 3);
+        assert.doesNotMatch(lefthookYml, /hook-pre-commit|hook-pre-push|hook-post-merge/);
         assert.doesNotMatch(justfile, /just ci-act/);
     });
 });
@@ -856,20 +888,24 @@ describe("project metadata health", () => {
 });
 
 describe("GitHub Actions health", () => {
-    it("runs all test tiers including mutation", () => {
+    it("runs the ready gate and mutation", () => {
         assert.doesNotMatch(ciYml, /MINIMAX_(?:API_)?KEY/);
-        assert.doesNotMatch(updatesYml, /MINIMAX_(?:API_)?KEY/);
+        assert.doesNotMatch(dependabotYml, /MINIMAX_(?:API_)?KEY/);
         assert.match(ciYml, /run: bun install --frozen-lockfile/);
-        assert.match(ciYml, /run: just ci-test-all/);
-        assert.match(ciYml, /run: just test-e2e/);
-        assert.match(ciYml, /run: just test-mutation/);
+        assert.match(ciYml, /run: just ready/);
+        assert.match(ciYml, /run: just mutation/);
+        assert.doesNotMatch(ciYml, /ci-test-all|test-e2e|test-mutation/);
         assert.match(ciYml, /browser-actions\/setup-chrome@v2\.1\.1/);
         assert.match(ciYml, /install-dependencies: true/);
         assert.doesNotMatch(ciYml, /flaky apt source/);
         assert.match(ciYml, /CHROMIUM_PATH=/);
-        assert.match(justfile, /ci-test-all: ci-check build test-unit test-integration/);
-        assert.match(justfile, /test-all: check build test-unit test-integration/);
-        assert.match(justfile, /ci-check: fmt-check lint/);
+    });
+
+    it("agent PR workflows fix then run ready before commit", () => {
+        assert.match(agentsYml, /browser-actions\/setup-chrome@v2\.1\.1/);
+        assert.equal((agentsYml.match(/just fix\n\s+just ready/g) ?? []).length, 8);
+        assert.doesNotMatch(agentsYml, /just fmt \|\| true/);
+        assert.match(slopChopperAgent, /Run "just fix" && "just ready" after/);
     });
 
     it("caches Bun deps and uploads mutation HTML artifacts", () => {
@@ -891,18 +927,21 @@ describe("GitHub Actions health", () => {
         assert.match(strykerDb, /fileName: "reports\/mutation\/db\.html"/);
     });
 
-    it("builds container and checks dependency updates", () => {
+    it("builds container and lets Dependabot open dependency update PRs", () => {
         assert.match(ciYml, /container:/);
-        assert.match(ciYml, /docker build -f deploy\/Dockerfile -t hallucygenie:ci \./);
+        assert.match(ciYml, /run: just container hallucygenie:ci/);
         assert.doesNotMatch(ciYml, /env\.ACT/);
         assert.doesNotMatch(ciYml, /act \+ Podman/);
-        assert.match(updatesYml, /schedule:/);
-        assert.match(updatesYml, /workflow_dispatch:/);
-        assert.match(updatesYml, /run: just update-check/);
-        assert.match(justfile, /container-build:/);
-        assert.match(justfile, /docker build -f deploy\/Dockerfile -t hallucygenie:local \./);
-        assert.match(justfile, /update-check:/);
-        assert.match(justfile, /bun outdated --latest/);
+        assert.equal(existsSync(".github/workflows/updates.yml"), false);
+        assert.match(dependabotYml, /package-ecosystem: bun/);
+        assert.doesNotMatch(dependabotYml, /package-ecosystem: npm/);
+        assert.match(dependabotYml, /package-ecosystem: github-actions/);
+        assert.match(dependabotYml, /package-ecosystem: docker/);
+        assert.match(dependabotYml, /interval: weekly/);
+        assert.doesNotMatch(dependabotYml, /workflow_dispatch|bun outdated|just deps-check/);
+        assert.match(justfile, /\ncontainer image="hallucygenie:local":/);
+        assert.match(justfile, /docker build -f deploy\/Dockerfile -t "\{\{ image \}\}" \./);
+        assert.doesNotMatch(justfile, /\ndeps-check:|bun outdated --latest/);
     });
 
     it("has no local act runner recipes", () => {
@@ -989,7 +1028,7 @@ describe("layout health", () => {
         }
         for (const file of ["server.test.ts", "agent.test.ts", "tools.test.ts", "db.test.ts"]) {
             assert.equal(existsSync(file), false, `${file} should not be in repo root`);
-            assert.equal(existsSync(`test/${file}`), true, `test/${file} should exist`);
+            assert.equal(existsSync(`test/unit/${file}`), true, `test/unit/${file} should exist`);
         }
         assert.equal(existsSync("deploy/Dockerfile"), true);
         assert.equal(existsSync("deploy/hallucygenie.container"), true);
@@ -999,6 +1038,8 @@ describe("layout health", () => {
         assert.match(gitignore, /public\/app\.js/);
         assert.doesNotMatch(gitignore, /\.pulse\.json/);
         assert.match(gitignore, /test-data\*\//);
+        assert.match(prettierignore, /test\/\*\*\/__snapshots__\//);
+        assert.match(prettierignore, /\.system\//);
     });
 });
 

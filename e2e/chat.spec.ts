@@ -1,6 +1,6 @@
 // HallucyGenie E2E Tests — Playwright
 // Tests run against http://localhost:3000 (server must be running)
-// Run with: just test-e2e
+// Run with: just e2e
 
 import { test, expect, type Page } from "playwright-core";
 

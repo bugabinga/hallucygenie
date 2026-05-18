@@ -22,9 +22,9 @@ import {
     executeToolSafely,
     DEFAULT_MAX_CONTEXT_TOKENS,
     MINIMAX_BASE,
-} from "../src/agent.ts";
-import type { AgentEvent, OnBeforeTool } from "../src/agent.ts";
-import { getToolDefinitions } from "../src/tools.ts";
+} from "../../src/agent.ts";
+import type { AgentEvent, OnBeforeTool } from "../../src/agent.ts";
+import { getToolDefinitions } from "../../src/tools.ts";
 
 // ── Test helpers ─────────────────────────────────────────────────────
 

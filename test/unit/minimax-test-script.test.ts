@@ -10,7 +10,7 @@ import {
     textSummary,
     musicInstrumentalPayload,
     vlmPayload,
-} from "../scripts/minimax-test.ts";
+} from "../../scripts/minimax-test.ts";
 
 describe("minimax-test script formatting", () => {
     it("prints explicit MiniMax status label", () => {
