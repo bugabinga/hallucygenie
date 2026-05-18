@@ -613,6 +613,185 @@ describe("runAgentLoop", () => {
         );
     });
 
+    // HG-ISSUE-075 regression: assistant summary preserved after tool-id rejection
+    it("appends assistant summary when MiniMax rejects tool result id", async () => {
+        const firstResponse = anthropicResponse(
+            toolUseResponse(
+                "call_function_rejected_1",
+                "generate_image",
+                '{"prompt":"funny face"}',
+            ),
+        );
+        const toolIdError = JSON.stringify({
+            type: "error",
+            error: {
+                type: "invalid_request_error",
+                message:
+                    "invalid params, tool result's tool id(call_function_rejected_1) not found (2013)",
+            },
+        });
+        let fetchCallCount = 0;
+        globalThis.fetch = async (url: string | URL | Request) => {
+            const urlStr = url.toString();
+            if (urlStr.includes("/anthropic/v1/messages")) {
+                fetchCallCount++;
+                return fetchCallCount === 1
+                    ? firstResponse
+                    : new Response(toolIdError, { status: 400 });
+            }
+            return new Response(
+                JSON.stringify({ data: { image_urls: ["https://img/face.png"] } }),
+                { status: 200, headers: { "Content-Type": "application/json" } },
+            );
+        };
+
+        const { events, onEvent } = collectEvents();
+        const messages = await runAgentLoop(
+            [{ role: "user", content: "make me a funny face" }],
+            "test-key",
+            onEvent,
+        );
+
+        // Tool executed successfully
+        const toolResults = events.filter((e) => e.type === "tool_result");
+        assert.equal(toolResults.length, 1);
+        assert.equal(toolResults[0].result?.type, "image");
+
+        // A text event with the compact summary was emitted
+        const summaryEvents = events.filter(
+            (e) => e.type === "text" && e.content?.includes("Generated image"),
+        );
+        assert.equal(summaryEvents.length, 1, "should emit compact tool summary as text");
+
+        // An assistant message with the summary was added for DB persistence
+        const summaryMsg = messages.filter(
+            (m) =>
+                m.role === "assistant" && !m.tool_calls && m.content?.includes("Generated image"),
+        );
+        assert.equal(
+            summaryMsg.length,
+            1,
+            "should have assistant summary message without tool_calls",
+        );
+
+        // Last event is done
+        assert.equal(events[events.length - 1].type, "done");
+    });
+
+    it("summary after tool-id rejection works for multiple tools in one turn", async () => {
+        const eventsArr: string[] = [messageStart()];
+        eventsArr.push(
+            contentBlockStart(0, "tool_use", { id: "call_rej_1", name: "generate_image" }),
+        );
+        eventsArr.push(contentBlockDelta(0, "input_json_delta", '{"prompt":"cat"}'));
+        eventsArr.push(contentBlockStop(0));
+        eventsArr.push(
+            contentBlockStart(1, "tool_use", { id: "call_rej_2", name: "text_to_speech" }),
+        );
+        eventsArr.push(contentBlockDelta(1, "input_json_delta", '{"text":"meow"}'));
+        eventsArr.push(contentBlockStop(1));
+        eventsArr.push(messageDelta("tool_use"));
+        eventsArr.push(messageStop());
+
+        const firstResponse = anthropicResponse(eventsArr);
+        const toolIdError = JSON.stringify({
+            type: "error",
+            error: {
+                type: "invalid_request_error",
+                message: "invalid params, tool result's tool id(call_rej_1) not found (2013)",
+            },
+        });
+        let fetchCallCount = 0;
+        globalThis.fetch = async (url: string | URL | Request) => {
+            const urlStr = url.toString();
+            if (urlStr.includes("/anthropic/v1/messages")) {
+                fetchCallCount++;
+                return fetchCallCount === 1
+                    ? firstResponse
+                    : new Response(toolIdError, { status: 400 });
+            }
+            if (urlStr.includes("/v1/image_generation")) {
+                return new Response(
+                    JSON.stringify({ data: { image_urls: ["https://img/cat.png"] } }),
+                    { status: 200, headers: { "Content-Type": "application/json" } },
+                );
+            }
+            return new Response(JSON.stringify({ data: { audio: "48656c6c6f" } }), {
+                status: 200,
+                headers: { "Content-Type": "application/json" },
+            });
+        };
+
+        const { events, onEvent } = collectEvents();
+        const messages = await runAgentLoop(
+            [{ role: "user", content: "draw and speak" }],
+            "test-key",
+            onEvent,
+        );
+
+        // Both tools executed
+        assert.equal(events.filter((e) => e.type === "tool_result").length, 2);
+
+        // Summary includes both compact results
+        const summaryMsg = messages.find(
+            (m) =>
+                m.role === "assistant" && !m.tool_calls && m.content?.includes("Generated image"),
+        );
+        assert.ok(summaryMsg, "should have assistant summary");
+        assert.ok(
+            summaryMsg!.content!.includes("Generated audio"),
+            "summary should include audio tool result",
+        );
+    });
+
+    it("summary message is plain text (no tool_calls) for DB replay compatibility", async () => {
+        const firstResponse = anthropicResponse(
+            toolUseResponse("call_db_replay_1", "generate_image", '{"prompt":"sparkles"}'),
+        );
+        const toolIdError = JSON.stringify({
+            type: "error",
+            error: {
+                type: "invalid_request_error",
+                message: "invalid params, tool result's tool id(call_db_replay_1) not found (2013)",
+            },
+        });
+        let fetchCallCount = 0;
+        globalThis.fetch = async (url: string | URL | Request) => {
+            const urlStr = url.toString();
+            if (urlStr.includes("/anthropic/v1/messages")) {
+                fetchCallCount++;
+                return fetchCallCount === 1
+                    ? firstResponse
+                    : new Response(toolIdError, { status: 400 });
+            }
+            return new Response(
+                JSON.stringify({ data: { image_urls: ["https://img/sparkles.png"] } }),
+                { status: 200, headers: { "Content-Type": "application/json" } },
+            );
+        };
+
+        const { events, onEvent } = collectEvents();
+        const messages = await runAgentLoop(
+            [{ role: "user", content: "make sparkles" }],
+            "test-key",
+            onEvent,
+        );
+
+        // Find the synthetic assistant summary
+        const summary = messages.find(
+            (m) =>
+                m.role === "assistant" && !m.tool_calls && m.content?.includes("Generated image"),
+        );
+        assert.ok(summary, "should have assistant summary without tool_calls");
+
+        // Verify it would survive DB round-trip:
+        // - no tool_calls → tool_calls_json will be null → not skipped on load
+        // - no tool_call_id → not a tool row → not skipped on load
+        assert.equal(summary!.tool_calls, undefined);
+        assert.equal(summary!.tool_call_id, undefined);
+        assert.ok(summary!.content!.length > 0, "summary content must not be empty");
+    });
+
     it("detects MiniMax tool result id errors", () => {
         assert.equal(
             isToolResultIdError(
