@@ -398,6 +398,23 @@ describe("index.html health", () => {
         assert.doesNotMatch(styleCss, /\.steer-hint \{[^}]*animation:/);
     });
 
+    it("thinking indicator is a reserved accessible status layer", () => {
+        assert.match(indexHtml, /id="typing-indicator"[\s\S]*role="status"/);
+        assert.match(indexHtml, /id="typing-indicator"[\s\S]*aria-live="polite"/);
+        assert.match(indexHtml, /id="typing-indicator"[\s\S]*aria-label="Genie is thinking"/);
+        const doc = new Window().document;
+        doc.body.innerHTML = indexHtml;
+        assert.equal(doc.querySelector("#typing-indicator")?.hasAttribute("hidden"), false);
+        assert.match(styleCss, /\.typing-indicator \{[^}]*min-height: 36px;/);
+        assert.match(styleCss, /\.typing-indicator \{[^}]*visibility: hidden;/);
+        assert.match(styleCss, /\.typing-indicator \{[^}]*opacity: 0;/);
+        assert.match(styleCss, /\.typing-indicator\.is-visible \{[^}]*visibility: visible;/);
+        assert.match(styleCss, /\.typing-indicator\.is-visible \{[^}]*opacity: 1;/);
+        assert.match(appTs, /typingIndicator\.classList\.add\("is-visible"\)/);
+        assert.match(appTs, /typingIndicator\.classList\.remove\("is-visible"\)/);
+        assert.doesNotMatch(appTs, /typingIndicator\.hidden\s*=/);
+    });
+
     it("assistant streaming animation is low-risk and reduced-motion safe", () => {
         assert.match(styleCss, /\.assistant-text-region\.is-streaming/);
         assert.match(styleCss, /\.stream-chunk/);

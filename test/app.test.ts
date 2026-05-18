@@ -1036,7 +1036,7 @@ function setupDOM(): { win: any; doc: any; errors: string[] } {
     </form>
     <div id="steer-hint" hidden></div>
     <div id="message-list"></div>
-    <div id="typing-indicator" hidden></div>
+    <div id="typing-indicator" role="status" aria-live="polite" aria-label="Genie is thinking" aria-hidden="true"></div>
     <div id="lightbox" role="dialog" aria-modal="true" aria-label="Image preview" hidden>
       <div class="lightbox-backdrop"></div>
       <div class="lightbox-content"><img id="lightbox-img" /></div>
@@ -2038,23 +2038,14 @@ describe("sendMessage", () => {
         setupDOM();
         doc = globalThis.document;
 
-        // First send: start streaming
-        let resolveStream: () => void;
-        const streamPromise = new Promise<void>((r) => {
-            resolveStream = r;
-        });
-
+        // First send: start streaming and keep the stream open until this test closes it.
+        const encoder = new TextEncoder();
+        let streamController!: ReadableStreamDefaultController<Uint8Array>;
         (globalThis as any).fetch = () => {
-            // Return a response that stays open until we resolve
-            const encoder = new TextEncoder();
-            let sent = false;
-            const stream = new ReadableStream({
-                pull(controller) {
-                    if (!sent) {
-                        sent = true;
-                        controller.enqueue(encoder.encode(sseText("thinking...")));
-                    }
-                    // Don't close — keep streaming
+            const stream = new ReadableStream<Uint8Array>({
+                start(controller) {
+                    streamController = controller;
+                    controller.enqueue(encoder.encode(sseText("thinking...")));
                 },
             });
             return Promise.resolve(new Response(stream, { status: 200 }));
@@ -2078,10 +2069,10 @@ describe("sendMessage", () => {
 
         assert.ok(steerCalled, "steer endpoint should be called");
 
-        // Clean up — finish the stream
-        // We need to finish somehow. Let's just let it timeout or resolve.
-        // Actually, the first sendMessage is still awaiting streamChat...
-        // Let's just not wait for it.
+        // Clean up so later tests do not inherit the streaming module state.
+        streamController.enqueue(encoder.encode(sseDone()));
+        streamController.close();
+        await firstSend;
     });
 });
 
@@ -2488,9 +2479,46 @@ describe("setStreamingUI (via sendMessage)", () => {
 
         await sendMessage("test");
 
-        // After streaming finishes, typing indicator should be hidden
+        // After streaming finishes, typing indicator should be visually inactive but still reserved in layout.
         const typing = doc.querySelector("#typing-indicator");
-        assert.ok(typing.hidden, "typing indicator should be hidden after stream");
+        assert.ok(!typing.hidden, "typing indicator should stay in the layout");
+        assert.equal(typing.classList.contains("is-visible"), false);
+        assert.equal(typing.getAttribute("aria-hidden"), "true");
+    });
+
+    it("shows typing indicator as a non-layout-toggle status while streaming", async () => {
+        setupDOM();
+        doc = globalThis.document;
+
+        let releaseStream!: () => void;
+        const pending = new Promise<void>((resolve) => {
+            releaseStream = resolve;
+        });
+        (globalThis as any).fetch = () =>
+            Promise.resolve(
+                new Response(
+                    new ReadableStream({
+                        async start(controller) {
+                            controller.enqueue(new TextEncoder().encode(sseText("reply")));
+                            await pending;
+                            controller.enqueue(new TextEncoder().encode(sseDone()));
+                            controller.close();
+                        },
+                    }),
+                    { status: 200 },
+                ),
+            );
+
+        const sendPromise = sendMessage("test");
+        await new Promise((resolve) => setTimeout(resolve, 0));
+
+        const typing = doc.querySelector("#typing-indicator");
+        assert.ok(!typing.hidden, "typing indicator should not use hidden layout toggling");
+        assert.equal(typing.classList.contains("is-visible"), true);
+        assert.equal(typing.getAttribute("aria-hidden"), "false");
+
+        releaseStream();
+        await sendPromise;
     });
 
     it("enables input after streaming finishes", async () => {

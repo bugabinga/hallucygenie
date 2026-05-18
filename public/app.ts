@@ -1135,13 +1135,15 @@ function setStreamingUI(streaming: boolean): void {
         input.disabled = false; // Allow typing during streaming for steering
         input.placeholder = "💡 Type to steer the response...";
         sendBtn.disabled = true;
-        typingIndicator.hidden = false;
+        typingIndicator.classList.add("is-visible");
+        typingIndicator.setAttribute("aria-hidden", "false");
         steerHint.hidden = true;
     } else {
         input.disabled = false;
         input.placeholder = "Type a message...";
         sendBtn.disabled = true; // Will be enabled by input handler
-        typingIndicator.hidden = true;
+        typingIndicator.classList.remove("is-visible");
+        typingIndicator.setAttribute("aria-hidden", "true");
         steerHint.hidden = true;
         input.focus();
     }
