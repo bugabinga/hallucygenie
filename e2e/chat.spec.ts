@@ -3,21 +3,6 @@
 // Run with: just test-e2e
 
 import { test, expect, type Page } from "playwright-core";
-import { chromium } from "playwright-core";
-
-// ── Test fixture: launch browser with system Chromium ────────────────
-
-test.use({
-    launchOptions: {
-        executablePath: "/data/data/com.termux/files/usr/lib/chromium/chrome",
-        args: [
-            "--no-sandbox",
-            "--disable-gpu",
-            "--disable-setuid-sandbox",
-            "--disable-dev-shm-usage",
-        ],
-    },
-});
 
 // ── Helper: wait for page to be interactive ──────────────────────────
 

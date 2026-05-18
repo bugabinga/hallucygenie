@@ -26,7 +26,6 @@ const CHROMIUM_CANDIDATES = [
     "/usr/bin/google-chrome",
     "/usr/bin/chromium",
     "/usr/bin/chromium-browser",
-    "/data/data/com.termux/files/usr/lib/chromium/chrome",
 ].filter((path): path is string => Boolean(path));
 
 const CHROMIUM_PATH = CHROMIUM_CANDIDATES.find((path) => existsSync(path));

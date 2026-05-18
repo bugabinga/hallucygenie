@@ -6,7 +6,6 @@ const chromiumPath = [
     "/usr/bin/google-chrome",
     "/usr/bin/chromium",
     "/usr/bin/chromium-browser",
-    "/data/data/com.termux/files/usr/lib/chromium/chrome",
 ].find((path) => path && existsSync(path));
 
 export default {

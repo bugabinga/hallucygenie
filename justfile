@@ -178,7 +178,7 @@ update-check:
 # playwright E2E (real server + mocked MiniMax via nock)
 [group('test')]
 test-e2e: build
-    PLAYWRIGHT_ALLOW_ANDROID=1 bun e2e/run-e2e.ts
+    bun e2e/run-e2e.ts
 
 alias t := test-unit
 alias tb := test-backend
