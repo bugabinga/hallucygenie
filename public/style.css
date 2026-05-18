@@ -869,16 +869,21 @@ textarea,
 /* ── Typing Indicator ───────────────────────────────────────────────── */
 
 .typing-indicator {
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: 0;
+    transform: translateY(-100%);
     display: flex;
     align-items: center;
     justify-content: center;
     min-height: 36px;
     padding: var(--space-xs) 0;
-    flex-shrink: 0;
     visibility: hidden;
     opacity: 0;
     pointer-events: none;
     transition: opacity var(--snap);
+    z-index: 11;
 }
 
 .typing-indicator.is-visible {

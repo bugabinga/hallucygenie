@@ -383,6 +383,120 @@ async function runE2ETests(): Promise<void> {
         results,
     );
 
+    await runTest(
+        "thinking indicator does not shift layout",
+        async () => {
+            for (const viewport of [
+                { width: 1280, height: 800 },
+                { width: 375, height: 812 },
+            ]) {
+                const page = await browser!.newPage({ viewport });
+                await page.route("**/api/chat", async (route) => {
+                    await page.waitForTimeout(700);
+                    await route.fulfill({
+                        status: 200,
+                        headers: { "Content-Type": "text/event-stream" },
+                        body: 'data: {"delta":"Layout stable"}\n\ndata: [DONE]\n\n',
+                    });
+                });
+                await waitForApp(page, { dismissOnboarding: true });
+                await page.evaluate(() => {
+                    const list = document.querySelector("#message-list")!;
+                    list.innerHTML = Array.from(
+                        { length: 36 },
+                        (_, i) => `
+                            <div class="message message--assistant">
+                                <div class="message-avatar" aria-hidden="true">🧞</div>
+                                <div class="message-bubble"><div class="message-content">Long history row ${i + 1}</div></div>
+                            </div>`,
+                    ).join("");
+                    list.scrollTop = list.scrollHeight;
+                });
+
+                const measure = async () =>
+                    page.evaluate(() => {
+                        const rect = (selector: string) => {
+                            const r = document.querySelector(selector)!.getBoundingClientRect();
+                            return {
+                                top: Math.round(r.top),
+                                bottom: Math.round(r.bottom),
+                                height: Math.round(r.height),
+                            };
+                        };
+                        const typing = document.querySelector("#typing-indicator") as HTMLElement;
+                        const style = getComputedStyle(typing);
+                        return {
+                            list: rect("#message-list"),
+                            input: rect("#input-area"),
+                            typing: rect("#typing-indicator"),
+                            typingHidden: typing.hasAttribute("hidden"),
+                            typingAriaHidden: typing.getAttribute("aria-hidden"),
+                            typingVisibility: style.visibility,
+                            typingOpacity: Math.round(Number(style.opacity)),
+                        };
+                    });
+
+                const before = await measure();
+                await page.fill("#chat-input", "Check layout stability");
+                await page.press("#chat-input", "Enter");
+                await page.waitForSelector("#typing-indicator.is-visible", { timeout: 5000 });
+                await page.waitForTimeout(200);
+                const during = await measure();
+                await page.waitForFunction(
+                    () =>
+                        !document
+                            .querySelector("#typing-indicator")
+                            ?.classList.contains("is-visible"),
+                    null,
+                    { timeout: 5000 },
+                );
+                await page.waitForTimeout(200);
+                const after = await measure();
+
+                if (Math.abs(before.list.bottom - before.input.top) > 1) {
+                    throw new Error(
+                        `Message list does not reach input area: ${before.list.bottom} != ${before.input.top}`,
+                    );
+                }
+                if (Math.abs(during.typing.bottom - during.input.top) > 1) {
+                    throw new Error(
+                        `Typing indicator does not overlay list end: ${during.typing.bottom} != ${during.input.top}`,
+                    );
+                }
+                for (const key of ["top", "bottom", "height"] as const) {
+                    assertEqual(during.list[key], before.list[key], `message list ${key} during`);
+                    assertEqual(after.list[key], before.list[key], `message list ${key} after`);
+                    assertEqual(during.input[key], before.input[key], `input area ${key} during`);
+                    assertEqual(after.input[key], before.input[key], `input area ${key} after`);
+                }
+                assertEqual(during.typingHidden, false, "Typing indicator hidden attr during");
+                assertEqual(during.typingAriaHidden, "false", "Typing indicator aria during");
+                assertEqual(
+                    during.typingVisibility,
+                    "visible",
+                    "Typing indicator visibility during",
+                );
+                assertEqual(during.typingOpacity, 1, "Typing indicator opacity during");
+                assertEqual(after.typingHidden, false, "Typing indicator hidden attr after");
+                assertEqual(after.typingAriaHidden, "true", "Typing indicator aria after");
+                assertEqual(after.typingVisibility, "hidden", "Typing indicator visibility after");
+                assertEqual(after.typingOpacity, 0, "Typing indicator opacity after");
+                assertEqual(
+                    (
+                        await page
+                            .locator(".message--assistant .message-content")
+                            .last()
+                            .textContent()
+                    )?.trim(),
+                    "Layout stable",
+                    "Assistant response after layout check",
+                );
+                await page.close();
+            }
+        },
+        results,
+    );
+
     // Test 9: Auto-resize textarea
     await runTest(
         "textarea auto-resizes with content",

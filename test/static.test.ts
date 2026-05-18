@@ -398,13 +398,16 @@ describe("index.html health", () => {
         assert.doesNotMatch(styleCss, /\.steer-hint \{[^}]*animation:/);
     });
 
-    it("thinking indicator is a reserved accessible status layer", () => {
+    it("thinking indicator is an accessible overlay status", () => {
+        assert.match(indexHtml, /<footer id="input-area">[\s\S]*id="typing-indicator"/);
         assert.match(indexHtml, /id="typing-indicator"[\s\S]*role="status"/);
         assert.match(indexHtml, /id="typing-indicator"[\s\S]*aria-live="polite"/);
         assert.match(indexHtml, /id="typing-indicator"[\s\S]*aria-label="Genie is thinking"/);
         const doc = new Window().document;
         doc.body.innerHTML = indexHtml;
         assert.equal(doc.querySelector("#typing-indicator")?.hasAttribute("hidden"), false);
+        assert.match(styleCss, /\.typing-indicator \{[^}]*position: absolute;/);
+        assert.match(styleCss, /\.typing-indicator \{[^}]*transform: translateY\(-100%\);/);
         assert.match(styleCss, /\.typing-indicator \{[^}]*min-height: 36px;/);
         assert.match(styleCss, /\.typing-indicator \{[^}]*visibility: hidden;/);
         assert.match(styleCss, /\.typing-indicator \{[^}]*opacity: 0;/);

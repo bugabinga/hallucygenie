@@ -2479,9 +2479,8 @@ describe("setStreamingUI (via sendMessage)", () => {
 
         await sendMessage("test");
 
-        // After streaming finishes, typing indicator should be visually inactive but still reserved in layout.
         const typing = doc.querySelector("#typing-indicator");
-        assert.ok(!typing.hidden, "typing indicator should stay in the layout");
+        assert.ok(!typing.hidden, "typing indicator should stay in DOM for status updates");
         assert.equal(typing.classList.contains("is-visible"), false);
         assert.equal(typing.getAttribute("aria-hidden"), "true");
     });

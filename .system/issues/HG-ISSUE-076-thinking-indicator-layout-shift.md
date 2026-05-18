@@ -29,7 +29,8 @@ Cause:
 
 Fix:
 
-- Redesign typing/thinking indicator as non-layout-affecting UI:
-  - fixed/absolute overlay anchored above composer or inside chat shell
-  - or always reserved layer with visibility/opacity instead of `display: none`
-- Update tests to assert it is out of normal flow and toggled without layout-affecting display changes.
+- Put `#typing-indicator` inside `#input-area`.
+- Position it absolute above the composer.
+- Keep `visibility`/`opacity` + `aria-hidden` toggles.
+- Do not reserve flex height between `#message-list` and `#input-area`.
+- Test long scrollback. Assert list bottom reaches composer top.
