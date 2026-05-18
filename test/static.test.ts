@@ -398,7 +398,7 @@ describe("index.html health", () => {
         assert.doesNotMatch(styleCss, /\.steer-hint \{[^}]*animation:/);
     });
 
-    it("thinking indicator is an accessible overlay status", () => {
+    it("thinking indicator is accessible but not visual layout", () => {
         assert.match(indexHtml, /<footer id="input-area">[\s\S]*id="typing-indicator"/);
         assert.match(indexHtml, /id="typing-indicator"[\s\S]*role="status"/);
         assert.match(indexHtml, /id="typing-indicator"[\s\S]*aria-live="polite"/);
@@ -407,12 +407,11 @@ describe("index.html health", () => {
         doc.body.innerHTML = indexHtml;
         assert.equal(doc.querySelector("#typing-indicator")?.hasAttribute("hidden"), false);
         assert.match(styleCss, /\.typing-indicator \{[^}]*position: absolute;/);
-        assert.match(styleCss, /\.typing-indicator \{[^}]*transform: translateY\(-100%\);/);
-        assert.match(styleCss, /\.typing-indicator \{[^}]*min-height: 36px;/);
-        assert.match(styleCss, /\.typing-indicator \{[^}]*visibility: hidden;/);
-        assert.match(styleCss, /\.typing-indicator \{[^}]*opacity: 0;/);
-        assert.match(styleCss, /\.typing-indicator\.is-visible \{[^}]*visibility: visible;/);
-        assert.match(styleCss, /\.typing-indicator\.is-visible \{[^}]*opacity: 1;/);
+        assert.match(styleCss, /\.typing-indicator \{[^}]*width: 1px;/);
+        assert.match(styleCss, /\.typing-indicator \{[^}]*height: 1px;/);
+        assert.match(styleCss, /\.typing-indicator \{[^}]*overflow: hidden;/);
+        assert.doesNotMatch(styleCss, /\.typing-indicator \{[^}]*min-height:/);
+        assert.doesNotMatch(styleCss, /\.typing-indicator\.is-visible \{/);
         assert.match(appTs, /typingIndicator\.classList\.add\("is-visible"\)/);
         assert.match(appTs, /typingIndicator\.classList\.remove\("is-visible"\)/);
         assert.doesNotMatch(appTs, /typingIndicator\.hidden\s*=/);
@@ -420,9 +419,19 @@ describe("index.html health", () => {
 
     it("assistant streaming animation is low-risk and reduced-motion safe", () => {
         assert.match(styleCss, /\.assistant-text-region\.is-streaming/);
+        assert.match(styleCss, /\.assistant-text-region\.is-streaming \{[^}]*position: relative;/);
         assert.match(styleCss, /\.stream-chunk/);
         assert.match(styleCss, /@keyframes stream-chunk-in/);
         assert.match(styleCss, /@keyframes caret-blink/);
+        assert.match(
+            styleCss,
+            /\.assistant-text-region\.is-streaming::after \{[^}]*position: absolute;/,
+        );
+        assert.match(styleCss, /\.assistant-text-region\.is-streaming::after \{[^}]*width: 0;/);
+        assert.match(
+            styleCss,
+            /\.assistant-text-region\.is-streaming::after \{[^}]*overflow: visible;/,
+        );
         assert.match(styleCss, /@media \(prefers-reduced-motion: reduce\)/);
         assert.match(styleCss, /\.stream-chunk \{[^}]*animation: stream-chunk-in/);
         assert.match(styleCss, /\.stream-chunk \{[^}]*display: inline-block;/);

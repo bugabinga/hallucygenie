@@ -384,23 +384,44 @@ async function runE2ETests(): Promise<void> {
     );
 
     await runTest(
-        "thinking indicator does not shift layout",
+        "thinking indicator does not shift long scrollback layout",
         async () => {
             for (const viewport of [
                 { width: 1280, height: 800 },
                 { width: 375, height: 812 },
             ]) {
                 const page = await browser!.newPage({ viewport });
-                await page.route("**/api/chat", async (route) => {
-                    await page.waitForTimeout(700);
-                    await route.fulfill({
-                        status: 200,
-                        headers: { "Content-Type": "text/event-stream" },
-                        body: 'data: {"delta":"Layout stable"}\n\ndata: [DONE]\n\n',
-                    });
-                });
                 await waitForApp(page, { dismissOnboarding: true });
                 await page.evaluate(() => {
+                    const originalFetch = fetch.bind(globalThis);
+                    globalThis.fetch = async (input, init) => {
+                        const url = new URL(
+                            input instanceof Request ? input.url : String(input),
+                            location.href,
+                        );
+                        if (url.pathname !== "/api/chat") return originalFetch(input, init);
+                        const encoder = new TextEncoder();
+                        return new Response(
+                            new ReadableStream({
+                                start(controller) {
+                                    setTimeout(
+                                        () =>
+                                            controller.enqueue(
+                                                encoder.encode(
+                                                    'data: {"delta":"Layout stable"}\n\n',
+                                                ),
+                                            ),
+                                        200,
+                                    );
+                                    setTimeout(() => {
+                                        controller.enqueue(encoder.encode("data: [DONE]\n\n"));
+                                        controller.close();
+                                    }, 900);
+                                },
+                            }),
+                            { status: 200, headers: { "Content-Type": "text/event-stream" } },
+                        );
+                    };
                     const list = document.querySelector("#message-list")!;
                     list.innerHTML = Array.from(
                         { length: 36 },
@@ -423,16 +444,17 @@ async function runE2ETests(): Promise<void> {
                                 height: Math.round(r.height),
                             };
                         };
+                        const list = document.querySelector("#message-list") as HTMLElement;
                         const typing = document.querySelector("#typing-indicator") as HTMLElement;
-                        const style = getComputedStyle(typing);
                         return {
                             list: rect("#message-list"),
                             input: rect("#input-area"),
                             typing: rect("#typing-indicator"),
+                            lastMessage: rect(".message--assistant:last-child"),
+                            scrollHeight: list.scrollHeight,
                             typingHidden: typing.hasAttribute("hidden"),
                             typingAriaHidden: typing.getAttribute("aria-hidden"),
-                            typingVisibility: style.visibility,
-                            typingOpacity: Math.round(Number(style.opacity)),
+                            typingVisible: typing.classList.contains("is-visible"),
                         };
                     });
 
@@ -440,8 +462,25 @@ async function runE2ETests(): Promise<void> {
                 await page.fill("#chat-input", "Check layout stability");
                 await page.press("#chat-input", "Enter");
                 await page.waitForSelector("#typing-indicator.is-visible", { timeout: 5000 });
+                const duringThinking = await measure();
+                await page.waitForFunction(
+                    () => {
+                        const list = document.querySelector("#message-list") as HTMLElement;
+                        return (
+                            document
+                                .querySelector(".message--assistant:last-child .message-content")
+                                ?.textContent?.includes("Layout stable") &&
+                            document
+                                .querySelector("#typing-indicator")
+                                ?.classList.contains("is-visible") &&
+                            list.scrollHeight - list.clientHeight - list.scrollTop <= 1
+                        );
+                    },
+                    null,
+                    { timeout: 5000 },
+                );
                 await page.waitForTimeout(200);
-                const during = await measure();
+                const beforeDone = await measure();
                 await page.waitForFunction(
                     () =>
                         !document
@@ -451,36 +490,62 @@ async function runE2ETests(): Promise<void> {
                     { timeout: 5000 },
                 );
                 await page.waitForTimeout(200);
-                const after = await measure();
+                const afterDone = await measure();
 
                 if (Math.abs(before.list.bottom - before.input.top) > 1) {
                     throw new Error(
                         `Message list does not reach input area: ${before.list.bottom} != ${before.input.top}`,
                     );
                 }
-                if (Math.abs(during.typing.bottom - during.input.top) > 1) {
-                    throw new Error(
-                        `Typing indicator does not overlay list end: ${during.typing.bottom} != ${during.input.top}`,
+                for (const key of ["top", "bottom", "height"] as const) {
+                    assertEqual(
+                        duringThinking.list[key],
+                        before.list[key],
+                        `message list ${key} during thinking`,
+                    );
+                    assertEqual(
+                        beforeDone.list[key],
+                        before.list[key],
+                        `message list ${key} before done`,
+                    );
+                    assertEqual(
+                        afterDone.list[key],
+                        before.list[key],
+                        `message list ${key} after done`,
+                    );
+                    assertEqual(
+                        afterDone.input[key],
+                        before.input[key],
+                        `input area ${key} after done`,
+                    );
+                    assertEqual(
+                        afterDone.lastMessage[key],
+                        beforeDone.lastMessage[key],
+                        `last assistant message ${key} after indicator hides`,
                     );
                 }
-                for (const key of ["top", "bottom", "height"] as const) {
-                    assertEqual(during.list[key], before.list[key], `message list ${key} during`);
-                    assertEqual(after.list[key], before.list[key], `message list ${key} after`);
-                    assertEqual(during.input[key], before.input[key], `input area ${key} during`);
-                    assertEqual(after.input[key], before.input[key], `input area ${key} after`);
-                }
-                assertEqual(during.typingHidden, false, "Typing indicator hidden attr during");
-                assertEqual(during.typingAriaHidden, "false", "Typing indicator aria during");
                 assertEqual(
-                    during.typingVisibility,
-                    "visible",
-                    "Typing indicator visibility during",
+                    afterDone.scrollHeight,
+                    beforeDone.scrollHeight,
+                    "Scroll height after indicator hides",
                 );
-                assertEqual(during.typingOpacity, 1, "Typing indicator opacity during");
-                assertEqual(after.typingHidden, false, "Typing indicator hidden attr after");
-                assertEqual(after.typingAriaHidden, "true", "Typing indicator aria after");
-                assertEqual(after.typingVisibility, "hidden", "Typing indicator visibility after");
-                assertEqual(after.typingOpacity, 0, "Typing indicator opacity after");
+                assertEqual(
+                    duringThinking.typingHidden,
+                    false,
+                    "Typing indicator hidden attr during",
+                );
+                assertEqual(
+                    duringThinking.typingAriaHidden,
+                    "false",
+                    "Typing indicator aria during",
+                );
+                assertEqual(duringThinking.typingVisible, true, "Typing indicator class during");
+                assertEqual(afterDone.typingHidden, false, "Typing indicator hidden attr after");
+                assertEqual(afterDone.typingAriaHidden, "true", "Typing indicator aria after");
+                assertEqual(afterDone.typingVisible, false, "Typing indicator class after");
+                if (duringThinking.typing.height > 1 || afterDone.typing.height > 1) {
+                    throw new Error("Typing indicator has visual height");
+                }
                 assertEqual(
                     (
                         await page
