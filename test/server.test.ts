@@ -2953,6 +2953,8 @@ describe("Session, draft, and create-history APIs", () => {
         const sessionId = resolveSessionId(new Request("http://localhost/api/state"), db);
         saveMessage(db, sessionId, "user", "seed");
 
+        const prevKey = process.env.MINIMAX_API_KEY;
+        process.env.MINIMAX_API_KEY = "test-key";
         const prevFetch = globalThis.fetch;
         globalThis.fetch = async () => {
             return new Response(
@@ -3001,6 +3003,8 @@ describe("Session, draft, and create-history APIs", () => {
             );
         } finally {
             globalThis.fetch = prevFetch;
+            if (prevKey) process.env.MINIMAX_API_KEY = prevKey;
+            else delete process.env.MINIMAX_API_KEY;
         }
     });
 });
