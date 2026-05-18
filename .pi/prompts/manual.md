@@ -5,9 +5,9 @@ argument-hint: "<flow or feature>"
 
 Manual test: $ARGUMENTS
 
-- Start app/browser as needed (`just dev`, `just dev-chrome`).
-- Use Chrome + chrome-cdp skill if page inspection/interaction helps; get explicit approval first.
-- Exercise happy path + likely edge cases. Capture exact steps, observed, expected.
-- Turn what you learn into unit/integration/e2e tests. Prefer smallest durable coverage.
+- Use visible Chrome via `just dev-chrome`.
+- Use chrome-cdp to inspect/interact.
+- Exercise happy path + likely edge cases. Capture steps, observed, expected.
+- Add/fix durable tests: unit, integration, e2e, headless as useful.
 - Fix bugs found. Run relevant checks.
-- Report: manual outcome, issues found/fixed, tests added, checks run.
+- Report: Chrome/CDP, outcome, bugs, tests, checks.
