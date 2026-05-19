@@ -31,6 +31,11 @@ const CHROMIUM_CANDIDATES = [
 const CHROMIUM_PATH = CHROMIUM_CANDIDATES.find((path) => existsSync(path));
 const TEST_PORT = 3001;
 const BASE_URL = `http://localhost:${TEST_PORT}`;
+const TINY_PNG = Buffer.from([
+    137, 80, 78, 71, 13, 10, 26, 10, 0, 0, 0, 13, 73, 72, 68, 82, 0, 0, 0, 1, 0, 0, 0, 1, 8, 6, 0,
+    0, 0, 31, 21, 196, 137, 0, 0, 0, 13, 73, 68, 65, 84, 120, 156, 99, 248, 15, 4, 0, 9, 251, 3,
+    253, 167, 95, 88, 29, 0, 0, 0, 0, 73, 69, 78, 68, 174, 66, 96, 130,
+]);
 
 // ── Test framework ──────────────────────────────────────────────────
 
@@ -712,6 +717,110 @@ async function runE2ETests(): Promise<void> {
             // Switch back to image tab
             await page.click(".create-tab[data-tab='image']");
             await expectVisible(page, "#create-image-form");
+
+            await page.close();
+        },
+        results,
+    );
+
+    await runTest(
+        "create analyze uploads local image safely",
+        async () => {
+            const page = await browser!.newPage();
+            await waitForApp(page, { dismissOnboarding: true });
+
+            await page.click("#create-btn");
+            await page.click(".create-tab[data-tab='analyze']");
+            await expectVisible(page, "#create-analyze-form");
+
+            const uploadResponse = page.waitForResponse(
+                (res) =>
+                    res.url().includes("/api/analyze-image") && res.request().method() === "POST",
+            );
+            await page.setInputFiles("#analyze-file", {
+                name: "pixel.png",
+                mimeType: "image/png",
+                buffer: TINY_PNG,
+            });
+            assertEqual((await uploadResponse).status(), 200, "Analyze upload response");
+            await page.waitForFunction(
+                () =>
+                    document.querySelector("#analyze-file-status")?.textContent ===
+                    "Selected pixel.png",
+            );
+
+            const previewSrc =
+                (await page.locator("#analyze-file-preview img").getAttribute("src")) ?? "";
+            if (!previewSrc.startsWith("/asset/asset_")) {
+                throw new Error(`Analyze preview did not use stored asset: ${previewSrc}`);
+            }
+            if (/data:image|base64/i.test(previewSrc))
+                throw new Error("Preview leaked raw image data");
+
+            await page.fill("#analyze-prompt", "What color is this pixel?");
+            await page.click("#create-analyze-form button[type='submit']");
+            await expectHidden(page, "#create-modal");
+            const userText =
+                (await page.locator(".message--user .message-content").last().textContent()) ?? "";
+            if (!userText.includes("Use analyze_image with image_url: /asset/asset_")) {
+                throw new Error(`Analyze user message missed asset URL: ${userText}`);
+            }
+            if (/data:image|base64/i.test(userText))
+                throw new Error("Analyze message leaked raw image data");
+
+            await page.close();
+        },
+        results,
+    );
+
+    await runTest(
+        "create analyze handles file edges",
+        async () => {
+            const page = await browser!.newPage();
+            await waitForApp(page, { dismissOnboarding: true });
+
+            await page.click("#create-btn");
+            await page.click(".create-tab[data-tab='analyze']");
+            await expectVisible(page, "#create-analyze-form");
+
+            await page.evaluate(() => {
+                const file = new File(["GIF89a"], "sparkle.gif", { type: "image/gif" });
+                const dataTransfer = new DataTransfer();
+                dataTransfer.items.add(file);
+                document.querySelector("#analyze-dropzone")!.dispatchEvent(
+                    new DragEvent("drop", {
+                        bubbles: true,
+                        cancelable: true,
+                        dataTransfer,
+                    }),
+                );
+            });
+            await page.waitForFunction(
+                () =>
+                    document.querySelector("#analyze-file-status")?.textContent ===
+                    "Use a PNG, JPG, or WebP image.",
+            );
+            await expectHidden(page, "#analyze-file-preview img");
+
+            await page.setInputFiles("#analyze-file", {
+                name: "pixel.png",
+                mimeType: "image/png",
+                buffer: TINY_PNG,
+            });
+            await page.waitForFunction(
+                () =>
+                    document.querySelector("#analyze-file-status")?.textContent ===
+                    "Selected pixel.png",
+            );
+            await expectVisible(page, "#analyze-file-preview img");
+
+            await page.fill("#analyze-url", "https://example.com/fallback.png");
+            await page.waitForFunction(
+                () =>
+                    document.querySelector("#analyze-file-status")?.textContent ===
+                    "Using image URL fallback.",
+            );
+            await expectHidden(page, "#analyze-file-preview img");
 
             await page.close();
         },

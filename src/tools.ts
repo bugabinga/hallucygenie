@@ -712,6 +712,7 @@ export async function analyzeImage(
         }
         const data = (await resp.json()) as {
             content?: string;
+            choices?: { message?: { content?: string } }[];
             base_resp?: { status_code: number; status_msg: string };
         };
         if (data.base_resp && data.base_resp.status_code !== 0) {
@@ -720,7 +721,8 @@ export async function analyzeImage(
                 content: `Image analysis failed: ${data.base_resp.status_msg}`,
             };
         }
-        return { type: "text", content: data.content || "No description returned." };
+        const content = data.content ?? data.choices?.[0]?.message?.content ?? "";
+        return { type: "text", content: content || "No description returned." };
     } catch (err) {
         return { type: "error", content: `Image analysis failed: ${String(err)}` };
     }

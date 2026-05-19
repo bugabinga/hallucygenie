@@ -33,6 +33,7 @@ const strykerDb = readFileSync("test/stryker-db.mjs", "utf-8");
 const deployDockerfile = readFileSync("deploy/Dockerfile", "utf-8");
 const agentsMd = readFileSync("AGENTS.md", "utf-8");
 const issuePrompt = readFileSync(".pi/prompts/issue.md", "utf-8");
+const manualPrompt = readFileSync(".pi/prompts/manual.md", "utf-8");
 const minimaxResearchPrompt = readFileSync(".pi/prompts/minimax-research.md", "utf-8");
 const updateFontsScript = readFileSync("scripts/update-fonts.ts", "utf-8");
 const readmeMd = readFileSync("README.md", "utf-8");
@@ -878,6 +879,11 @@ describe("prompt health", () => {
     it("uses ci prompt for commit workflow", () => {
         assert.equal(existsSync(".pi/prompts/commit.md"), false);
         assert.equal(existsSync(".pi/prompts/ci.md"), true);
+    });
+
+    it("uses the supported visible Chrome recipe for manual tests", () => {
+        assert.match(manualPrompt, /just chrome/);
+        assert.doesNotMatch(manualPrompt, /just dev-chrome/);
     });
 });
 

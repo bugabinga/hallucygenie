@@ -1468,6 +1468,17 @@ describe("analyzeImage HTTP request structure", () => {
         assert.ok(result.content.includes("gaming logo"));
     });
 
+    it("returns choices message content on VLM success", async () => {
+        globalThis.fetch = async (url: string | URL | Request) => {
+            if (!url.toString().includes("/v1/coding_plan/vlm")) return imageResponse("image/png");
+            return jsonResponse({ choices: [{ message: { content: "A tiny red pixel" } }] });
+        };
+
+        const result = await analyzeImage("https://example.com/img.png", API_KEY);
+        assert.equal(result.type, "text");
+        assert.equal(result.content, "A tiny red pixel");
+    });
+
     it("returns error on provider HTTP failure", async () => {
         globalThis.fetch = async (url: string | URL | Request) => {
             if (!url.toString().includes("/v1/coding_plan/vlm")) return imageResponse("image/png");
