@@ -421,7 +421,7 @@ async function runE2ETests(): Promise<void> {
                                     setTimeout(() => {
                                         controller.enqueue(encoder.encode("data: [DONE]\n\n"));
                                         controller.close();
-                                    }, 900);
+                                    }, 2000);
                                 },
                             }),
                             { status: 200, headers: { "Content-Type": "text/event-stream" } },

@@ -17,13 +17,5 @@
         "lib": ["ESNext", "DOM"]
     },
     "include": ["**/*.ts"],
-    "exclude": [
-        "node_modules",
-        "dist",
-        ".stryker-tmp",
-        "reports",
-        "e2e",
-        "**/*.test.ts",
-        "**/playwright.config.ts"
-    ]
+    "exclude": ["node_modules", "dist", ".stryker-tmp", "reports", "e2e", "**/*.test.ts"]
 }

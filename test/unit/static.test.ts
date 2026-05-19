@@ -14,9 +14,7 @@ const justfile = readFileSync("justfile", "utf-8");
 const serverTs = readFileSync("src/server.ts", "utf-8");
 const agentTest = readFileSync("test/unit/agent.test.ts", "utf-8");
 const dbTest = readFileSync("test/unit/db.test.ts", "utf-8");
-const e2eChatSpec = readFileSync("e2e/chat.spec.ts", "utf-8");
 const e2eRunner = readFileSync("e2e/run-e2e.ts", "utf-8");
-const playwrightConfig = readFileSync("test/playwright.config.ts", "utf-8");
 const serverTest = readFileSync("test/unit/server.test.ts", "utf-8");
 const gitignore = readFileSync(".gitignore", "utf-8");
 const dockerignore = readFileSync(".dockerignore", "utf-8");
@@ -384,8 +382,8 @@ describe("index.html health", () => {
         assert.equal(appTs.includes('type: "emoji"'), false);
         assert.equal(serverTs.includes('type: "emoji"'), false);
         assert.equal(agentTest.includes('type: "emoji"'), false);
-        assert.equal(e2eChatSpec.includes('fill("#profile-avatar")'), false);
-        assert.equal(e2eChatSpec.includes('toHaveValue("🦊")'), false);
+        assert.equal(e2eRunner.includes('fill("#profile-avatar")'), false);
+        assert.equal(e2eRunner.includes('toHaveValue("🦊")'), false);
         assert.match(dbTest, /avatar: \{ type: "emoji", value: "🦊" \}[\s\S]*avatar type invalid/);
         assert.match(
             serverTest,
@@ -844,8 +842,11 @@ describe("justfile health", () => {
         assert.match(updateFontsScript, /sameCommit && sameFonts && previous\?\.generated_at/);
     });
 
-    it("does not use python, mobile package paths, Playwright allow flags, or test-name-pattern hacks", () => {
-        const checked = [justfile, e2eRunner, playwrightConfig, e2eChatSpec].join("\n");
+    it("uses only the one e2e runner named by justfile", () => {
+        const checked = [justfile, e2eRunner].join("\n");
+        assert.equal(existsSync("e2e/chat.spec.ts"), false);
+        assert.equal(existsSync("e2e/static-server.ts"), false);
+        assert.equal(existsSync("test/playwright.config.ts"), false);
         assert.equal(checked.includes("python3"), false);
         assert.equal(/\/data\/data\/com\.[a-z]+/.test(checked), false);
         assert.equal(/PLAYWRIGHT_ALLOW_[A-Z_]+/.test(checked), false);
