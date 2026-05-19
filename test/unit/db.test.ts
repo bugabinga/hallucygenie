@@ -182,6 +182,14 @@ describe("initDb", () => {
                 value TEXT NOT NULL,
                 updated_at INTEGER NOT NULL
             );`,
+            "003-sessions.sql": `CREATE TABLE sessions (
+                id TEXT PRIMARY KEY,
+                name TEXT NOT NULL,
+                name_source TEXT NOT NULL DEFAULT 'default',
+                created_at TEXT NOT NULL DEFAULT (datetime('now')),
+                updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+                archived_at TEXT
+            );`,
         });
 
         const db = initDb(":memory:", dir);

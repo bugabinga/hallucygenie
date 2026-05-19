@@ -88,11 +88,7 @@ export function initDb(dbPath: string, migrationsDir?: string): Database {
 
     const mDir = migrationsDir ?? join(import.meta.dirname ?? ".", "..", "migrations");
     runMigrations(db, mDir);
-    if (tableExists(db, "sessions")) {
-        getOrCreateActiveSession(db);
-    } else {
-        getOrCreateActiveSessionId(db);
-    }
+    getOrCreateActiveSession(db);
 
     return db;
 }
