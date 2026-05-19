@@ -3152,6 +3152,34 @@ function debounce(fn, ms) {
     timer = setTimeout(fn, ms);
   };
 }
+var IMAGE_SIZE_PRESETS = {
+  small: 1024,
+  medium: 1536,
+  large: 2048
+};
+function multipleOf8(value) {
+  return Math.max(512, Math.min(2048, Math.round(value / 8) * 8));
+}
+function imageDimensionsForPreset(aspectRatio, preset) {
+  const longEdge = IMAGE_SIZE_PRESETS[preset];
+  if (!longEdge) return null;
+  const match = aspectRatio.match(/^(\d+):(\d+)$/);
+  if (!match) throw new Error(`Bad aspect ratio: ${aspectRatio}`);
+  const ratioWidth = Number(match[1]);
+  const ratioHeight = Number(match[2]);
+  if (ratioWidth >= ratioHeight) {
+    return { width: longEdge, height: multipleOf8(longEdge * ratioHeight / ratioWidth) };
+  }
+  return { width: multipleOf8(longEdge * ratioWidth / ratioHeight), height: longEdge };
+}
+function imageSurpriseCode(random = Math.random) {
+  return String(Math.floor(random() * 2147483647) + 1);
+}
+function sizePresetFromDimensions(width, height) {
+  const longEdge = Math.max(Number(width), Number(height));
+  const match = Object.entries(IMAGE_SIZE_PRESETS).find(([, value]) => value === longEdge);
+  return match?.[0] ?? "";
+}
 function clearChatUi() {
   const list2 = $("#message-list");
   list2.innerHTML = `
@@ -3221,6 +3249,13 @@ function applyCreateDraft(draft) {
   $("#img-seed").value = draft.image.seed ?? "";
   $("#img-width").value = draft.image.width ?? "";
   $("#img-height").value = draft.image.height ?? "";
+  const imageSize = document.querySelector("#img-size");
+  if (imageSize)
+    imageSize.value = sizePresetFromDimensions(draft.image.width, draft.image.height);
+  const imageSeedStatus = document.querySelector("#img-seed-status");
+  if (imageSeedStatus) {
+    imageSeedStatus.textContent = draft.image.seed ? `Surprise code: ${draft.image.seed}` : "Optional: same code can make a similar picture again.";
+  }
   $("#img-prompt-optimizer").checked = Boolean(
     draft.image.prompt_optimizer
   );
@@ -3232,8 +3267,8 @@ function applyCreateDraft(draft) {
   const voiceVolume = document.querySelector("#voice-volume");
   const voicePitch = document.querySelector("#voice-pitch");
   if (voiceId) voiceId.value = draft.voice.voice_id ?? "English_expressive_narrator";
-  if (voiceVolume) voiceVolume.value = draft.voice.volume ?? "";
-  if (voicePitch) voicePitch.value = draft.voice.pitch ?? "";
+  if (voiceVolume) voiceVolume.value = draft.voice.volume || "1";
+  if (voicePitch) voicePitch.value = draft.voice.pitch || "0";
   $("#analyze-url").value = draft.analyze?.image_url ?? "";
   $("#analyze-prompt").value = draft.analyze?.prompt ?? "What do you see?";
   $("#search-query").value = draft.search.query;
@@ -3643,7 +3678,10 @@ function init() {
   const imgPromptInput = $("#img-prompt");
   const imgRatioInput = $("#img-ratio");
   const imgCountInput = $("#img-count");
+  const imgSizeInput = $("#img-size");
   const imgSeedInput = $("#img-seed");
+  const imgSeedRandom = $("#img-seed-random");
+  const imgSeedStatus = $("#img-seed-status");
   const imgWidthInput = $("#img-width");
   const imgHeightInput = $("#img-height");
   const imgPromptOptimizerInput = $("#img-prompt-optimizer");
@@ -3673,6 +3711,11 @@ function init() {
       imgSeedInput.value = String(inputData.seed ?? "");
       imgWidthInput.value = String(inputData.width ?? "");
       imgHeightInput.value = String(inputData.height ?? "");
+      imgSizeInput.value = sizePresetFromDimensions(
+        imgWidthInput.value,
+        imgHeightInput.value
+      );
+      imgSeedStatus.textContent = imgSeedInput.value ? `Surprise code: ${imgSeedInput.value}` : "Optional: same code can make a similar picture again.";
       imgPromptOptimizerInput.checked = inputData.prompt_optimizer === true;
       setCreateTab("image");
     } else if (item.kind === "music") {
@@ -3776,6 +3819,16 @@ function init() {
       analyzeFileInput.value = "";
     }
   }
+  function applyImageSizePreset() {
+    const dimensions = imageDimensionsForPreset(imgRatioInput.value, imgSizeInput.value);
+    imgWidthInput.value = dimensions ? String(dimensions.width) : "";
+    imgHeightInput.value = dimensions ? String(dimensions.height) : "";
+  }
+  function rollImageSeed() {
+    imgSeedInput.value = imageSurpriseCode();
+    imgSeedStatus.textContent = `Surprise code: ${imgSeedInput.value}`;
+    void putDraft("create", createDraftFromDom());
+  }
   async function restoreDrafts() {
     const chatDraft = await getDraft("chat");
     if (chatDraft && typeof chatDraft === "object" && "text" in chatDraft) {
@@ -3791,10 +3844,19 @@ function init() {
       setCreateTab("image");
     }
   }
+  imgRatioInput.addEventListener("change", () => {
+    applyImageSizePreset();
+    persistCreateDraft();
+  });
+  imgSizeInput.addEventListener("change", () => {
+    applyImageSizePreset();
+    persistCreateDraft();
+  });
+  imgSeedRandom.addEventListener("click", rollImageSeed);
   [
     imgPromptInput,
-    imgRatioInput,
     imgCountInput,
+    imgSizeInput,
     imgSeedInput,
     imgWidthInput,
     imgHeightInput,
@@ -3969,6 +4031,8 @@ export {
   fetchProfile,
   getToolEmoji,
   handleInputChange,
+  imageDimensionsForPreset,
+  imageSurpriseCode,
   init,
   loadAssets,
   loadHistory,

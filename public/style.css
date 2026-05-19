@@ -1241,6 +1241,19 @@ textarea,
 .form-group select {
     cursor: pointer;
 }
+
+.range-group input[type="range"] {
+    accent-color: var(--color-primary);
+    cursor: pointer;
+}
+
+.range-labels {
+    display: flex;
+    justify-content: space-between;
+    margin-top: 4px;
+    color: var(--color-text-dim);
+    font-size: 0.68rem;
+}
 .form-group input::placeholder,
 .form-group textarea::placeholder {
     color: var(--color-text-dim);

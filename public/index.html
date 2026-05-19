@@ -313,38 +313,38 @@
                             </div>
                             <div class="form-row">
                                 <div class="form-group">
-                                    <label for="img-count">Count</label>
-                                    <input id="img-count" type="number" min="1" max="9" step="1" />
+                                    <label for="img-count">How many pictures?</label>
+                                    <select id="img-count">
+                                        <option value="">1 picture</option>
+                                        <option value="2">2 pictures</option>
+                                        <option value="4">4 pictures</option>
+                                    </select>
+                                    <p class="field-help">More pictures spend more image quota.</p>
                                 </div>
                                 <div class="form-group">
-                                    <label for="img-seed">Seed</label>
-                                    <input id="img-seed" type="number" step="1" />
+                                    <label for="img-size">Picture size</label>
+                                    <select id="img-size">
+                                        <option value="">Genie picks</option>
+                                        <option value="small">Small</option>
+                                        <option value="medium">Medium</option>
+                                        <option value="large">Large</option>
+                                    </select>
+                                    <p class="field-help">Size follows the shape you chose.</p>
                                 </div>
                             </div>
-                            <div class="form-row">
-                                <div class="form-group">
-                                    <label for="img-width">Width</label>
-                                    <input
-                                        id="img-width"
-                                        type="number"
-                                        min="512"
-                                        max="2048"
-                                        step="8"
-                                    />
-                                </div>
-                                <div class="form-group">
-                                    <label for="img-height">Height</label>
-                                    <input
-                                        id="img-height"
-                                        type="number"
-                                        min="512"
-                                        max="2048"
-                                        step="8"
-                                    />
-                                </div>
+                            <input id="img-width" type="hidden" />
+                            <input id="img-height" type="hidden" />
+                            <div class="form-group">
+                                <input id="img-seed" type="hidden" />
+                                <!-- prettier-ignore -->
+                                <button id="img-seed-random" class="btn-secondary" type="button">Roll surprise code 🎲</button>
+                                <!-- prettier-ignore -->
+                                <p id="img-seed-status" class="field-help" role="status">Optional: same code can make a similar picture again.</p>
                             </div>
                             <!-- prettier-ignore -->
-                            <label class="checkbox-row" for="img-prompt-optimizer"><input id="img-prompt-optimizer" type="checkbox" /> Optimize prompt</label>
+                            <label class="checkbox-row" for="img-prompt-optimizer"><input id="img-prompt-optimizer" type="checkbox" /> Let Genie improve my idea before drawing</label>
+                            <!-- prettier-ignore -->
+                            <p class="field-help">Adds clearer details so MiniMax understands your idea better.</p>
                             <button type="submit" class="btn-primary">Generate image 🎨</button>
                         </form>
                         <form id="create-music-form" class="create-panel" data-panel="music" hidden>
@@ -391,21 +391,68 @@
                             </div>
                             <div class="form-group">
                                 <label for="voice-id">Voice</label>
-                                <input id="voice-id" value="English_expressive_narrator" />
+                                <select id="voice-id">
+                                    <optgroup label="English">
+                                        <option value="English_expressive_narrator" selected>
+                                            Expressive Narrator
+                                        </option>
+                                        <option value="English_PlayfulGirl">Playful Girl</option>
+                                        <option value="English_FriendlyPerson">Friendly Guy</option>
+                                        <option value="English_CaptivatingStoryteller">
+                                            Storyteller
+                                        </option>
+                                    </optgroup>
+                                    <optgroup label="Deutsch">
+                                        <option value="German_FriendlyMan">
+                                            Freundlicher Mann
+                                        </option>
+                                        <option value="German_SweetLady">Nette Frau</option>
+                                        <option value="German_PlayfulMan">Verspielter Mann</option>
+                                    </optgroup>
+                                    <optgroup label="Europe">
+                                        <option value="French_MaleNarrator">French Narrator</option>
+                                        <option value="Italian_Narrator">Italian Narrator</option>
+                                        <option value="Dutch_kindhearted_girl">
+                                            Dutch Kind Girl
+                                        </option>
+                                    </optgroup>
+                                    <optgroup label="Rest">
+                                        <option value="Japanese_OptimisticYouth">
+                                            Japanese Youth
+                                        </option>
+                                        <option value="Spanish_EnergeticBoy">
+                                            Spanish Energetic Boy
+                                        </option>
+                                    </optgroup>
+                                </select>
                             </div>
-                            <div class="form-group">
-                                <label for="voice-volume">Volume (optional, 0.1-10)</label>
+                            <div class="form-group range-group">
+                                <label for="voice-volume">Volume</label>
                                 <input
                                     id="voice-volume"
-                                    type="number"
-                                    min="0.1"
-                                    max="10"
+                                    type="range"
+                                    min="0.5"
+                                    max="2"
                                     step="0.1"
+                                    value="1"
                                 />
+                                <div class="range-labels" aria-hidden="true">
+                                    <span>quiet</span><span>normal</span><span>loud</span>
+                                </div>
                             </div>
-                            <div class="form-group">
-                                <label for="voice-pitch">Pitch (optional, -12 to 12)</label>
-                                <input id="voice-pitch" type="number" min="-12" max="12" step="1" />
+                            <div class="form-group range-group">
+                                <label for="voice-pitch">Pitch</label>
+                                <input
+                                    id="voice-pitch"
+                                    type="range"
+                                    min="-6"
+                                    max="6"
+                                    step="1"
+                                    value="0"
+                                />
+                                <div class="range-labels" aria-hidden="true">
+                                    <span>deep</span><span>normal</span><span>high</span>
+                                </div>
                             </div>
                             <button type="submit" class="btn-primary">Read it to me 🎤</button>
                         </form>

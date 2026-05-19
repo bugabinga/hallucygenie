@@ -149,7 +149,9 @@ describe("index.html health", () => {
         const doc = parseIndex();
         for (const id of [
             "#img-count",
+            "#img-size",
             "#img-seed",
+            "#img-seed-random",
             "#img-width",
             "#img-height",
             "#img-prompt-optimizer",
@@ -181,6 +183,30 @@ describe("index.html health", () => {
         assert.match(appTs, /params\.push\(`width=\$\{imgWidthInput\.value\.trim\(\)\}`\)/);
         assert.match(appTs, /params\.push\(`height=\$\{imgHeightInput\.value\.trim\(\)\}`\)/);
         assert.doesNotMatch(appTs, /response_format|audio_base64|lyrics_optimizer/);
+    });
+
+    it("uses kid-friendly controls for bounded Create params", () => {
+        const doc = parseIndex();
+        assert.equal(doc.querySelector("#img-count")?.tagName.toLowerCase(), "select");
+        assert.equal(doc.querySelector("#img-size")?.tagName.toLowerCase(), "select");
+        assert.equal(doc.querySelector("#img-seed")?.getAttribute("type"), "hidden");
+        assert.equal(doc.querySelector("#img-width")?.getAttribute("type"), "hidden");
+        assert.equal(doc.querySelector("#img-height")?.getAttribute("type"), "hidden");
+        assert.equal(doc.querySelector("#voice-id")?.tagName.toLowerCase(), "select");
+        assert.equal(doc.querySelector("#voice-volume")?.getAttribute("type"), "range");
+        assert.equal(doc.querySelector("#voice-pitch")?.getAttribute("type"), "range");
+        assert.match(indexHtml, /Let Genie improve my idea before drawing/);
+        assert.match(indexHtml, /same code can make a similar picture again/);
+        assert.doesNotMatch(
+            indexHtml,
+            /Optimize prompt|Volume \(optional|Pitch \(optional|<label for="img-seed">Seed/,
+        );
+        assert.deepEqual(
+            Array.from(doc.querySelectorAll("#voice-id optgroup")).map((group) =>
+                group.getAttribute("label"),
+            ),
+            ["English", "Deutsch", "Europe", "Rest"],
+        );
     });
 
     it("has a 'Write lyrics for me' button in the music form", () => {

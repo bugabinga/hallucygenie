@@ -7,7 +7,7 @@ import assert from "node:assert/strict";
 import { writeFileSync, mkdirSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
-import { renderMarkdown } from "../../public/app.ts";
+import { imageDimensionsForPreset, imageSurpriseCode, renderMarkdown } from "../../public/app.ts";
 import type { SSEEvent } from "../../public/app.ts";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -237,6 +237,35 @@ describe("API Headers", () => {
 });
 
 // ── Tool Emojis ────────────────────────────────────────────────────────
+
+describe("Create image control helpers", () => {
+    it("keeps size presets linked to aspect ratio", () => {
+        assert.deepEqual(imageDimensionsForPreset("16:9", "medium"), {
+            width: 1536,
+            height: 864,
+        });
+        assert.deepEqual(imageDimensionsForPreset("9:16", "medium"), {
+            width: 864,
+            height: 1536,
+        });
+        assert.deepEqual(imageDimensionsForPreset("1:1", "small"), {
+            width: 1024,
+            height: 1024,
+        });
+        assert.equal(imageDimensionsForPreset("16:9", ""), null);
+    });
+
+    it("creates bounded surprise codes for optional seeds", () => {
+        assert.equal(
+            imageSurpriseCode(() => 0),
+            "1",
+        );
+        assert.equal(
+            imageSurpriseCode(() => 0.5),
+            "1073741824",
+        );
+    });
+});
 
 describe("Tool Emojis", () => {
     it("returns correct emoji for generate_image", () => {
@@ -1096,10 +1125,13 @@ function setupDOM(): { win: any; doc: any; errors: string[] } {
                 <option value="16:9" selected>16:9</option>
               </select>
             </div>
-            <input id="img-count" type="number" />
-            <input id="img-seed" type="number" />
-            <input id="img-width" type="number" />
-            <input id="img-height" type="number" />
+            <select id="img-count"><option value="">1 picture</option><option value="2">2 pictures</option></select>
+            <select id="img-size"><option value="">Genie picks</option><option value="small">Small</option><option value="medium">Medium</option><option value="large">Large</option></select>
+            <input id="img-seed" type="hidden" />
+            <button id="img-seed-random" type="button">Roll surprise code 🎲</button>
+            <p id="img-seed-status" role="status">Optional: same code can make a similar picture again.</p>
+            <input id="img-width" type="hidden" />
+            <input id="img-height" type="hidden" />
             <input id="img-prompt-optimizer" type="checkbox" />
           </form>
           <form id="create-music-form" class="create-panel" data-panel="music" hidden>
@@ -1119,6 +1151,9 @@ function setupDOM(): { win: any; doc: any; errors: string[] } {
                 <option value="1.0" selected>1.0x</option>
               </select>
             </div>
+            <select id="voice-id"><option value="English_expressive_narrator">Expressive Narrator</option></select>
+            <input id="voice-volume" type="range" value="1" />
+            <input id="voice-pitch" type="range" value="0" />
           </form>
           <form id="create-analyze-form" class="create-panel" data-panel="analyze" hidden>
             <div class="form-group">

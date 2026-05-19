@@ -1,5 +1,5 @@
 ---
-{ "status": "open", "specs": ["HG-SPEC-004", "HG-SPEC-006", "HG-SPEC-008", "HG-SPEC-011", "HG-SPEC-012", "HG-SPEC-015", "HG-SPEC-016"] }
+{ "status": "fixed", "specs": ["HG-SPEC-004", "HG-SPEC-006", "HG-SPEC-008", "HG-SPEC-011", "HG-SPEC-012", "HG-SPEC-015", "HG-SPEC-016"] }
 ---
 
 # HG-ISSUE-078: Create controls are too technical for kids
@@ -55,12 +55,16 @@ Cause:
 
 Fix:
 
-- Research current MiniMax limits and voice IDs before implementing.
-- Replace technical free-form controls with fixed/slider UI.
-- Keep explicit directive allowlist and tool schema unchanged unless control changes require normalized values.
-- Add static tests for control types, labels, and forbidden technical free-form inputs.
-- Add app tests for aspect-ratio-preserving size updates and random seed behavior if seed remains.
-- Implement HG-SPEC-016: bounded Create params use fixed controls; free-form input only where creative text is expected.
+- Replaced Image Count number box with fixed choices.
+- Replaced Width/Height number boxes with a Picture size preset selector and hidden linked dimensions.
+- Added aspect-ratio-preserving size calculation.
+- Replaced Seed number box with hidden optional “surprise code” and random-roll button.
+- Rewrote prompt optimizer copy to explain the outcome.
+- Replaced Voice ID free text with sorted supported system voice choices: English, Deutsch, Europe, Rest.
+- Replaced Voice Volume/Pitch number boxes with sliders and plain labels.
+- Kept tool schema and directive allowlist unchanged.
+- Added static tests for kid-friendly bounded controls and voice ordering.
+- Added app tests for linked size presets and surprise-code generation.
 
 Constraints:
 

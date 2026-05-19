@@ -1347,6 +1347,42 @@ function debounce(fn: () => void, ms: number): () => void {
     };
 }
 
+const IMAGE_SIZE_PRESETS: Record<string, number> = {
+    small: 1024,
+    medium: 1536,
+    large: 2048,
+};
+
+function multipleOf8(value: number): number {
+    return Math.max(512, Math.min(2048, Math.round(value / 8) * 8));
+}
+
+export function imageDimensionsForPreset(
+    aspectRatio: string,
+    preset: string,
+): { width: number; height: number } | null {
+    const longEdge = IMAGE_SIZE_PRESETS[preset];
+    if (!longEdge) return null;
+    const match = aspectRatio.match(/^(\d+):(\d+)$/);
+    if (!match) throw new Error(`Bad aspect ratio: ${aspectRatio}`);
+    const ratioWidth = Number(match[1]);
+    const ratioHeight = Number(match[2]);
+    if (ratioWidth >= ratioHeight) {
+        return { width: longEdge, height: multipleOf8((longEdge * ratioHeight) / ratioWidth) };
+    }
+    return { width: multipleOf8((longEdge * ratioWidth) / ratioHeight), height: longEdge };
+}
+
+export function imageSurpriseCode(random = Math.random): string {
+    return String(Math.floor(random() * 2_147_483_647) + 1);
+}
+
+function sizePresetFromDimensions(width: string, height: string): string {
+    const longEdge = Math.max(Number(width), Number(height));
+    const match = Object.entries(IMAGE_SIZE_PRESETS).find(([, value]) => value === longEdge);
+    return match?.[0] ?? "";
+}
+
 function clearChatUi(): void {
     const list = $("#message-list");
     list.innerHTML = `
@@ -1387,7 +1423,7 @@ function createDraftFromDom(): CreateDraft {
         image: {
             prompt: ($("#img-prompt") as HTMLTextAreaElement).value,
             aspect_ratio: ($("#img-ratio") as HTMLSelectElement).value,
-            n: ($("#img-count") as HTMLInputElement).value,
+            n: ($("#img-count") as HTMLSelectElement).value,
             seed: ($("#img-seed") as HTMLInputElement).value,
             width: ($("#img-width") as HTMLInputElement).value,
             height: ($("#img-height") as HTMLInputElement).value,
@@ -1401,7 +1437,7 @@ function createDraftFromDom(): CreateDraft {
             text: ($("#voice-text") as HTMLTextAreaElement).value,
             speed: ($("#voice-speed") as HTMLSelectElement).value,
             voice_id:
-                (document.querySelector("#voice-id") as HTMLInputElement | null)?.value ??
+                (document.querySelector("#voice-id") as HTMLSelectElement | null)?.value ??
                 "English_expressive_narrator",
             volume:
                 (document.querySelector("#voice-volume") as HTMLInputElement | null)?.value ?? "",
@@ -1418,10 +1454,19 @@ function createDraftFromDom(): CreateDraft {
 function applyCreateDraft(draft: CreateDraft): void {
     ($("#img-prompt") as HTMLTextAreaElement).value = draft.image.prompt;
     ($("#img-ratio") as HTMLSelectElement).value = draft.image.aspect_ratio;
-    ($("#img-count") as HTMLInputElement).value = draft.image.n ?? "";
+    ($("#img-count") as HTMLSelectElement).value = draft.image.n ?? "";
     ($("#img-seed") as HTMLInputElement).value = draft.image.seed ?? "";
     ($("#img-width") as HTMLInputElement).value = draft.image.width ?? "";
     ($("#img-height") as HTMLInputElement).value = draft.image.height ?? "";
+    const imageSize = document.querySelector("#img-size") as HTMLSelectElement | null;
+    if (imageSize)
+        imageSize.value = sizePresetFromDimensions(draft.image.width, draft.image.height);
+    const imageSeedStatus = document.querySelector("#img-seed-status") as HTMLElement | null;
+    if (imageSeedStatus) {
+        imageSeedStatus.textContent = draft.image.seed
+            ? `Surprise code: ${draft.image.seed}`
+            : "Optional: same code can make a similar picture again.";
+    }
     ($("#img-prompt-optimizer") as HTMLInputElement).checked = Boolean(
         draft.image.prompt_optimizer,
     );
@@ -1429,12 +1474,12 @@ function applyCreateDraft(draft: CreateDraft): void {
     ($("#music-lyrics") as HTMLTextAreaElement).value = draft.music.lyrics;
     ($("#voice-text") as HTMLTextAreaElement).value = draft.voice.text;
     ($("#voice-speed") as HTMLSelectElement).value = draft.voice.speed;
-    const voiceId = document.querySelector("#voice-id") as HTMLInputElement | null;
+    const voiceId = document.querySelector("#voice-id") as HTMLSelectElement | null;
     const voiceVolume = document.querySelector("#voice-volume") as HTMLInputElement | null;
     const voicePitch = document.querySelector("#voice-pitch") as HTMLInputElement | null;
     if (voiceId) voiceId.value = draft.voice.voice_id ?? "English_expressive_narrator";
-    if (voiceVolume) voiceVolume.value = draft.voice.volume ?? "";
-    if (voicePitch) voicePitch.value = draft.voice.pitch ?? "";
+    if (voiceVolume) voiceVolume.value = draft.voice.volume || "1";
+    if (voicePitch) voicePitch.value = draft.voice.pitch || "0";
     ($("#analyze-url") as HTMLInputElement).value = draft.analyze?.image_url ?? "";
     ($("#analyze-prompt") as HTMLTextAreaElement).value =
         draft.analyze?.prompt ?? "What do you see?";
@@ -1939,8 +1984,11 @@ export function init(): void {
     const createSearchForm = $("#create-search-form") as HTMLFormElement;
     const imgPromptInput = $("#img-prompt") as HTMLTextAreaElement;
     const imgRatioInput = $("#img-ratio") as HTMLSelectElement;
-    const imgCountInput = $("#img-count") as HTMLInputElement;
+    const imgCountInput = $("#img-count") as HTMLSelectElement;
+    const imgSizeInput = $("#img-size") as HTMLSelectElement;
     const imgSeedInput = $("#img-seed") as HTMLInputElement;
+    const imgSeedRandom = $("#img-seed-random") as HTMLButtonElement;
+    const imgSeedStatus = $("#img-seed-status") as HTMLElement;
     const imgWidthInput = $("#img-width") as HTMLInputElement;
     const imgHeightInput = $("#img-height") as HTMLInputElement;
     const imgPromptOptimizerInput = $("#img-prompt-optimizer") as HTMLInputElement;
@@ -1948,7 +1996,7 @@ export function init(): void {
     const musicLyricsInput = $("#music-lyrics") as HTMLTextAreaElement;
     const voiceTextInput = $("#voice-text") as HTMLTextAreaElement;
     const voiceSpeedInput = $("#voice-speed") as HTMLSelectElement;
-    const voiceIdInput = document.querySelector<HTMLInputElement>("#voice-id");
+    const voiceIdInput = document.querySelector<HTMLSelectElement>("#voice-id");
     const voiceVolumeInput = document.querySelector<HTMLInputElement>("#voice-volume");
     const voicePitchInput = document.querySelector<HTMLInputElement>("#voice-pitch");
     const analyzeFileInput = document.querySelector<HTMLInputElement>("#analyze-file");
@@ -1971,6 +2019,13 @@ export function init(): void {
             imgSeedInput.value = String(inputData.seed ?? "");
             imgWidthInput.value = String(inputData.width ?? "");
             imgHeightInput.value = String(inputData.height ?? "");
+            imgSizeInput.value = sizePresetFromDimensions(
+                imgWidthInput.value,
+                imgHeightInput.value,
+            );
+            imgSeedStatus.textContent = imgSeedInput.value
+                ? `Surprise code: ${imgSeedInput.value}`
+                : "Optional: same code can make a similar picture again.";
             imgPromptOptimizerInput.checked = inputData.prompt_optimizer === true;
             setCreateTab("image");
         } else if (item.kind === "music") {
@@ -2079,6 +2134,18 @@ export function init(): void {
         }
     }
 
+    function applyImageSizePreset(): void {
+        const dimensions = imageDimensionsForPreset(imgRatioInput.value, imgSizeInput.value);
+        imgWidthInput.value = dimensions ? String(dimensions.width) : "";
+        imgHeightInput.value = dimensions ? String(dimensions.height) : "";
+    }
+
+    function rollImageSeed(): void {
+        imgSeedInput.value = imageSurpriseCode();
+        imgSeedStatus.textContent = `Surprise code: ${imgSeedInput.value}`;
+        void putDraft("create", createDraftFromDom());
+    }
+
     async function restoreDrafts(): Promise<void> {
         const chatDraft = await getDraft("chat");
         if (chatDraft && typeof chatDraft === "object" && "text" in chatDraft) {
@@ -2095,10 +2162,20 @@ export function init(): void {
         }
     }
 
+    imgRatioInput.addEventListener("change", () => {
+        applyImageSizePreset();
+        persistCreateDraft();
+    });
+    imgSizeInput.addEventListener("change", () => {
+        applyImageSizePreset();
+        persistCreateDraft();
+    });
+    imgSeedRandom.addEventListener("click", rollImageSeed);
+
     [
         imgPromptInput,
-        imgRatioInput,
         imgCountInput,
+        imgSizeInput,
         imgSeedInput,
         imgWidthInput,
         imgHeightInput,
