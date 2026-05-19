@@ -108,31 +108,15 @@ export function safeToolResultForUser(toolName: string, result: ToolResult): Too
 
     log.warn("tool returned error", { toolName, error: truncateLogText(result.content) });
 
-    if (toolName === "generate_image") {
-        return {
-            type: "error",
-            content: "Couldn't generate the image. Try a shorter, clearer prompt.",
-        };
-    }
-    if (toolName === "text_to_speech") {
-        return { type: "error", content: "Couldn't generate voice audio. Try shorter text." };
-    }
-    if (toolName === "generate_music") {
-        return {
-            type: "error",
-            content: "Couldn't generate music. Try a shorter prompt or lyrics.",
-        };
-    }
-    if (toolName === "generate_lyrics") {
-        return { type: "error", content: "Couldn't generate lyrics. Try a different topic." };
-    }
-    if (toolName === "analyze_image") {
-        return {
-            type: "error",
-            content: "Couldn't analyze the image. Try a direct JPG, PNG, or WebP URL.",
-        };
-    }
-    return { type: "error", content: "Tool failed. Try again." };
+    const ERROR_MESSAGES: Record<string, string> = {
+        generate_image: "Couldn't generate the image. Try a shorter, clearer prompt.",
+        text_to_speech: "Couldn't generate voice audio. Try shorter text.",
+        generate_music: "Couldn't generate music. Try a shorter prompt or lyrics.",
+        generate_lyrics: "Couldn't generate lyrics. Try a different topic.",
+        analyze_image: "Couldn't analyze the image. Try a direct JPG, PNG, or WebP URL.",
+    };
+    const msg = ERROR_MESSAGES[toolName] ?? "Tool failed. Try again.";
+    return { type: "error", content: msg };
 }
 
 export interface SteerQueue {

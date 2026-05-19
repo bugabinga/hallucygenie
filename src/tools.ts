@@ -328,22 +328,8 @@ function baseRespError(
     };
 }
 
-function imageOptionsFromInput(input: string | GenerateImageOptions): GenerateImageOptions {
-    return typeof input === "string" ? { prompt: input } : input;
-}
-
-function ttsOptionsFromInput(
-    input: string | TextToSpeechOptions,
-    voiceId?: string,
-): TextToSpeechOptions {
-    return typeof input === "string" ? { text: input, voice_id: voiceId } : input;
-}
-
-function musicOptionsFromInput(
-    input: string | GenerateMusicOptions,
-    lyrics?: string,
-): GenerateMusicOptions {
-    return typeof input === "string" ? { prompt: input, lyrics } : input;
+function isObject(val: unknown): val is Record<string, unknown> {
+    return typeof val === "object" && val !== null && !Array.isArray(val);
 }
 
 function validateLyricsMode(value: unknown): GenerateLyricsOptions["mode"] | undefined {
@@ -358,7 +344,7 @@ export async function generateImage(
     input: string | GenerateImageOptions,
     apiKey: string,
 ): Promise<ToolResult> {
-    const options = imageOptionsFromInput(input);
+    const options = (isObject(input) ? input : { prompt: input }) as GenerateImageOptions;
     try {
         const payload: Record<string, unknown> = {
             model: "image-01",
@@ -430,7 +416,9 @@ export async function textToSpeech(
     apiKey: string,
     voiceId?: string,
 ): Promise<ToolResult> {
-    const options = ttsOptionsFromInput(input, voiceId);
+    const options = (
+        isObject(input) ? input : { text: input, voice_id: voiceId }
+    ) as TextToSpeechOptions;
     const voice = options.voice_id || "English_expressive_narrator";
 
     try {
@@ -560,7 +548,7 @@ export async function generateMusic(
     apiKey: string,
     lyrics?: string,
 ): Promise<ToolResult> {
-    const options = musicOptionsFromInput(input, lyrics);
+    const options = (isObject(input) ? input : { prompt: input, lyrics }) as GenerateMusicOptions;
     try {
         const lyricsText = options.lyrics?.trim() ?? "";
         const isInstrumental = lyricsText.length === 0;
