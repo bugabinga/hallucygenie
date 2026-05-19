@@ -1,28 +1,9 @@
 ---
-{ "status": "open", "specs": ["HG-SPEC-001", "HG-SPEC-011"] }
+{ "status": "fixed", "specs": ["HG-SPEC-001", "HG-SPEC-011"] }
 ---
 
-# HG-ISSUE-083: Static path prefix boundary weak
+Static containment used raw prefix check, so sibling paths sharing the `public` prefix were not explicitly excluded.
 
-Repro:
+Fix: static path must equal `public` or start with `public` + path separator.
 
-- Review `serveStaticFile()` path containment check.
-- Compare resolved paths for `public` and sibling prefix names like `public_evil`.
-
-Observed:
-
-- Containment uses `filePath.startsWith(publicDir)`.
-- Prefix checks can accept sibling paths that share the same prefix.
-
-Expected:
-
-- Static serving is limited to `public/` exactly.
-
-Cause:
-
-- String prefix boundary lacks path separator check.
-
-Fix:
-
-- Use `filePath === publicDir || filePath.startsWith(publicDir + sep)`.
-- Keep traversal tests for `..`, encoded paths, absolute-looking paths, and sibling-prefix paths.
+Tests: static path traversal/prefix tests cover sibling-prefix boundary.

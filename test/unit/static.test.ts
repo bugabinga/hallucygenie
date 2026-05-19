@@ -176,10 +176,10 @@ describe("index.html health", () => {
         ]) {
             assert.equal(doc.querySelector(forbiddenId), null, forbiddenId);
         }
-        assert.match(appTs, /params\.push\(`n=\$\{imgCountInput\.value\.trim\(\)\}`\)/);
-        assert.match(appTs, /params\.push\(`seed=\$\{imgSeedInput\.value\.trim\(\)\}`\)/);
-        assert.match(appTs, /params\.push\(`width=\$\{imgWidthInput\.value\.trim\(\)\}`\)/);
-        assert.match(appTs, /params\.push\(`height=\$\{imgHeightInput\.value\.trim\(\)\}`\)/);
+        assert.match(appTs, /input\.n = Number\(imgCountInput\.value\.trim\(\)\)/);
+        assert.match(appTs, /input\.seed = Number\(imgSeedInput\.value\.trim\(\)\)/);
+        assert.match(appTs, /input\.width = Number\(imgWidthInput\.value\.trim\(\)\)/);
+        assert.match(appTs, /input\.height = Number\(imgHeightInput\.value\.trim\(\)\)/);
         assert.doesNotMatch(appTs, /response_format|audio_base64|lyrics_optimizer/);
     });
 
@@ -205,6 +205,17 @@ describe("index.html health", () => {
             ),
             ["English", "Deutsch", "Europe", "Rest"],
         );
+    });
+
+    it("Create forms do not send internal tool directives through chat", () => {
+        assert.doesNotMatch(appTs, /Use generate_|Use analyze_|Use text_to_speech|Tool params:/);
+        assert.match(appTs, /\/api\/create-tool/);
+        assert.match(appTs, /sendCreateTool\([\s\S]*"generate_image"/);
+        assert.match(appTs, /sendCreateTool\([\s\S]*"generate_music"/);
+        assert.match(appTs, /sendCreateTool\([\s\S]*"text_to_speech"/);
+        assert.match(appTs, /sendCreateTool\([\s\S]*"generate_lyrics"/);
+        assert.match(appTs, /sendCreateTool\([\s\S]*"analyze_image"/);
+        assert.match(appTs, /sendCreateTool\([\s\S]*"web_search"/);
     });
 
     it("has a 'Write lyrics for me' button in the music form", () => {
@@ -340,7 +351,7 @@ describe("index.html health", () => {
         assert.match(appTs, /uploadAnalyzeImage\(file: File\)/);
         assert.match(appTs, /analyzeDropzone\.addEventListener\("drop"/);
         assert.match(appTs, /\["image\/png", "image\/jpeg", "image\/webp"\]/);
-        assert.match(appTs, /Use analyze_image with image_url:/);
+        assert.match(appTs, /sendCreateTool\([\s\S]*"analyze_image"/);
         assert.doesNotMatch(appTs, /FileReader|readAsDataURL/);
     });
 
@@ -533,6 +544,14 @@ describe("index.html health", () => {
         );
         assert.match(styleCss, /\.markdown-image \{[^}]*max-width: min\(100%, 320px\);/);
         assert.match(styleCss, /\.markdown-image \{[^}]*max-height: min\(45vh, 260px\);/);
+    });
+
+    it("static file containment has a path-separator boundary", () => {
+        assert.match(
+            serverTs,
+            /filePath !== publicDir && !filePath\.startsWith\(`\$\{publicDir\}\$\{sep\}`\)/,
+        );
+        assert.doesNotMatch(serverTs, /if \(!filePath\.startsWith\(publicDir\)\) return null;/);
     });
 
     it("asset library uses visible audio controls instead of hidden autoplay", () => {

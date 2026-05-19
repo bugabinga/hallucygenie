@@ -758,15 +758,27 @@ async function runE2ETests(): Promise<void> {
                 throw new Error("Preview leaked raw image data");
 
             await page.fill("#analyze-prompt", "What color is this pixel?");
+            const createToolRequest = page.waitForRequest(
+                (req) => req.url().includes("/api/create-tool") && req.method() === "POST",
+            );
             await page.click("#create-analyze-form button[type='submit']");
             await expectHidden(page, "#create-modal");
+            const requestBody = JSON.parse((await createToolRequest).postData() ?? "{}");
+            if (requestBody.tool_name !== "analyze_image") {
+                throw new Error(
+                    `Analyze used wrong endpoint payload: ${JSON.stringify(requestBody)}`,
+                );
+            }
+            if (!String(requestBody.input?.image_url ?? "").startsWith("/asset/asset_")) {
+                throw new Error(`Analyze payload missed asset URL: ${JSON.stringify(requestBody)}`);
+            }
             const userText =
                 (await page.locator(".message--user .message-content").last().textContent()) ?? "";
-            if (!userText.includes("Use analyze_image with image_url: /asset/asset_")) {
-                throw new Error(`Analyze user message missed asset URL: ${userText}`);
+            if (!userText.includes("Analyze image: What color is this pixel?")) {
+                throw new Error(`Analyze user message missed kid-safe label: ${userText}`);
             }
-            if (/data:image|base64/i.test(userText))
-                throw new Error("Analyze message leaked raw image data");
+            if (/Use analyze_image|Tool params|data:image|base64/i.test(userText))
+                throw new Error(`Analyze message leaked internals: ${userText}`);
 
             await page.close();
         },
@@ -821,6 +833,75 @@ async function runE2ETests(): Promise<void> {
                     "Using image URL fallback.",
             );
             await expectHidden(page, "#analyze-file-preview img");
+
+            await page.close();
+        },
+        results,
+    );
+
+    await runTest(
+        "create music uses structured multiline lyrics",
+        async () => {
+            const page = await browser!.newPage();
+            await waitForApp(page, { dismissOnboarding: true });
+
+            await page.click("#create-btn");
+            await page.click(".create-tab[data-tab='music']");
+            await expectVisible(page, "#create-music-form");
+            await page.fill("#music-prompt", "boss fight intro");
+            const lyrics = "Verse one, comma stays\nChorus line, also stays";
+            await page.fill("#music-lyrics", lyrics);
+            const createToolRequest = page.waitForRequest(
+                (req) => req.url().includes("/api/create-tool") && req.method() === "POST",
+            );
+            await page.click("#create-music-form button[type='submit']");
+            await expectHidden(page, "#create-modal");
+            const requestBody = JSON.parse((await createToolRequest).postData() ?? "{}");
+            assertEqual(requestBody.tool_name, "generate_music", "Music create tool");
+            assertEqual(requestBody.input.prompt, "boss fight intro", "Music prompt");
+            assertEqual(requestBody.input.lyrics, lyrics, "Music lyrics preserved");
+            const userText =
+                (await page.locator(".message--user .message-content").last().textContent()) ?? "";
+            if (/Use generate_music|Tool params:/i.test(userText)) {
+                throw new Error(`Music message leaked internals: ${userText}`);
+            }
+
+            await page.close();
+        },
+        results,
+    );
+
+    await runTest(
+        "write lyrics draft survives reload",
+        async () => {
+            const page = await browser!.newPage();
+            await waitForApp(page, { dismissOnboarding: true });
+
+            await page.click("#create-btn");
+            await page.click(".create-tab[data-tab='music']");
+            await page.fill("#music-prompt", "victory song");
+            const createToolResponse = page.waitForResponse(
+                (res) =>
+                    res.url().includes("/api/create-tool") && res.request().method() === "POST",
+            );
+            await page.click("#write-lyrics-btn");
+            assertEqual((await createToolResponse).status(), 200, "Lyrics create tool response");
+            await page.waitForFunction(() =>
+                (
+                    document.querySelector("#music-lyrics") as HTMLTextAreaElement | null
+                )?.value.includes("Verse one, game on"),
+            );
+            await page.reload();
+            await waitForAppReady(page);
+            await page.click("#create-btn");
+            await page.click(".create-tab[data-tab='music']");
+            const lyrics = await page.locator("#music-lyrics").inputValue();
+            if (
+                !lyrics.includes("Verse one, game on") ||
+                !lyrics.includes("Chorus, win the fight")
+            ) {
+                throw new Error(`Generated lyrics draft did not survive reload: ${lyrics}`);
+            }
 
             await page.close();
         },

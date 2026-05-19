@@ -91,20 +91,23 @@ function minimaxResponse(url: URL): Response | null {
         case "/v1/t2a_v2":
             return jsonResponse({
                 data: {
-                    audio_file: "",
-                    audio_url: "https://example.com/test.mp3",
-                    hex: Buffer.from("fake-mp3-data").toString("hex"),
+                    audio: Buffer.from("fake-mp3-data").toString("hex"),
                 },
+                base_resp: { status_code: 0 },
+            });
+
+        case "/v1/lyrics_generation":
+            return jsonResponse({
+                lyrics: "Verse one, game on\nChorus, win the fight",
+                base_resp: { status_code: 0 },
             });
 
         case "/v1/music_generation":
             return jsonResponse({
-                data: [
-                    {
-                        audio_url: "https://example.com/test.music.mp3",
-                        extra: { audio_file: Buffer.from("fake-music-data").toString("hex") },
-                    },
-                ],
+                data: {
+                    audio: Buffer.from("fake-music-data").toString("hex"),
+                },
+                base_resp: { status_code: 0 },
             });
 
         case "/v1/coding_plan/search":

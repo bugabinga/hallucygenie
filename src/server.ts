@@ -106,15 +106,27 @@ export interface ChatRequestBody {
     system_prompt?: string;
 }
 
-export interface ExplicitToolDirective {
+export type DirectToolName =
+    | "generate_image"
+    | "generate_music"
+    | "text_to_speech"
+    | "generate_lyrics"
+    | "analyze_image"
+    | "web_search";
+
+export interface DirectToolExecution {
+    name: DirectToolName;
+    args: Record<string, unknown>;
+    prompt: string | null;
+}
+
+export interface ExplicitToolDirective extends DirectToolExecution {
     name:
         | "generate_image"
         | "generate_music"
         | "text_to_speech"
         | "generate_lyrics"
         | "analyze_image";
-    args: Record<string, unknown>;
-    prompt: string | null;
 }
 
 export interface AssetApiRow extends Omit<AssetRow, "params_json"> {
@@ -218,7 +230,7 @@ function validateChatBody(body: unknown):
 // ── Static file serving ──────────────────────────────────────────────
 
 import { readFile, stat } from "node:fs/promises";
-import { resolve, join } from "node:path";
+import { resolve, join, sep } from "node:path";
 
 const MIME_TYPES: Record<string, string> = {
     ".html": "text/html; charset=utf-8",
@@ -247,7 +259,7 @@ async function serveStaticFile(path: string): Promise<Response | null> {
     const filePath = resolve(join("public", path));
 
     // Ensure the resolved path is still under public/
-    if (!filePath.startsWith(publicDir)) return null;
+    if (filePath !== publicDir && !filePath.startsWith(`${publicDir}${sep}`)) return null;
     if (filePath.includes("..")) return null;
 
     try {
@@ -661,7 +673,7 @@ async function localAnalyzeAssetDataUrl(
 }
 
 async function explicitExecutionArgs(
-    directive: ExplicitToolDirective,
+    directive: DirectToolExecution,
     database: Database,
     sessionId?: string,
 ): Promise<Record<string, unknown>> {
@@ -676,11 +688,140 @@ async function explicitExecutionArgs(
     };
 }
 
-function handleExplicitToolDirective(
-    directive: ExplicitToolDirective,
+function parseStringField(input: Record<string, unknown>, key: string, max: number): string | null {
+    const value = input[key];
+    if (typeof value !== "string") return null;
+    const trimmed = value.trim();
+    if (!trimmed) return null;
+    return Array.from(trimmed).slice(0, max).join("");
+}
+
+function optionalStringField(
+    input: Record<string, unknown>,
+    key: string,
+    max: number,
+): string | undefined {
+    const value = input[key];
+    if (typeof value !== "string") return undefined;
+    const trimmed = value.trim();
+    if (!trimmed) return undefined;
+    return Array.from(trimmed).slice(0, max).join("");
+}
+
+function optionalNumberField(
+    input: Record<string, unknown>,
+    key: string,
+    min: number,
+    max: number,
+): number | undefined {
+    const value = input[key];
+    if (typeof value !== "number" || !Number.isFinite(value)) return undefined;
+    return Math.min(max, Math.max(min, value));
+}
+
+function optionalIntegerField(
+    input: Record<string, unknown>,
+    key: string,
+    min: number,
+    max: number,
+): number | undefined {
+    const value = input[key];
+    if (typeof value !== "number" || !Number.isInteger(value)) return undefined;
+    return Math.min(max, Math.max(min, value));
+}
+
+function optionalBooleanField(input: Record<string, unknown>, key: string): boolean | undefined {
+    return typeof input[key] === "boolean" ? input[key] : undefined;
+}
+
+function normalizeCreateToolExecution(body: unknown): DirectToolExecution | string {
+    if (!body || typeof body !== "object" || Array.isArray(body)) return "body must be an object";
+    const obj = body as Record<string, unknown>;
+    const name = obj.tool_name;
+    const input = obj.input;
+    if (typeof name !== "string") return "tool_name required";
+    if (!input || typeof input !== "object" || Array.isArray(input)) return "input required";
+    const fields = input as Record<string, unknown>;
+
+    if (name === "generate_image") {
+        const prompt = parseStringField(fields, "prompt", 1500);
+        if (!prompt) return "prompt required";
+        const args: Record<string, unknown> = { prompt };
+        const aspectRatio = fields.aspect_ratio;
+        if (typeof aspectRatio === "string") args.aspect_ratio = aspectRatio;
+        const n = optionalIntegerField(fields, "n", 1, 9);
+        if (n !== undefined) args.n = n;
+        const seed = optionalIntegerField(fields, "seed", 0, Number.MAX_SAFE_INTEGER);
+        if (seed !== undefined) args.seed = seed;
+        const width = optionalIntegerField(fields, "width", 512, 2048);
+        const height = optionalIntegerField(fields, "height", 512, 2048);
+        if (width !== undefined) args.width = width;
+        if (height !== undefined) args.height = height;
+        const promptOptimizer = optionalBooleanField(fields, "prompt_optimizer");
+        if (promptOptimizer !== undefined) args.prompt_optimizer = promptOptimizer;
+        return { name, args, prompt };
+    }
+
+    if (name === "generate_music") {
+        const prompt = parseStringField(fields, "prompt", 2000);
+        if (!prompt) return "prompt required";
+        const args: Record<string, unknown> = { prompt };
+        const lyrics = optionalStringField(fields, "lyrics", 3500);
+        if (lyrics !== undefined) args.lyrics = lyrics;
+        return { name, args, prompt };
+    }
+
+    if (name === "text_to_speech") {
+        const text = parseStringField(fields, "text", 10000);
+        if (!text) return "text required";
+        const args: Record<string, unknown> = { text };
+        const voiceId = optionalStringField(fields, "voice_id", 120);
+        if (voiceId !== undefined) args.voice_id = voiceId;
+        const speed = optionalNumberField(fields, "speed", 0.5, 2);
+        if (speed !== undefined) args.speed = speed;
+        const volume = optionalNumberField(fields, "volume", 0.01, 10);
+        if (volume !== undefined) args.volume = volume;
+        const pitch = optionalNumberField(fields, "pitch", -12, 12);
+        if (pitch !== undefined) args.pitch = pitch;
+        return { name, args, prompt: text };
+    }
+
+    if (name === "generate_lyrics") {
+        const prompt = parseStringField(fields, "prompt", 2000);
+        if (!prompt) return "prompt required";
+        const args: Record<string, unknown> = { prompt };
+        const mode = fields.mode;
+        if (mode === "write_full_song" || mode === "edit") args.mode = mode;
+        const lyrics = optionalStringField(fields, "lyrics", 3500);
+        if (lyrics !== undefined) args.lyrics = lyrics;
+        const title = optionalStringField(fields, "title", 200);
+        if (title !== undefined) args.title = title;
+        return { name, args, prompt };
+    }
+
+    if (name === "analyze_image") {
+        const imageUrl = parseStringField(fields, "image_url", 2048);
+        if (!imageUrl) return "image_url required";
+        const prompt = optionalStringField(fields, "prompt", 1000) ?? "What do you see?";
+        return { name, args: { image_url: imageUrl, prompt }, prompt };
+    }
+
+    if (name === "web_search") {
+        const query = parseStringField(fields, "query", 300);
+        if (!query) return "query required";
+        return { name, args: { query }, prompt: query };
+    }
+
+    return "unsupported tool_name";
+}
+
+function handleDirectToolExecution(
+    directive: DirectToolExecution,
     apiKey: string,
     database: Database,
-    sessionId?: string,
+    sessionId: string | undefined,
+    origin: "chat" | "create",
+    clearCreateDraftOnSuccess: boolean,
 ): Response {
     const { readable, writable } = new TransformStream<Uint8Array, Uint8Array>();
     const writer = writable.getWriter();
@@ -727,7 +868,7 @@ function handleExplicitToolDirective(
                 try {
                     recordToolInputHistory(database, {
                         session_id: sessionId,
-                        origin: "chat",
+                        origin,
                         tool_name: directive.name,
                         input: directive.args,
                         status: saved.type === "error" ? "failed" : "succeeded",
@@ -743,7 +884,7 @@ function handleExplicitToolDirective(
                 name: directive.name,
                 result: saved,
             });
-            if (sessionId && saved.type !== "error") {
+            if (sessionId && saved.type !== "error" && clearCreateDraftOnSuccess) {
                 deleteDraft(database, sessionId, "create");
             }
             await writer.write(encoder.encode("data: [DONE]\n\n"));
@@ -776,6 +917,42 @@ function handleExplicitToolDirective(
     })();
 
     return sseResponse(readable);
+}
+
+function handleExplicitToolDirective(
+    directive: ExplicitToolDirective,
+    apiKey: string,
+    database: Database,
+    sessionId?: string,
+): Response {
+    return handleDirectToolExecution(directive, apiKey, database, sessionId, "chat", true);
+}
+
+async function handleCreateTool(
+    req: Request,
+    apiKey: string,
+    database: Database,
+): Promise<Response> {
+    let parsed: unknown;
+    try {
+        parsed = await req.json();
+    } catch {
+        return jsonResponse({ error: "Invalid JSON in request body" }, 400);
+    }
+    const normalized = normalizeCreateToolExecution(parsed);
+    if (typeof normalized === "string") return jsonResponse({ error: normalized }, 400);
+    const sessionId = resolveSessionId(req, database);
+    if (countSessionUserMessages(database, sessionId) === 0) {
+        autoNameDefaultSession(database, sessionId, normalized.prompt ?? normalized.name);
+    }
+    return handleDirectToolExecution(
+        normalized,
+        apiKey,
+        database,
+        sessionId,
+        "create",
+        normalized.name !== "generate_lyrics",
+    );
 }
 
 // ── Session validation ──────────────────────────────────────────────
@@ -1177,6 +1354,19 @@ export async function handleRequest(req: Request): Promise<Response> {
             }
         }
 
+        if (path === "/api/create-tool" && method === "POST") {
+            const apiKey = process.env.MINIMAX_API_KEY;
+            if (!apiKey) {
+                return jsonResponse(
+                    {
+                        error: "Server is missing the API key. Ask whoever set this up to add MINIMAX_API_KEY to the environment.",
+                    },
+                    503,
+                );
+            }
+            return handleCreateTool(req, apiKey, database);
+        }
+
         if (path === "/api/chat" && method === "POST") {
             const apiKey = process.env.MINIMAX_API_KEY;
             if (!apiKey) {
@@ -1507,6 +1697,29 @@ function saveAssetBuffer(
     return { type: resultType, content: `/asset/${assetId}` };
 }
 
+const MAX_GENERATED_IMAGE_BYTES = 20 * 1024 * 1024;
+const GENERATED_IMAGE_MIMES = new Set(["image/jpeg", "image/png", "image/webp", "image/gif"]);
+
+async function readResponseBytesCapped(resp: Response, maxBytes: number): Promise<Buffer> {
+    if (!resp.body) {
+        const buf = Buffer.from(await resp.arrayBuffer());
+        if (buf.byteLength > maxBytes) throw new Error("image download too large");
+        return buf;
+    }
+    const reader = resp.body.getReader();
+    const chunks: Uint8Array[] = [];
+    let total = 0;
+    while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        if (!value) continue;
+        total += value.byteLength;
+        if (total > maxBytes) throw new Error("image download too large");
+        chunks.push(value);
+    }
+    return Buffer.concat(chunks.map((chunk) => Buffer.from(chunk)));
+}
+
 async function downloadImageAsset(url: string): Promise<{ buf: Buffer; mime: string }> {
     const parsed = new URL(url);
     if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
@@ -1517,9 +1730,13 @@ async function downloadImageAsset(url: string): Promise<{ buf: Buffer; mime: str
     if (!resp.ok) throw new Error(`image download failed: ${resp.status}`);
 
     const mime = resp.headers.get("Content-Type")?.split(";")[0]?.trim().toLowerCase() ?? "";
-    if (!mime.startsWith("image/")) throw new Error(`image download returned ${mime || "unknown"}`);
+    if (!GENERATED_IMAGE_MIMES.has(mime)) {
+        throw new Error(`image download returned ${mime || "unknown"}`);
+    }
+    const contentLength = Number(resp.headers.get("Content-Length") ?? "0");
+    if (contentLength > MAX_GENERATED_IMAGE_BYTES) throw new Error("image download too large");
 
-    return { buf: Buffer.from(await resp.arrayBuffer()), mime };
+    return { buf: await readResponseBytesCapped(resp, MAX_GENERATED_IMAGE_BYTES), mime };
 }
 
 /**

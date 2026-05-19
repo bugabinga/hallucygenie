@@ -27,6 +27,7 @@ import {
     saveDraft,
     getDraft,
     createSession,
+    listToolInputHistory,
 } from "../../src/db.ts";
 import {
     trackUsage,
@@ -896,6 +897,135 @@ describe("SSE streaming from Anthropic endpoint", () => {
                 prompt: "cat",
                 aspect_ratio: "16:9",
             });
+        } finally {
+            globalThis.fetch = originalFetch;
+        }
+    });
+
+    it("executes Create tool endpoint with origin=create and exact multiline params", async () => {
+        const sessionId = "create-tool-multiline-session";
+        const db = getDb()!;
+        createSession(db, sessionId, "Create Tool Multiline");
+        const lyrics = "Verse one, with comma\nChorus line, still here";
+        let musicPayload: Record<string, unknown> | null = null;
+        const originalFetch = globalThis.fetch;
+        globalThis.fetch = async (_url: string | URL | Request, init?: RequestInit) => {
+            musicPayload = JSON.parse(String(init?.body));
+            return new Response(JSON.stringify({ data: { audio: "ff" } }), {
+                status: 200,
+                headers: { "Content-Type": "application/json" },
+            });
+        };
+
+        try {
+            const resp = await handleRequest(
+                makeRequest(
+                    "POST",
+                    "/api/create-tool",
+                    {
+                        tool_name: "generate_music",
+                        input: { prompt: "boss fight", lyrics },
+                    },
+                    { "X-Session-Id": sessionId },
+                ),
+            );
+            const body = await readBody(resp);
+
+            assert.equal(musicPayload?.lyrics, lyrics);
+            assert.equal(musicPayload?.is_instrumental, false);
+            assert.ok(body.includes("tool_result"));
+            assert.equal(body.includes("Use generate_music"), false);
+            const rows = getMessages(db, sessionId);
+            assert.equal(
+                rows.some((row) => row.role === "user"),
+                false,
+            );
+            const history = listToolInputHistory(db, sessionId, { kind: "music" });
+            assert.equal(history[0]?.origin, "create");
+            assert.equal(JSON.parse(history[0]!.input_json).lyrics, lyrics);
+        } finally {
+            globalThis.fetch = originalFetch;
+        }
+    });
+
+    it("preserves create draft after successful Create lyrics helper", async () => {
+        const sessionId = "create-tool-lyrics-draft-session";
+        const db = getDb()!;
+        createSession(db, sessionId, "Create Lyrics Draft");
+        saveDraft(db, sessionId, "create", {
+            selectedTab: "music",
+            music: { prompt: "boss", lyrics: "" },
+        });
+
+        const originalFetch = globalThis.fetch;
+        globalThis.fetch = async () =>
+            new Response(JSON.stringify({ lyrics: "Verse one\nChorus" }), {
+                status: 200,
+                headers: { "Content-Type": "application/json" },
+            });
+
+        try {
+            const resp = await handleRequest(
+                makeRequest(
+                    "POST",
+                    "/api/create-tool",
+                    { tool_name: "generate_lyrics", input: { prompt: "boss" } },
+                    { "X-Session-Id": sessionId },
+                ),
+            );
+            const body = await readBody(resp);
+
+            assert.ok(body.includes("tool_result"));
+            assert.deepEqual(JSON.parse(getDraft(db, sessionId, "create")!.value_json), {
+                selectedTab: "music",
+                music: { prompt: "boss", lyrics: "" },
+            });
+            const history = listToolInputHistory(db, sessionId, { kind: "music" });
+            assert.equal(history[0]?.origin, "create");
+            assert.equal(history[0]?.tool_name, "generate_lyrics");
+        } finally {
+            globalThis.fetch = originalFetch;
+        }
+    });
+
+    it("rejects generated image downloads over the byte cap before buffering", async () => {
+        const sessionId = "create-tool-image-too-large-session";
+        const db = getDb()!;
+        createSession(db, sessionId, "Create Image Too Large");
+        const originalFetch = globalThis.fetch;
+        globalThis.fetch = async (url: string | URL | Request) => {
+            const urlStr = url.toString();
+            if (urlStr === "https://example.com/huge.png") {
+                return new Response(null, {
+                    status: 200,
+                    headers: {
+                        "Content-Type": "image/png",
+                        "Content-Length": String(21 * 1024 * 1024),
+                    },
+                });
+            }
+            return new Response(
+                JSON.stringify({ data: { image_urls: ["https://example.com/huge.png"] } }),
+                { status: 200, headers: { "Content-Type": "application/json" } },
+            );
+        };
+
+        try {
+            const resp = await handleRequest(
+                makeRequest(
+                    "POST",
+                    "/api/create-tool",
+                    { tool_name: "generate_image", input: { prompt: "huge cat" } },
+                    { "X-Session-Id": sessionId },
+                ),
+            );
+            const body = await readBody(resp);
+
+            assert.ok(body.includes("Couldn't save generated image"));
+            assert.equal(getAssets(db, sessionId).length, 0);
+            const history = listToolInputHistory(db, sessionId, { kind: "image" });
+            assert.equal(history[0]?.status, "failed");
+            assert.equal(history[0]?.origin, "create");
         } finally {
             globalThis.fetch = originalFetch;
         }

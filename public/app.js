@@ -2458,7 +2458,8 @@ var TOOL_EMOJIS = {
   text_to_speech: "\u{1F399}\uFE0F",
   generate_music: "\u{1F3B5}",
   generate_lyrics: "\u{1F4DD}",
-  analyze_image: "\u{1F50E}"
+  analyze_image: "\u{1F50E}",
+  web_search: "\u{1F50D}"
 };
 function getToolEmoji(name) {
   return TOOL_EMOJIS[name] ?? "\u{1F527}";
@@ -2724,11 +2725,11 @@ var streamHadError = false;
 var streamHadToolResult = false;
 var clearDraftAfterDone = null;
 var refreshSessionsAfterDone = null;
-async function streamChat(messages, onEvent) {
-  const resp = await fetch("/api/chat", {
+async function streamSseRequest(path, body, onEvent) {
+  const resp = await fetch(path, {
     method: "POST",
     headers: createApiHeaders(),
-    body: JSON.stringify({ messages })
+    body: JSON.stringify(body)
   });
   if (resp.status === 400) {
     const parsed = await resp.json().catch(() => null);
@@ -2776,6 +2777,12 @@ async function streamChat(messages, onEvent) {
     }
   }
   if (isStreaming) finishStreaming();
+}
+async function streamChat(messages, onEvent) {
+  await streamSseRequest("/api/chat", { messages }, onEvent);
+}
+async function streamCreateTool(toolName, input, onEvent) {
+  await streamSseRequest("/api/create-tool", { tool_name: toolName, input }, onEvent);
 }
 function ensureAssistantContent() {
   if (currentAssistantContent) return currentAssistantContent;
@@ -3044,6 +3051,26 @@ async function sendMessage(content, draftKind = "chat") {
   try {
     await streamChat([{ role: "user", content }]);
   } catch (err) {
+    streamHadError = true;
+    showError("Connection lost. Check your internet? \u{1F4E1}");
+    finishStreaming();
+  }
+}
+async function sendCreateTool(toolName, input, visibleLabel, clearDraftOnSuccess = true) {
+  if (isStreaming) return;
+  const messageList = $("#message-list");
+  messageList.appendChild(renderUserMessage(visibleLabel));
+  scrollToBottom();
+  const { container: assistantEl, contentEl: assistantContent } = renderAssistantMessage();
+  messageList.appendChild(assistantEl);
+  currentAssistantEl = assistantEl;
+  currentAssistantContent = assistantContent;
+  clearDraftAfterDone = clearDraftOnSuccess ? "create" : null;
+  isStreaming = true;
+  setStreamingUI(true);
+  try {
+    await streamCreateTool(toolName, input);
+  } catch {
     streamHadError = true;
     showError("Connection lost. Check your internet? \u{1F4E1}");
     finishStreaming();
@@ -3920,22 +3947,20 @@ function init() {
   createImgForm.addEventListener("submit", (e) => {
     e.preventDefault();
     const prompt = imgPromptInput.value.trim();
-    const ratio = imgRatioInput.value;
-    const params = [`aspect_ratio=${ratio}`];
-    if (imgCountInput.value.trim()) params.push(`n=${imgCountInput.value.trim()}`);
-    if (imgSeedInput.value.trim()) params.push(`seed=${imgSeedInput.value.trim()}`);
+    const input2 = {
+      prompt,
+      aspect_ratio: imgRatioInput.value,
+      prompt_optimizer: imgPromptOptimizerInput.checked
+    };
+    if (imgCountInput.value.trim()) input2.n = Number(imgCountInput.value.trim());
+    if (imgSeedInput.value.trim()) input2.seed = Number(imgSeedInput.value.trim());
     if (imgWidthInput.value.trim() && imgHeightInput.value.trim()) {
-      params.push(`width=${imgWidthInput.value.trim()}`);
-      params.push(`height=${imgHeightInput.value.trim()}`);
+      input2.width = Number(imgWidthInput.value.trim());
+      input2.height = Number(imgHeightInput.value.trim());
     }
-    if (imgPromptOptimizerInput.checked) params.push("prompt_optimizer=true");
     if (prompt) {
       closeCreateModal();
-      sendMessage(
-        `Use generate_image with prompt: ${prompt}
-Tool params: ${params.join(",")}`,
-        "create"
-      );
+      void sendCreateTool("generate_image", input2, `Create image: ${prompt}`);
     }
   });
   createMusicForm.addEventListener("submit", (e) => {
@@ -3944,10 +3969,7 @@ Tool params: ${params.join(",")}`,
     const lyrics = musicLyricsInput.value.trim();
     if (prompt) {
       closeCreateModal();
-      let msg = `Use generate_music with prompt: ${prompt}`;
-      if (lyrics) msg += `
-Tool params: lyrics=${lyrics}`;
-      sendMessage(msg, "create");
+      void sendCreateTool("generate_music", { prompt, lyrics }, `Create music: ${prompt}`);
     }
   });
   const writeLyricsBtn = document.querySelector("#write-lyrics-btn");
@@ -3962,28 +3984,29 @@ Tool params: lyrics=${lyrics}`;
     writeLyricsBtn.textContent = "Writing... \u2728";
     setLyricsWriteResolve((lyricsText) => {
       musicLyricsInput.value = lyricsText;
+      void putDraft("create", createDraftFromDom());
     });
-    sendMessage(`Use generate_lyrics with prompt: ${prompt}`, "create").finally(() => {
-      writeLyricsBtn.disabled = false;
-      writeLyricsBtn.textContent = "Write lyrics for me \u2728";
-      setLyricsWriteResolve(null);
-    });
+    sendCreateTool("generate_lyrics", { prompt }, `Write lyrics: ${prompt}`, false).finally(
+      () => {
+        writeLyricsBtn.disabled = false;
+        writeLyricsBtn.textContent = "Write lyrics for me \u2728";
+        setLyricsWriteResolve(null);
+      }
+    );
   });
   createVoiceForm.addEventListener("submit", (e) => {
     e.preventDefault();
     const text = voiceTextInput.value.trim();
-    const speed = voiceSpeedInput.value;
-    const params = [`speed=${speed}`];
-    if (voiceIdInput?.value.trim()) params.push(`voice_id=${voiceIdInput.value.trim()}`);
-    if (voiceVolumeInput?.value.trim()) params.push(`volume=${voiceVolumeInput.value.trim()}`);
-    if (voicePitchInput?.value.trim()) params.push(`pitch=${voicePitchInput.value.trim()}`);
+    const input2 = {
+      text,
+      speed: Number(voiceSpeedInput.value)
+    };
+    if (voiceIdInput?.value.trim()) input2.voice_id = voiceIdInput.value.trim();
+    if (voiceVolumeInput?.value.trim()) input2.volume = Number(voiceVolumeInput.value.trim());
+    if (voicePitchInput?.value.trim()) input2.pitch = Number(voicePitchInput.value.trim());
     if (text) {
       closeCreateModal();
-      sendMessage(
-        `Use text_to_speech with text: ${text}
-Tool params: ${params.join(",")}`,
-        "create"
-      );
+      void sendCreateTool("text_to_speech", input2, `Create voice: ${text}`);
     }
   });
   createAnalyzeForm.addEventListener("submit", (e) => {
@@ -3996,10 +4019,10 @@ Tool params: ${params.join(",")}`,
       return;
     }
     closeCreateModal();
-    sendMessage(
-      `Use analyze_image with image_url: ${imageUrl}
-Tool params: prompt=${prompt}`,
-      "create"
+    void sendCreateTool(
+      "analyze_image",
+      { image_url: imageUrl, prompt },
+      `Analyze image: ${prompt}`
     );
   });
   createSearchForm.addEventListener("submit", (e) => {
@@ -4007,7 +4030,7 @@ Tool params: prompt=${prompt}`,
     const query = searchQueryInput.value.trim();
     if (query) {
       closeCreateModal();
-      sendMessage(`Search the web for: ${query}`, "create");
+      void sendCreateTool("web_search", { query }, `Search web: ${query}`);
     }
   });
   input.focus();
@@ -4049,6 +4072,7 @@ export {
   renderToolCardLoading,
   renderToolResult,
   renderUserMessage,
+  sendCreateTool,
   sendMessage,
   sendSteer,
   sendSteerMessage,

@@ -90,6 +90,7 @@ const TOOL_EMOJIS: Record<string, string> = {
     text_to_speech: "🎙️",
     generate_music: "🎵",
     analyze_image: "🔎",
+    web_search: "🔍",
 };
 
 function getToolEmoji(name: string): string {
@@ -995,6 +996,7 @@ import {
     showError,
     streamChat,
     sendMessage,
+    sendCreateTool,
     sendSteerMessage,
     loadHistory,
     autoResizeInput,
@@ -1548,6 +1550,98 @@ describe("streamChat SSE processing", () => {
         assert.equal(
             calls.some((call) => call.url === "/api/draft/create" && call.method === "DELETE"),
             true,
+        );
+    });
+
+    it("Create tool endpoint renders kid label and clears draft after success", async () => {
+        const { doc: newDoc } = setupDOM();
+        doc = newDoc;
+        const sessionSelect = doc.createElement("select");
+        sessionSelect.id = "session-select";
+        doc.body.appendChild(sessionSelect);
+        const calls: Array<{ url: string; method: string; body: string }> = [];
+        const chunks = [
+            sseEvent("tool_start", JSON.stringify({ id: "tool-ok", name: "generate_image" })),
+            sseEvent(
+                "tool_result",
+                JSON.stringify({
+                    id: "tool-ok",
+                    name: "generate_image",
+                    result: { type: "image", content: "/asset/img.png" },
+                }),
+            ),
+            sseDone(),
+        ];
+        (globalThis as any).fetch = (url: string, init?: RequestInit) => {
+            calls.push({
+                url: String(url),
+                method: init?.method ?? "GET",
+                body: String(init?.body ?? ""),
+            });
+            if (String(url) === "/api/create-tool")
+                return Promise.resolve(createSSEResponse(chunks));
+            return Promise.resolve(new Response("{}", { status: 200 }));
+        };
+
+        await sendCreateTool("generate_image", { prompt: "cat" }, "Create image: cat");
+        await new Promise((resolve) => setTimeout(resolve, 0));
+
+        const createCall = calls.find((call) => call.url === "/api/create-tool");
+        assert.ok(createCall);
+        assert.deepEqual(JSON.parse(createCall.body), {
+            tool_name: "generate_image",
+            input: { prompt: "cat" },
+        });
+        assert.equal(
+            doc.querySelector(".message--user")?.textContent?.includes("Create image: cat"),
+            true,
+        );
+        assert.equal(
+            doc.querySelector(".message--user")?.textContent?.includes("Use generate_"),
+            false,
+        );
+        assert.equal(
+            calls.some((call) => call.url === "/api/draft/create" && call.method === "DELETE"),
+            true,
+        );
+    });
+
+    it("Create lyrics helper does not clear create draft", async () => {
+        const { doc: newDoc } = setupDOM();
+        doc = newDoc;
+        const sessionSelect = doc.createElement("select");
+        sessionSelect.id = "session-select";
+        doc.body.appendChild(sessionSelect);
+        const calls: Array<{ url: string; method: string; body: string }> = [];
+        const chunks = [
+            sseEvent("tool_start", JSON.stringify({ id: "lyrics-ok", name: "generate_lyrics" })),
+            sseEvent(
+                "tool_result",
+                JSON.stringify({
+                    id: "lyrics-ok",
+                    name: "generate_lyrics",
+                    result: { type: "text", content: "Verse one\nChorus" },
+                }),
+            ),
+            sseDone(),
+        ];
+        (globalThis as any).fetch = (url: string, init?: RequestInit) => {
+            calls.push({
+                url: String(url),
+                method: init?.method ?? "GET",
+                body: String(init?.body ?? ""),
+            });
+            if (String(url) === "/api/create-tool")
+                return Promise.resolve(createSSEResponse(chunks));
+            return Promise.resolve(new Response("{}", { status: 200 }));
+        };
+
+        await sendCreateTool("generate_lyrics", { prompt: "boss" }, "Write lyrics: boss", false);
+        await new Promise((resolve) => setTimeout(resolve, 0));
+
+        assert.equal(
+            calls.some((call) => call.url === "/api/draft/create" && call.method === "DELETE"),
+            false,
         );
     });
 
