@@ -13,6 +13,7 @@ import {
     getActiveSessionId,
     getOrCreateActiveSessionId,
     getOrCreateActiveSession,
+    getSession,
     createSession,
     listSessions,
     renameSession,
@@ -213,7 +214,22 @@ describe("initDb", () => {
         assert.ok(tables.includes("preferences"));
         assert.ok(tables.includes("daily_usage"));
         assert.ok(tables.includes("app_state"));
+        assert.ok(tables.includes("sessions"));
         assert.match(getOrCreateActiveSessionId(db), /^[0-9a-f-]{36}$/);
+        db.close();
+    });
+
+    it("initDb creates active session row via getOrCreateActiveSession after migrations", () => {
+        // Verifies the PR fix: initDb now always calls getOrCreateActiveSession(db)
+        // (previously guarded by tableExists("sessions")).
+        // After initDb, the sessions table must contain the active session.
+        const db = initDb(":memory:");
+        const sessionId = getActiveSessionId(db);
+        assert.ok(sessionId, "active session ID must be set after initDb");
+        const session = getSession(db, sessionId!);
+        assert.ok(session, "active session row must exist in sessions table after initDb");
+        assert.equal(session!.name, "New Chat");
+        assert.equal(session!.name_source, "default");
         db.close();
     });
 });
