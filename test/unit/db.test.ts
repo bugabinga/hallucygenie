@@ -3,7 +3,7 @@
 import { describe, it, beforeEach } from "node:test";
 import assert from "node:assert/strict";
 import { Database } from "bun:sqlite";
-import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from "node:fs";
+import { mkdtempSync, mkdirSync, writeFileSync, rmSync, copyFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 
@@ -220,8 +220,8 @@ describe("initDb", () => {
     });
 
     it("initDb creates active session row via getOrCreateActiveSession after migrations", () => {
-        // Verifies the PR fix: initDb now always calls getOrCreateActiveSession(db)
-        // (previously guarded by tableExists("sessions")).
+        // Verifies that initDb creates the active session row in the sessions table.
+        // When sessions table exists (after migrations), initDb calls getOrCreateActiveSession.
         // After initDb, the sessions table must contain the active session.
         const db = initDb(":memory:");
         const sessionId = getActiveSessionId(db);
@@ -231,6 +231,39 @@ describe("initDb", () => {
         assert.equal(session!.name, "New Chat");
         assert.equal(session!.name_source, "default");
         db.close();
+    });
+
+    it("initDb falls back to getOrCreateActiveSessionId when sessions table does not exist", () => {
+        // Verifies that initDb handles databases without the sessions table gracefully.
+        // In this case, it should use getOrCreateActiveSessionId (legacy fallback).
+        const dir = mkdtempSync(join(tmpdir(), "hg-no-sessions-"));
+        const migrationsDir = join(dir, "migrations");
+        mkdirSync(migrationsDir, { recursive: true });
+
+        // Create a minimal migrations dir that has pre-sessions schema but no sessions table
+        // We include all migrations EXCEPT 008-create-sessions.sql
+        const allMigrations = readdirSync(join(import.meta.dirname, "..", "..", "migrations"));
+        for (const file of allMigrations) {
+            if (file === "008-create-sessions.sql") continue; // Skip sessions migration
+            copyFileSync(
+                join(import.meta.dirname, "..", "..", "migrations", file),
+                join(migrationsDir, file),
+            );
+        }
+
+        const db = initDb(join(dir, "legacy.db"), migrationsDir);
+        const sessionId = getActiveSessionId(db);
+        assert.ok(sessionId, "active session ID must be set even without sessions table");
+        assert.match(sessionId!, /^[0-9a-f-]{36}$/);
+
+        // sessions table should NOT exist
+        const tables = db
+            .prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='sessions'")
+            .all();
+        assert.equal(tables.length, 0, "sessions table should not exist in legacy DB");
+
+        db.close();
+        rmSync(dir, { recursive: true });
     });
 });
 
