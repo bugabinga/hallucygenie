@@ -1,6 +1,6 @@
 // HallucyGenie — Tools tests
 
-import { describe, it, beforeEach, afterEach } from "node:test";
+import { describe, it, beforeEach, afterEach, after } from "node:test";
 import assert from "node:assert/strict";
 import {
     getToolDefinitions,
@@ -18,7 +18,15 @@ import {
 
 const API_KEY = "test-api-key";
 
+// Capture the real fetch at module load. File-level after() restores it,
+// guarding against parallel test ordering where the last afterEach might
+// fire before integration tests run.
+const REAL_FETCH = globalThis.fetch;
 let originalFetch: typeof globalThis.fetch;
+
+after(() => {
+    globalThis.fetch = REAL_FETCH;
+});
 
 function mockFetch(response: Response): void {
     globalThis.fetch = async () => response;
