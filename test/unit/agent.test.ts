@@ -1851,7 +1851,7 @@ describe("System Prompt", () => {
         // Profile data that creates a context exceeding 500 chars.
         // We compute the expected truncation deterministically to verify slice(0, 500) vs slice(0, 499).
         //
-        // The header is 150 chars (no trailing newline since the join adds it).
+        // The header is 180 chars (no trailing newline since the join adds it).
         // With username of 348 x's and a name line of 361 chars total:
         //   - Total context: 150 + 1 (\n) + 361 = 512 chars (> 500, triggers truncation)
         const largeProfile = {
