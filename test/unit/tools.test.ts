@@ -18,10 +18,13 @@ import {
 
 const API_KEY = "test-api-key";
 
-// Capture the real fetch at module load. File-level after() restores it,
-// guarding against parallel test ordering where the last afterEach might
-// fire before integration tests run.
-const REAL_FETCH = globalThis.fetch;
+// Capture the real (native) fetch. Use getOwnPropertyDescriptor so we
+// reliably get the native fetch even if this file is loaded in a worker
+// where another parallel file already reassigned globalThis.fetch.
+// Bun --parallel runs files in parallel in separate workers; each worker
+// has its own globalThis, but the own-property descriptor still gives us
+// the value currently assigned in this global scope.
+const REAL_FETCH = Object.getOwnPropertyDescriptor(globalThis, "fetch")?.value ?? globalThis.fetch;
 let originalFetch: typeof globalThis.fetch;
 
 after(() => {

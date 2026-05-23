@@ -37,10 +37,13 @@ import {
     saveUserProfile,
 } from "../../src/db.ts";
 
-// Capture the real fetch at module load. All tests in this file restore to REAL_FETCH
-// (not per-test originalFetch) so that the file is isolated from whatever state
-// globalThis.fetch was left in by previously-run test files (e.g. tools.test.ts).
-const REAL_FETCH = globalThis.fetch;
+// Capture the real (native) fetch at module load. Use getOwnPropertyDescriptor
+// so we reliably get the native fetch even if this file is loaded in a worker
+// where another parallel file already reassigned globalThis.fetch (e.g. tools.test.ts).
+// Bun --parallel runs files in parallel in separate workers; each module capture
+// can happen after another worker's reassignment. getOwnPropertyDescriptor on
+// globalThis always returns the own (non-inherited, non-proxied) fetch value.
+const REAL_FETCH = Object.getOwnPropertyDescriptor(globalThis, "fetch")?.value ?? globalThis.fetch;
 
 // -- Test helpers -----------------------------------------------------
 

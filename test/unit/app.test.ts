@@ -12,7 +12,11 @@ import type { SSEEvent } from "../../public/app.ts";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const SNAPSHOTS_DIR = join(__dirname, "__snapshots__");
-const ORIGINAL_FETCH = globalThis.fetch;
+// Capture the real (native) fetch. Use getOwnPropertyDescriptor so we
+// reliably get the native fetch even if this file is loaded in a worker
+// where another parallel file already reassigned globalThis.fetch.
+const ORIGINAL_FETCH =
+    Object.getOwnPropertyDescriptor(globalThis, "fetch")?.value ?? globalThis.fetch;
 
 after(() => {
     globalThis.fetch = ORIGINAL_FETCH;
