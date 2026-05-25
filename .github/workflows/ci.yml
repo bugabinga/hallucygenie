@@ -21,10 +21,10 @@ jobs:
                   path: ~/.bun/install/cache
                   key: ${{ runner.os }}-bun-${{ hashFiles('bun.lock') }}
                   restore-keys: ${{ runner.os }}-bun-
-            - uses: taiki-e/install-action@v2.75.28
+            - uses: taiki-e/install-action@v2.79.7
               with:
                   tool: just
-            - uses: browser-actions/setup-chrome@v2.1.1
+            - uses: browser-actions/setup-chrome@v2.1.2
               id: setup-chrome
               with:
                   install-dependencies: true
@@ -49,7 +49,7 @@ jobs:
                   path: ~/.bun/install/cache
                   key: ${{ runner.os }}-bun-${{ hashFiles('bun.lock') }}
                   restore-keys: ${{ runner.os }}-bun-
-            - uses: taiki-e/install-action@v2.75.28
+            - uses: taiki-e/install-action@v2.79.7
               with:
                   tool: just
             - name: Install deps
@@ -73,7 +73,7 @@ jobs:
             - uses: oven-sh/setup-bun@v2.2.0
               with:
                   bun-version: 1.3.13
-            - uses: taiki-e/install-action@v2.75.28
+            - uses: taiki-e/install-action@v2.79.7
               with:
                   tool: just
             - name: Build container
