@@ -908,6 +908,8 @@ describe("SSE streaming from Anthropic endpoint", () => {
         const db = getDb()!;
         createSession(db, sessionId, "Create Tool Multiline");
         const lyrics = "Verse one, with comma\nChorus line, still here";
+        const previousApiKey = process.env.MINIMAX_API_KEY;
+        process.env.MINIMAX_API_KEY = "test-key";
         let musicPayload: Record<string, unknown> | null = null;
         globalThis.fetch = async (_url: string | URL | Request, init?: RequestInit) => {
             musicPayload = JSON.parse(String(init?.body));
@@ -945,6 +947,8 @@ describe("SSE streaming from Anthropic endpoint", () => {
             assert.equal(JSON.parse(history[0]!.input_json).lyrics, lyrics);
         } finally {
             globalThis.fetch = REAL_FETCH;
+            if (previousApiKey === undefined) delete process.env.MINIMAX_API_KEY;
+            else process.env.MINIMAX_API_KEY = previousApiKey;
         }
     });
 
@@ -957,6 +961,8 @@ describe("SSE streaming from Anthropic endpoint", () => {
             music: { prompt: "boss", lyrics: "" },
         });
 
+        const previousApiKey = process.env.MINIMAX_API_KEY;
+        process.env.MINIMAX_API_KEY = "test-key";
         globalThis.fetch = async () =>
             new Response(JSON.stringify({ lyrics: "Verse one\nChorus" }), {
                 status: 200,
@@ -984,6 +990,8 @@ describe("SSE streaming from Anthropic endpoint", () => {
             assert.equal(history[0]?.tool_name, "generate_lyrics");
         } finally {
             globalThis.fetch = REAL_FETCH;
+            if (previousApiKey === undefined) delete process.env.MINIMAX_API_KEY;
+            else process.env.MINIMAX_API_KEY = previousApiKey;
         }
     });
 
@@ -991,6 +999,8 @@ describe("SSE streaming from Anthropic endpoint", () => {
         const sessionId = "create-tool-image-too-large-session";
         const db = getDb()!;
         createSession(db, sessionId, "Create Image Too Large");
+        const previousApiKey = process.env.MINIMAX_API_KEY;
+        process.env.MINIMAX_API_KEY = "test-key";
         globalThis.fetch = async (url: string | URL | Request) => {
             const urlStr = url.toString();
             if (urlStr === "https://example.com/huge.png") {
@@ -1026,6 +1036,8 @@ describe("SSE streaming from Anthropic endpoint", () => {
             assert.equal(history[0]?.origin, "create");
         } finally {
             globalThis.fetch = REAL_FETCH;
+            if (previousApiKey === undefined) delete process.env.MINIMAX_API_KEY;
+            else process.env.MINIMAX_API_KEY = previousApiKey;
         }
     });
 
