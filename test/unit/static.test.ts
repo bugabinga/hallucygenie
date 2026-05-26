@@ -1051,8 +1051,8 @@ describe("agent janitor health", () => {
 
 describe("layout health", () => {
     it("deploy image uses optimized Bun multi-stage build", () => {
-        assert.match(deployDockerfile, /^FROM docker\.io\/oven\/bun:1\.3\.13 AS build/m);
-        assert.match(deployDockerfile, /^FROM docker\.io\/oven\/bun:1\.3\.13 AS runtime/m);
+        assert.match(deployDockerfile, /^FROM docker\.io\/oven\/bun:1\.3\.14 AS build/m);
+        assert.match(deployDockerfile, /^FROM docker\.io\/oven\/bun:1\.3\.14 AS runtime/m);
         assert.match(deployDockerfile, /--mount=type=cache,target=\/root\/\.bun\/install\/cache/);
         assert.match(deployDockerfile, /COPY package\.json bun\.lock \./);
         assert.match(deployDockerfile, /COPY public \.\/public/);
