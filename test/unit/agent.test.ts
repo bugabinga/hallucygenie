@@ -863,6 +863,15 @@ describe("runAgentLoop", () => {
         assert.ok(compact.includes("[Tool result truncated for context]"));
     });
 
+    it("returns string (not object) for error type", () => {
+        const result = compactToolResultForModel("generate_image", {
+            type: "error",
+            content: "something went wrong",
+        });
+        assert.equal(typeof result, "string");
+        assert.equal(result, "Error: something went wrong");
+    });
+
     it("strips model control placeholders", () => {
         assert.equal(stripModelControlPlaceholders("<end_turn>"), "");
         assert.equal(stripModelControlPlaceholders("ok\n<image>"), "ok");
@@ -2259,6 +2268,23 @@ describe("buildContext tool pair boundary conditions", () => {
         const result = buildContext(messages, 1000);
         assert.equal(result.length, 2);
         assert.equal(result[1].role, "tool");
+    });
+
+    it("orphan tool result not dropped when it alone exceeds remaining budget", () => {
+        // When orphan tool result exceeds remaining budget, we decrement i and continue.
+        // This prevents orphans from being permanently excluded from context.
+        const messages: ChatMessage[] = [
+            { role: "system" as const, content: "a" }, // 1 token
+            { role: "user" as const, content: "old msg" }, // ~3 tokens
+            { role: "tool" as const, content: "orphan", tool_call_id: "nonexistent" }, // ~5 tokens
+        ];
+        // Budget tight enough that orphan alone would exceed remaining, but older messages fit
+        const result = buildContext(messages, 10);
+        // System(1) + user(3) + orphan(5) = 9 tokens, budget=10 → all should fit
+        assert.equal(result.length, 3);
+        assert.ok(
+            result.some((m) => m.role === "tool" && (m as any).tool_call_id === "nonexistent"),
+        );
     });
 
     it("paired tool result skipped when turn exceeds budget", () => {

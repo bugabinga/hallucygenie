@@ -594,7 +594,7 @@ function parseToolParams(raw: string | undefined, allowed: Set<string>): Record<
 
 export function parseExplicitToolDirective(content: string): ExplicitToolDirective | null {
     const match = content.match(
-        /^Use\s+(generate_image|generate_music|text_to_speech|generate_lyrics|analyze_image)\s+with\s+(prompt|text|image_url):\s*([\s\S]*?)(?:\nTool params:\s*([\s\S]*))?$/i,
+        /^Use\s+(generate_image|generate_music|text_to_speech|generate_lyrics|analyze_image)\s+with\s+(prompt|text|image_url|lyrics):\s*([\s\S]*?)(?:\nTool params:\s*([\s\S]*))?$/i,
     );
     if (!match) return null;
 
@@ -628,6 +628,12 @@ export function parseExplicitToolDirective(content: string): ExplicitToolDirecti
         if (field !== "image_url") return null;
         args.image_url = value;
         return { name, args, prompt: typeof args.prompt === "string" ? args.prompt : value };
+    }
+
+    if (name === "generate_lyrics") {
+        if (field !== "lyrics") return null;
+        args.lyrics = value;
+        return { name, args, prompt: value };
     }
 
     if (field !== "prompt") return null;

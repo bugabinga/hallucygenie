@@ -214,6 +214,28 @@ describe("Explicit Create directives", () => {
         });
     });
 
+    it("parses generate_lyrics directive with lyrics field (not prompt)", () => {
+        const directive = parseExplicitToolDirective(
+            "Use generate_lyrics with lyrics: write me a song about cats",
+        );
+        assert.deepEqual(directive, {
+            name: "generate_lyrics",
+            args: { lyrics: "write me a song about cats" },
+            prompt: "write me a song about cats",
+        });
+    });
+
+    it("parses generate_lyrics directive with title and mode", () => {
+        const directive = parseExplicitToolDirective(
+            "Use generate_lyrics with lyrics: sing a happy song\nTool params: title=Joy,title=Happy Day",
+        );
+        assert.deepEqual(directive, {
+            name: "generate_lyrics",
+            args: { lyrics: "sing a happy song", title: "Happy Day" },
+            prompt: "sing a happy song",
+        });
+    });
+
     it("parses analyze image directive with prompt param", () => {
         const directive = parseExplicitToolDirective(
             "Use analyze_image with image_url: https://example.com/cat.png\nTool params: prompt=Tell me one thing you see",
