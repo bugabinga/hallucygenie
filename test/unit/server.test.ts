@@ -214,6 +214,44 @@ describe("Explicit Create directives", () => {
         });
     });
 
+    it("parses generate_lyrics directive with lyrics field as prompt alias", () => {
+        const directive = parseExplicitToolDirective(
+            "Use generate_lyrics with lyrics: write me a song about cats",
+        );
+        assert.deepEqual(directive, {
+            name: "generate_lyrics",
+            args: { prompt: "write me a song about cats" },
+            prompt: "write me a song about cats",
+        });
+    });
+
+    it("parses generate_lyrics directive with prompt field", () => {
+        const directive = parseExplicitToolDirective(
+            "Use generate_lyrics with prompt: write me a song about cats",
+        );
+        assert.deepEqual(directive, {
+            name: "generate_lyrics",
+            args: { prompt: "write me a song about cats" },
+            prompt: "write me a song about cats",
+        });
+    });
+
+    it("parses generate_lyrics directive with title, mode, and edit lyrics", () => {
+        const directive = parseExplicitToolDirective(
+            "Use generate_lyrics with lyrics: sing a happy song\nTool params: title=Joy,title=Happy Day,mode=edit,lyrics=old words",
+        );
+        assert.deepEqual(directive, {
+            name: "generate_lyrics",
+            args: {
+                title: "Happy Day",
+                mode: "edit",
+                lyrics: "old words",
+                prompt: "sing a happy song",
+            },
+            prompt: "sing a happy song",
+        });
+    });
+
     it("parses analyze image directive with prompt param", () => {
         const directive = parseExplicitToolDirective(
             "Use analyze_image with image_url: https://example.com/cat.png\nTool params: prompt=Tell me one thing you see",
@@ -903,6 +941,46 @@ describe("SSE streaming from Anthropic endpoint", () => {
         }
     });
 
+    it("executes explicit generate_lyrics directive with required prompt", async () => {
+        let lyricsPayload: Record<string, unknown> | null = null;
+        globalThis.fetch = async (_url: string | URL | Request, init?: RequestInit) => {
+            lyricsPayload = JSON.parse(String(init?.body));
+            return new Response(JSON.stringify({ lyrics: "cat song" }), {
+                status: 200,
+                headers: { "Content-Type": "application/json" },
+            });
+        };
+
+        try {
+            const resp = await handleChat(
+                makeRequest(
+                    "POST",
+                    "/api/chat",
+                    {
+                        messages: [
+                            {
+                                role: "user",
+                                content:
+                                    "Use generate_lyrics with lyrics: write me a song about cats",
+                            },
+                        ],
+                    },
+                    { "X-Session-Id": "explicit-lyrics-session" },
+                ),
+                "test-key",
+                "explicit-lyrics-session",
+            );
+            const body = await readBody(resp);
+            assert.ok(body.includes("cat song"));
+            assert.deepEqual(lyricsPayload, {
+                mode: "write_full_song",
+                prompt: "write me a song about cats",
+            });
+        } finally {
+            globalThis.fetch = REAL_FETCH;
+        }
+    });
+
     it("executes Create tool endpoint with origin=create and exact multiline params", async () => {
         const sessionId = "create-tool-multiline-session";
         const db = getDb()!;
@@ -967,6 +1045,8 @@ describe("SSE streaming from Anthropic endpoint", () => {
 
     it("preprocesses music cover direct audio URL", async () => {
         const originalFetch = globalThis.fetch;
+        const previousApiKey = process.env.MINIMAX_API_KEY;
+        process.env.MINIMAX_API_KEY = "test-key";
         let payload: Record<string, unknown> | null = null;
         globalThis.fetch = async (_url: string | URL | Request, init?: RequestInit) => {
             payload = JSON.parse(String(init?.body));
@@ -996,6 +1076,8 @@ describe("SSE streaming from Anthropic endpoint", () => {
             assert.equal(body.lyrics, "[Verse]\nhi");
         } finally {
             globalThis.fetch = originalFetch;
+            if (previousApiKey === undefined) delete process.env.MINIMAX_API_KEY;
+            else process.env.MINIMAX_API_KEY = previousApiKey;
         }
     });
 
@@ -1005,6 +1087,8 @@ describe("SSE streaming from Anthropic endpoint", () => {
         createSession(db, sessionId, "Create Tool Cover");
         let payload: Record<string, unknown> | null = null;
         const originalFetch = globalThis.fetch;
+        const previousApiKey = process.env.MINIMAX_API_KEY;
+        process.env.MINIMAX_API_KEY = "test-key";
         globalThis.fetch = async (_url: string | URL | Request, init?: RequestInit) => {
             payload = JSON.parse(String(init?.body));
             return new Response(JSON.stringify({ data: { audio: "ff" } }), {
@@ -1043,6 +1127,8 @@ describe("SSE streaming from Anthropic endpoint", () => {
             assert.equal(history[0]?.tool_name, "generate_music_cover");
         } finally {
             globalThis.fetch = originalFetch;
+            if (previousApiKey === undefined) delete process.env.MINIMAX_API_KEY;
+            else process.env.MINIMAX_API_KEY = previousApiKey;
         }
     });
 

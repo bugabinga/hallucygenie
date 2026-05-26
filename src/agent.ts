@@ -263,7 +263,11 @@ export function buildContext(
                 i = pairedIndex - 1;
             } else {
                 // Orphan tool result with no matching tool_use — treat as standalone
-                if (usedTokens + msgTokens > remainingBudget) break;
+                if (usedTokens + msgTokens > remainingBudget) {
+                    // Budget exceeded — skip orphan and continue scanning older messages
+                    i--;
+                    continue;
+                }
                 result.unshift(msg);
                 usedTokens += msgTokens;
                 i--;
@@ -348,7 +352,7 @@ export function stripModelControlPlaceholders(text: string): string {
 }
 
 export function compactToolResultForModel(toolName: string, result: ToolResult): string {
-    if (result.type === "error") return `Error: ${result.content}`;
+    if (result.type === "error") return "Error: " + result.content;
 
     if (result.type === "image") {
         return `Generated image with ${toolName}. The UI displays it in a tool card. Do not embed image URLs or markdown images in your reply.`;

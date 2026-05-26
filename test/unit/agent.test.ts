@@ -863,6 +863,15 @@ describe("runAgentLoop", () => {
         assert.ok(compact.includes("[Tool result truncated for context]"));
     });
 
+    it("returns string (not object) for error type", () => {
+        const result = compactToolResultForModel("generate_image", {
+            type: "error",
+            content: "something went wrong",
+        });
+        assert.equal(typeof result, "string");
+        assert.equal(result, "Error: something went wrong");
+    });
+
     it("strips model control placeholders", () => {
         assert.equal(stripModelControlPlaceholders("<end_turn>"), "");
         assert.equal(stripModelControlPlaceholders("ok\n<image>"), "ok");
@@ -2259,6 +2268,18 @@ describe("buildContext tool pair boundary conditions", () => {
         const result = buildContext(messages, 1000);
         assert.equal(result.length, 2);
         assert.equal(result[1].role, "tool");
+    });
+
+    it("oversized orphan tool result skipped without blocking older messages", () => {
+        const messages: ChatMessage[] = [
+            { role: "system" as const, content: "a" },
+            { role: "user" as const, content: "old msg" },
+            { role: "tool" as const, content: "x".repeat(80), tool_call_id: "nonexistent" },
+        ];
+        const result = buildContext(messages, 10);
+        assert.equal(result.length, 2);
+        assert.equal(result[1].role, "user");
+        assert.ok(!result.some((m) => m.role === "tool"));
     });
 
     it("paired tool result skipped when turn exceeds budget", () => {

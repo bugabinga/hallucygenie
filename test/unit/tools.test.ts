@@ -927,9 +927,13 @@ describe("music cover", () => {
     });
 
     it("generates cover from cover_feature_id", async () => {
+        let capturedUrl = "";
         let capturedBody = "";
-        globalThis.fetch = async (_url: string | URL | Request, init?: RequestInit) => {
+        let capturedInit: RequestInit | undefined;
+        globalThis.fetch = async (url: string | URL | Request, init?: RequestInit) => {
+            capturedUrl = url.toString();
             capturedBody = init?.body as string;
+            capturedInit = init;
             return jsonResponse({ data: { audio: "4d75736963" } });
         };
 
@@ -938,12 +942,138 @@ describe("music cover", () => {
             API_KEY,
         );
 
-        assert.equal(result.type, "audio");
+        const expectedBase64 = Buffer.from("4d75736963", "hex").toString("base64");
+        assert.deepEqual(result, {
+            type: "audio",
+            content: `data:audio/mp3;base64,${expectedBase64}`,
+        });
+        assert.ok(capturedUrl.endsWith("/v1/music_generation"));
+        assert.equal(capturedInit!.method, "POST");
         const body = JSON.parse(capturedBody);
-        assert.equal(body.model, "music-cover");
-        assert.equal(body.cover_feature_id, "cover-1");
-        assert.equal(body.prompt, "spooky boss battle");
-        assert.equal(body.lyrics, "[Verse]\nhi");
+        assert.deepEqual(body, {
+            model: "music-cover",
+            cover_feature_id: "cover-1",
+            prompt: "spooky boss battle",
+            lyrics: "[Verse]\nhi",
+        });
+        const headers = capturedInit!.headers as Record<string, string>;
+        assert.equal(headers["Authorization"], `Bearer ${API_KEY}`);
+        assert.equal(headers["Content-Type"], "application/json");
+    });
+
+    it("reports music cover API failures", async () => {
+        globalThis.fetch = async () => new Response("broken", { status: 503 });
+
+        const result = await generateMusicCover(
+            { prompt: "spooky", lyrics: "[Verse]\nhi", cover_feature_id: "cover-1" },
+            API_KEY,
+        );
+
+        assert.deepEqual(result, { type: "error", content: "Music cover API error: 503" });
+    });
+
+    it("reports music cover base_resp failures", async () => {
+        mockFetch(jsonResponse({ base_resp: { status_code: 2013, status_msg: "bad cover" } }));
+
+        const result = await generateMusicCover(
+            { prompt: "spooky", lyrics: "[Verse]\nhi", cover_feature_id: "cover-1" },
+            API_KEY,
+        );
+
+        assert.deepEqual(result, { type: "error", content: "Music cover failed: bad cover" });
+    });
+
+    it("reports music cover responses with no audio", async () => {
+        mockFetch(jsonResponse({ data: {} }));
+
+        const result = await generateMusicCover(
+            { prompt: "spooky", lyrics: "[Verse]\nhi", cover_feature_id: "cover-1" },
+            API_KEY,
+        );
+
+        assert.deepEqual(result, { type: "error", content: "Music cover returned no audio" });
+    });
+
+    it("reports music cover network failures", async () => {
+        globalThis.fetch = async () => {
+            throw new Error("offline");
+        };
+
+        const result = await generateMusicCover(
+            { prompt: "spooky", lyrics: "[Verse]\nhi", cover_feature_id: "cover-1" },
+            API_KEY,
+        );
+
+        assert.deepEqual(result, { type: "error", content: "Music cover failed: Error: offline" });
+    });
+
+    it("preprocesses audio_base64 and preserves formatted lyrics priority", async () => {
+        let capturedUrl = "";
+        let capturedBody = "";
+        let capturedInit: RequestInit | undefined;
+        globalThis.fetch = async (url: string | URL | Request, init?: RequestInit) => {
+            capturedUrl = url.toString();
+            capturedBody = init?.body as string;
+            capturedInit = init;
+            return jsonResponse({
+                data: { cover_feature_id: "cover-2", lyrics: "raw", formatted_lyrics: "formatted" },
+            });
+        };
+
+        const result = await musicCoverPreprocess({ audio_base64: "QUJD" }, API_KEY);
+
+        assert.deepEqual(result, { cover_feature_id: "cover-2", lyrics: "formatted" });
+        assert.ok(capturedUrl.endsWith("/v1/music_cover_preprocess"));
+        assert.equal(capturedInit!.method, "POST");
+        assert.deepEqual(JSON.parse(capturedBody), { model: "music-cover", audio_base64: "QUJD" });
+        const headers = capturedInit!.headers as Record<string, string>;
+        assert.equal(headers["Authorization"], `Bearer ${API_KEY}`);
+        assert.equal(headers["Content-Type"], "application/json");
+    });
+
+    it("preprocess returns raw lyrics fallback and empty default", async () => {
+        globalThis.fetch = async () =>
+            jsonResponse({ data: { cover_feature_id: "cover-3", lyrics: "raw" } });
+        assert.deepEqual(
+            await musicCoverPreprocess({ audio_url: "https://example.com/a.mp3" }, API_KEY),
+            {
+                cover_feature_id: "cover-3",
+                lyrics: "raw",
+            },
+        );
+
+        globalThis.fetch = async () => jsonResponse({ data: { cover_feature_id: "cover-4" } });
+        assert.deepEqual(
+            await musicCoverPreprocess({ audio_url: "https://example.com/a.mp3" }, API_KEY),
+            {
+                cover_feature_id: "cover-4",
+                lyrics: "",
+            },
+        );
+    });
+
+    it("rejects preprocess without source", async () => {
+        await assert.rejects(() => musicCoverPreprocess({}, API_KEY), /cover source required/);
+    });
+
+    it("reports preprocess HTTP, base_resp, and missing-id failures", async () => {
+        globalThis.fetch = async () => new Response("broken", { status: 502 });
+        await assert.rejects(
+            () => musicCoverPreprocess({ audio_url: "https://example.com/a.mp3" }, API_KEY),
+            /music cover preprocess API error: 502/,
+        );
+
+        mockFetch(jsonResponse({ base_resp: { status_code: 2013, status_msg: "bad source" } }));
+        await assert.rejects(
+            () => musicCoverPreprocess({ audio_url: "https://example.com/a.mp3" }, API_KEY),
+            /Music cover preprocess failed: bad source/,
+        );
+
+        mockFetch(jsonResponse({ data: {} }));
+        await assert.rejects(
+            () => musicCoverPreprocess({ audio_url: "https://example.com/a.mp3" }, API_KEY),
+            /music cover preprocess returned no cover_feature_id/,
+        );
     });
 });
 
