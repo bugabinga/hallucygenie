@@ -631,8 +631,8 @@ export function parseExplicitToolDirective(content: string): ExplicitToolDirecti
     }
 
     if (name === "generate_lyrics") {
-        if (field !== "lyrics") return null;
-        args.lyrics = value;
+        if (field !== "prompt" && field !== "lyrics") return null;
+        args.prompt = value;
         return { name, args, prompt: value };
     }
 

@@ -2270,21 +2270,16 @@ describe("buildContext tool pair boundary conditions", () => {
         assert.equal(result[1].role, "tool");
     });
 
-    it("orphan tool result not dropped when it alone exceeds remaining budget", () => {
-        // When orphan tool result exceeds remaining budget, we decrement i and continue.
-        // This prevents orphans from being permanently excluded from context.
+    it("oversized orphan tool result skipped without blocking older messages", () => {
         const messages: ChatMessage[] = [
-            { role: "system" as const, content: "a" }, // 1 token
-            { role: "user" as const, content: "old msg" }, // ~3 tokens
-            { role: "tool" as const, content: "orphan", tool_call_id: "nonexistent" }, // ~5 tokens
+            { role: "system" as const, content: "a" },
+            { role: "user" as const, content: "old msg" },
+            { role: "tool" as const, content: "x".repeat(80), tool_call_id: "nonexistent" },
         ];
-        // Budget tight enough that orphan alone would exceed remaining, but older messages fit
         const result = buildContext(messages, 10);
-        // System(1) + user(3) + orphan(5) = 9 tokens, budget=10 → all should fit
-        assert.equal(result.length, 3);
-        assert.ok(
-            result.some((m) => m.role === "tool" && (m as any).tool_call_id === "nonexistent"),
-        );
+        assert.equal(result.length, 2);
+        assert.equal(result[1].role, "user");
+        assert.ok(!result.some((m) => m.role === "tool"));
     });
 
     it("paired tool result skipped when turn exceeds budget", () => {

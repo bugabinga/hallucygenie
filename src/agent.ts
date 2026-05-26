@@ -264,7 +264,7 @@ export function buildContext(
             } else {
                 // Orphan tool result with no matching tool_use — treat as standalone
                 if (usedTokens + msgTokens > remainingBudget) {
-                    // Budget exceeded — decrement i and continue rather than dropping orphan
+                    // Budget exceeded — skip orphan and continue scanning older messages
                     i--;
                     continue;
                 }
