@@ -2,6 +2,7 @@
 
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
+import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { Window } from "happy-dom";
@@ -9,7 +10,6 @@ import { Window } from "happy-dom";
 const indexHtml = readFileSync("public/index.html", "utf-8");
 const styleCss = readFileSync("public/style.css", "utf-8");
 const appTs = readFileSync("public/app.ts", "utf-8");
-const appJs = readFileSync("public/app.js", "utf-8");
 const justfile = readFileSync("justfile", "utf-8");
 const serverTs = readFileSync("src/server.ts", "utf-8");
 const agentTest = readFileSync("test/unit/agent.test.ts", "utf-8");
@@ -44,6 +44,9 @@ const musicCreatorSpec = readFileSync(
 const musicCoverSpec = readFileSync(
     ".system/specs/HG-SPEC-013-minimax-music-cover-reference-tracks.md",
     "utf-8",
+);
+const trackedFiles = new Set(
+    execFileSync("git", ["ls-files"], { encoding: "utf-8" }).trim().split("\n").filter(Boolean),
 );
 
 type FontManifest = {
@@ -732,9 +735,7 @@ describe("frontend session identity health", () => {
 
     it("uses localStorage only for onboarding", () => {
         assert.equal(appTs.includes("hallucygenie_recent_error"), false);
-        assert.equal(appJs.includes("hallucygenie_recent_error"), false);
         assert.doesNotMatch(appTs, /restoreRecentError|saveRecentError|clearRecentError/);
-        assert.doesNotMatch(appJs, /restoreRecentError|saveRecentError|clearRecentError/);
         assert.doesNotMatch(appTs, /localStorage\.removeItem/);
         assert.match(appTs, /localStorage\.setItem\(ONBOARDING_KEY, "1"\)/);
         assert.match(appTs, /localStorage\.getItem\(ONBOARDING_KEY\)/);
@@ -852,20 +853,21 @@ describe("system metadata health", () => {
 });
 
 describe("justfile health", () => {
-    it("has one obvious non-mutating gate", () => {
+    it("has one obvious gate and ignored frontend bundle", () => {
         assert.match(justfile, /\nready: fmt-check typecheck build-check unit integration e2e\n/);
         assert.match(
             justfile,
             /\nfix:\n\s+just -f \.\/justfile --fmt\n\s+bunx prettier --write \.\n\s+just build/,
         );
         assert.match(justfile, /\nbuild-check:\n\s+tmp="\$\(mktemp\)"/);
-        assert.match(justfile, /public\/app\.js is stale; run: just fix/);
+        assert.match(justfile, /verify frontend bundle builds without writing generated output/);
+        assert.doesNotMatch(justfile, /public\/app\.js is stale/);
     });
 
     it("runs every test from directories, not brittle file lists", () => {
         assert.match(justfile, /\nunit:\n\s+bun test test\/unit/);
         assert.match(justfile, /\nintegration:\n\s+bun test test\/integration/);
-        assert.match(justfile, /\ne2e: build-check\n\s+bun e2e\/run-e2e\.ts/);
+        assert.match(justfile, /\ne2e: build\n\s+bun e2e\/run-e2e\.ts/);
         assert.doesNotMatch(justfile, /BACKEND_TESTS|FRONTEND_TESTS/);
         assert.deepEqual(
             readdirSync("test").filter((name) => name.endsWith(".test.ts")),
@@ -1153,8 +1155,9 @@ describe("layout health", () => {
         assert.equal(existsSync("deploy/hallucygenie.container"), true);
     });
 
-    it("ignores generated frontend bundle and local test artifacts", () => {
+    it("ignores and does not track generated frontend bundle", () => {
         assert.match(gitignore, /public\/app\.js/);
+        assert.equal(trackedFiles.has("public/app.js"), false);
         assert.doesNotMatch(gitignore, /\.pulse\.json/);
         assert.match(gitignore, /test-data\*\//);
         assert.match(prettierignore, /test\/\*\*\/__snapshots__\//);
@@ -1163,8 +1166,8 @@ describe("layout health", () => {
 });
 
 describe("removed profile UI cleanup", () => {
-    it("has no stale personality selector references in source or generated bundle", () => {
-        const sourceFiles = [indexHtml, styleCss, appTs, serverTs, appJs];
+    it("has no stale personality selector references in source", () => {
+        const sourceFiles = [indexHtml, styleCss, appTs, serverTs];
         for (const text of sourceFiles) {
             assert.equal(/personality/i.test(text), false);
         }

@@ -7,7 +7,7 @@ set unstable
 [group('check')]
 ready: fmt-check typecheck build-check unit integration e2e
 
-# format and rebuild tracked generated frontend
+# format and rebuild ignored generated frontend
 [group('check')]
 fix:
     just -f ./justfile --fmt
@@ -25,18 +25,17 @@ fmt-check:
 typecheck:
     bunx tsc --noEmit
 
-# bundle tracked frontend
+# bundle ignored frontend
 [group('dev')]
 build:
     bunx esbuild public/app.ts --outfile=public/app.js --bundle --format=esm --target=esnext
 
-# fail if tracked frontend bundle is stale
+# verify frontend bundle builds without writing generated output
 [group('check')]
 build-check:
     tmp="$(mktemp)"; \
     trap 'rm -f "$tmp"' EXIT; \
-    bunx esbuild public/app.ts --outfile="$tmp" --bundle --format=esm --target=esnext; \
-    cmp -s "$tmp" public/app.js || { echo "public/app.js is stale; run: just fix"; exit 1; }
+    bunx esbuild public/app.ts --outfile="$tmp" --bundle --format=esm --target=esnext
 
 # all unit tests; add new tests under test/unit/
 [group('test')]
@@ -50,7 +49,7 @@ integration:
 
 # browser E2E against mocked MiniMax
 [group('test')]
-e2e: build-check
+e2e: build
     bun e2e/run-e2e.ts
 
 # mutation tests
