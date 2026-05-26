@@ -960,14 +960,14 @@ describe("GitHub Actions health", () => {
         assert.match(ciYml, /run: just ready/);
         assert.match(ciYml, /run: just mutation/);
         assert.doesNotMatch(ciYml, /ci-test-all|test-e2e|test-mutation/);
-        assert.match(ciYml, /browser-actions\/setup-chrome@v2\.1\.1/);
+        assert.match(ciYml, /browser-actions\/setup-chrome@v2\.1\.2/);
         assert.match(ciYml, /install-dependencies: true/);
         assert.doesNotMatch(ciYml, /flaky apt source/);
         assert.match(ciYml, /CHROMIUM_PATH=/);
     });
 
     it("agent PR workflows fix then run ready before commit", () => {
-        assert.match(agentsYml, /browser-actions\/setup-chrome@v2\.1\.1/);
+        assert.match(agentsYml, /browser-actions\/setup-chrome@v2\.1\.2/);
         assert.equal((agentsYml.match(/just fix\n\s+just ready/g) ?? []).length, 8);
         assert.doesNotMatch(agentsYml, /just fmt \|\| true/);
         assert.match(slopChopperAgent, /Run "just fix" && "just ready" after/);
@@ -978,7 +978,7 @@ describe("GitHub Actions health", () => {
         assert.match(ciYml, /actions\/checkout@v6\.0\.2/);
         assert.match(ciYml, /oven-sh\/setup-bun@v2\.2\.0/);
         assert.match(ciYml, /actions\/cache@v5\.0\.5/);
-        assert.match(ciYml, /taiki-e\/install-action@v2\.75\.28/);
+        assert.match(ciYml, /taiki-e\/install-action@v2\.79\.7/);
         assert.match(ciYml, /tool: just/);
         assert.match(ciYml, /path: ~\/\.bun\/install\/cache/);
         assert.match(ciYml, /hashFiles\('bun\.lock'\)/);
