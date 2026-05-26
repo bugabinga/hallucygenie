@@ -44,6 +44,22 @@ export interface GenerateMusicOptions {
     lyrics?: string;
 }
 
+export interface GenerateMusicCoverOptions {
+    prompt: string;
+    lyrics: string;
+    cover_feature_id: string;
+}
+
+export interface MusicCoverPreprocessOptions {
+    audio_url?: string;
+    audio_base64?: string;
+}
+
+export interface MusicCoverPreprocessResult {
+    cover_feature_id: string;
+    lyrics: string;
+}
+
 export interface AnalyzeImageOptions {
     image_url: string;
     prompt?: string;
@@ -269,6 +285,15 @@ export async function executeTool(
                 },
                 apiKey,
             );
+        case "generate_music_cover":
+            return generateMusicCover(
+                {
+                    prompt: args.prompt as string,
+                    lyrics: args.lyrics as string,
+                    cover_feature_id: args.cover_feature_id as string,
+                },
+                apiKey,
+            );
         case "analyze_image":
             return analyzeImage(
                 {
@@ -485,6 +510,71 @@ export async function textToSpeech(
  * Calls POST /v1/lyrics_generation.
  * Returns plain text lyrics.
  */
+export async function generateMusicCover(
+    input: GenerateMusicCoverOptions,
+    apiKey: string,
+): Promise<ToolResult> {
+    try {
+        const resp = await fetch(`${MINIMAX_BASE}/v1/music_generation`, {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json",
+                Authorization: `Bearer ${apiKey}`,
+            },
+            body: JSON.stringify({
+                model: "music-cover",
+                prompt: input.prompt,
+                lyrics: input.lyrics,
+                cover_feature_id: input.cover_feature_id,
+            }),
+        });
+        if (!resp.ok) return { type: "error", content: `Music cover API error: ${resp.status}` };
+        const data = (await resp.json()) as {
+            data?: { audio?: string };
+            base_resp?: { status_code?: number; status_msg?: string };
+        };
+        const baseResp = baseRespError(data, "Music cover");
+        if (baseResp) return baseResp;
+        const audioHex = data.data?.audio;
+        if (!audioHex) return { type: "error", content: "Music cover returned no audio" };
+        const audioBase64 = Buffer.from(audioHex, "hex").toString("base64");
+        return { type: "audio", content: `data:audio/mp3;base64,${audioBase64}` };
+    } catch (err) {
+        return { type: "error", content: `Music cover failed: ${String(err)}` };
+    }
+}
+
+export async function musicCoverPreprocess(
+    input: MusicCoverPreprocessOptions,
+    apiKey: string,
+): Promise<MusicCoverPreprocessResult> {
+    if (!input.audio_url && !input.audio_base64) throw new Error("cover source required");
+    const payload: Record<string, unknown> = { model: "music-cover" };
+    if (input.audio_url) payload.audio_url = input.audio_url;
+    if (input.audio_base64) payload.audio_base64 = input.audio_base64;
+    const resp = await fetch(`${MINIMAX_BASE}/v1/music_cover_preprocess`, {
+        method: "POST",
+        headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${apiKey}`,
+        },
+        body: JSON.stringify(payload),
+    });
+    if (!resp.ok) throw new Error(`music cover preprocess API error: ${resp.status}`);
+    const data = (await resp.json()) as {
+        data?: { cover_feature_id?: string; lyrics?: string; formatted_lyrics?: string };
+        base_resp?: { status_code?: number; status_msg?: string };
+    };
+    const baseResp = baseRespError(data, "Music cover preprocess");
+    if (baseResp) throw new Error(baseResp.content);
+    const coverFeatureId = data.data?.cover_feature_id;
+    if (!coverFeatureId) throw new Error("music cover preprocess returned no cover_feature_id");
+    return {
+        cover_feature_id: coverFeatureId,
+        lyrics: data.data?.formatted_lyrics ?? data.data?.lyrics ?? "",
+    };
+}
+
 export async function generateLyrics(
     input: string | GenerateLyricsOptions,
     apiKey: string,
@@ -609,6 +699,87 @@ export async function generateMusic(
 
 // ── Web Search ───────────────────────────────────────────────────
 
+const YOUTUBE_OEMBED_LIMIT = 2;
+
+type SearchResult = { title: string; link: string; snippet: string };
+type YouTubeMetadata = {
+    source: string;
+    title: string;
+    authorName: string;
+    thumbnailUrl: string;
+};
+
+function youtubeVideoUrl(raw: string): string | null {
+    let url: URL;
+    try {
+        url = new URL(raw);
+    } catch {
+        return null;
+    }
+    const host = url.hostname.toLowerCase().replace(/^www\./, "");
+    if (host === "youtu.be") {
+        const id = url.pathname.split("/").filter(Boolean)[0] ?? "";
+        return /^[A-Za-z0-9_-]{11}$/.test(id) ? raw : null;
+    }
+    if (host !== "youtube.com" && host !== "m.youtube.com" && host !== "music.youtube.com") {
+        return null;
+    }
+    const watchId = url.searchParams.get("v") ?? "";
+    if (/^[A-Za-z0-9_-]{11}$/.test(watchId)) return raw;
+    const parts = url.pathname.split("/").filter(Boolean);
+    if (
+        (parts[0] === "shorts" || parts[0] === "embed") &&
+        /^[A-Za-z0-9_-]{11}$/.test(parts[1] ?? "")
+    ) {
+        return raw;
+    }
+    return null;
+}
+
+function youtubeUrlsFromText(text: string): string[] {
+    return [...text.matchAll(/https?:\/\/[^\s<>)"]+/g)]
+        .map((match) => match[0]!.replace(/[.,!?;:]+$/g, ""))
+        .map(youtubeVideoUrl)
+        .filter((url): url is string => url !== null);
+}
+
+function youtubeUrls(query: string, results: SearchResult[]): string[] {
+    const urls = [
+        ...youtubeUrlsFromText(query),
+        ...results.flatMap((result) => youtubeUrlsFromText(result.link)),
+    ];
+    return [...new Set(urls)].slice(0, YOUTUBE_OEMBED_LIMIT);
+}
+
+async function fetchYouTubeMetadata(source: string): Promise<YouTubeMetadata | null> {
+    const url = new URL("https://www.youtube.com/oembed");
+    url.searchParams.set("url", source);
+    url.searchParams.set("format", "json");
+    const resp = await fetch(url);
+    if (!resp.ok) return null;
+    const data = (await resp.json()) as {
+        title?: string;
+        author_name?: string;
+        thumbnail_url?: string;
+    };
+    if (!data.title || !data.author_name || !data.thumbnail_url) return null;
+    return {
+        source,
+        title: data.title,
+        authorName: data.author_name,
+        thumbnailUrl: data.thumbnail_url,
+    };
+}
+
+function formatYouTubeMetadata(items: YouTubeMetadata[]): string {
+    return items
+        .map(
+            (item) =>
+                `YouTube metadata:\n   Title: ${item.title}\n   Author: ${item.authorName}\n   Thumbnail: ${item.thumbnailUrl}\n   Source: ${item.source}`,
+        )
+        .join("\n\n");
+}
+
 export async function webSearch(query: string, apiKey: string): Promise<ToolResult> {
     try {
         const resp = await fetch(`${MINIMAX_BASE}/v1/coding_plan/search`, {
@@ -623,15 +794,17 @@ export async function webSearch(query: string, apiKey: string): Promise<ToolResu
             return { type: "error", content: `Search failed: HTTP ${resp.status}` };
         }
         const data = (await resp.json()) as {
-            organic?: Array<{ title: string; link: string; snippet: string }>;
+            organic?: SearchResult[];
         };
-        const results = data.organic ?? [];
-        if (results.length === 0) {
+        const results = (data.organic ?? []).slice(0, 5);
+        const metadata = (
+            await Promise.all(youtubeUrls(query, results).map((url) => fetchYouTubeMetadata(url)))
+        ).filter((item): item is YouTubeMetadata => item !== null);
+        const lines = results.map((r, i) => `${i + 1}. ${r.title}\n   ${r.link}\n   ${r.snippet}`);
+        if (metadata.length > 0) lines.push(formatYouTubeMetadata(metadata));
+        if (lines.length === 0) {
             return { type: "text", content: "No search results found." };
         }
-        const lines = results
-            .slice(0, 5)
-            .map((r, i) => `${i + 1}. ${r.title}\n   ${r.link}\n   ${r.snippet}`);
         return { type: "text", content: lines.join("\n\n") };
     } catch (err) {
         return { type: "error", content: `Search failed: ${String(err)}` };

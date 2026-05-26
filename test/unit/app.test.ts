@@ -78,10 +78,6 @@ function* parseSSEChunk(chunk: string): Generator<SSEEvent> {
 }
 
 // API helpers
-function clearLegacySessionId(localStorage: { removeItem: (k: string) => void }): void {
-    localStorage.removeItem("hallucygenie_session_id");
-}
-
 function createApiHeaders(): Record<string, string> {
     return {
         "Content-Type": "application/json",
@@ -93,6 +89,7 @@ const TOOL_EMOJIS: Record<string, string> = {
     generate_image: "🎨",
     text_to_speech: "🎙️",
     generate_music: "🎵",
+    generate_music_cover: "🎵",
     analyze_image: "🔎",
     web_search: "🔍",
 };
@@ -231,13 +228,6 @@ describe("API Headers", () => {
         const headers = createApiHeaders();
         assert.equal(headers["Content-Type"], "application/json");
         assert.equal("X-Session-Id" in headers, false);
-    });
-
-    it("removes legacy browser-owned session ID", () => {
-        const ls = new LocalStorageMock();
-        ls.setItem("hallucygenie_session_id", "existing-id-123");
-        clearLegacySessionId(ls);
-        assert.equal(ls.getItem("hallucygenie_session_id"), null);
     });
 });
 
@@ -1152,6 +1142,16 @@ function setupDOM(): { win: any; doc: any; errors: string[] } {
             <div class="form-group">
               <textarea id="music-lyrics"></textarea>
             </div>
+            <button id="write-lyrics-btn" type="button">Write lyrics</button>
+            <select id="cover-source-kind"><option value="direct">Audio URL</option><option value="upload">Audio file</option><option value="youtube">YouTube link</option></select>
+            <input id="cover-audio-url" />
+            <input id="cover-audio-file" type="file" />
+            <textarea id="cover-style"></textarea>
+            <button id="cover-preprocess" type="button">Prepare cover lyrics</button>
+            <input id="cover-feature-id" type="hidden" />
+            <p id="cover-status" role="status"></p>
+            <textarea id="cover-lyrics"></textarea>
+            <button id="cover-generate" type="button">Generate cover</button>
           </form>
           <form id="create-voice-form" class="create-panel" data-panel="voice" hidden>
             <div class="form-group">
@@ -2872,12 +2872,10 @@ describe("renderSteerMessage", () => {
 // ── Init accessibility regressions ──────────────────────────────────
 
 describe("init accessibility behavior", () => {
-    it("removes legacy browser-owned session ID", () => {
+    it("initializes without browser-owned session cleanup", () => {
         const { doc } = setupDOM();
-        (globalThis as any).localStorage.setItem("hallucygenie_session_id", "legacy-session");
         init();
 
-        assert.equal((globalThis as any).localStorage.getItem("hallucygenie_session_id"), null);
         assert.ok(doc.querySelector("#message-list"));
     });
 
@@ -3094,6 +3092,25 @@ describe("init accessibility behavior", () => {
         closeBtn.click();
         assert.equal(modal.hidden, true);
         assert.equal(doc.activeElement, createBtn);
+    });
+
+    it("updates create tab ARIA selection", () => {
+        const { doc } = setupDOM();
+        init();
+
+        const imageTab = doc.querySelector('.create-tab[data-tab="image"]') as HTMLButtonElement;
+        const musicTab = doc.querySelector('.create-tab[data-tab="music"]') as HTMLButtonElement;
+        const imagePanel = doc.querySelector('.create-panel[data-panel="image"]') as HTMLElement;
+        const musicPanel = doc.querySelector('.create-panel[data-panel="music"]') as HTMLElement;
+
+        musicTab.click();
+
+        assert.equal(imageTab.getAttribute("aria-selected"), "false");
+        assert.equal(musicTab.getAttribute("aria-selected"), "true");
+        assert.equal(imageTab.tabIndex, -1);
+        assert.equal(musicTab.tabIndex, 0);
+        assert.equal(imagePanel.hidden, true);
+        assert.equal(musicPanel.hidden, false);
     });
 
     it("traps Tab focus inside create modal", () => {

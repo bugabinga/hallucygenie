@@ -64,7 +64,7 @@ import { createLogger, nextReqId } from "./log.ts";
 
 const log = createLogger({ service: "hallucygenie" });
 import type { Database } from "bun:sqlite";
-import { MINIMAX_BASE, type ToolResult } from "./tools.ts";
+import { MINIMAX_BASE, musicCoverPreprocess, type ToolResult } from "./tools.ts";
 import {
     runAgentLoop,
     buildSystemPrompt,
@@ -109,6 +109,7 @@ export interface ChatRequestBody {
 export type DirectToolName =
     | "generate_image"
     | "generate_music"
+    | "generate_music_cover"
     | "text_to_speech"
     | "generate_lyrics"
     | "analyze_image"
@@ -637,7 +638,7 @@ export function parseExplicitToolDirective(content: string): ExplicitToolDirecti
 function featureForTool(name: string): "image" | "speech" | "music" | "lyrics" | null {
     if (name === "generate_image") return "image";
     if (name === "text_to_speech") return "speech";
-    if (name === "generate_music") return "music";
+    if (name === "generate_music" || name === "generate_music_cover") return "music";
     if (name === "generate_lyrics") return "lyrics";
     return null;
 }
@@ -769,6 +770,16 @@ function normalizeCreateToolExecution(body: unknown): DirectToolExecution | stri
         const lyrics = optionalStringField(fields, "lyrics", 3500);
         if (lyrics !== undefined) args.lyrics = lyrics;
         return { name, args, prompt };
+    }
+
+    if (name === "generate_music_cover") {
+        const prompt = parseStringField(fields, "prompt", 2000);
+        const lyrics = parseStringField(fields, "lyrics", 3500);
+        const coverFeatureId = parseStringField(fields, "cover_feature_id", 200);
+        if (!prompt) return "prompt required";
+        if (!lyrics) return "lyrics required";
+        if (!coverFeatureId) return "cover_feature_id required";
+        return { name, args: { prompt, lyrics, cover_feature_id: coverFeatureId }, prompt };
     }
 
     if (name === "text_to_speech") {
@@ -1033,11 +1044,23 @@ function isAnalyzeImageMime(mime: string): boolean {
     return ["image/png", "image/jpeg", "image/webp"].includes(mime);
 }
 
+function isCoverAudioMime(mime: string): boolean {
+    return [
+        "audio/mpeg",
+        "audio/mp3",
+        "audio/mp4",
+        "audio/m4a",
+        "audio/x-m4a",
+        "audio/wav",
+        "audio/x-wav",
+    ].includes(mime);
+}
+
 function profileAvatarPrompt(profile: ReturnType<typeof getUserProfile>): string {
     const parts = [
         profile.username ? `username: ${profile.username}` : "kid gamer creator",
         profile.interests ? `topics: ${profile.interests}` : "gaming and YouTube",
-        profile.favorites ? `style favorites: ${profile.favorites}` : "fun bright mascot",
+        profile.favorites ? `style ingredients: ${profile.favorites}` : "fun bright mascot",
         profile.hates ? `avoid: ${profile.hates}` : "",
     ].filter(Boolean);
     return `Square friendly gaming avatar for a kid creator. ${parts.join(". ")}. Clean icon, expressive, safe for YouTube profile picture.`.slice(
@@ -1109,6 +1132,54 @@ async function handleAnalyzeImageUpload(req: Request, database: Database): Promi
         const assetId = assetIdFromToolResult(saved);
         if (!assetId) throw new Error("analyze image asset save failed");
         return jsonResponse({ assetId, assetUrl: saved.content });
+    } catch (err) {
+        return jsonResponse({ error: String(err instanceof Error ? err.message : err) }, 400);
+    }
+}
+
+async function coverSourceFromSidecar(
+    url: string,
+): Promise<{ audio_url?: string; audio_base64?: string }> {
+    const sidecar = process.env.COVER_EXTRACTOR_URL;
+    if (!sidecar) throw new Error("Cover extractor is not configured.");
+    const resp = await fetch(sidecar, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ url }),
+    });
+    if (!resp.ok) throw new Error(`cover extractor failed: ${resp.status}`);
+    const data = (await resp.json()) as { audio_url?: string; audio_base64?: string };
+    if (!data.audio_url && !data.audio_base64) throw new Error("cover extractor returned no audio");
+    return data;
+}
+
+async function handleMusicCoverPreprocess(req: Request, apiKey: string): Promise<Response> {
+    try {
+        const form = await req.formData();
+        const sourceKind = String(form.get("source_kind") ?? "direct");
+        let source: { audio_url?: string; audio_base64?: string };
+        if (sourceKind === "direct") {
+            const audioUrl = String(form.get("audio_url") ?? "").trim();
+            if (!/^https?:\/\//i.test(audioUrl))
+                return jsonResponse({ error: "audio_url required" }, 400);
+            source = { audio_url: audioUrl };
+        } else if (sourceKind === "upload") {
+            const file = form.get("audio");
+            if (!(file instanceof File)) return jsonResponse({ error: "audio file required" }, 400);
+            if (!isCoverAudioMime(file.type))
+                return jsonResponse({ error: "audio type invalid" }, 400);
+            if (file.size > 20 * 1024 * 1024)
+                return jsonResponse({ error: "audio too large" }, 400);
+            source = { audio_base64: Buffer.from(await file.arrayBuffer()).toString("base64") };
+        } else if (sourceKind === "youtube") {
+            const url = String(form.get("audio_url") ?? "").trim();
+            if (!/^https?:\/\//i.test(url))
+                return jsonResponse({ error: "youtube url required" }, 400);
+            source = await coverSourceFromSidecar(url);
+        } else {
+            return jsonResponse({ error: "source_kind invalid" }, 400);
+        }
+        return jsonResponse(await musicCoverPreprocess(source, apiKey));
     } catch (err) {
         return jsonResponse({ error: String(err instanceof Error ? err.message : err) }, 400);
     }
@@ -1232,6 +1303,16 @@ export async function handleRequest(req: Request): Promise<Response> {
 
         if (path === "/api/analyze-image" && method === "POST") {
             return handleAnalyzeImageUpload(req, database);
+        }
+
+        if (path === "/api/music-cover/status" && method === "GET") {
+            return jsonResponse({ youtubeEnabled: Boolean(process.env.COVER_EXTRACTOR_URL) });
+        }
+
+        if (path === "/api/music-cover/preprocess" && method === "POST") {
+            const apiKey = process.env.MINIMAX_API_KEY;
+            if (!apiKey) return jsonResponse({ error: "MINIMAX_API_KEY not configured" }, 503);
+            return handleMusicCoverPreprocess(req, apiKey);
         }
 
         if (path === "/api/profile" && method === "PUT") {
@@ -1654,6 +1735,16 @@ function assetParamsJson(
             is_instrumental: lyrics.length === 0,
         });
     }
+    if (toolName === "generate_music_cover") {
+        const lyrics = stringParam(args, "lyrics") ?? "";
+        return JSON.stringify({
+            model: "music-cover",
+            prompt: prompt ?? stringParam(args, "prompt") ?? null,
+            cover_feature_id_present: Boolean(stringParam(args, "cover_feature_id")),
+            lyrics_present: lyrics.length > 0,
+            lyrics_excerpt: lyrics ? lyrics.slice(0, 200) : null,
+        });
+    }
     if (toolName === "generate_lyrics") {
         return JSON.stringify({
             endpoint: "lyrics_generation",
@@ -1685,7 +1776,12 @@ function saveAssetBuffer(
     saveAsset(db, {
         id: assetId,
         session_id: sessionId,
-        type: resultType === "image" ? "image" : toolName === "generate_music" ? "music" : "audio",
+        type:
+            resultType === "image"
+                ? "image"
+                : toolName === "generate_music" || toolName === "generate_music_cover"
+                  ? "music"
+                  : "audio",
         filename,
         mime_type: mime,
         prompt,

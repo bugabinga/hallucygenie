@@ -11,6 +11,8 @@ import {
     generateLyrics,
     webSearch,
     analyzeImage,
+    generateMusicCover,
+    musicCoverPreprocess,
     MINIMAX_BASE,
 } from "../../src/tools.ts";
 
@@ -405,6 +407,18 @@ describe("executeTool", () => {
         globalThis.fetch = async () => jsonResponse({ data: { audio: "4d75736963" } });
 
         const result = await executeTool("generate_music", { prompt: "upbeat tune" }, API_KEY);
+        assert.equal(result.type, "audio");
+        assert.ok(result.content.startsWith("data:audio/mp3;base64,"));
+    });
+
+    it("dispatches to generate_music_cover", async () => {
+        globalThis.fetch = async () => jsonResponse({ data: { audio: "4d75736963" } });
+
+        const result = await executeTool(
+            "generate_music_cover",
+            { prompt: "boss fight", lyrics: "la", cover_feature_id: "cover-1" },
+            API_KEY,
+        );
         assert.equal(result.type, "audio");
         assert.ok(result.content.startsWith("data:audio/mp3;base64,"));
     });
@@ -877,6 +891,59 @@ describe("generateMusic", () => {
         const result = await generateMusic("test", API_KEY);
         assert.ok(result.content.startsWith("data:audio/mp3;base64,"));
         assert.equal(result.type, "audio");
+    });
+});
+
+// ── music cover ─────────────────────────────────────────────────────
+
+describe("music cover", () => {
+    beforeEach(() => {
+        originalFetch = globalThis.fetch;
+    });
+
+    afterEach(() => {
+        globalThis.fetch = originalFetch;
+    });
+
+    it("preprocesses direct audio URL with music-cover model", async () => {
+        let capturedBody = "";
+        globalThis.fetch = async (_url: string | URL | Request, init?: RequestInit) => {
+            capturedBody = init?.body as string;
+            return jsonResponse({
+                data: { cover_feature_id: "cover-1", formatted_lyrics: "[Verse]\nhi" },
+            });
+        };
+
+        const result = await musicCoverPreprocess(
+            { audio_url: "https://example.com/a.mp3" },
+            API_KEY,
+        );
+
+        assert.equal(result.cover_feature_id, "cover-1");
+        assert.equal(result.lyrics, "[Verse]\nhi");
+        const body = JSON.parse(capturedBody);
+        assert.equal(body.model, "music-cover");
+        assert.equal(body.audio_url, "https://example.com/a.mp3");
+    });
+
+    it("generates cover from cover_feature_id", async () => {
+        let capturedBody = "";
+        globalThis.fetch = async (_url: string | URL | Request, init?: RequestInit) => {
+            capturedBody = init?.body as string;
+            return jsonResponse({ data: { audio: "4d75736963" } });
+        };
+
+        const result = await generateMusicCover(
+            { prompt: "spooky boss battle", lyrics: "[Verse]\nhi", cover_feature_id: "cover-1" },
+            API_KEY,
+        );
+
+        assert.equal(result.type, "audio");
+        const body = JSON.parse(capturedBody);
+        assert.equal(body.model, "music-cover");
+        assert.equal(body.cover_feature_id, "cover-1");
+        assert.equal(body.prompt, "spooky boss battle");
+        assert.equal(body.lyrics, "[Verse]\nhi");
     });
 });
 
@@ -1384,6 +1451,86 @@ describe("webSearch HTTP request structure", () => {
 
         const result = await webSearch("many results", API_KEY);
         assert.ok(!result.content.includes("Result 6"), "should limit to 5 results");
+    });
+
+    it("enriches YouTube result links with oEmbed metadata", async () => {
+        const urls: string[] = [];
+        globalThis.fetch = async (url: string | URL | Request) => {
+            urls.push(url.toString());
+            if (url.toString().includes("/v1/coding_plan/search")) {
+                return jsonResponse({
+                    organic: [
+                        {
+                            title: "Watch this",
+                            link: "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
+                            snippet: "Video result",
+                        },
+                    ],
+                });
+            }
+            return jsonResponse({
+                title: "Minecraft Lava Challenge",
+                author_name: "CoolGamer",
+                thumbnail_url: "https://i.ytimg.com/vi/dQw4w9WgXcQ/hqdefault.jpg",
+            });
+        };
+
+        const result = await webSearch("minecraft challenge", API_KEY);
+
+        assert.equal(result.type, "text");
+        assert.ok(result.content.includes("YouTube metadata:"));
+        assert.ok(result.content.includes("Title: Minecraft Lava Challenge"));
+        assert.ok(result.content.includes("Author: CoolGamer"));
+        assert.ok(
+            result.content.includes("Thumbnail: https://i.ytimg.com/vi/dQw4w9WgXcQ/hqdefault.jpg"),
+        );
+        assert.ok(urls.some((url) => url.startsWith("https://www.youtube.com/oembed?")));
+    });
+
+    it("enriches YouTube URLs pasted directly into query when search has no results", async () => {
+        globalThis.fetch = async (url: string | URL | Request) => {
+            if (url.toString().includes("/v1/coding_plan/search"))
+                return jsonResponse({ organic: [] });
+            return jsonResponse({
+                title: "Direct Video",
+                author_name: "Direct Creator",
+                thumbnail_url: "https://i.ytimg.com/vi/dQw4w9WgXcQ/hqdefault.jpg",
+            });
+        };
+
+        const result = await webSearch("ideas from https://youtu.be/dQw4w9WgXcQ", API_KEY);
+
+        assert.equal(result.type, "text");
+        assert.ok(result.content.includes("YouTube metadata:"));
+        assert.ok(result.content.includes("Title: Direct Video"));
+        assert.ok(result.content.includes("Source: https://youtu.be/dQw4w9WgXcQ"));
+    });
+
+    it("caps YouTube oEmbed enrichment at 2 videos", async () => {
+        let oembedCalls = 0;
+        globalThis.fetch = async (url: string | URL | Request) => {
+            if (url.toString().includes("/v1/coding_plan/search")) {
+                return jsonResponse({
+                    organic: ["dQw4w9WgXcQ", "abcdefghijk", "lmnopqrstuv"].map((id) => ({
+                        title: id,
+                        link: `https://www.youtube.com/watch?v=${id}`,
+                        snippet: "Video",
+                    })),
+                });
+            }
+            oembedCalls += 1;
+            return jsonResponse({
+                title: `Video ${oembedCalls}`,
+                author_name: "Creator",
+                thumbnail_url: "https://i.ytimg.com/thumb.jpg",
+            });
+        };
+
+        const result = await webSearch("videos", API_KEY);
+
+        assert.equal(oembedCalls, 2);
+        assert.ok(result.content.includes("Video 1"));
+        assert.ok(result.content.includes("Video 2"));
     });
 
     it("handles missing organic field gracefully", async () => {

@@ -9,7 +9,7 @@ import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { connect } from "node:net";
 import { initDatabase, resetStateForTesting, handleNodeRequest, getDb } from "../../src/server.ts";
 import type { IncomingMessage, ServerResponse } from "node:http";
-import { getMessages, getOrCreateActiveSessionId, saveAsset } from "../../src/db.ts";
+import { createSession, getMessages, getOrCreateActiveSessionId, saveAsset } from "../../src/db.ts";
 
 let server: ReturnType<typeof createServer>;
 let baseUrl: string;
@@ -247,6 +247,117 @@ describe("GET /api/quota", () => {
             const r = await api("GET", "/api/quota");
             assert.equal(r.status, 502);
             assert.equal((r.body as any).error, "Failed to fetch quota");
+        } finally {
+            globalThis.fetch = oldFetch;
+            if (oldKey) process.env.MINIMAX_API_KEY = oldKey;
+            else delete process.env.MINIMAX_API_KEY;
+        }
+    });
+});
+
+describe("Music cover HTTP flow", () => {
+    it("reports YouTube extractor disabled when COVER_EXTRACTOR_URL is missing", async () => {
+        const oldExtractor = process.env.COVER_EXTRACTOR_URL;
+        delete process.env.COVER_EXTRACTOR_URL;
+        try {
+            const r = await api("GET", "/api/music-cover/status");
+            assert.equal(r.status, 200);
+            assert.equal((r.body as any).youtubeEnabled, false);
+        } finally {
+            if (oldExtractor) process.env.COVER_EXTRACTOR_URL = oldExtractor;
+            else delete process.env.COVER_EXTRACTOR_URL;
+        }
+    });
+
+    it("preprocesses a direct audio URL through real HTTP server", async () => {
+        const oldKey = process.env.MINIMAX_API_KEY;
+        const oldFetch = globalThis.fetch;
+        process.env.MINIMAX_API_KEY = "test-key";
+        let providerBody: Record<string, unknown> | null = null;
+        globalThis.fetch = async (input: RequestInfo | URL, init?: RequestInit) => {
+            if (String(input).startsWith(baseUrl)) return oldFetch(input, init);
+            providerBody = JSON.parse(String(init?.body));
+            return new Response(
+                JSON.stringify({
+                    data: {
+                        cover_feature_id: "cover-integration",
+                        formatted_lyrics: "[Verse]\nhi",
+                    },
+                    base_resp: { status_code: 0 },
+                }),
+                { status: 200, headers: { "Content-Type": "application/json" } },
+            );
+        };
+
+        try {
+            const form = new FormData();
+            form.set("source_kind", "direct");
+            form.set("audio_url", "https://example.com/source.mp3");
+            const resp = await oldFetch(`${baseUrl}/api/music-cover/preprocess`, {
+                method: "POST",
+                body: form,
+            });
+            const body = await resp.json();
+
+            assert.equal(resp.status, 200);
+            assert.deepEqual(providerBody, {
+                model: "music-cover",
+                audio_url: "https://example.com/source.mp3",
+            });
+            assert.equal(body.cover_feature_id, "cover-integration");
+            assert.equal(body.lyrics, "[Verse]\nhi");
+        } finally {
+            globalThis.fetch = oldFetch;
+            if (oldKey) process.env.MINIMAX_API_KEY = oldKey;
+            else delete process.env.MINIMAX_API_KEY;
+        }
+    });
+
+    it("generates cover music through Create tool endpoint and saves asset", async () => {
+        const oldKey = process.env.MINIMAX_API_KEY;
+        const oldFetch = globalThis.fetch;
+        process.env.MINIMAX_API_KEY = "test-key";
+        const db = getDb();
+        assert.ok(db);
+        const sessionId = "integration-cover-session";
+        createSession(db, sessionId, "Cover Test");
+        let providerBody: Record<string, unknown> | null = null;
+        globalThis.fetch = async (input: RequestInfo | URL, init?: RequestInit) => {
+            if (String(input).startsWith(baseUrl)) return oldFetch(input, init);
+            providerBody = JSON.parse(String(init?.body));
+            return new Response(
+                JSON.stringify({ data: { audio: "ff" }, base_resp: { status_code: 0 } }),
+                { status: 200, headers: { "Content-Type": "application/json" } },
+            );
+        };
+
+        try {
+            const r = await api(
+                "POST",
+                "/api/create-tool",
+                JSON.stringify({
+                    tool_name: "generate_music_cover",
+                    input: {
+                        prompt: "spooky boss battle",
+                        lyrics: "[Verse]\nhi",
+                        cover_feature_id: "cover-integration",
+                    },
+                }),
+                { "X-Session-Id": sessionId },
+            );
+            assert.equal(r.status, 200);
+            assert.equal(providerBody?.model, "music-cover");
+            assert.equal(providerBody?.cover_feature_id, "cover-integration");
+
+            const assets = await api("GET", "/assets", undefined, { "X-Session-Id": sessionId });
+            assert.equal(assets.status, 200);
+            const cover = (assets.body as any).assets.find(
+                (asset: { tool_name: string }) => asset.tool_name === "generate_music_cover",
+            );
+            assert.ok(cover);
+            assert.equal(cover.type, "music");
+            assert.equal(cover.params.cover_feature_id_present, true);
+            assert.equal(String(cover.url).startsWith("/asset/"), true);
         } finally {
             globalThis.fetch = oldFetch;
             if (oldKey) process.env.MINIMAX_API_KEY = oldKey;

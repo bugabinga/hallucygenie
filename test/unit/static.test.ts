@@ -108,6 +108,30 @@ describe("index.html health", () => {
         assert.match(text, /🎨\s+—🎙️\s+—🎵\s+—/);
     });
 
+    it("create type switcher uses ARIA tabs", () => {
+        const doc = parseIndex();
+        const tabNames = ["image", "music", "voice", "analyze", "search", "assets"];
+        for (const name of tabNames) {
+            const tab = doc.querySelector(`.create-tab[data-tab="${name}"]`) as HTMLElement | null;
+            const panel = doc.querySelector(
+                `.create-panel[data-panel="${name}"]`,
+            ) as HTMLElement | null;
+            assert.equal(tab?.getAttribute("role"), "tab", `${name} tab role`);
+            assert.equal(tab?.id, `create-tab-${name}`, `${name} tab id`);
+            assert.equal(tab?.getAttribute("aria-controls"), panel?.id, `${name} controls`);
+            assert.equal(panel?.getAttribute("role"), "tabpanel", `${name} panel role`);
+            assert.equal(panel?.getAttribute("aria-labelledby"), tab?.id, `${name} labelledby`);
+        }
+        assert.equal(
+            doc.querySelector('.create-tab[data-tab="image"]')?.getAttribute("aria-selected"),
+            "true",
+        );
+        assert.equal(
+            doc.querySelector('.create-tab[data-tab="music"]')?.getAttribute("aria-selected"),
+            "false",
+        );
+    });
+
     it("visible labels and controls have no direct newline indentation", () => {
         const doc = parseIndex();
         const offenders = Array.from(
@@ -177,8 +201,6 @@ describe("index.html health", () => {
             "#music-lyrics-optimizer",
             "#music-output-format",
             "#music-audio-base64",
-            "#music-audio-url",
-            "#music-cover-feature-id",
         ]) {
             assert.equal(doc.querySelector(forbiddenId), null, forbiddenId);
         }
@@ -218,6 +240,7 @@ describe("index.html health", () => {
         assert.match(appTs, /\/api\/create-tool/);
         assert.match(appTs, /sendCreateTool\([\s\S]*"generate_image"/);
         assert.match(appTs, /sendCreateTool\([\s\S]*"generate_music"/);
+        assert.match(appTs, /sendCreateTool\([\s\S]*"generate_music_cover"/);
         assert.match(appTs, /sendCreateTool\([\s\S]*"text_to_speech"/);
         assert.match(appTs, /sendCreateTool\([\s\S]*"generate_lyrics"/);
         assert.match(appTs, /sendCreateTool\([\s\S]*"analyze_image"/);
@@ -229,6 +252,27 @@ describe("index.html health", () => {
         const btn = doc.querySelector("#write-lyrics-btn");
         assert.ok(btn, "Write lyrics button should exist");
         assert.equal(btn?.tagName.toLowerCase(), "button");
+    });
+
+    it("has a two-step music cover flow in the music form", () => {
+        const doc = parseIndex();
+        for (const id of [
+            "#cover-source-kind",
+            "#cover-audio-url",
+            "#cover-audio-file",
+            "#cover-style",
+            "#cover-preprocess",
+            "#cover-feature-id",
+            "#cover-status",
+            "#cover-lyrics",
+            "#cover-generate",
+        ]) {
+            assert.ok(doc.querySelector(id), id);
+        }
+        assert.match(appTs, /\/api\/music-cover\/status/);
+        assert.match(appTs, /\/api\/music-cover\/preprocess/);
+        assert.match(appTs, /youtube\.disabled = true/);
+        assert.match(appTs, /"generate_music_cover"/);
     });
 
     it("quota badge includes lyrics item", () => {
@@ -387,7 +431,7 @@ describe("index.html health", () => {
         );
         assert.equal(
             doc.querySelector('label[for="profile-favorites"]')?.textContent,
-            "Style favorites",
+            "Style ingredients",
         );
         assert.equal(doc.querySelector("#profile-avatar"), null);
         assert.equal(indexHtml.includes("Avatar emoji"), false);
@@ -669,9 +713,9 @@ describe("font vendoring health", () => {
 describe("frontend session identity health", () => {
     it("does not create browser-owned session IDs or send X-Session-Id", () => {
         assert.equal(appTs.includes("crypto.randomUUID()"), false);
-        assert.equal(appTs.includes('localStorage.setItem("hallucygenie_session_id"'), false);
+        assert.equal(appTs.includes("hallucygenie_session_id"), false);
+        assert.equal(appTs.includes("LEGACY_SESSION_KEY"), false);
         assert.equal(appTs.includes("X-Session-Id"), false);
-        assert.match(appTs, /localStorage\.removeItem\(LEGACY_SESSION_KEY\)/);
     });
 
     it("uses active-session asset API URLs without session query", () => {
@@ -686,12 +730,12 @@ describe("frontend session identity health", () => {
         assert.match(appTs, /\/api\/profile/);
     });
 
-    it("uses localStorage only for onboarding plus legacy session cleanup", () => {
+    it("uses localStorage only for onboarding", () => {
         assert.equal(appTs.includes("hallucygenie_recent_error"), false);
         assert.equal(appJs.includes("hallucygenie_recent_error"), false);
         assert.doesNotMatch(appTs, /restoreRecentError|saveRecentError|clearRecentError/);
         assert.doesNotMatch(appJs, /restoreRecentError|saveRecentError|clearRecentError/);
-        assert.match(appTs, /localStorage\.removeItem\(LEGACY_SESSION_KEY\)/);
+        assert.doesNotMatch(appTs, /localStorage\.removeItem/);
         assert.match(appTs, /localStorage\.setItem\(ONBOARDING_KEY, "1"\)/);
         assert.match(appTs, /localStorage\.getItem\(ONBOARDING_KEY\)/);
     });
@@ -857,11 +901,15 @@ describe("justfile health", () => {
         assert.equal(/^minimax-research:/m.test(justfile), false);
     });
 
-    it("can update vendored fonts", () => {
+    it("can update vendored fonts from pinned source commit", () => {
+        const commit = loadFontManifest().source.commit;
         assert.match(
             justfile,
-            /\nfonts-update commit="main":\n\s+bun scripts\/update-fonts\.ts \{\{ commit \}\}\n\s+bunx prettier --write public\/fonts\/fonts\.manifest\.json public\/style\.css/,
+            new RegExp(
+                `\\nfonts-update commit="${commit}":\\n\\s+bun scripts/update-fonts\\.ts \\{\\{ commit \\}\\}\\n\\s+bunx prettier --write public/fonts/fonts\\.manifest\\.json public/style\\.css`,
+            ),
         );
+        assert.doesNotMatch(justfile, /\nfonts-update commit="main":/);
         assert.equal(existsSync("scripts/update-fonts.ts"), true);
         assert.match(updateFontsScript, /function manifestTime/);
         assert.match(updateFontsScript, /sameCommit && sameFonts && previous\?\.generated_at/);

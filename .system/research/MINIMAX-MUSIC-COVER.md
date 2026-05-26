@@ -31,17 +31,35 @@ one of:
 Raw source audio must stay in temp files or asset storage only. It must never go
 into prompts, chat history, agent context, logs, or issue excerpts.
 
-## Open live-smoke questions
+## Live smoke 2026-05-26
 
-- Does current Token Plan allow `music-cover`?
+Plan check:
+
+- `GET /v1/token_plan/remains` lists `music-cover`.
+- Daily quota: 100.
+- Current usage before smoke: 0.
+
+One-step `audio_url` smoke:
+
+- `POST /v1/music_generation`.
+- Payload: `model: music-cover`, public direct MP3 `audio_url`, style prompt, `output_format: url`.
+- Result: `base_resp.status_code: 0`, `data.status: 2`, output audio URL returned.
+- Extra info: duration `174315ms`, sample rate `44100`, channels `2`, size `5585684` bytes.
+- Raw output bytes were not printed or stored in research.
+
+Preprocess smoke:
+
+- `POST /v1/music_cover_preprocess` with same public direct MP3 URL.
+- Result: `base_resp.status_code: 0`, `cover_feature_id` returned, `audio_duration: 182`.
+
+Observed failures:
+
+- Very short audio failed: `audio duration must be between 6s and 360s`.
+- Public URLs must be provider-fetchable; one Wikimedia URL failed with `download audio_url failed`.
+- Instrumental/no-lyric samples can fail one-step cover with `lyrics is too short` or provider `unknown error`.
+
+## Remaining questions
+
 - Does `audio_base64` work directly for small MP3/WAV input?
-- Does `audio_url` need a publicly reachable URL?
-- Is `music_cover_preprocess` required for quality or only optional?
-- Is output returned as hex like `music-2.6`, URL, or async task?
-- Does polling exist for cover generation?
-
-## No live smoke
-
-No live request was run in this ticket. Live cover testing needs explicit user
-approval and a tiny known-legal sample committed or generated specifically for
-the test. Do not use copyrighted or YouTube-derived audio.
+- Is two-step `cover_feature_id` required for no-lyric/instrumental references?
+- Final product policy for kid-friendly YouTube/audio URLs.

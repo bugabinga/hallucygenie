@@ -50,7 +50,7 @@ function buildProfileContext(profile?: UserProfile): string {
         quotedProfileLine("Name", profile.username),
         quotedProfileLine("Interests", profile.interests),
         quotedProfileLine("Dislikes", profile.hates),
-        quotedProfileLine("Favorites", profile.favorites),
+        quotedProfileLine("Style ingredients", profile.favorites),
     ].filter((line): line is string => Boolean(line));
     if (lines.length === 0) return "";
 

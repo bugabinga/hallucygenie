@@ -292,15 +292,11 @@ async function runE2ETests(): Promise<void> {
         async () => {
             const page = await browser!.newPage();
             await page.goto(BASE_URL);
-            await page.evaluate(() => localStorage.setItem("hallucygenie_session_id", "legacy"));
-            await page.reload();
             await waitForAppReady(page);
 
-            const sessionId = await page.evaluate(() => {
-                return localStorage.getItem("hallucygenie_session_id");
-            });
-
-            if (sessionId !== null) throw new Error(`Unexpected session ID: ${sessionId}`);
+            const keys = await page.evaluate(() => Object.keys(localStorage));
+            if (keys.includes("hallucygenie_session_id"))
+                throw new Error("Unexpected session ID key");
 
             await page.close();
         },
@@ -947,28 +943,7 @@ async function runE2ETests(): Promise<void> {
         results,
     );
 
-    // Test 17: Legacy session ID stays removed across reloads
-    await runTest(
-        "legacy session ID stays removed across reloads",
-        async () => {
-            const page = await browser!.newPage();
-            await page.goto(BASE_URL);
-            await page.evaluate(() => localStorage.setItem("hallucygenie_session_id", "legacy"));
-
-            await page.reload();
-            await waitForAppReady(page);
-
-            const sessionId = await page.evaluate(() =>
-                localStorage.getItem("hallucygenie_session_id"),
-            );
-            assertEqual(sessionId, null, "Legacy session ID removed");
-
-            await page.close();
-        },
-        results,
-    );
-
-    // Test 18: Profile saves via DB and survives localStorage clearing
+    // Test 17: Profile saves via DB and survives localStorage clearing
     await runTest(
         "profile saves via DB and survives localStorage clearing",
         async () => {

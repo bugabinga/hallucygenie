@@ -952,6 +952,100 @@ describe("SSE streaming from Anthropic endpoint", () => {
         }
     });
 
+    it("reports music cover extractor status", async () => {
+        const previous = process.env.COVER_EXTRACTOR_URL;
+        delete process.env.COVER_EXTRACTOR_URL;
+        try {
+            const resp = await handleRequest(makeRequest("GET", "/api/music-cover/status"));
+            const body = JSON.parse(await readBody(resp));
+            assert.equal(body.youtubeEnabled, false);
+        } finally {
+            if (previous === undefined) delete process.env.COVER_EXTRACTOR_URL;
+            else process.env.COVER_EXTRACTOR_URL = previous;
+        }
+    });
+
+    it("preprocesses music cover direct audio URL", async () => {
+        const originalFetch = globalThis.fetch;
+        let payload: Record<string, unknown> | null = null;
+        globalThis.fetch = async (_url: string | URL | Request, init?: RequestInit) => {
+            payload = JSON.parse(String(init?.body));
+            return new Response(
+                JSON.stringify({
+                    data: { cover_feature_id: "cover-1", formatted_lyrics: "[Verse]\nhi" },
+                }),
+                { status: 200, headers: { "Content-Type": "application/json" } },
+            );
+        };
+
+        try {
+            const form = new FormData();
+            form.set("source_kind", "direct");
+            form.set("audio_url", "https://example.com/source.mp3");
+            const resp = await handleRequest(
+                new Request("http://localhost/api/music-cover/preprocess", {
+                    method: "POST",
+                    body: form,
+                }),
+            );
+            const body = JSON.parse(await readBody(resp));
+
+            assert.equal(payload?.model, "music-cover");
+            assert.equal(payload?.audio_url, "https://example.com/source.mp3");
+            assert.equal(body.cover_feature_id, "cover-1");
+            assert.equal(body.lyrics, "[Verse]\nhi");
+        } finally {
+            globalThis.fetch = originalFetch;
+        }
+    });
+
+    it("executes Create music cover generation and saves asset", async () => {
+        const sessionId = "create-tool-cover-session";
+        const db = getDb()!;
+        createSession(db, sessionId, "Create Tool Cover");
+        let payload: Record<string, unknown> | null = null;
+        const originalFetch = globalThis.fetch;
+        globalThis.fetch = async (_url: string | URL | Request, init?: RequestInit) => {
+            payload = JSON.parse(String(init?.body));
+            return new Response(JSON.stringify({ data: { audio: "ff" } }), {
+                status: 200,
+                headers: { "Content-Type": "application/json" },
+            });
+        };
+
+        try {
+            const resp = await handleRequest(
+                makeRequest(
+                    "POST",
+                    "/api/create-tool",
+                    {
+                        tool_name: "generate_music_cover",
+                        input: {
+                            prompt: "spooky boss battle",
+                            lyrics: "[Verse]\nhi",
+                            cover_feature_id: "cover-1",
+                        },
+                    },
+                    { "X-Session-Id": sessionId },
+                ),
+            );
+            const body = await readBody(resp);
+
+            assert.equal(payload?.model, "music-cover");
+            assert.equal(payload?.cover_feature_id, "cover-1");
+            assert.ok(body.includes("tool_result"));
+            const asset = getAssets(db, sessionId).at(-1)!;
+            assert.equal(asset.type, "music");
+            assert.equal(asset.tool_name, "generate_music_cover");
+            const params = JSON.parse(asset.params_json!);
+            assert.equal(params.cover_feature_id_present, true);
+            const history = listToolInputHistory(db, sessionId, { kind: "music" });
+            assert.equal(history[0]?.tool_name, "generate_music_cover");
+        } finally {
+            globalThis.fetch = originalFetch;
+        }
+    });
+
     it("preserves create draft after successful Create lyrics helper", async () => {
         const sessionId = "create-tool-lyrics-draft-session";
         const db = getDb()!;

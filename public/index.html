@@ -206,12 +206,12 @@
                             ></textarea>
                         </div>
                         <div class="form-group">
-                            <label for="profile-favorites">Style favorites</label>
+                            <label for="profile-favorites">Style ingredients</label>
                             <textarea
                                 id="profile-favorites"
                                 rows="2"
                                 maxlength="300"
-                                placeholder="Blue fire, fox mascots, synthwave, favorite characters..."
+                                placeholder="Blue fire, fox mascots, synthwave, pixel art, spooky boss music..."
                             ></textarea>
                         </div>
                         <div class="profile-avatar-editor">
@@ -277,18 +277,26 @@
                     </div>
                     <div class="create-tabs" role="tablist" aria-label="Create type">
                         <!-- prettier-ignore -->
-                        <button class="create-tab active" data-tab="image" type="button">🎨 Image</button>
-                        <button class="create-tab" data-tab="music" type="button">🎵 Music</button>
-                        <button class="create-tab" data-tab="voice" type="button">🎤 Voice</button>
+                        <button id="create-tab-image" class="create-tab active" data-tab="image" type="button" role="tab" aria-selected="true" aria-controls="create-image-form">🎨 Image</button>
                         <!-- prettier-ignore -->
-                        <button class="create-tab" data-tab="analyze" type="button">🔎 Analyze</button>
+                        <button id="create-tab-music" class="create-tab" data-tab="music" type="button" role="tab" aria-selected="false" aria-controls="create-music-form" tabindex="-1">🎵 Music</button>
                         <!-- prettier-ignore -->
-                        <button class="create-tab" data-tab="search" type="button">🔍 Search</button>
+                        <button id="create-tab-voice" class="create-tab" data-tab="voice" type="button" role="tab" aria-selected="false" aria-controls="create-voice-form" tabindex="-1">🎤 Voice</button>
                         <!-- prettier-ignore -->
-                        <button class="create-tab" data-tab="assets" type="button">📁 Assets</button>
+                        <button id="create-tab-analyze" class="create-tab" data-tab="analyze" type="button" role="tab" aria-selected="false" aria-controls="create-analyze-form" tabindex="-1">🔎 Analyze</button>
+                        <!-- prettier-ignore -->
+                        <button id="create-tab-search" class="create-tab" data-tab="search" type="button" role="tab" aria-selected="false" aria-controls="create-search-form" tabindex="-1">🔍 Search</button>
+                        <!-- prettier-ignore -->
+                        <button id="create-tab-assets" class="create-tab" data-tab="assets" type="button" role="tab" aria-selected="false" aria-controls="assets-panel" tabindex="-1">📁 Assets</button>
                     </div>
                     <div class="create-panels">
-                        <form id="create-image-form" class="create-panel" data-panel="image">
+                        <form
+                            id="create-image-form"
+                            class="create-panel"
+                            data-panel="image"
+                            role="tabpanel"
+                            aria-labelledby="create-tab-image"
+                        >
                             <div class="create-recent" data-kind="image"></div>
                             <div class="form-group">
                                 <label for="img-prompt">Describe your image</label>
@@ -347,7 +355,14 @@
                             <p class="field-help">Adds clearer details so MiniMax understands your idea better.</p>
                             <button type="submit" class="btn-primary">Generate image 🎨</button>
                         </form>
-                        <form id="create-music-form" class="create-panel" data-panel="music" hidden>
+                        <form
+                            id="create-music-form"
+                            class="create-panel"
+                            data-panel="music"
+                            role="tabpanel"
+                            aria-labelledby="create-tab-music"
+                            hidden
+                        >
                             <div class="create-recent" data-kind="music"></div>
                             <div class="form-group">
                                 <label for="music-prompt">Describe the music</label>
@@ -370,8 +385,62 @@
                             <!-- prettier-ignore -->
                             <button type="button" id="write-lyrics-btn" class="btn-secondary">Write lyrics for me ✨</button>
                             <button type="submit" class="btn-primary">Generate music 🎵</button>
+                            <section class="cover-box" aria-labelledby="music-cover-title">
+                                <h3 id="music-cover-title">Cover a song</h3>
+                                <div class="form-group">
+                                    <label for="cover-source-kind">Source</label>
+                                    <select id="cover-source-kind">
+                                        <option value="direct">Audio URL</option>
+                                        <option value="upload">Audio file</option>
+                                        <option value="youtube">YouTube link</option>
+                                    </select>
+                                </div>
+                                <div class="form-group">
+                                    <label for="cover-audio-url">Audio or YouTube URL</label>
+                                    <input
+                                        id="cover-audio-url"
+                                        type="url"
+                                        inputmode="url"
+                                        placeholder="https://..."
+                                    />
+                                </div>
+                                <div class="form-group">
+                                    <label for="cover-audio-file">Audio file</label>
+                                    <input id="cover-audio-file" type="file" accept="audio/*" />
+                                </div>
+                                <div class="form-group">
+                                    <label for="cover-style">New style</label>
+                                    <textarea
+                                        id="cover-style"
+                                        rows="2"
+                                        placeholder="Spooky boss battle chiptune"
+                                    ></textarea>
+                                </div>
+                                <!-- prettier-ignore -->
+                                <button id="cover-preprocess" class="btn-secondary" type="button">Prepare cover lyrics</button>
+                                <input id="cover-feature-id" type="hidden" />
+                                <!-- prettier-ignore -->
+                                <p id="cover-status" class="field-help" role="status">Prepare a source before generating a cover.</p>
+                                <div class="form-group">
+                                    <label for="cover-lyrics">Cover lyrics</label>
+                                    <textarea
+                                        id="cover-lyrics"
+                                        rows="4"
+                                        placeholder="Lyrics appear here after prepare"
+                                    ></textarea>
+                                </div>
+                                <!-- prettier-ignore -->
+                                <button id="cover-generate" class="btn-primary" type="button">Generate cover 🎵</button>
+                            </section>
                         </form>
-                        <form id="create-voice-form" class="create-panel" data-panel="voice" hidden>
+                        <form
+                            id="create-voice-form"
+                            class="create-panel"
+                            data-panel="voice"
+                            role="tabpanel"
+                            aria-labelledby="create-tab-voice"
+                            hidden
+                        >
                             <div class="create-recent" data-kind="voice"></div>
                             <div class="form-group">
                                 <label for="voice-text">Text to speak</label>
@@ -460,6 +529,8 @@
                             id="create-analyze-form"
                             class="create-panel"
                             data-panel="analyze"
+                            role="tabpanel"
+                            aria-labelledby="create-tab-analyze"
                             hidden
                         >
                             <div class="create-recent" data-kind="analyze"></div>
@@ -502,6 +573,8 @@
                             id="create-search-form"
                             class="create-panel"
                             data-panel="search"
+                            role="tabpanel"
+                            aria-labelledby="create-tab-search"
                             hidden
                         >
                             <div class="create-recent" data-kind="search"></div>
@@ -515,7 +588,14 @@
                             </div>
                             <button type="submit" class="btn-primary">Search the web 🔍</button>
                         </form>
-                        <div id="assets-panel" class="create-panel" data-panel="assets" hidden>
+                        <div
+                            id="assets-panel"
+                            class="create-panel"
+                            data-panel="assets"
+                            role="tabpanel"
+                            aria-labelledby="create-tab-assets"
+                            hidden
+                        >
                             <div id="assets-grid"></div>
                             <!-- prettier-ignore -->
                             <p id="assets-empty" class="assets-empty" hidden>No assets yet — generate something! ✨</p>

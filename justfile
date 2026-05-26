@@ -72,7 +72,7 @@ install:
 
 # download newest Google font files, convert to woff2, update manifest checksums
 [group('setup')]
-fonts-update commit="main":
+fonts-update commit="8fee968603b86ac85d4fbf0f3ffbde3fed1d84e1":
     bun scripts/update-fonts.ts {{ commit }}
     bunx prettier --write public/fonts/fonts.manifest.json public/style.css
 
