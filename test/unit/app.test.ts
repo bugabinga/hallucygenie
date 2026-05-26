@@ -301,8 +301,7 @@ describe("DOM Rendering", () => {
     let happyDOMRef: any;
 
     before(async () => {
-        const { Window } = await import("happy-dom");
-        const win = new Window({ url: "http://localhost:3000" });
+        const win = createTestWindow({ url: "http://localhost:3000" });
         doc = win.document as unknown as Document;
         happyDOMRef = win;
     });
@@ -511,8 +510,7 @@ describe("Snapshot Tests - Message Bubbles", () => {
     let happyDOMRef: any;
 
     before(async () => {
-        const { Window } = await import("happy-dom");
-        const win = new Window({ url: "http://localhost:3000" });
+        const win = createTestWindow({ url: "http://localhost:3000" });
         doc = win.document as unknown as Document;
         happyDOMRef = win;
     });
@@ -979,6 +977,13 @@ describe("renderMarkdown", () => {
 // because app.ts auto-bootstraps (calls init()) at import time.
 
 import { Window } from "happy-dom";
+
+function createTestWindow(options?: ConstructorParameters<typeof Window>[0]): Window {
+    const win = new Window(options);
+    Object.assign(win, { SyntaxError, TypeError });
+    return win;
+}
+
 import {
     renderThinkingBlock,
     fetchHistory,
@@ -1017,7 +1022,7 @@ import {
  * Sets globalThis.document, window, localStorage, etc.
  */
 function setupDOM(): { win: any; doc: any; errors: string[] } {
-    const win = new Window();
+    const win = createTestWindow();
     const doc = win.document;
 
     // Inject clearAllIntervals for test cleanup — clears intervals started by app.ts init()
@@ -1186,6 +1191,13 @@ function setupDOM(): { win: any; doc: any; errors: string[] } {
     // Set globals
     globalThis.document = doc;
     globalThis.window = win;
+    Object.assign(globalThis, {
+        Event: win.Event,
+        MouseEvent: win.MouseEvent,
+        KeyboardEvent: win.KeyboardEvent,
+        InputEvent: win.InputEvent,
+        FocusEvent: win.FocusEvent,
+    });
     const localStore = new Map<string, string>();
     (globalThis as any).localStorage = {
         getItem: (key: string) => localStore.get(key) ?? null,

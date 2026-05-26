@@ -63,8 +63,14 @@ type FontManifest = {
     }>;
 };
 
-function parseIndex(): Document {
+function testWindow(): Window {
     const win = new Window();
+    (win as unknown as { SyntaxError: typeof SyntaxError }).SyntaxError = SyntaxError;
+    return win;
+}
+
+function parseIndex(): Document {
+    const win = testWindow();
     win.document.body.innerHTML = indexHtml;
     const head = indexHtml.match(/<head>[\s\S]*?<\/head>/)?.[0] ?? "";
     win.document.head.innerHTML = head.replace(/^<head>|<\/head>$/g, "");
@@ -457,7 +463,7 @@ describe("index.html health", () => {
         assert.match(indexHtml, /id="typing-indicator"[\s\S]*role="status"/);
         assert.match(indexHtml, /id="typing-indicator"[\s\S]*aria-live="polite"/);
         assert.match(indexHtml, /id="typing-indicator"[\s\S]*aria-label="Genie is thinking"/);
-        const doc = new Window().document;
+        const doc = testWindow().document;
         doc.body.innerHTML = indexHtml;
         assert.equal(doc.querySelector("#typing-indicator")?.hasAttribute("hidden"), false);
         assert.match(styleCss, /\.typing-indicator \{[^}]*position: absolute;/);
