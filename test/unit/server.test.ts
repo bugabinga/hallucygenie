@@ -37,6 +37,14 @@ import {
     saveUserProfile,
 } from "../../src/db.ts";
 
+// Capture the real (native) fetch at module load. Use getOwnPropertyDescriptor
+// so we reliably get the native fetch even if this file is loaded in a worker
+// where another parallel file already reassigned globalThis.fetch (e.g. tools.test.ts).
+// Bun --parallel runs files in parallel in separate workers; each module capture
+// can happen after another worker's reassignment. getOwnPropertyDescriptor on
+// globalThis always returns the own (non-inherited, non-proxied) fetch value.
+const REAL_FETCH = Object.getOwnPropertyDescriptor(globalThis, "fetch")?.value ?? globalThis.fetch;
+
 // -- Test helpers -----------------------------------------------------
 
 function makeRequest(
@@ -93,6 +101,8 @@ function ensureTestDb(): void {
 }
 
 after(() => {
+    // Restore real fetch (isolates this file from prior test files' mocks)
+    globalThis.fetch = REAL_FETCH;
     // Cleanup
     try {
         shutdown();
@@ -252,7 +262,6 @@ describe("Explicit Create directives", () => {
 
     it("analyzes uploaded assets without storing raw data URLs", async () => {
         const originalKey = process.env.MINIMAX_API_KEY;
-        const originalFetch = globalThis.fetch;
         process.env.MINIMAX_API_KEY = "test-key";
         const db = getDb()!;
         const session = createSession(db);
@@ -299,7 +308,7 @@ describe("Explicit Create directives", () => {
                 .join("\n");
             assert.doesNotMatch(stored, /data:image\/png;base64|;base64,/);
         } finally {
-            globalThis.fetch = originalFetch;
+            globalThis.fetch = REAL_FETCH;
             if (originalKey === undefined) delete process.env.MINIMAX_API_KEY;
             else process.env.MINIMAX_API_KEY = originalKey;
         }
@@ -558,7 +567,6 @@ describe("SSE streaming from Anthropic endpoint", () => {
         });
 
         // Mock fetch
-        const originalFetch = globalThis.fetch;
         globalThis.fetch = async () =>
             new Response(stream, {
                 status: 200,
@@ -580,7 +588,7 @@ describe("SSE streaming from Anthropic endpoint", () => {
             assert.ok(body.includes("World"));
             assert.ok(body.includes("[DONE]"));
         } finally {
-            globalThis.fetch = originalFetch;
+            globalThis.fetch = REAL_FETCH;
         }
     });
 
@@ -607,7 +615,6 @@ describe("SSE streaming from Anthropic endpoint", () => {
             },
         });
 
-        const originalFetch = globalThis.fetch;
         globalThis.fetch = async () =>
             new Response(stream, {
                 status: 200,
@@ -625,7 +632,7 @@ describe("SSE streaming from Anthropic endpoint", () => {
             assert.ok(body.includes("hidden thought"));
             assert.ok(body.includes("Hello"));
         } finally {
-            globalThis.fetch = originalFetch;
+            globalThis.fetch = REAL_FETCH;
         }
     });
 
@@ -652,7 +659,6 @@ describe("SSE streaming from Anthropic endpoint", () => {
         let callCount = 0;
         const encoder = new TextEncoder();
 
-        const originalFetch = globalThis.fetch;
         globalThis.fetch = async (url: string | URL | Request) => {
             const urlStr = url.toString();
             if (urlStr.includes("/anthropic/v1/messages")) {
@@ -692,12 +698,11 @@ describe("SSE streaming from Anthropic endpoint", () => {
             assert.ok(body.includes("tool_result"));
             assert.ok(body.includes("generate_image"));
         } finally {
-            globalThis.fetch = originalFetch;
+            globalThis.fetch = REAL_FETCH;
         }
     });
 
     it("streams error when MiniMax is unreachable", async () => {
-        const originalFetch = globalThis.fetch;
         globalThis.fetch = async () => {
             throw new Error("Connection refused");
         };
@@ -712,12 +717,11 @@ describe("SSE streaming from Anthropic endpoint", () => {
             const body = await readBody(resp);
             assert.ok(body.includes("Failed to connect"));
         } finally {
-            globalThis.fetch = originalFetch;
+            globalThis.fetch = REAL_FETCH;
         }
     });
 
     it("streams error when MiniMax returns non-200", async () => {
-        const originalFetch = globalThis.fetch;
         globalThis.fetch = async () => new Response("Internal Server Error", { status: 500 });
 
         try {
@@ -731,7 +735,7 @@ describe("SSE streaming from Anthropic endpoint", () => {
             assert.ok(body.includes("MiniMax returned 500"));
             assert.equal(body.includes("Internal Server Error"), false);
         } finally {
-            globalThis.fetch = originalFetch;
+            globalThis.fetch = REAL_FETCH;
         }
     });
 
@@ -755,7 +759,6 @@ describe("SSE streaming from Anthropic endpoint", () => {
             },
         });
 
-        const originalFetch = globalThis.fetch;
         globalThis.fetch = async () =>
             new Response(stream, {
                 status: 200,
@@ -770,7 +773,7 @@ describe("SSE streaming from Anthropic endpoint", () => {
             const body = await readBody(resp);
             assert.ok(body.includes("partial"));
         } finally {
-            globalThis.fetch = originalFetch;
+            globalThis.fetch = REAL_FETCH;
         }
     });
 
@@ -778,7 +781,6 @@ describe("SSE streaming from Anthropic endpoint", () => {
         let capturedPayload: unknown = null;
         const encoder = new TextEncoder();
 
-        const originalFetch = globalThis.fetch;
         globalThis.fetch = async (_url: string | URL | Request, init?: RequestInit) => {
             capturedPayload = JSON.parse(init?.body as string);
             const sseChunks = [
@@ -826,13 +828,12 @@ describe("SSE streaming from Anthropic endpoint", () => {
             // Messages should not contain system role
             assert.ok(!payload.messages.some((m: { role: string }) => m.role === "system"));
         } finally {
-            globalThis.fetch = originalFetch;
+            globalThis.fetch = REAL_FETCH;
         }
     });
 
     it("executes explicit Create tool directives directly", async () => {
         const fetchUrls: string[] = [];
-        const originalFetch = globalThis.fetch;
         globalThis.fetch = async (url: string | URL | Request) => {
             const urlStr = url.toString();
             fetchUrls.push(urlStr);
@@ -898,7 +899,7 @@ describe("SSE streaming from Anthropic endpoint", () => {
                 aspect_ratio: "16:9",
             });
         } finally {
-            globalThis.fetch = originalFetch;
+            globalThis.fetch = REAL_FETCH;
         }
     });
 
@@ -907,8 +908,9 @@ describe("SSE streaming from Anthropic endpoint", () => {
         const db = getDb()!;
         createSession(db, sessionId, "Create Tool Multiline");
         const lyrics = "Verse one, with comma\nChorus line, still here";
+        const previousApiKey = process.env.MINIMAX_API_KEY;
+        process.env.MINIMAX_API_KEY = "test-key";
         let musicPayload: Record<string, unknown> | null = null;
-        const originalFetch = globalThis.fetch;
         globalThis.fetch = async (_url: string | URL | Request, init?: RequestInit) => {
             musicPayload = JSON.parse(String(init?.body));
             return new Response(JSON.stringify({ data: { audio: "ff" } }), {
@@ -944,7 +946,9 @@ describe("SSE streaming from Anthropic endpoint", () => {
             assert.equal(history[0]?.origin, "create");
             assert.equal(JSON.parse(history[0]!.input_json).lyrics, lyrics);
         } finally {
-            globalThis.fetch = originalFetch;
+            globalThis.fetch = REAL_FETCH;
+            if (previousApiKey === undefined) delete process.env.MINIMAX_API_KEY;
+            else process.env.MINIMAX_API_KEY = previousApiKey;
         }
     });
 
@@ -957,7 +961,8 @@ describe("SSE streaming from Anthropic endpoint", () => {
             music: { prompt: "boss", lyrics: "" },
         });
 
-        const originalFetch = globalThis.fetch;
+        const previousApiKey = process.env.MINIMAX_API_KEY;
+        process.env.MINIMAX_API_KEY = "test-key";
         globalThis.fetch = async () =>
             new Response(JSON.stringify({ lyrics: "Verse one\nChorus" }), {
                 status: 200,
@@ -984,7 +989,9 @@ describe("SSE streaming from Anthropic endpoint", () => {
             assert.equal(history[0]?.origin, "create");
             assert.equal(history[0]?.tool_name, "generate_lyrics");
         } finally {
-            globalThis.fetch = originalFetch;
+            globalThis.fetch = REAL_FETCH;
+            if (previousApiKey === undefined) delete process.env.MINIMAX_API_KEY;
+            else process.env.MINIMAX_API_KEY = previousApiKey;
         }
     });
 
@@ -992,7 +999,8 @@ describe("SSE streaming from Anthropic endpoint", () => {
         const sessionId = "create-tool-image-too-large-session";
         const db = getDb()!;
         createSession(db, sessionId, "Create Image Too Large");
-        const originalFetch = globalThis.fetch;
+        const previousApiKey = process.env.MINIMAX_API_KEY;
+        process.env.MINIMAX_API_KEY = "test-key";
         globalThis.fetch = async (url: string | URL | Request) => {
             const urlStr = url.toString();
             if (urlStr === "https://example.com/huge.png") {
@@ -1027,7 +1035,9 @@ describe("SSE streaming from Anthropic endpoint", () => {
             assert.equal(history[0]?.status, "failed");
             assert.equal(history[0]?.origin, "create");
         } finally {
-            globalThis.fetch = originalFetch;
+            globalThis.fetch = REAL_FETCH;
+            if (previousApiKey === undefined) delete process.env.MINIMAX_API_KEY;
+            else process.env.MINIMAX_API_KEY = previousApiKey;
         }
     });
 
@@ -1037,7 +1047,6 @@ describe("SSE streaming from Anthropic endpoint", () => {
         createSession(db, sessionId, "Draft Success");
         saveDraft(db, sessionId, "create", { selectedTab: "voice", voice: { text: "hello" } });
 
-        const originalFetch = globalThis.fetch;
         globalThis.fetch = async () =>
             new Response(JSON.stringify({ data: { audio: "ff" } }), {
                 status: 200,
@@ -1057,7 +1066,7 @@ describe("SSE streaming from Anthropic endpoint", () => {
             assert.ok(body.includes("tool_result"));
             assert.equal(getDraft(db, sessionId, "create"), null);
         } finally {
-            globalThis.fetch = originalFetch;
+            globalThis.fetch = REAL_FETCH;
         }
     });
 
@@ -1067,7 +1076,6 @@ describe("SSE streaming from Anthropic endpoint", () => {
         createSession(db, sessionId, "Draft Failure");
         saveDraft(db, sessionId, "create", { selectedTab: "voice", voice: { text: "hello" } });
 
-        const originalFetch = globalThis.fetch;
         globalThis.fetch = async () =>
             new Response(
                 JSON.stringify({ base_resp: { status_code: 2013, status_msg: "bad text" } }),
@@ -1090,7 +1098,7 @@ describe("SSE streaming from Anthropic endpoint", () => {
                 voice: { text: "hello" },
             });
         } finally {
-            globalThis.fetch = originalFetch;
+            globalThis.fetch = REAL_FETCH;
         }
     });
 
@@ -1104,7 +1112,6 @@ describe("SSE streaming from Anthropic endpoint", () => {
             "INSERT OR REPLACE INTO daily_usage (date, feature, count) VALUES (date('now'), 'image', 99)",
         ).run();
 
-        const originalFetch = globalThis.fetch;
         let imageApiCalls = 0;
         globalThis.fetch = async (url: string | URL | Request) => {
             const urlStr = url.toString();
@@ -1135,7 +1142,7 @@ describe("SSE streaming from Anthropic endpoint", () => {
             assert.equal(imageApiCalls, 1);
             assert.equal(getUsageToday(db).image, 100);
         } finally {
-            globalThis.fetch = originalFetch;
+            globalThis.fetch = REAL_FETCH;
             if (existing) {
                 db.prepare(
                     "INSERT OR REPLACE INTO daily_usage (date, feature, count) VALUES (date('now'), 'image', ?)",
@@ -1160,7 +1167,6 @@ describe("SSE streaming from Anthropic endpoint", () => {
             "INSERT OR REPLACE INTO daily_usage (date, feature, count) VALUES (date('now'), 'speech', 3)",
         ).run();
 
-        const originalFetch = globalThis.fetch;
         globalThis.fetch = async () =>
             new Response(JSON.stringify({ data: { audio: "ff" } }), {
                 status: 200,
@@ -1180,7 +1186,7 @@ describe("SSE streaming from Anthropic endpoint", () => {
             assert.ok(body.includes("/asset/"));
             assert.equal(getUsageToday(db).speech, 8);
         } finally {
-            globalThis.fetch = originalFetch;
+            globalThis.fetch = REAL_FETCH;
             if (existing) {
                 db.prepare(
                     "INSERT OR REPLACE INTO daily_usage (date, feature, count) VALUES (date('now'), 'speech', ?)",
@@ -1205,7 +1211,6 @@ describe("SSE streaming from Anthropic endpoint", () => {
             "INSERT OR REPLACE INTO daily_usage (date, feature, count) VALUES (date('now'), 'speech', 3)",
         ).run();
 
-        const originalFetch = globalThis.fetch;
         globalThis.fetch = async () =>
             new Response(
                 JSON.stringify({ base_resp: { status_code: 2013, status_msg: "bad text" } }),
@@ -1225,7 +1230,7 @@ describe("SSE streaming from Anthropic endpoint", () => {
             assert.ok(body.includes("Couldn't generate voice audio"));
             assert.equal(getUsageToday(db).speech, 3);
         } finally {
-            globalThis.fetch = originalFetch;
+            globalThis.fetch = REAL_FETCH;
             if (existing) {
                 db.prepare(
                     "INSERT OR REPLACE INTO daily_usage (date, feature, count) VALUES (date('now'), 'speech', ?)",
@@ -1249,7 +1254,6 @@ describe("SSE streaming from Anthropic endpoint", () => {
             "INSERT OR REPLACE INTO daily_usage (date, feature, count) VALUES (date('now'), 'image', 100)",
         ).run();
 
-        const originalFetch = globalThis.fetch;
         globalThis.fetch = async () => {
             throw new Error("MiniMax API should not be called when quota is blocked");
         };
@@ -1278,7 +1282,7 @@ describe("SSE streaming from Anthropic endpoint", () => {
             assert.equal(rows.at(-1)?.role, "tool");
             assert.equal(rows.at(-1)?.content, "Error: Daily image quota is used up.");
         } finally {
-            globalThis.fetch = originalFetch;
+            globalThis.fetch = REAL_FETCH;
             if (existing) {
                 db.prepare(
                     "INSERT OR REPLACE INTO daily_usage (date, feature, count) VALUES (date('now'), 'image', ?)",
@@ -1309,7 +1313,6 @@ describe("SSE streaming from Anthropic endpoint", () => {
             size_bytes: 1,
         });
 
-        const originalFetch = globalThis.fetch;
         globalThis.fetch = async (url: string | URL | Request) => {
             const urlStr = url.toString();
             if (urlStr === "https://example.com/new-cat.png") {
@@ -1361,7 +1364,7 @@ describe("SSE streaming from Anthropic endpoint", () => {
             assert.match(toolRows.at(-1)!.content, /^\/asset\/asset_[0-9a-f-]{36}$/);
             assert.match(lastToolCall.id, /^direct_[0-9a-f-]{36}$/);
         } finally {
-            globalThis.fetch = originalFetch;
+            globalThis.fetch = REAL_FETCH;
             resetStateForTesting();
             rmSync(dir, { recursive: true, force: true });
             rmSync(`data/assets/${sessionId}`, { recursive: true, force: true });
@@ -1373,7 +1376,6 @@ describe("SSE streaming from Anthropic endpoint", () => {
         let capturedPayload: unknown = null;
         const encoder = new TextEncoder();
 
-        const originalFetch = globalThis.fetch;
         globalThis.fetch = async (_url: string | URL | Request, init?: RequestInit) => {
             capturedPayload = JSON.parse(init?.body as string);
             const sseChunks = [
@@ -1411,7 +1413,7 @@ describe("SSE streaming from Anthropic endpoint", () => {
             assert.equal(payload.stream, true);
             assert.equal(payload.max_tokens, 4096);
         } finally {
-            globalThis.fetch = originalFetch;
+            globalThis.fetch = REAL_FETCH;
         }
     });
 });
@@ -1509,7 +1511,6 @@ describe("Error handling", () => {
             },
         });
 
-        const originalFetch = globalThis.fetch;
         globalThis.fetch = async () =>
             new Response(stream, {
                 status: 200,
@@ -1526,7 +1527,7 @@ describe("Error handling", () => {
             const body = await readBody(resp);
             assert.ok(body !== undefined);
         } finally {
-            globalThis.fetch = originalFetch;
+            globalThis.fetch = REAL_FETCH;
         }
     });
 
@@ -1537,7 +1538,6 @@ describe("Error handling", () => {
             },
         });
 
-        const originalFetch = globalThis.fetch;
         globalThis.fetch = async () =>
             new Response(stream, {
                 status: 200,
@@ -1553,7 +1553,7 @@ describe("Error handling", () => {
             const body = await readBody(resp);
             assert.ok(body !== undefined);
         } finally {
-            globalThis.fetch = originalFetch;
+            globalThis.fetch = REAL_FETCH;
         }
     });
 
@@ -1566,7 +1566,6 @@ describe("Error handling", () => {
             },
         });
 
-        const originalFetch = globalThis.fetch;
         globalThis.fetch = async () =>
             new Response(stream, {
                 status: 200,
@@ -1580,12 +1579,11 @@ describe("Error handling", () => {
             const resp = await handleChat(req, "test-key");
             assert.equal(resp.status, 200);
         } finally {
-            globalThis.fetch = originalFetch;
+            globalThis.fetch = REAL_FETCH;
         }
     });
 
     it("handles MiniMax 401 auth error", async () => {
-        const originalFetch = globalThis.fetch;
         globalThis.fetch = async () =>
             new Response(JSON.stringify({ error: { message: "Invalid API key" } }), {
                 status: 401,
@@ -1602,7 +1600,7 @@ describe("Error handling", () => {
             const body = await readBody(resp);
             assert.ok(body.includes("401"));
         } finally {
-            globalThis.fetch = originalFetch;
+            globalThis.fetch = REAL_FETCH;
         }
     });
 
@@ -1612,7 +1610,6 @@ describe("Error handling", () => {
 
         let callCount = 0;
 
-        const originalFetch = globalThis.fetch;
         globalThis.fetch = async (url: string | URL | Request) => {
             const urlStr = url.toString();
             if (urlStr.includes("/anthropic/v1/messages")) {
@@ -1636,7 +1633,7 @@ describe("Error handling", () => {
             assert.ok(body.includes("tool_start"));
             assert.ok(body.includes("tool_result"));
         } finally {
-            globalThis.fetch = originalFetch;
+            globalThis.fetch = REAL_FETCH;
         }
     });
 
@@ -1651,7 +1648,6 @@ describe("Error handling", () => {
             'event: message_stop\ndata: {"type":"message_stop"}\n\n',
         ];
 
-        const originalFetch = globalThis.fetch;
         globalThis.fetch = async () =>
             new Response(makeAnthropicStream(sseChunks), {
                 status: 200,
@@ -1667,7 +1663,7 @@ describe("Error handling", () => {
             // Should complete gracefully with [DONE]
             assert.ok(body.includes("[DONE]"));
         } finally {
-            globalThis.fetch = originalFetch;
+            globalThis.fetch = REAL_FETCH;
         }
     });
 
@@ -1708,7 +1704,6 @@ describe("Error handling", () => {
             },
         });
 
-        const originalFetch = globalThis.fetch;
         globalThis.fetch = async () =>
             new Response(stream, {
                 status: 200,
@@ -1725,7 +1720,7 @@ describe("Error handling", () => {
             const body = await readBody(resp);
             assert.ok(body !== undefined);
         } finally {
-            globalThis.fetch = originalFetch;
+            globalThis.fetch = REAL_FETCH;
         }
     });
 });
@@ -1917,7 +1912,6 @@ describe("Integration: chat with agent loop + persistence", () => {
     it("text-only chat: SSE stream + messages saved to DB", async () => {
         const sseChunks = anthropicTextSse(["Hey! Cool idea."]);
 
-        const originalFetch = globalThis.fetch;
         globalThis.fetch = async () =>
             new Response(makeAnthropicStream(sseChunks), {
                 status: 200,
@@ -1946,7 +1940,7 @@ describe("Integration: chat with agent loop + persistence", () => {
             assert.ok(assistantMsgs.length >= 1);
             assert.ok(assistantMsgs[assistantMsgs.length - 1].content.includes("Cool idea"));
         } finally {
-            globalThis.fetch = originalFetch;
+            globalThis.fetch = REAL_FETCH;
         }
     });
 
@@ -1961,7 +1955,6 @@ describe("Integration: chat with agent loop + persistence", () => {
             'event: message_stop\ndata: {"type":"message_stop"}\n\n',
         ];
 
-        const originalFetch = globalThis.fetch;
         globalThis.fetch = async () => anthropicResponse(sseChunks);
 
         try {
@@ -1983,7 +1976,7 @@ describe("Integration: chat with agent loop + persistence", () => {
             assert.match(assistantRows[0].content, /empty final answer/i);
             assert.equal(assistantRows[0].thinking, "plan only");
         } finally {
-            globalThis.fetch = originalFetch;
+            globalThis.fetch = REAL_FETCH;
         }
     });
 
@@ -2000,7 +1993,6 @@ describe("Integration: chat with agent loop + persistence", () => {
             'event: message_stop\ndata: {"type":"message_stop"}\n\n',
         ];
 
-        const originalFetch = globalThis.fetch;
         globalThis.fetch = async () => anthropicResponse(sseChunks);
 
         try {
@@ -2020,7 +2012,7 @@ describe("Integration: chat with agent loop + persistence", () => {
             assert.equal(assistant.content, "Answer.");
             assert.equal(assistant.thinking, "plan first");
         } finally {
-            globalThis.fetch = originalFetch;
+            globalThis.fetch = REAL_FETCH;
         }
     });
 
@@ -2032,7 +2024,6 @@ describe("Integration: chat with agent loop + persistence", () => {
         const oversizedHistoryMessage = "old history ".repeat(90_000);
         saveMessage(getDb()!, sessionId, "user", oversizedHistoryMessage);
 
-        const originalFetch = globalThis.fetch;
         globalThis.fetch = async (_url, init) => {
             const payload = JSON.parse(String(init?.body)) as {
                 messages: Array<{ role: string; content: string }>;
@@ -2061,7 +2052,7 @@ describe("Integration: chat with agent loop + persistence", () => {
                 "Assistant response should be saved after context trimming",
             );
         } finally {
-            globalThis.fetch = originalFetch;
+            globalThis.fetch = REAL_FETCH;
         }
     });
 
@@ -2074,7 +2065,6 @@ describe("Integration: chat with agent loop + persistence", () => {
         const finalSse = anthropicTextSse(["Here is your image!"]);
 
         let callCount = 0;
-        const originalFetch = globalThis.fetch;
         globalThis.fetch = async (url: string | URL | Request) => {
             const urlStr = url.toString();
             if (urlStr.includes("/anthropic/v1/messages")) {
@@ -2113,7 +2103,7 @@ describe("Integration: chat with agent loop + persistence", () => {
                 true,
             );
         } finally {
-            globalThis.fetch = originalFetch;
+            globalThis.fetch = REAL_FETCH;
         }
     });
 
@@ -2131,7 +2121,6 @@ describe("Integration: chat with agent loop + persistence", () => {
         const finalSse = anthropicTextSse(["Done."]);
         let llmCallCount = 0;
         let imageApiCalls = 0;
-        const originalFetch = globalThis.fetch;
         globalThis.fetch = async (url: string | URL | Request) => {
             const urlStr = url.toString();
             if (urlStr.includes("/anthropic/v1/messages")) {
@@ -2166,7 +2155,7 @@ describe("Integration: chat with agent loop + persistence", () => {
             assert.equal(imageApiCalls, 1);
             assert.equal(getUsageToday(db).image, 100);
         } finally {
-            globalThis.fetch = originalFetch;
+            globalThis.fetch = REAL_FETCH;
             if (existing) {
                 db.prepare(
                     "INSERT OR REPLACE INTO daily_usage (date, feature, count) VALUES (date('now'), 'image', ?)",
@@ -2193,7 +2182,6 @@ describe("Integration: chat with agent loop + persistence", () => {
         const finalSse = anthropicTextSse(["Try again."]);
         let llmCallCount = 0;
         let imageApiCalls = 0;
-        const originalFetch = globalThis.fetch;
         globalThis.fetch = async (url: string | URL | Request) => {
             const urlStr = url.toString();
             if (urlStr.includes("/anthropic/v1/messages")) {
@@ -2230,7 +2218,7 @@ describe("Integration: chat with agent loop + persistence", () => {
                 true,
             );
         } finally {
-            globalThis.fetch = originalFetch;
+            globalThis.fetch = REAL_FETCH;
             if (existing) {
                 db.prepare(
                     "INSERT OR REPLACE INTO daily_usage (date, feature, count) VALUES (date('now'), 'image', ?)",
@@ -2261,7 +2249,6 @@ describe("Integration: chat with agent loop + persistence", () => {
         const finalSse = anthropicTextSse(["Try later."]);
         let llmCallCount = 0;
         let imageApiCalls = 0;
-        const originalFetch = globalThis.fetch;
         globalThis.fetch = async (url: string | URL | Request) => {
             const urlStr = url.toString();
             if (urlStr.includes("/anthropic/v1/messages")) {
@@ -2287,7 +2274,7 @@ describe("Integration: chat with agent loop + persistence", () => {
             assert.equal(imageApiCalls, 0);
             assert.equal(getUsageToday(db).image, 100);
         } finally {
-            globalThis.fetch = originalFetch;
+            globalThis.fetch = REAL_FETCH;
             if (existing) {
                 db.prepare(
                     "INSERT OR REPLACE INTO daily_usage (date, feature, count) VALUES (date('now'), 'image', ?)",
@@ -2310,7 +2297,6 @@ describe("Integration: chat with agent loop + persistence", () => {
         const capturedAnthropicBodies: string[] = [];
         let callCount = 0;
 
-        const originalFetch = globalThis.fetch;
         globalThis.fetch = async (url: string | URL | Request, init?: RequestInit) => {
             const urlStr = url.toString();
             if (urlStr.includes("/anthropic/v1/messages")) {
@@ -2348,14 +2334,13 @@ describe("Integration: chat with agent loop + persistence", () => {
             );
             assert.ok(rows.some((row) => row.role === "tool" && row.content.includes("/asset/")));
         } finally {
-            globalThis.fetch = originalFetch;
+            globalThis.fetch = REAL_FETCH;
         }
     });
 
     it("snapshot: text-only SSE stream", async () => {
         const sseChunks = anthropicTextSse(["Short answer."]);
 
-        const originalFetch = globalThis.fetch;
         globalThis.fetch = async () =>
             new Response(makeAnthropicStream(sseChunks), {
                 status: 200,
@@ -2372,7 +2357,7 @@ describe("Integration: chat with agent loop + persistence", () => {
             assert.ok(body.includes("Short answer."));
             assert.ok(body.includes("[DONE]"));
         } finally {
-            globalThis.fetch = originalFetch;
+            globalThis.fetch = REAL_FETCH;
         }
     });
 });
@@ -2674,7 +2659,6 @@ describe("Coverage: History loading in handleChat", () => {
         );
 
         let capturedPayload: any = null;
-        const originalFetch = globalThis.fetch;
         globalThis.fetch = async (_url: string | URL | Request, init?: RequestInit) => {
             capturedPayload = JSON.parse(init?.body as string);
             return anthropicResponse(anthropicTextSse(["safe reply"]));
@@ -2694,7 +2678,7 @@ describe("Coverage: History loading in handleChat", () => {
             assert.equal(serialized.includes("call_function_old_1"), false);
             assert.equal(serialized.includes("<end_turn>"), false);
         } finally {
-            globalThis.fetch = originalFetch;
+            globalThis.fetch = REAL_FETCH;
         }
     });
 
@@ -2708,7 +2692,6 @@ describe("Coverage: History loading in handleChat", () => {
         );
 
         let capturedPayload: any = null;
-        const originalFetch = globalThis.fetch;
         globalThis.fetch = async (_url: string | URL | Request, init?: RequestInit) => {
             capturedPayload = JSON.parse(init?.body as string);
             return anthropicResponse(anthropicTextSse(["safe reply"]));
@@ -2725,7 +2708,7 @@ describe("Coverage: History loading in handleChat", () => {
             assert.equal(serialized.includes("hailuo-image"), false);
             assert.ok(serialized.includes("Generated media is shown in the tool card."));
         } finally {
-            globalThis.fetch = originalFetch;
+            globalThis.fetch = REAL_FETCH;
         }
     });
 
@@ -2736,7 +2719,6 @@ describe("Coverage: History loading in handleChat", () => {
         saveMessage(database, "test-session-123", "assistant", "previous reply");
 
         let capturedPayload: unknown = null;
-        const originalFetch = globalThis.fetch;
         globalThis.fetch = async (_url: string | URL | Request, init?: RequestInit) => {
             capturedPayload = JSON.parse(init?.body as string);
             const sseChunks = anthropicTextSse(["new reply"]);
@@ -2765,7 +2747,7 @@ describe("Coverage: History loading in handleChat", () => {
             const userMsgs = payload.messages.filter((m) => m.role === "user");
             assert.ok(userMsgs.length >= 2, "should have multiple user messages (history + new)");
         } finally {
-            globalThis.fetch = originalFetch;
+            globalThis.fetch = REAL_FETCH;
         }
     });
 });

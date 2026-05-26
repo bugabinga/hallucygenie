@@ -3,7 +3,7 @@
 import { describe, it, beforeEach } from "node:test";
 import assert from "node:assert/strict";
 import { Database } from "bun:sqlite";
-import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from "node:fs";
+import { mkdtempSync, mkdirSync, writeFileSync, rmSync, copyFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 
@@ -13,6 +13,7 @@ import {
     getActiveSessionId,
     getOrCreateActiveSessionId,
     getOrCreateActiveSession,
+    getSession,
     createSession,
     listSessions,
     renameSession,
@@ -182,6 +183,14 @@ describe("initDb", () => {
                 value TEXT NOT NULL,
                 updated_at INTEGER NOT NULL
             );`,
+            "003-sessions.sql": `CREATE TABLE sessions (
+                id TEXT PRIMARY KEY,
+                name TEXT NOT NULL,
+                name_source TEXT NOT NULL DEFAULT 'default',
+                created_at TEXT NOT NULL DEFAULT (datetime('now')),
+                updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+                archived_at TEXT
+            );`,
         });
 
         const db = initDb(":memory:", dir);
@@ -205,8 +214,56 @@ describe("initDb", () => {
         assert.ok(tables.includes("preferences"));
         assert.ok(tables.includes("daily_usage"));
         assert.ok(tables.includes("app_state"));
+        assert.ok(tables.includes("sessions"));
         assert.match(getOrCreateActiveSessionId(db), /^[0-9a-f-]{36}$/);
         db.close();
+    });
+
+    it("initDb creates active session row via getOrCreateActiveSession after migrations", () => {
+        // Verifies that initDb creates the active session row in the sessions table.
+        // When sessions table exists (after migrations), initDb calls getOrCreateActiveSession.
+        // After initDb, the sessions table must contain the active session.
+        const db = initDb(":memory:");
+        const sessionId = getActiveSessionId(db);
+        assert.ok(sessionId, "active session ID must be set after initDb");
+        const session = getSession(db, sessionId!);
+        assert.ok(session, "active session row must exist in sessions table after initDb");
+        assert.equal(session!.name, "New Chat");
+        assert.equal(session!.name_source, "default");
+        db.close();
+    });
+
+    it("initDb falls back to getOrCreateActiveSessionId when sessions table does not exist", () => {
+        // Verifies that initDb handles databases without the sessions table gracefully.
+        // In this case, it should use getOrCreateActiveSessionId (legacy fallback).
+        const dir = mkdtempSync(join(tmpdir(), "hg-no-sessions-"));
+        const migrationsDir = join(dir, "migrations");
+        mkdirSync(migrationsDir, { recursive: true });
+
+        // Create a minimal migrations dir that has pre-sessions schema but no sessions table
+        // We include all migrations EXCEPT 008-create-sessions.sql
+        const allMigrations = readdirSync(join(import.meta.dirname, "..", "..", "migrations"));
+        for (const file of allMigrations) {
+            if (file === "008-create-sessions.sql") continue; // Skip sessions migration
+            copyFileSync(
+                join(import.meta.dirname, "..", "..", "migrations", file),
+                join(migrationsDir, file),
+            );
+        }
+
+        const db = initDb(join(dir, "legacy.db"), migrationsDir);
+        const sessionId = getActiveSessionId(db);
+        assert.ok(sessionId, "active session ID must be set even without sessions table");
+        assert.match(sessionId!, /^[0-9a-f-]{36}$/);
+
+        // sessions table should NOT exist
+        const tables = db
+            .prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='sessions'")
+            .all();
+        assert.equal(tables.length, 0, "sessions table should not exist in legacy DB");
+
+        db.close();
+        rmSync(dir, { recursive: true });
     });
 });
 

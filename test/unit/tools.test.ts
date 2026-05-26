@@ -1,6 +1,6 @@
 // HallucyGenie — Tools tests
 
-import { describe, it, beforeEach, afterEach } from "node:test";
+import { describe, it, beforeEach, afterEach, after } from "node:test";
 import assert from "node:assert/strict";
 import {
     getToolDefinitions,
@@ -18,7 +18,18 @@ import {
 
 const API_KEY = "test-api-key";
 
+// Capture the real (native) fetch. Use getOwnPropertyDescriptor so we
+// reliably get the native fetch even if this file is loaded in a worker
+// where another parallel file already reassigned globalThis.fetch.
+// Bun --parallel runs files in parallel in separate workers; each worker
+// has its own globalThis, but the own-property descriptor still gives us
+// the value currently assigned in this global scope.
+const REAL_FETCH = Object.getOwnPropertyDescriptor(globalThis, "fetch")?.value ?? globalThis.fetch;
 let originalFetch: typeof globalThis.fetch;
+
+after(() => {
+    globalThis.fetch = REAL_FETCH;
+});
 
 function mockFetch(response: Response): void {
     globalThis.fetch = async () => response;
