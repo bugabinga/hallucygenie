@@ -64,11 +64,15 @@ function schemaFor(toolName: string): { properties: Record<string, unknown>; req
 // ── Tool definitions ─────────────────────────────────────────────────
 
 describe("getToolDefinitions", () => {
-    it("returns six live tool definitions", () => {
+    it("returns seven live tool definitions", () => {
         const defs = getToolDefinitions();
-        assert.equal(defs.length, 6);
+        assert.equal(defs.length, 7);
         assert.equal(
             defs.some((tool) => tool.name === "analyze_image"),
+            true,
+        );
+        assert.equal(
+            defs.some((tool) => tool.name === "generate_music_cover"),
             true,
         );
     });
@@ -162,6 +166,22 @@ describe("getToolDefinitions", () => {
         assert.ok(schema.properties.image_url);
         assert.ok(schema.properties.prompt);
         assert.deepEqual(schema.required, ["image_url"]);
+    });
+
+    it("defines generate_music_cover with correct schema", () => {
+        const defs = getToolDefinitions();
+        const cover = defs.find((d) => d.name === "generate_music_cover");
+        assert.ok(cover, "generate_music_cover should be in tool definitions");
+        const schema = cover.input_schema as {
+            type: string;
+            properties: Record<string, unknown>;
+            required: string[];
+        };
+        assert.equal(schema.type, "object");
+        assert.ok(schema.properties.prompt);
+        assert.ok(schema.properties.lyrics);
+        assert.ok(schema.properties.cover_feature_id);
+        assert.deepEqual(schema.required, ["prompt", "lyrics", "cover_feature_id"]);
     });
 
     it("all definitions have descriptions", () => {

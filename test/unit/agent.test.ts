@@ -2270,16 +2270,31 @@ describe("buildContext tool pair boundary conditions", () => {
         assert.equal(result[1].role, "tool");
     });
 
-    it("oversized orphan tool result skipped without blocking older messages", () => {
+    it("oversized orphan tool result causes immediate break (not infinite loop)", () => {
+        // Orphan at index 1 alone exceeds remaining budget (system=1, remaining=4, orphan≈20)
+        const messages: ChatMessage[] = [
+            { role: "system" as const, content: "a" }, // 1 token
+            { role: "tool" as const, content: "x".repeat(80), tool_call_id: "nonexistent" }, // ~20 tokens
+        ];
+        // Budget=5: system(1), remaining(4), orphan(20) > 4 → should break immediately
+        const result = buildContext(messages, 5);
+        // Should return only system, not loop infinitely
+        assert.equal(result.length, 1);
+        assert.equal(result[0].role, "system");
+    });
+
+    it("oversized orphan tool result causes immediate break", () => {
+        // When an oversized orphan is encountered, we break immediately.
+        // Older messages are NOT processed since we've exceeded budget.
         const messages: ChatMessage[] = [
             { role: "system" as const, content: "a" },
             { role: "user" as const, content: "old msg" },
             { role: "tool" as const, content: "x".repeat(80), tool_call_id: "nonexistent" },
         ];
         const result = buildContext(messages, 10);
-        assert.equal(result.length, 2);
-        assert.equal(result[1].role, "user");
-        assert.ok(!result.some((m) => m.role === "tool"));
+        // Break on oversized orphan returns only system message
+        assert.equal(result.length, 1);
+        assert.equal(result[0].role, "system");
     });
 
     it("paired tool result skipped when turn exceeds budget", () => {
@@ -3239,5 +3254,46 @@ describe("SSE parser error paths", () => {
         assert.equal(lyricsResult.result?.type, "text");
         assert.ok(musicResult, "should return music result");
         assert.equal(musicResult.result?.type, "audio");
+    });
+
+    it("processes trailing incomplete SSE line after stream ends", async () => {
+        // Simulates: chunk ends with incomplete SSE line like "data: {"partial"}"
+        // When reader.read() returns done=true, any incomplete line in buffer should be processed
+        const stream = new ReadableStream({
+            start(controller) {
+                const enc = new TextEncoder();
+                // Send complete event
+                controller.enqueue(
+                    sseEvent("content_block_start", {
+                        type: "content_block_start",
+                        index: 0,
+                        content_block: { type: "text", text: "" },
+                    }),
+                );
+                controller.enqueue(
+                    sseEvent("content_block_delta", {
+                        type: "content_block_delta",
+                        index: 0,
+                        delta: { type: "text_delta", text: "Hello" },
+                    }),
+                );
+                controller.enqueue(
+                    sseEvent("content_block_stop", { type: "content_block_stop", index: 0 }),
+                );
+                // Now send an incomplete line as a raw chunk (no trailing newline)
+                controller.enqueue(enc.encode('data: {"type":"message_delta"'));
+                // Stream ends without proper newline termination
+                controller.close();
+            },
+        });
+        globalThis.fetch = async () =>
+            new Response(stream, { status: 200, headers: { "Content-Type": "text/event-stream" } });
+        const { events: evTrailing, onEvent: onTrailing } = collectEvents();
+        await runAgentLoop([{ role: "user", content: "hi" }], "test-key", onTrailing);
+        // Should still have processed the complete text before the incomplete line
+        const textEvents = evTrailing.filter((e) => e.type === "text");
+        assert.equal(textEvents.length, 1);
+        assert.equal(textEvents[0].content, "Hello");
+        assert.equal(evTrailing[evTrailing.length - 1].type, "done");
     });
 });

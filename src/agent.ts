@@ -264,9 +264,8 @@ export function buildContext(
             } else {
                 // Orphan tool result with no matching tool_use — treat as standalone
                 if (usedTokens + msgTokens > remainingBudget) {
-                    // Budget exceeded — skip orphan and continue scanning older messages
-                    i--;
-                    continue;
+                    // Budget exceeded — stop building context
+                    break;
                 }
                 result.unshift(msg);
                 usedTokens += msgTokens;
@@ -672,6 +671,34 @@ export async function runAgentLoop(
                 }
 
                 // message_start and message_stop — no special handling needed
+            }
+        }
+
+        // Process any remaining incomplete SSE line in buffer
+        if (buffer.trim()) {
+            const trimmed = buffer.trim();
+            if (trimmed.startsWith("data:")) {
+                const data = trimmed.slice(5).trim();
+                if (data && data !== "[DONE]") {
+                    try {
+                        const parsed = JSON.parse(data);
+                        // Handle content_block_delta for trailing partial data
+                        if (currentEventType === "content_block_delta") {
+                            const delta = parsed.delta as Record<string, unknown> | undefined;
+                            if (delta?.type === "text_delta") {
+                                const text = stripModelControlPlaceholders(
+                                    (delta.text as string) || "",
+                                );
+                                if (text) {
+                                    textContent += text;
+                                    await onEvent({ type: "text", content: text });
+                                }
+                            }
+                        }
+                    } catch {
+                        // Ignore parse errors for partial data
+                    }
+                }
             }
         }
 

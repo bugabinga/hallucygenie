@@ -195,6 +195,29 @@ export function getToolDefinitions(): ToolDefinition[] {
             },
         },
         {
+            name: "generate_music_cover",
+            description:
+                "Generate a music cover (cover song) from given lyrics. Requires cover_feature_id from musicCoverPreprocess. Returns a base64-encoded MP3 audio data URL.",
+            input_schema: {
+                type: "object",
+                properties: {
+                    prompt: {
+                        type: "string",
+                        description: "Description or topic for the cover song.",
+                    },
+                    lyrics: {
+                        type: "string",
+                        description: "Lyrics for the cover song.",
+                    },
+                    cover_feature_id: {
+                        type: "string",
+                        description: "Cover feature ID from musicCoverPreprocess.",
+                    },
+                },
+                required: ["prompt", "lyrics", "cover_feature_id"],
+            },
+        },
+        {
             name: "analyze_image",
             description:
                 "Analyze an HTTPS image URL and answer a prompt about what is visible. Returns text only.",
