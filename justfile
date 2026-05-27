@@ -116,6 +116,7 @@ chrome:
 # build production container image locally
 [group('deploy')]
 container image="hallucygenie:local":
+    set -e; \
     package_tag="v$(bun -e 'console.log(JSON.parse(await Bun.file("package.json").text()).version)')"; \
     version="${RELEASE_TAG:-$package_tag}"; \
     docker build -f deploy/Dockerfile --build-arg VERSION="$version" -t "{{ image }}" .
@@ -123,6 +124,7 @@ container image="hallucygenie:local":
 # smoke-test production container image locally
 [group('deploy')]
 container-smoke image="hallucygenie:local":
+    set -e; \
     name="hallucygenie-smoke-$RANDOM"; \
     volume="$name-data"; \
     docker volume create "$volume" >/dev/null; \
@@ -130,14 +132,15 @@ container-smoke image="hallucygenie:local":
     trap cleanup EXIT; \
     docker run -d --name "$name" -p 127.0.0.1:3099:3000 -e MINIMAX_API_KEY=release-smoke -v "$volume:/app/data" "{{ image }}" >/dev/null; \
     ok=0; \
-    for _ in $(seq 1 30); do curl -fsS http://127.0.0.1:3099/api/health >/dev/null && ok=1 && break; sleep 1; done; \
+    for _ in $(seq 1 30); do if curl -fsS http://127.0.0.1:3099/api/health >/dev/null 2>&1; then ok=1; break; fi; sleep 1; done; \
     test "$ok" = "1"; \
     curl -fsS http://127.0.0.1:3099/ >/dev/null; \
-    curl -fsSI http://127.0.0.1:3099/fonts/pixelify-sans/PixelifySans.woff2 >/dev/null
+    curl -fsS http://127.0.0.1:3099/fonts/pixelify-sans/PixelifySans.woff2 >/dev/null
 
 # full release gate: checks, metadata validation, container build, container smoke
 [group('deploy')]
 release-check image="hallucygenie:local": ready
+    set -e; \
     image="{{ image }}"; \
     package_tag="v$(bun -e 'console.log(JSON.parse(await Bun.file("package.json").text()).version)')"; \
     release_tag="${RELEASE_TAG:-$package_tag}"; \
@@ -151,13 +154,14 @@ release-check image="hallucygenie:local": ready
 # cut release tag after local proof and manual Chrome confirmation
 [group('deploy')]
 release tag:
+    set -e; \
     tag="{{ tag }}"; \
     case "$tag" in v[0-9]*.[0-9]*.[0-9]*) ;; *) echo "tag must be vX.Y.Z"; exit 1 ;; esac; \
     package_tag="v$(bun -e 'console.log(JSON.parse(await Bun.file("package.json").text()).version)')"; \
     if [ "$tag" != "$package_tag" ]; then echo "tag $tag != package $package_tag"; exit 1; fi; \
     image="ghcr.io/bugabinga/hallucygenie:$tag"; \
     RELEASE_TAG="$tag" just release-check "$image"; \
-    if [ -n "$(git status --short)" ]; then git status --short; echo "dirty worktree"; exit 1; fi; \
+    if [ -n "$(git status --porcelain=v1 --untracked-files=all)" ]; then git status --short; echo "dirty worktree"; exit 1; fi; \
     if [ "${MANUAL_CHROME_OK:-}" != "$tag" ]; then echo "manually test $image in Chrome, then run: MANUAL_CHROME_OK=$tag just release $tag"; exit 1; fi; \
     if git rev-parse -q --verify "refs/tags/$tag" >/dev/null; then echo "tag $tag already exists"; exit 1; fi; \
     git tag "$tag"; \
@@ -166,6 +170,7 @@ release tag:
 # build and push production container image
 [group('deploy')]
 publish-container image:
+    set -e; \
     image="{{ image }}"; \
     case "$image" in ghcr.io/bugabinga/hallucygenie:v[0-9]*.[0-9]*.[0-9]*) ;; *) echo "image must be ghcr.io/bugabinga/hallucygenie:vX.Y.Z"; exit 1 ;; esac; \
     release_tag="${image##*:}"; \

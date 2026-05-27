@@ -916,13 +916,18 @@ describe("justfile health", () => {
         );
         assert.match(justfile, /\ncontainer-smoke image="hallucygenie:local":/);
         assert.match(justfile, /curl -fsS http:\/\/127\.0\.0\.1:3099\/api\/health/);
+        assert.match(
+            justfile,
+            /curl -fsS http:\/\/127\.0\.0\.1:3099\/fonts\/pixelify-sans\/PixelifySans\.woff2/,
+        );
+        assert.doesNotMatch(justfile, /curl -fsSI/);
         assert.match(justfile, /\nrelease-check image="hallucygenie:local": ready/);
         assert.match(justfile, /RELEASE_TAG="\$release_tag" bun scripts\/release-check\.ts/);
         assert.match(justfile, /docker inspect "\$image"/);
         assert.match(justfile, /image version label/);
         assert.match(justfile, /\nrelease tag:/);
         assert.match(justfile, /MANUAL_CHROME_OK/);
-        assert.match(justfile, /git status --short/);
+        assert.match(justfile, /git status --porcelain=v1 --untracked-files=all/);
         assert.match(justfile, /git tag "\$tag"/);
         assert.match(justfile, /git push origin "\$tag"/);
         assert.match(justfile, /image must be ghcr\.io\/bugabinga\/hallucygenie:vX\.Y\.Z/);
@@ -931,6 +936,8 @@ describe("justfile health", () => {
             justfile,
             /docker buildx build -f deploy\/Dockerfile --build-arg VERSION="\$release_tag" -t "\$image" --push \./,
         );
+        assert.match(justfile, /release tag:\n\s+set -e; \\/);
+        assert.match(justfile, /release-check image="hallucygenie:local": ready\n\s+set -e; \\/);
     });
 
     it("uses clear MiniMax smoke test script", () => {
