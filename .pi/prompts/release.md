@@ -20,16 +20,15 @@ Workflow:
 3. Update README run/release docs and image tag.
 4. Update `.system/issues/` statuses for release work.
 5. Run `RELEASE_TAG=$ARGUMENTS just release-check ghcr.io/bugabinga/hallucygenie:$ARGUMENTS`.
-6. Manually test that exact image in Chrome.
-7. Cut release with `MANUAL_CHROME_OK=$ARGUMENTS just release $ARGUMENTS`.
-8. The `release` recipe must refuse dirty worktrees, wrong tags, existing tags, and missing manual Chrome confirmation.
+6. Cut release with `just release $ARGUMENTS`.
+7. `just release` must open the exact release image in Chrome, wait for the tester to close Chrome or press Ctrl+C, ask `Manual test OK? [y/N]`, then tag only on `y`.
+8. The `release` recipe must refuse dirty worktrees, wrong tags, existing tags, missing `MINIMAX_API_KEY`, and failed browser confirmation.
 
 Commands:
 
 ```sh
 RELEASE_TAG=$ARGUMENTS just release-check ghcr.io/bugabinga/hallucygenie:$ARGUMENTS
-# manually test ghcr.io/bugabinga/hallucygenie:$ARGUMENTS in Chrome
-MANUAL_CHROME_OK=$ARGUMENTS just release $ARGUMENTS
+just release $ARGUMENTS
 ```
 
 Rules:
@@ -37,7 +36,7 @@ Rules:
 - Never force-push `trunk` for a release.
 - Never log or commit `MINIMAX_API_KEY`.
 - Never tag from a dirty worktree.
-- Never tag without `MANUAL_CHROME_OK=$ARGUMENTS` after a real Chrome test.
+- Never tag unless `just release` opened the exact image in Chrome and the tester answered `y`.
 - Never publish without a local container smoke test.
 - Never publish if image tag, `RELEASE_TAG`, `package.json`, or OCI image label disagree.
 - Release notes must include parent-facing DB/backup notes when migrations changed.

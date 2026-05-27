@@ -55,17 +55,16 @@ Then open <http://localhost:3000>.
 
 ```sh
 RELEASE_TAG=v1.0.0 just release-check ghcr.io/bugabinga/hallucygenie:v1.0.0
-# manually test ghcr.io/bugabinga/hallucygenie:v1.0.0 in Chrome
-MANUAL_CHROME_OK=v1.0.0 just release v1.0.0
+just release v1.0.0
 ```
 
-`just release` tags and pushes. Tag push publishes GHCR tags via `.github/workflows/release.yml`.
+`just release` opens the release image in Chrome, asks for manual approval, tags, and pushes. Tag push publishes GHCR tags via `.github/workflows/release.yml`.
 
 ## Commands
 
 • `just ready` — format, typecheck, build-check, unit, integration, E2E.
 • `just release-check` — `ready`, metadata validation, container build, smoke test.
-• `just release vX.Y.Z` — verify, require manual Chrome confirmation, tag, push.
+• `just release vX.Y.Z` — verify, open Chrome, ask manual approval, tag, push.
 • `just container` — local production image.
 • `just minimax-test` — real MiniMax smoke test; consumes quota.
 

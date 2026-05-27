@@ -926,7 +926,9 @@ describe("justfile health", () => {
         assert.match(justfile, /docker inspect "\$image"/);
         assert.match(justfile, /image version label/);
         assert.match(justfile, /\nrelease tag:/);
-        assert.match(justfile, /MANUAL_CHROME_OK/);
+        assert.doesNotMatch(justfile, /MANUAL_CHROME_OK/);
+        assert.match(justfile, /google-chrome-stable/);
+        assert.match(justfile, /Manual test OK\? \[y\/N\]/);
         assert.match(justfile, /git status --porcelain=v1 --untracked-files=all/);
         assert.match(justfile, /git tag "\$tag"/);
         assert.match(justfile, /git push origin "\$tag"/);
@@ -1029,10 +1031,11 @@ describe("prompt health", () => {
     it("uses release prompt for tag and artifact workflow", () => {
         assert.equal(existsSync(".pi/prompts/release.md"), true);
         assert.match(releasePrompt, /RELEASE_TAG=\$ARGUMENTS just release-check/);
-        assert.match(releasePrompt, /MANUAL_CHROME_OK=\$ARGUMENTS just release \$ARGUMENTS/);
+        assert.match(releasePrompt, /just release \$ARGUMENTS/);
+        assert.match(releasePrompt, /Manual test OK\? \[y\/N\]/);
         assert.match(releasePrompt, /CHANGELOG\.md/);
         assert.match(releasePrompt, /\.system\/issues/);
-        assert.match(releasePrompt, /Manually test that exact image in Chrome/);
+        assert.match(releasePrompt, /opened the exact image in Chrome/);
         assert.match(releasePrompt, /dirty worktrees/);
         assert.match(releasePrompt, /OCI image label disagree/);
     });
@@ -1055,7 +1058,8 @@ describe("project metadata health", () => {
         assert.match(readmeMd, /No built-in auth/);
         assert.match(readmeMd, /data\//);
         assert.match(readmeMd, /just release-check/);
-        assert.match(readmeMd, /MANUAL_CHROME_OK=v1\.0\.0 just release v1\.0\.0/);
+        assert.match(readmeMd, /just release v1\.0\.0/);
+        assert.match(readmeMd, /opens the release image in Chrome/);
         assert.match(readmeMd, /Made with love, hand-vibing AI, and bugabinga\./);
     });
 

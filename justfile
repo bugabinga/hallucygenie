@@ -151,7 +151,7 @@ release-check image="hallucygenie:local": ready
     docker inspect "$image" | RELEASE_TAG="$release_tag" bun -e 'const image = JSON.parse(await new Response(Bun.stdin.stream()).text())[0]; const got = image.Config.Labels["org.opencontainers.image.version"]; if (got !== process.env.RELEASE_TAG) throw new Error(`image version label ${got} != ${process.env.RELEASE_TAG}`);'; \
     just container-smoke "$image"
 
-# cut release tag after local proof and manual Chrome confirmation
+# cut release tag after local proof and interactive browser confirmation
 [group('deploy')]
 release tag:
     set -e; \
@@ -162,8 +162,30 @@ release tag:
     image="ghcr.io/bugabinga/hallucygenie:$tag"; \
     RELEASE_TAG="$tag" just release-check "$image"; \
     if [ -n "$(git status --porcelain=v1 --untracked-files=all)" ]; then git status --short; echo "dirty worktree"; exit 1; fi; \
-    if [ "${MANUAL_CHROME_OK:-}" != "$tag" ]; then echo "manually test $image in Chrome, then run: MANUAL_CHROME_OK=$tag just release $tag"; exit 1; fi; \
     if git rev-parse -q --verify "refs/tags/$tag" >/dev/null; then echo "tag $tag already exists"; exit 1; fi; \
+    if git ls-remote --exit-code --tags origin "refs/tags/$tag" >/dev/null 2>&1; then echo "remote tag $tag already exists"; exit 1; fi; \
+    if [ -z "${MINIMAX_API_KEY:-}" ]; then echo "MINIMAX_API_KEY required for manual release browser"; exit 1; fi; \
+    command -v google-chrome-stable >/dev/null || { echo "google-chrome-stable missing"; exit 1; }; \
+    name="hallucygenie-release-${tag#v}-$RANDOM"; \
+    volume="$name-data"; \
+    profile="$(mktemp -d)"; \
+    cleanup() { docker rm -f "$name" >/dev/null 2>&1 || true; docker volume rm "$volume" >/dev/null 2>&1 || true; rm -rf "$profile"; }; \
+    trap cleanup EXIT; \
+    docker volume create "$volume" >/dev/null; \
+    docker run -d --name "$name" -p 127.0.0.1:3100:3000 -e MINIMAX_API_KEY -v "$volume:/app/data" "$image" >/dev/null; \
+    ok=0; \
+    for _ in $(seq 1 30); do if curl -fsS http://127.0.0.1:3100/api/health >/dev/null 2>&1; then ok=1; break; fi; sleep 1; done; \
+    test "$ok" = "1"; \
+    echo "Manual test: http://127.0.0.1:3100"; \
+    echo "Close Chrome window or press Ctrl+C here when done."; \
+    google-chrome-stable --user-data-dir="$profile" --no-first-run --no-default-browser-check --disable-search-engine-choice-screen --app=http://127.0.0.1:3100 >/dev/null 2>&1 & \
+    browser="$!"; \
+    trap 'echo; kill "$browser" >/dev/null 2>&1 || true' INT; \
+    wait "$browser" || true; \
+    trap - INT; \
+    printf "Manual test OK? [y/N] "; \
+    read answer; \
+    case "$answer" in y|Y|yes|YES) ;; *) echo "release aborted"; exit 1 ;; esac; \
     git tag "$tag"; \
     git push origin "$tag"
 

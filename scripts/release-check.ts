@@ -77,8 +77,13 @@ requireMatch(
 );
 requireMatch(
     ".pi/prompts/release.md",
-    /MANUAL_CHROME_OK=\$ARGUMENTS just release \$ARGUMENTS/,
+    /just release \$ARGUMENTS/,
     "missing release recipe instruction",
+);
+requireMatch(
+    ".pi/prompts/release.md",
+    /Manual test OK\? \[y\/N\]/,
+    "missing interactive manual approval instruction",
 );
 requireMatch(".pi/prompts/release.md", /dirty worktrees/, "missing clean worktree instruction");
 requireMatch(
