@@ -8,6 +8,7 @@ Agent instructions only. Do not mirror project state here.
 - Use `/skill:tiger` for style.
 - Use `/skill:minimax` when touching MiniMax APIs.
 - Use `just --list`; `justfile` is command source of truth.
+- Release work must use `.pi/prompts/release.md`; final tag push goes through `just release`.
 
 ## Rules
 
@@ -18,6 +19,7 @@ Agent instructions only. Do not mirror project state here.
 - Raw asset bytes only in asset storage. Never put raw media in prompts,
   context, or chat history.
 - Add tests for code and docs contracts.
+- Release changes update `CHANGELOG.md`, README, `.env.example`, release issues, and the local container smoke path.
 
 ## Prompts
 
@@ -25,6 +27,7 @@ Agent instructions only. Do not mirror project state here.
 - Implementation → `.pi/prompts/impl.md`.
 - MiniMax research → `.pi/prompts/minimax-research.md`.
 - Commit → `.pi/prompts/ci.md`.
+- Release -> `.pi/prompts/release.md`.
 
 ## Source of truth
 

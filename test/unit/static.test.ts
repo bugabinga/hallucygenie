@@ -21,6 +21,7 @@ const dockerignore = readFileSync(".dockerignore", "utf-8");
 const prettierignore = readFileSync(".prettierignore", "utf-8");
 const lefthookYml = readFileSync("lefthook.yml", "utf-8");
 const ciYml = readFileSync(".github/workflows/ci.yml", "utf-8");
+const releaseYml = readFileSync(".github/workflows/release.yml", "utf-8");
 const dependabotYml = readFileSync(".github/dependabot.yml", "utf-8");
 const agentsYml = readFileSync(".github/workflows/agents.yml", "utf-8");
 const janitorAgent = readFileSync(".github/agents/janitor.ts", "utf-8");
@@ -33,8 +34,11 @@ const agentsMd = readFileSync("AGENTS.md", "utf-8");
 const issuePrompt = readFileSync(".pi/prompts/issue.md", "utf-8");
 const manualPrompt = readFileSync(".pi/prompts/manual.md", "utf-8");
 const minimaxResearchPrompt = readFileSync(".pi/prompts/minimax-research.md", "utf-8");
+const releasePrompt = readFileSync(".pi/prompts/release.md", "utf-8");
 const updateFontsScript = readFileSync("scripts/update-fonts.ts", "utf-8");
 const readmeMd = readFileSync("README.md", "utf-8");
+const changelogMd = readFileSync("CHANGELOG.md", "utf-8");
+const envExample = readFileSync(".env.example", "utf-8");
 const licenseMd = readFileSync("LICENSE", "utf-8");
 const rulesMd = readFileSync(".system/RULES.md", "utf-8");
 const musicCreatorSpec = readFileSync(
@@ -166,6 +170,20 @@ describe("index.html health", () => {
         const doc = parseIndex();
         assert.equal(doc.querySelectorAll("#onboarding .onboarding-dots").length, 1);
         assert.equal(doc.querySelectorAll("#onboarding .onboarding-dots .dot").length, 4);
+    });
+
+    it("has accessible child-friendly changelog entry point", () => {
+        const doc = parseIndex();
+        const btn = doc.querySelector("#whats-new-btn");
+        const modal = doc.querySelector("#whats-new-modal");
+        assert.equal(btn?.textContent, "v1.0");
+        assert.equal(modal?.getAttribute("role"), "dialog");
+        assert.equal(modal?.getAttribute("aria-modal"), "true");
+        assert.equal(modal?.getAttribute("aria-labelledby"), "whats-new-title");
+        assert.match(modal?.textContent ?? "", /What’s new in v1\.0/);
+        assert.match(modal?.textContent ?? "", /No built-in\s+auth/);
+        assert.match(appTs, /openWhatsNew/);
+        assert.match(appTs, /trapFocus\(whatsNewModal/);
     });
 
     it("has accessible labels for form controls", () => {
@@ -306,7 +324,12 @@ describe("index.html health", () => {
         const headerRight = doc.querySelector(".header-right");
         assert.deepEqual(
             Array.from(headerLeft?.children ?? []).map((el) => `#${el.id}.${el.className}`),
-            ["#.header-emoji", "#.header-title", "#connection-status.status-dot"],
+            [
+                "#.header-emoji",
+                "#.header-title",
+                "#whats-new-btn.whats-new-btn",
+                "#connection-status.status-dot",
+            ],
         );
         assert.deepEqual(
             Array.from(headerRight?.children ?? []).map((el) => `#${el.id}.${el.className}`),
@@ -756,6 +779,8 @@ describe("constitution health", () => {
         assert.match(agentsMd, /\.pi\/prompts\/spec\.md/);
         assert.match(agentsMd, /\.pi\/prompts\/minimax-research\.md/);
         assert.match(agentsMd, /\.pi\/prompts\/ci\.md/);
+        assert.match(agentsMd, /\.pi\/prompts\/release\.md/);
+        assert.match(agentsMd, /just release/);
         assert.doesNotMatch(agentsMd, /\.pi\/prompts\/commit\.md/);
         assert.doesNotMatch(agentsMd, /\/home\//);
         assert.doesNotMatch(
@@ -884,18 +909,27 @@ describe("justfile health", () => {
         assert.match(justfile, /\ndev: build\n\s+bun src\/server\.ts/);
         assert.match(justfile, /\nfresh: kill reset dev\n/);
         assert.match(justfile, /\nchrome:\n/);
+        assert.match(justfile, /\ncontainer image="hallucygenie:local":/);
         assert.match(
             justfile,
-            /\ncontainer image="hallucygenie:local":\n\s+docker build -f deploy\/Dockerfile -t "\{\{ image \}\}" \./,
+            /docker build -f deploy\/Dockerfile --build-arg VERSION="\$version" -t "\{\{ image \}\}" \./,
         );
-        assert.match(justfile, /image must be ghcr\.io\/bugabinga\/hallucygenie:<tag>/);
+        assert.match(justfile, /\ncontainer-smoke image="hallucygenie:local":/);
+        assert.match(justfile, /curl -fsS http:\/\/127\.0\.0\.1:3099\/api\/health/);
+        assert.match(justfile, /\nrelease-check image="hallucygenie:local": ready/);
+        assert.match(justfile, /RELEASE_TAG="\$release_tag" bun scripts\/release-check\.ts/);
+        assert.match(justfile, /docker inspect "\$image"/);
+        assert.match(justfile, /image version label/);
+        assert.match(justfile, /\nrelease tag:/);
+        assert.match(justfile, /MANUAL_CHROME_OK/);
+        assert.match(justfile, /git status --short/);
+        assert.match(justfile, /git tag "\$tag"/);
+        assert.match(justfile, /git push origin "\$tag"/);
+        assert.match(justfile, /image must be ghcr\.io\/bugabinga\/hallucygenie:vX\.Y\.Z/);
+        assert.match(justfile, /\npublish-container image:/);
         assert.match(
             justfile,
-            /\npublish-container image:\n\s+case "\{\{ image \}\}" in ghcr\.io\/bugabinga\/hallucygenie:\*/,
-        );
-        assert.match(
-            justfile,
-            /docker buildx build -f deploy\/Dockerfile -t "\{\{ image \}\}" --push \./,
+            /docker buildx build -f deploy\/Dockerfile --build-arg VERSION="\$release_tag" -t "\$image" --push \./,
         );
     });
 
@@ -985,6 +1019,17 @@ describe("prompt health", () => {
         assert.equal(existsSync(".pi/prompts/ci.md"), true);
     });
 
+    it("uses release prompt for tag and artifact workflow", () => {
+        assert.equal(existsSync(".pi/prompts/release.md"), true);
+        assert.match(releasePrompt, /RELEASE_TAG=\$ARGUMENTS just release-check/);
+        assert.match(releasePrompt, /MANUAL_CHROME_OK=\$ARGUMENTS just release \$ARGUMENTS/);
+        assert.match(releasePrompt, /CHANGELOG\.md/);
+        assert.match(releasePrompt, /\.system\/issues/);
+        assert.match(releasePrompt, /Manually test that exact image in Chrome/);
+        assert.match(releasePrompt, /dirty worktrees/);
+        assert.match(releasePrompt, /OCI image label disagree/);
+    });
+
     it("uses the supported visible Chrome recipe for manual tests", () => {
         assert.match(manualPrompt, /just chrome/);
         assert.doesNotMatch(manualPrompt, /just dev-chrome/);
@@ -992,17 +1037,38 @@ describe("prompt health", () => {
 });
 
 describe("project metadata health", () => {
-    it("ships a minimal README with badges and footer", () => {
+    it("ships README release docs with badges and footer", () => {
         assert.match(readmeMd, /^# HallucyGenie\n/);
         assert.match(readmeMd, /actions\/workflows\/ci\.yml\/badge\.svg/);
         assert.match(readmeMd, /License-MIT/);
         assert.match(readmeMd, /Dark little genie/);
         assert.match(readmeMd, /chat, image, voice, and song/);
+        assert.match(readmeMd, /ghcr\.io\/bugabinga\/hallucygenie:v1\.0\.0/);
+        assert.match(readmeMd, /MINIMAX_API_KEY/);
+        assert.match(readmeMd, /No built-in auth/);
+        assert.match(readmeMd, /data\//);
+        assert.match(readmeMd, /just release-check/);
+        assert.match(readmeMd, /MANUAL_CHROME_OK=v1\.0\.0 just release v1\.0\.0/);
         assert.match(readmeMd, /Made with love, hand-vibing AI, and bugabinga\./);
     });
 
+    it("ships first-release changelog and env example", () => {
+        assert.match(changelogMd, /^## 1\.0\.0 - 2026-05-27$/m);
+        assert.match(changelogMd, /Kid notes/);
+        assert.match(changelogMd, /Parent notes/);
+        assert.match(changelogMd, /Database/);
+        assert.match(changelogMd, /ghcr\.io\/bugabinga\/hallucygenie:v1\.0\.0/);
+        assert.match(envExample, /^MINIMAX_API_KEY=$/m);
+        assert.match(envExample, /^PORT=3000$/m);
+        assert.match(envExample, /^COVER_EXTRACTOR_URL=$/m);
+    });
+
     it("uses MIT license metadata", () => {
-        const pkg = JSON.parse(readFileSync("package.json", "utf-8")) as { license: string };
+        const pkg = JSON.parse(readFileSync("package.json", "utf-8")) as {
+            license: string;
+            version: string;
+        };
+        assert.equal(pkg.version, "1.0.0");
         assert.equal(pkg.license, "MIT");
         assert.match(licenseMd, /^MIT License/);
         assert.match(licenseMd, /Copyright \(c\) 2026 bugabinga/);
@@ -1032,7 +1098,7 @@ describe("GitHub Actions health", () => {
     });
 
     it("caches Bun deps and uploads mutation HTML artifacts", () => {
-        assert.match(ciYml, /bun-version: 1\.3\.13/);
+        assert.match(ciYml, /bun-version: 1\.3\.14/);
         assert.match(ciYml, /actions\/checkout@v6\.0\.2/);
         assert.match(ciYml, /oven-sh\/setup-bun@v2\.2\.0/);
         assert.match(ciYml, /actions\/cache@v5\.0\.5/);
@@ -1050,9 +1116,21 @@ describe("GitHub Actions health", () => {
         assert.match(strykerDb, /fileName: "reports\/mutation\/db\.html"/);
     });
 
-    it("builds container and lets Dependabot open dependency update PRs", () => {
+    it("builds and releases containers without local act clutter", () => {
         assert.match(ciYml, /container:/);
         assert.match(ciYml, /run: just container hallucygenie:ci/);
+        assert.match(releaseYml, /tags:\n\s+- "v\*\.\*\.\*"/);
+        assert.match(releaseYml, /ghcr\.io\/bugabinga\/hallucygenie/);
+        assert.match(releaseYml, /permissions:\n\s+contents: read\n\s+packages: write/);
+        assert.match(releaseYml, /browser-actions\/setup-chrome@v2\.1\.2/);
+        assert.match(releaseYml, /CHROMIUM_PATH=/);
+        assert.match(
+            releaseYml,
+            /run: RELEASE_TAG="\$RELEASE_TAG" just release-check "\$IMAGE:\$RELEASE_TAG"/,
+        );
+        assert.match(releaseYml, /docker\/build-push-action@v7\.0\.0/);
+        assert.match(releaseYml, /cache-from: type=gha/);
+        assert.match(releaseYml, /latest=false/);
         assert.doesNotMatch(ciYml, /env\.ACT/);
         assert.doesNotMatch(ciYml, /act \+ Podman/);
         assert.equal(existsSync(".github/workflows/updates.yml"), false);
@@ -1063,7 +1141,11 @@ describe("GitHub Actions health", () => {
         assert.match(dependabotYml, /interval: weekly/);
         assert.doesNotMatch(dependabotYml, /workflow_dispatch|bun outdated|just deps-check/);
         assert.match(justfile, /\ncontainer image="hallucygenie:local":/);
-        assert.match(justfile, /docker build -f deploy\/Dockerfile -t "\{\{ image \}\}" \./);
+        assert.match(
+            justfile,
+            /docker build -f deploy\/Dockerfile --build-arg VERSION="\$version" -t "\{\{ image \}\}" \./,
+        );
+        assert.match(justfile, /\nrelease-check image="hallucygenie:local": ready/);
         assert.doesNotMatch(justfile, /\ndeps-check:|bun outdated --latest/);
     });
 
@@ -1082,7 +1164,7 @@ describe("GitHub Actions health", () => {
             packageManager: string;
             scripts: Record<string, string>;
         };
-        assert.equal(pkg.packageManager, "bun@1.3.13");
+        assert.equal(pkg.packageManager, "bun@1.3.14");
         assert.deepEqual(Object.keys(pkg.scripts), ["prepare"]);
         assert.match(pkg.scripts.prepare, /git rev-parse --git-dir/);
         assert.match(pkg.scripts.prepare, /lefthook install/);
@@ -1108,19 +1190,30 @@ describe("agent janitor health", () => {
 });
 
 describe("layout health", () => {
-    it("deploy image uses optimized Bun multi-stage build", () => {
-        assert.match(deployDockerfile, /^FROM docker\.io\/oven\/bun:1\.3\.14 AS build/m);
-        assert.match(deployDockerfile, /^FROM docker\.io\/oven\/bun:1\.3\.14 AS runtime/m);
-        assert.match(deployDockerfile, /--mount=type=cache,target=\/root\/\.bun\/install\/cache/);
-        assert.match(deployDockerfile, /COPY package\.json bun\.lock \./);
-        assert.match(deployDockerfile, /COPY public \.\/public/);
-        assert.match(deployDockerfile, /COPY src \.\/src/);
-        assert.match(deployDockerfile, /COPY migrations \.\/migrations/);
+    it("deploy image uses hardened optimized Bun multi-stage build", () => {
+        assert.match(deployDockerfile, /^ARG BUN_VERSION=1\.3\.14$/m);
+        assert.match(deployDockerfile, /^FROM docker\.io\/oven\/bun:\$\{BUN_VERSION\} AS deps/m);
+        assert.match(deployDockerfile, /^FROM deps AS build/m);
+        assert.match(deployDockerfile, /^FROM docker\.io\/oven\/bun:\$\{BUN_VERSION\} AS runtime/m);
+        assert.match(deployDockerfile, /^ARG VERSION=1\.0\.0$/m);
         assert.match(
             deployDockerfile,
-            /COPY --from=build \/app\/public\/app\.js \.\/public\/app\.js/,
+            /--mount=type=cache,target=\/root\/\.bun\/install\/cache,sharing=locked/,
+        );
+        assert.match(deployDockerfile, /COPY package\.json bun\.lock \./);
+        assert.match(deployDockerfile, /COPY public \.\/public/);
+        assert.match(deployDockerfile, /COPY --chown=bun:bun src \.\/src/);
+        assert.match(deployDockerfile, /COPY --chown=bun:bun migrations \.\/migrations/);
+        assert.match(
+            deployDockerfile,
+            /COPY --from=build --chown=bun:bun \/app\/public\/app\.js \.\/public\/app\.js/,
         );
         assert.match(deployDockerfile, /bunx esbuild public\/app\.ts/);
+        assert.match(deployDockerfile, /--minify/);
+        assert.match(deployDockerfile, /org\.opencontainers\.image\.version/);
+        assert.match(deployDockerfile, /^USER bun$/m);
+        assert.match(deployDockerfile, /^HEALTHCHECK /m);
+        assert.match(deployDockerfile, /\/api\/health/);
         assert.doesNotMatch(deployDockerfile, /COPY \. \./);
     });
 

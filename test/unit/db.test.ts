@@ -3,7 +3,15 @@
 import { describe, it, beforeEach } from "node:test";
 import assert from "node:assert/strict";
 import { Database } from "bun:sqlite";
-import { mkdtempSync, mkdirSync, writeFileSync, rmSync, copyFileSync, readdirSync } from "node:fs";
+import {
+    mkdtempSync,
+    mkdirSync,
+    writeFileSync,
+    rmSync,
+    copyFileSync,
+    readdirSync,
+    readFileSync,
+} from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 
@@ -170,6 +178,38 @@ describe("runMigrations", () => {
         // Should not throw
         runMigrations(db, "/nonexistent/path/migrations");
 
+        db.close();
+    });
+
+    it("refuses unknown future schema versions", () => {
+        const dir = tempMigrationsDir({
+            "001-first.sql": "CREATE TABLE t1 (id INTEGER PRIMARY KEY);",
+        });
+        const db = new Database(":memory:");
+        db.exec(`
+            CREATE TABLE schema_migrations (
+                version INTEGER PRIMARY KEY,
+                applied_at TEXT NOT NULL
+            );
+        `);
+        db.exec(
+            "INSERT INTO schema_migrations (version, applied_at) VALUES (999, datetime('now'))",
+        );
+        assert.throws(() => runMigrations(db, dir), /newer than code/);
+        db.close();
+        rmSync(dir, { recursive: true });
+    });
+
+    it("released v1.0.0 schema fixture migrates to current schema", () => {
+        const db = new Database(":memory:");
+        db.exec(readFileSync("test/fixtures/db/v1.0.0/schema.sql", "utf-8"));
+        runMigrations(db, join(import.meta.dirname ?? ".", "..", "..", "migrations"));
+        const versions = db
+            .prepare("SELECT version FROM schema_migrations ORDER BY version")
+            .all()
+            .map((r: any) => r.version);
+        assert.deepEqual(versions, [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]);
+        assert.ok(getOrCreateActiveSession(db));
         db.close();
     });
 });

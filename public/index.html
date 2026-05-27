@@ -18,6 +18,7 @@
                 <div class="header-left">
                     <span class="header-emoji" aria-hidden="true">🧞</span>
                     <h1 class="header-title">HallucyGenie</h1>
+                    <button id="whats-new-btn" class="whats-new-btn" type="button">v1.0</button>
                     <span
                         id="connection-status"
                         class="status-dot"
@@ -162,6 +163,38 @@
             <div id="error-toast" class="error-toast" hidden>
                 <span id="error-toast-icon" aria-hidden="true">😕</span>
                 <span id="error-toast-message"></span>
+            </div>
+
+            <div
+                id="whats-new-modal"
+                class="modal"
+                role="dialog"
+                aria-modal="true"
+                aria-labelledby="whats-new-title"
+                hidden
+            >
+                <div class="modal-backdrop whats-new-backdrop"></div>
+                <div class="modal-content whats-new-modal-content">
+                    <div class="modal-header">
+                        <h2 id="whats-new-title">✨ What’s new in v1.0</h2>
+                        <!-- prettier-ignore -->
+                        <button id="whats-new-close" class="modal-close" aria-label="Close">✕</button>
+                    </div>
+                    <div class="whats-new-body">
+                        <p>
+                            <strong>Big launch!</strong> HallucyGenie can help make images, voices,
+                            music, lyrics, searches, and image ideas.
+                        </p>
+                        <ul>
+                            <li>Assets stay saved in your local gallery.</li>
+                            <li>Chats, drafts, and profile style notes survive reloads.</li>
+                            <li>
+                                Parents: back up <code>data/</code> before upgrades. No built-in
+                                auth.
+                            </li>
+                        </ul>
+                    </div>
+                </div>
             </div>
 
             <div

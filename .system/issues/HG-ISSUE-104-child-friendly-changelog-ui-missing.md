@@ -1,5 +1,5 @@
 ---
-{ "status": "open", "specs": ["HG-SPEC-015", "HG-SPEC-016", "HG-SPEC-017"] }
+{ "status": "fixed", "specs": ["HG-SPEC-015", "HG-SPEC-016", "HG-SPEC-017"] }
 ---
 
 Repro: app UI has no subtle changelog entry point.

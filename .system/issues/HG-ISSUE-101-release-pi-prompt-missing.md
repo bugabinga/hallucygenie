@@ -1,5 +1,5 @@
 ---
-{ "status": "open", "specs": ["HG-SPEC-011"] }
+{ "status": "fixed", "specs": ["HG-SPEC-011"] }
 ---
 
 Repro: `.pi/prompts/` has no release prompt.

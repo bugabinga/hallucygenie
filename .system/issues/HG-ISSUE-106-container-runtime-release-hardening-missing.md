@@ -1,5 +1,5 @@
 ---
-{ "status": "open", "specs": ["HG-SPEC-011"] }
+{ "status": "fixed", "specs": ["HG-SPEC-011"] }
 ---
 
 Repro: `deploy/Dockerfile` runs default image user and has no runtime healthcheck or release labels.

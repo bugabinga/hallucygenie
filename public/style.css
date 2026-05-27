@@ -248,6 +248,25 @@ textarea,
     letter-spacing: -0.03em;
 }
 
+.whats-new-btn {
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-full);
+    background: var(--color-bg-card);
+    color: var(--color-tertiary);
+    padding: 2px 7px;
+    font-size: 0.7rem;
+    font-weight: 800;
+    line-height: 1;
+    cursor: pointer;
+}
+
+.whats-new-btn:hover,
+.whats-new-btn:focus-visible {
+    border-color: var(--color-tertiary);
+    box-shadow: 0 0 0 3px var(--color-tertiary-glow);
+    outline: none;
+}
+
 .header-right {
     display: flex;
     align-items: center;
@@ -1314,6 +1333,29 @@ textarea,
     width: min(92vw, 440px);
     max-height: min(86dvh, 680px);
     overflow-y: auto;
+}
+
+.whats-new-modal-content {
+    width: min(92vw, 420px);
+    max-height: min(86dvh, 560px);
+    overflow-y: auto;
+}
+
+.whats-new-body {
+    display: grid;
+    gap: var(--space-sm);
+    color: var(--color-text);
+    font-size: 0.9rem;
+    line-height: 1.5;
+}
+
+.whats-new-body p,
+.whats-new-body ul {
+    margin: 0;
+}
+
+.whats-new-body ul {
+    padding-left: 1.2rem;
 }
 
 .profile-avatar-editor {

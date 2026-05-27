@@ -1681,6 +1681,31 @@ export function init(): void {
             .catch(() => showError("Failed to create chat 😕"));
     });
 
+    const whatsNewBtn = document.querySelector<HTMLButtonElement>("#whats-new-btn");
+    const whatsNewModal = document.querySelector<HTMLElement>("#whats-new-modal");
+    const whatsNewClose = document.querySelector<HTMLButtonElement>("#whats-new-close");
+    const whatsNewBackdrop = whatsNewModal?.querySelector<HTMLElement>(".whats-new-backdrop");
+    let whatsNewReturnFocus: HTMLElement | null = null;
+
+    function openWhatsNew(): void {
+        if (!whatsNewModal || !whatsNewClose) return;
+        whatsNewReturnFocus = document.activeElement as HTMLElement | null;
+        whatsNewModal.hidden = false;
+        whatsNewClose.focus();
+    }
+
+    function closeWhatsNew(): void {
+        if (!whatsNewModal) return;
+        whatsNewModal.hidden = true;
+        whatsNewReturnFocus?.focus();
+        whatsNewReturnFocus = null;
+    }
+
+    whatsNewBtn?.addEventListener("click", openWhatsNew);
+    whatsNewClose?.addEventListener("click", closeWhatsNew);
+    whatsNewBackdrop?.addEventListener("click", closeWhatsNew);
+    whatsNewModal?.addEventListener("keydown", (e) => trapFocus(whatsNewModal, e));
+
     connectionStatus.setAttribute(
         "aria-label",
         `Connection status: ${connectionStatus.title || "Connected"}`,
@@ -1896,6 +1921,7 @@ export function init(): void {
     document.addEventListener("keydown", (e) => {
         if (e.key === "Escape") {
             closeLightbox();
+            if (whatsNewModal && !whatsNewModal.hidden) closeWhatsNew();
             if (!profileModal.hidden) closeProfileModal();
             if (!createModal.hidden) closeCreateModal();
         }

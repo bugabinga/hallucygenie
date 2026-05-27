@@ -53,6 +53,12 @@ export function runMigrations(db: Database, migrationsDir: string): void {
         return;
     }
 
+    const latest = files.reduce((max, file) => Math.max(max, parseInt(file.split("-")[0], 10)), 0);
+    for (const version of applied) {
+        if (version > latest)
+            throw new Error(`Database schema version ${version} is newer than code ${latest}`);
+    }
+
     // Run pending migrations in a transaction
     const pending = files.filter((f) => {
         const version = parseInt(f.split("-")[0], 10);

@@ -1,5 +1,5 @@
 ---
-{ "status": "open", "specs": ["HG-SPEC-011", "HG-SPEC-017"] }
+{ "status": "fixed", "specs": ["HG-SPEC-011", "HG-SPEC-017"] }
 ---
 
 Repro: `justfile` has `ready`, `container`, and `publish-container`, but no single release gate.

@@ -1,5 +1,5 @@
 ---
-{ "status": "open", "specs": ["HG-SPEC-011"] }
+{ "status": "fixed", "specs": ["HG-SPEC-011"] }
 ---
 
 Repro: CI builds a container but tag releases do not publish the primary artifact.

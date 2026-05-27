@@ -1,5 +1,5 @@
 ---
-{ "status": "open", "specs": ["HG-SPEC-011"] }
+{ "status": "fixed", "specs": ["HG-SPEC-011"] }
 ---
 
 Repro: README lacks first-release container run docs and `.env.example` is absent.

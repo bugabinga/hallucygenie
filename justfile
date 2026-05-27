@@ -116,13 +116,61 @@ chrome:
 # build production container image locally
 [group('deploy')]
 container image="hallucygenie:local":
-    docker build -f deploy/Dockerfile -t "{{ image }}" .
+    package_tag="v$(bun -e 'console.log(JSON.parse(await Bun.file("package.json").text()).version)')"; \
+    version="${RELEASE_TAG:-$package_tag}"; \
+    docker build -f deploy/Dockerfile --build-arg VERSION="$version" -t "{{ image }}" .
+
+# smoke-test production container image locally
+[group('deploy')]
+container-smoke image="hallucygenie:local":
+    name="hallucygenie-smoke-$RANDOM"; \
+    volume="$name-data"; \
+    docker volume create "$volume" >/dev/null; \
+    cleanup() { docker rm -f "$name" >/dev/null 2>&1 || true; docker volume rm "$volume" >/dev/null 2>&1 || true; }; \
+    trap cleanup EXIT; \
+    docker run -d --name "$name" -p 127.0.0.1:3099:3000 -e MINIMAX_API_KEY=release-smoke -v "$volume:/app/data" "{{ image }}" >/dev/null; \
+    ok=0; \
+    for _ in $(seq 1 30); do curl -fsS http://127.0.0.1:3099/api/health >/dev/null && ok=1 && break; sleep 1; done; \
+    test "$ok" = "1"; \
+    curl -fsS http://127.0.0.1:3099/ >/dev/null; \
+    curl -fsSI http://127.0.0.1:3099/fonts/pixelify-sans/PixelifySans.woff2 >/dev/null
+
+# full release gate: checks, metadata validation, container build, container smoke
+[group('deploy')]
+release-check image="hallucygenie:local": ready
+    image="{{ image }}"; \
+    package_tag="v$(bun -e 'console.log(JSON.parse(await Bun.file("package.json").text()).version)')"; \
+    release_tag="${RELEASE_TAG:-$package_tag}"; \
+    image_tag="${image##*:}"; \
+    case "$image" in ghcr.io/bugabinga/hallucygenie:*) if [ "$image_tag" != "$release_tag" ]; then echo "image tag $image_tag != RELEASE_TAG $release_tag"; exit 1; fi ;; esac; \
+    RELEASE_TAG="$release_tag" bun scripts/release-check.ts; \
+    RELEASE_TAG="$release_tag" just container "$image"; \
+    docker inspect "$image" | RELEASE_TAG="$release_tag" bun -e 'const image = JSON.parse(await new Response(Bun.stdin.stream()).text())[0]; const got = image.Config.Labels["org.opencontainers.image.version"]; if (got !== process.env.RELEASE_TAG) throw new Error(`image version label ${got} != ${process.env.RELEASE_TAG}`);'; \
+    just container-smoke "$image"
+
+# cut release tag after local proof and manual Chrome confirmation
+[group('deploy')]
+release tag:
+    tag="{{ tag }}"; \
+    case "$tag" in v[0-9]*.[0-9]*.[0-9]*) ;; *) echo "tag must be vX.Y.Z"; exit 1 ;; esac; \
+    package_tag="v$(bun -e 'console.log(JSON.parse(await Bun.file("package.json").text()).version)')"; \
+    if [ "$tag" != "$package_tag" ]; then echo "tag $tag != package $package_tag"; exit 1; fi; \
+    image="ghcr.io/bugabinga/hallucygenie:$tag"; \
+    RELEASE_TAG="$tag" just release-check "$image"; \
+    if [ -n "$(git status --short)" ]; then git status --short; echo "dirty worktree"; exit 1; fi; \
+    if [ "${MANUAL_CHROME_OK:-}" != "$tag" ]; then echo "manually test $image in Chrome, then run: MANUAL_CHROME_OK=$tag just release $tag"; exit 1; fi; \
+    if git rev-parse -q --verify "refs/tags/$tag" >/dev/null; then echo "tag $tag already exists"; exit 1; fi; \
+    git tag "$tag"; \
+    git push origin "$tag"
 
 # build and push production container image
 [group('deploy')]
 publish-container image:
-    case "{{ image }}" in ghcr.io/bugabinga/hallucygenie:*) ;; *) echo "image must be ghcr.io/bugabinga/hallucygenie:<tag>"; exit 1 ;; esac
-    docker buildx build -f deploy/Dockerfile -t "{{ image }}" --push .
+    image="{{ image }}"; \
+    case "$image" in ghcr.io/bugabinga/hallucygenie:v[0-9]*.[0-9]*.[0-9]*) ;; *) echo "image must be ghcr.io/bugabinga/hallucygenie:vX.Y.Z"; exit 1 ;; esac; \
+    release_tag="${image##*:}"; \
+    RELEASE_TAG="$release_tag" bun scripts/release-check.ts; \
+    docker buildx build -f deploy/Dockerfile --build-arg VERSION="$release_tag" -t "$image" --push .
 
 # test MiniMax API endpoints + check quota (real API; consumes TTS/image/music quota)
 [group('pi')]

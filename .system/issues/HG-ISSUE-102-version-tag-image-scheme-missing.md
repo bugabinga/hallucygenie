@@ -1,5 +1,5 @@
 ---
-{ "status": "open", "specs": ["HG-SPEC-011"] }
+{ "status": "fixed", "specs": ["HG-SPEC-011"] }
 ---
 
 Repro: `package.json` has `0.1.0`, but no documented tag/image scheme.

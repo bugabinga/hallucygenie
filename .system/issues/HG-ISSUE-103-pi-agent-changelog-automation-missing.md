@@ -1,5 +1,5 @@
 ---
-{ "status": "open", "specs": ["HG-SPEC-011", "HG-SPEC-017"] }
+{ "status": "fixed", "specs": ["HG-SPEC-011", "HG-SPEC-017"] }
 ---
 
 Repro: no command/prompt generates changelog from git history and `.system/issues`.
