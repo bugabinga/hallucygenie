@@ -170,9 +170,11 @@ describe("index.html health", () => {
 
     it("has accessible labels for form controls", () => {
         const doc = parseIndex();
-        assert.ok(doc.querySelector('label[for="chat-input"]'));
-        assert.ok(doc.querySelector('label[for="music-prompt"]'));
-        assert.ok(doc.querySelector('label[for="music-lyrics"]'));
+        const offenders = Array.from(doc.querySelectorAll("input, textarea, select"))
+            .filter((el) => (el as HTMLInputElement).type !== "hidden")
+            .filter((el) => ((el as HTMLInputElement).labels?.length ?? 0) === 0)
+            .map((el) => el.id || el.outerHTML);
+        assert.deepEqual(offenders, []);
         assert.equal(doc.querySelector("#music-instrumental"), null);
     });
 

@@ -2490,6 +2490,70 @@ describe("init event binding", () => {
         assert.ok(!chatFetchCalled, "chat endpoint should NOT be called on Shift+Enter");
     });
 
+    it("DB empty chat draft clears Firefox-restored text", async () => {
+        setupFullDOM();
+
+        const input = doc.querySelector("#chat-input");
+        input.value = "browser restored stale draft";
+
+        (globalThis as any).fetch = (url: string) => {
+            if (url === "/api/draft/chat") {
+                return Promise.resolve(
+                    new Response(JSON.stringify({ draft: null }), {
+                        status: 200,
+                        headers: { "Content-Type": "application/json" },
+                    }),
+                );
+            }
+            if (url === "/api/draft/create") {
+                return Promise.resolve(
+                    new Response(JSON.stringify({ draft: null }), {
+                        status: 200,
+                        headers: { "Content-Type": "application/json" },
+                    }),
+                );
+            }
+            if (url === "/api/history") {
+                return Promise.resolve(
+                    new Response(JSON.stringify({ messages: [] }), {
+                        status: 200,
+                        headers: { "Content-Type": "application/json" },
+                    }),
+                );
+            }
+            if (url === "/api/sessions") {
+                return Promise.resolve(
+                    new Response(JSON.stringify({ activeSessionId: "s1", sessions: [] }), {
+                        status: 200,
+                        headers: { "Content-Type": "application/json" },
+                    }),
+                );
+            }
+            if (url === "/api/profile") {
+                return Promise.resolve(
+                    new Response(
+                        JSON.stringify({
+                            version: 1,
+                            username: "",
+                            interests: "",
+                            hates: "",
+                            favorites: "",
+                            avatar: { type: "asset", value: "" },
+                            updatedAt: 0,
+                        }),
+                        { status: 200, headers: { "Content-Type": "application/json" } },
+                    ),
+                );
+            }
+            return Promise.resolve(new Response(JSON.stringify({}), { status: 200 }));
+        };
+
+        init();
+        await new Promise((r) => setTimeout(r, 20));
+
+        assert.equal(input.value, "");
+    });
+
     it("input change → enables send button", () => {
         setupFullDOM();
 
@@ -3176,6 +3240,92 @@ describe("init accessibility behavior", () => {
         closeBtn.click();
         assert.equal(lightbox.hidden, true);
         assert.equal(doc.activeElement, opener);
+    });
+
+    it("blocks new session while streaming when confirmation is rejected", async () => {
+        const { doc } = setupDOM();
+        const sessionSelect = doc.createElement("select");
+        sessionSelect.id = "session-select";
+        const sessionNew = doc.createElement("button");
+        sessionNew.id = "session-new";
+        doc.body.append(sessionSelect, sessionNew);
+
+        let newSessionPosts = 0;
+        let confirmCalls = 0;
+        let resolveChat!: (response: Response) => void;
+        (globalThis as any).confirm = () => {
+            confirmCalls += 1;
+            return false;
+        };
+        (globalThis as any).fetch = (input: string | Request, init?: RequestInit) => {
+            const url = input.toString();
+            if (url === "/api/chat") {
+                return new Promise<Response>((resolve) => {
+                    resolveChat = resolve;
+                });
+            }
+            if (url === "/api/sessions" && init?.method === "POST") newSessionPosts += 1;
+            if (url === "/api/sessions") {
+                return Promise.resolve(
+                    new Response(
+                        JSON.stringify({
+                            activeSessionId: "s1",
+                            sessions: [{ id: "s1", name: "New Chat" }],
+                        }),
+                        { status: 200, headers: { "Content-Type": "application/json" } },
+                    ),
+                );
+            }
+            if (url === "/api/profile") {
+                return Promise.resolve(
+                    new Response(
+                        JSON.stringify({
+                            version: 1,
+                            username: "",
+                            interests: "",
+                            hates: "",
+                            favorites: "",
+                            avatar: { type: "asset", value: "" },
+                            updatedAt: 0,
+                        }),
+                        { status: 200, headers: { "Content-Type": "application/json" } },
+                    ),
+                );
+            }
+            if (url === "/api/history") {
+                return Promise.resolve(
+                    new Response(JSON.stringify({ messages: [] }), {
+                        status: 200,
+                        headers: { "Content-Type": "application/json" },
+                    }),
+                );
+            }
+            if (url === "/api/draft/chat" || url === "/api/draft/create") {
+                return Promise.resolve(
+                    new Response(JSON.stringify({ draft: null }), {
+                        status: 200,
+                        headers: { "Content-Type": "application/json" },
+                    }),
+                );
+            }
+            return Promise.resolve(
+                new Response(JSON.stringify({}), {
+                    status: 200,
+                    headers: { "Content-Type": "application/json" },
+                }),
+            );
+        };
+
+        init();
+        const sendPromise = sendMessage("keep streaming");
+        await Promise.resolve();
+        sessionNew.click();
+
+        assert.equal(confirmCalls, 1);
+        assert.equal(newSessionPosts, 0);
+
+        resolveChat(createSSEResponse([sseDone()]));
+        await sendPromise;
     });
 });
 

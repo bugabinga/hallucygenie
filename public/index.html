@@ -116,6 +116,7 @@
                             placeholder="Type a message..."
                             rows="1"
                             maxlength="2000"
+                            autocomplete="off"
                             aria-label="Type your message"
                         ></textarea>
                         <button id="send-button" type="submit" aria-label="Send message" disabled>
@@ -237,12 +238,14 @@
                             >
                             <div class="profile-avatar-fields">
                                 <input id="profile-avatar-asset" type="hidden" />
+                                <label for="profile-avatar-upload" class="sr-only"
+                                    >Upload avatar image</label
+                                >
                                 <input
                                     id="profile-avatar-upload"
                                     class="sr-only"
                                     type="file"
                                     accept="image/png,image/jpeg,image/webp,image/gif"
-                                    aria-label="Upload avatar image"
                                 />
                                 <!-- prettier-ignore -->
                                 <p class="profile-avatar-help">Click the avatar to upload an image.</p>

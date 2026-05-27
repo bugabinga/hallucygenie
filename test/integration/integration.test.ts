@@ -6,6 +6,7 @@ import { describe, it, after, before } from "node:test";
 import assert from "node:assert/strict";
 import { createServer } from "node:http";
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { Window } from "happy-dom";
 import { connect } from "node:net";
 import { initDatabase, resetStateForTesting, handleNodeRequest, getDb } from "../../src/server.ts";
 import type { IncomingMessage, ServerResponse } from "node:http";
@@ -145,6 +146,21 @@ describe("GET /api/health", () => {
         const r = await api("GET", "/api/health");
         assert.equal(r.status, 200);
         assert.equal((r.body as any).status, "ok");
+    });
+});
+
+describe("GET /", () => {
+    it("serves associated labels for all user-editable controls", async () => {
+        const r = await httpGet("/");
+        assert.equal(r.status, 200);
+        const win = new Window();
+        (win as unknown as { SyntaxError: typeof SyntaxError }).SyntaxError = SyntaxError;
+        win.document.write(await r.text());
+        const offenders = Array.from(win.document.querySelectorAll("input, textarea, select"))
+            .filter((el: any) => el.type !== "hidden")
+            .filter((el: any) => (el.labels?.length ?? 0) === 0)
+            .map((el: any) => el.id || el.outerHTML);
+        assert.deepEqual(offenders, []);
     });
 });
 
@@ -358,6 +374,72 @@ describe("Music cover HTTP flow", () => {
             assert.equal(cover.type, "music");
             assert.equal(cover.params.cover_feature_id_present, true);
             assert.equal(String(cover.url).startsWith("/asset/"), true);
+        } finally {
+            globalThis.fetch = oldFetch;
+            if (oldKey) process.env.MINIMAX_API_KEY = oldKey;
+            else delete process.env.MINIMAX_API_KEY;
+        }
+    });
+});
+
+describe("POST /api/create-tool web_search", () => {
+    it("persists YouTube oEmbed enrichment through real HTTP flow", async () => {
+        const oldKey = process.env.MINIMAX_API_KEY;
+        const oldFetch = globalThis.fetch;
+        process.env.MINIMAX_API_KEY = "test-key";
+        const db = getDb();
+        assert.ok(db);
+        const sessionId = "integration-search-session";
+        createSession(db, sessionId, "Search Test");
+        const fetched: string[] = [];
+        globalThis.fetch = async (input: RequestInfo | URL, init?: RequestInit) => {
+            const url = String(input);
+            if (url.startsWith(baseUrl)) return oldFetch(input, init);
+            fetched.push(url);
+            if (url.includes("/v1/coding_plan/search")) {
+                assert.equal(JSON.parse(String(init?.body)).query, undefined);
+                assert.equal(JSON.parse(String(init?.body)).q, "https://youtu.be/dQw4w9WgXcQ");
+                return new Response(JSON.stringify({ organic: [] }), {
+                    status: 200,
+                    headers: { "Content-Type": "application/json" },
+                });
+            }
+            if (url.startsWith("https://www.youtube.com/oembed?")) {
+                return new Response(
+                    JSON.stringify({
+                        title: "Never Gonna Give You Up",
+                        author_name: "Rick Astley",
+                        thumbnail_url: "https://i.ytimg.com/vi/dQw4w9WgXcQ/hqdefault.jpg",
+                    }),
+                    { status: 200, headers: { "Content-Type": "application/json" } },
+                );
+            }
+            throw new Error(`Unexpected fetch ${url}`);
+        };
+
+        try {
+            const resp = await fetch(`${baseUrl}/api/create-tool`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json", "X-Session-Id": sessionId },
+                body: JSON.stringify({
+                    tool_name: "web_search",
+                    input: { query: "https://youtu.be/dQw4w9WgXcQ" },
+                }),
+            });
+            assert.equal(resp.status, 200);
+            const body = await resp.text();
+            assert.match(body, /event: tool_result/);
+            assert.match(body, /YouTube metadata/);
+            assert.match(body, /Never Gonna Give You Up/);
+            assert.match(body, /Rick Astley/);
+            assert.ok(fetched.some((url) => url.startsWith("https://www.youtube.com/oembed?")));
+
+            const history = await api("GET", "/api/create-history?kind=search", undefined, {
+                "X-Session-Id": sessionId,
+            });
+            assert.equal(history.status, 200);
+            assert.equal((history.body as any).items[0].tool_name, "web_search");
+            assert.equal((history.body as any).items[0].status, "succeeded");
         } finally {
             globalThis.fetch = oldFetch;
             if (oldKey) process.env.MINIMAX_API_KEY = oldKey;

@@ -2287,8 +2287,10 @@ export function init(): void {
         const chatDraft = await getDraft("chat");
         if (chatDraft && typeof chatDraft === "object" && "text" in chatDraft) {
             input.value = String((chatDraft as { text: unknown }).text ?? "");
-            handleInputChange();
+        } else {
+            input.value = "";
         }
+        handleInputChange();
         const createDraft = await getDraft("create");
         if (isCreateDraft(createDraft)) {
             applyCreateDraft(createDraft);

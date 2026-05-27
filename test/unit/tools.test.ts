@@ -1636,6 +1636,35 @@ describe("webSearch HTTP request structure", () => {
         assert.ok(result.content.includes("Source: https://youtu.be/dQw4w9WgXcQ"));
     });
 
+    it("deduplicates YouTube oEmbed enrichment by video id", async () => {
+        let oembedCalls = 0;
+        globalThis.fetch = async (url: string | URL | Request) => {
+            if (url.toString().includes("/v1/coding_plan/search")) {
+                return jsonResponse({
+                    organic: [
+                        {
+                            title: "Same video",
+                            link: "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
+                            snippet: "Video",
+                        },
+                    ],
+                });
+            }
+            oembedCalls += 1;
+            return jsonResponse({
+                title: "Same Video",
+                author_name: "Creator",
+                thumbnail_url: "https://i.ytimg.com/thumb.jpg",
+            });
+        };
+
+        const result = await webSearch("https://youtu.be/dQw4w9WgXcQ", API_KEY);
+
+        assert.equal(oembedCalls, 1);
+        assert.equal(result.content.split("YouTube metadata:").length - 1, 1);
+        assert.ok(result.content.includes("Source: https://youtu.be/dQw4w9WgXcQ"));
+    });
+
     it("caps YouTube oEmbed enrichment at 2 videos", async () => {
         let oembedCalls = 0;
         globalThis.fetch = async (url: string | URL | Request) => {

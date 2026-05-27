@@ -59,6 +59,17 @@ async function expectVisible(page: Page, selector: string): Promise<void> {
     await el.waitFor({ state: "visible", timeout: 5000 });
 }
 
+async function expectImageLoaded(page: Page, selector: string): Promise<void> {
+    await page.waitForFunction(
+        (target) => {
+            const img = document.querySelector<HTMLImageElement>(target);
+            return img && img.complete && img.naturalWidth > 0 && img.naturalHeight > 0;
+        },
+        selector,
+        { timeout: 5000 },
+    );
+}
+
 async function expectHidden(page: Page, selector: string): Promise<void> {
     const el = page.locator(selector);
     await el.waitFor({ state: "hidden", timeout: 5000 });
@@ -713,6 +724,35 @@ async function runE2ETests(): Promise<void> {
             // Switch back to image tab
             await page.click(".create-tab[data-tab='image']");
             await expectVisible(page, "#create-image-form");
+
+            await page.close();
+        },
+        results,
+    );
+
+    await runTest(
+        "create image renders chat lightbox and asset previews",
+        async () => {
+            const page = await browser!.newPage();
+            await waitForApp(page, { dismissOnboarding: true });
+
+            await page.click("#create-btn");
+            await page.fill("#img-prompt", "a neon fox gamer logo");
+            await page.click("#create-image-form button[type='submit']");
+            await expectHidden(page, "#create-modal");
+            await expectVisible(page, ".tool-result-image");
+            await expectImageLoaded(page, ".tool-result-image");
+
+            await page.click(".tool-result-image");
+            await expectVisible(page, "#lightbox");
+            await expectImageLoaded(page, "#lightbox-img");
+            await page.click(".lightbox-close");
+            await expectHidden(page, "#lightbox");
+
+            await page.click("#create-btn");
+            await page.click(".create-tab[data-tab='assets']");
+            await expectVisible(page, ".asset-card[data-type='image']");
+            await expectImageLoaded(page, ".asset-card[data-type='image'] .asset-thumb");
 
             await page.close();
         },

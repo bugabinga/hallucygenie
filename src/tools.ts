@@ -709,7 +709,7 @@ type YouTubeMetadata = {
     thumbnailUrl: string;
 };
 
-function youtubeVideoUrl(raw: string): string | null {
+function youtubeVideoRef(raw: string): { id: string; source: string } | null {
     let url: URL;
     try {
         url = new URL(raw);
@@ -719,36 +719,40 @@ function youtubeVideoUrl(raw: string): string | null {
     const host = url.hostname.toLowerCase().replace(/^www\./, "");
     if (host === "youtu.be") {
         const id = url.pathname.split("/").filter(Boolean)[0] ?? "";
-        return /^[A-Za-z0-9_-]{11}$/.test(id) ? raw : null;
+        return /^[A-Za-z0-9_-]{11}$/.test(id) ? { id, source: raw } : null;
     }
     if (host !== "youtube.com" && host !== "m.youtube.com" && host !== "music.youtube.com") {
         return null;
     }
     const watchId = url.searchParams.get("v") ?? "";
-    if (/^[A-Za-z0-9_-]{11}$/.test(watchId)) return raw;
+    if (/^[A-Za-z0-9_-]{11}$/.test(watchId)) return { id: watchId, source: raw };
     const parts = url.pathname.split("/").filter(Boolean);
     if (
         (parts[0] === "shorts" || parts[0] === "embed") &&
         /^[A-Za-z0-9_-]{11}$/.test(parts[1] ?? "")
     ) {
-        return raw;
+        return { id: parts[1]!, source: raw };
     }
     return null;
 }
 
-function youtubeUrlsFromText(text: string): string[] {
+function youtubeRefsFromText(text: string): Array<{ id: string; source: string }> {
     return [...text.matchAll(/https?:\/\/[^\s<>)"]+/g)]
         .map((match) => match[0]!.replace(/[.,!?;:]+$/g, ""))
-        .map(youtubeVideoUrl)
-        .filter((url): url is string => url !== null);
+        .map(youtubeVideoRef)
+        .filter((ref): ref is { id: string; source: string } => ref !== null);
 }
 
 function youtubeUrls(query: string, results: SearchResult[]): string[] {
-    const urls = [
-        ...youtubeUrlsFromText(query),
-        ...results.flatMap((result) => youtubeUrlsFromText(result.link)),
+    const refs = [
+        ...youtubeRefsFromText(query),
+        ...results.flatMap((result) => youtubeRefsFromText(result.link)),
     ];
-    return [...new Set(urls)].slice(0, YOUTUBE_OEMBED_LIMIT);
+    const sourcesById = new Map<string, string>();
+    for (const ref of refs) {
+        if (!sourcesById.has(ref.id)) sourcesById.set(ref.id, ref.source);
+    }
+    return [...sourcesById.values()].slice(0, YOUTUBE_OEMBED_LIMIT);
 }
 
 async function fetchYouTubeMetadata(source: string): Promise<YouTubeMetadata | null> {
