@@ -5,7 +5,7 @@ description: MiniMax API integration for HallucyGenie. Use when working with Min
 
 # MiniMax API — HallucyGenie
 
-Current docs crawl: 2026-05-15 from `https://platform.minimax.io/docs/llms.txt` into `~/.pi/research/pages/`. Cross-checked `MiniMax-AI/MiniMax-Coding-Plan-MCP` source via `git_clone_safe`.
+Current docs crawl: 2026-05-27 from `https://platform.minimax.io/docs/llms.txt` into `~/.pi/research/pages/`. Cross-checked `MiniMax-AI/MiniMax-Coding-Plan-MCP` source via `git_clone_safe`.
 
 ## Base URLs
 
@@ -60,6 +60,7 @@ Current docs crawl: 2026-05-15 from `https://platform.minimax.io/docs/llms.txt` 
 ### Sync TTS
 
 - `POST /v1/t2a_v2` — synchronous, up to **10,000 chars/request**.
+- Docs models: `speech-2.8-hd`, `speech-2.8-turbo`, `speech-2.6-hd`, `speech-2.6-turbo`, `speech-02-hd`, `speech-02-turbo`, `speech-01-hd`, `speech-01-turbo`.
 - Model for HallucyGenie Plus-Highspeed: `speech-2.8-hd`.
 - Output: `output_format: "hex"` by default. Convert with `Buffer.from(hex, "hex").toString("base64")` → data URL.
 - Text >3,000 chars: streaming recommended.
@@ -80,6 +81,9 @@ Current docs crawl: 2026-05-15 from `https://platform.minimax.io/docs/llms.txt` 
 - `POST /v1/t2a_async_v2` — create task, up to **1,000,000 chars/request**.
 - `file_id` text-file input is now documented up to **1,000,000 chars**; supported file formats: `txt`, `zip`.
 - Async `audio_setting.format`: `mp3|pcm|flac|wav|pcmu_raw|pcmu_wav|opus`; `voice_modify` supports `mp3|wav|flac` only.
+- Async `audio_setting.format=opus` only supports sample rates `8000|12000|16000|24000|48000`; other sample rates fail.
+- Async `audio_setting.channel` docs default is `2`.
+- Async now includes `subtitle_enable`, `subtitle_type`, and `continuous_sound` (`speech-2.8-hd|speech-2.8-turbo`; default `false`; `true` keeps model-side continuous inference for better long-text prosody, `false` splits text for lower latency).
 - `GET /v1/query/t2a_async_query_v2` — query task → get `file_id` → use File API retrieve/download.
 - Returned audio URL valid 9 hours (32,400 seconds).
 
@@ -100,6 +104,8 @@ Current docs crawl: 2026-05-15 from `https://platform.minimax.io/docs/llms.txt` 
 | `speech-2.6-turbo` | ❌ Unsupported |                                                                                          |
 | `speech-02-hd`     | ❌ Unsupported |                                                                                          |
 | `speech-02-turbo`  | ❌ Unsupported |                                                                                          |
+| `speech-01-hd`     | not tested     | Documented current API model; no HallucyGenie plan smoke result                          |
+| `speech-01-turbo`  | not tested     | Documented current API model; no HallucyGenie plan smoke result                          |
 
 Unsupported TTS models returned `{"base_resp":{"status_code":2061,"status_msg":"your current token plan not support model"}}` in project testing.
 
