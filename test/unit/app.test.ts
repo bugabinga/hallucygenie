@@ -2880,6 +2880,26 @@ describe("renderToolResult", () => {
         });
         assert.ok(card.outerHTML.includes("audio"));
     });
+
+    it("renders sanitized input details and tweak button", () => {
+        const card = renderToolResult(
+            "generate_image",
+            { type: "image", content: "/asset/one" },
+            {
+                prompt: "neon fox",
+                n: 2,
+                prompt_optimizer: true,
+                image: "data:image/png;base64,raw",
+                api_key: "secret",
+            },
+        );
+        assert.equal(card.querySelector("details.tool-input-details")?.hasAttribute("open"), false);
+        assert.ok(card.textContent?.includes("Input details"));
+        assert.ok(card.textContent?.includes("neon fox"));
+        assert.equal(card.textContent?.includes("data:image"), false);
+        assert.equal(card.textContent?.includes("secret"), false);
+        assert.equal(card.querySelectorAll(".tool-tweak-button").length, 1);
+    });
 });
 
 describe("sendSteer", () => {

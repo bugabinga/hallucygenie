@@ -836,9 +836,35 @@ textarea,
     font-size: 18px;
 }
 
+.tool-tweak-button {
+    margin-left: auto;
+    min-height: 32px;
+    padding: 4px 10px;
+    font-size: 0.8rem;
+}
+
 .tool-card-body {
     color: var(--color-text-dim);
     font-size: 14px;
+}
+
+.tool-input-details {
+    margin-top: var(--space-sm);
+}
+
+.tool-input-details summary {
+    cursor: pointer;
+    color: var(--color-text);
+    font-weight: 700;
+}
+
+.tool-input-details pre {
+    white-space: pre-wrap;
+    word-break: break-word;
+    margin: var(--space-xs) 0 0;
+    padding: var(--space-sm);
+    border-radius: var(--radius-sm);
+    background: rgba(0, 0, 0, 0.18);
 }
 
 /* Loading spinner in tool cards */

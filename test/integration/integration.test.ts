@@ -196,6 +196,15 @@ describe("GET /style.css", () => {
         assert.match(css, /\.tool-result-audio \{[\s\S]*display: block;/);
     });
 
+    it("serves tool details and tweak control styles", async () => {
+        const r = await httpGet("/style.css");
+        assert.equal(r.status, 200);
+        const css = await r.text();
+        assert.match(css, /\.tool-input-details \{[\s\S]*margin-top: var\(--space-sm\);/);
+        assert.match(css, /\.tool-input-details pre \{[\s\S]*white-space: pre-wrap;/);
+        assert.match(css, /\.tool-tweak-button \{[\s\S]*min-height: 32px;/);
+    });
+
     it("serves Create image proximity spacing", async () => {
         const r = await httpGet("/style.css");
         assert.equal(r.status, 200);

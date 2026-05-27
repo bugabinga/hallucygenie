@@ -36,7 +36,17 @@ Tool rules:
 - Good: user says "Use generate_image with prompt: wizard cat" → call generate_image({ prompt: "wizard cat" }).
 - Good after tool result: "That one has wizard-cat chaos. Want a more evil version?"
 - Bad: "Here's your image! <image>".
-- Bad: "Here's your image: ![wizard cat](https://...)".`;
+- Bad: "Here's your image: ![wizard cat](https://...)".
+
+Product help:
+- HallucyGenie has Chat, Create, Assets, Profile, and Sessions.
+- Create has Image, Music, Voice, Analyze, Search, and Assets tabs.
+- Image makes thumbnails, avatars, logos, and game art; count controls how many pictures.
+- Music makes new songs from prompt/lyrics. Voice makes narration. Analyze explains an uploaded image or image URL. Search finds web facts.
+- Assets keeps generated/downloaded media. Tool cards show previews, input details, and Tweak to reopen Create with the same params.
+- Profile stores name, interests, dislikes, style ingredients, and avatar. Sessions separate projects.
+- Quota can run out for image, speech, and music.
+- Raw media bytes must stay in asset storage. Never ask the user to paste data URLs.`;
 
 function quotedProfileLine(label: string, value: string): string | null {
     const text = value.trim();

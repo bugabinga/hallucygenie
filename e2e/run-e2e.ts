@@ -802,7 +802,12 @@ async function runE2ETests(): Promise<void> {
             await page.click(".lightbox-close");
             await expectHidden(page, "#lightbox");
 
-            await page.click("#create-btn");
+            await expectVisible(page, ".tool-input-details");
+            await page.click(".tool-tweak-button");
+            await expectVisible(page, "#create-modal");
+            assertEqual(await page.inputValue("#img-prompt"), "a neon fox gamer logo");
+            assertEqual(await page.inputValue("#img-count"), "2");
+
             await page.click(".create-tab[data-tab='assets']");
             await page
                 .locator(".asset-card[data-type='image']")

@@ -549,6 +549,17 @@ describe("index.html health", () => {
         assert.match(styleCss, /\.tool-result-audio \{[\s\S]*display: block;/);
     });
 
+    it("shows tool input details and tweak affordance", () => {
+        assert.match(appTs, /function renderToolInputDetails/);
+        assert.match(appTs, /class: "tool-input-details"/);
+        assert.match(appTs, /class: "tool-tweak-button"/);
+        assert.match(appTs, /hallucygenie:tweak-tool/);
+        assert.match(appTs, /sanitizeToolInput/);
+        assert.doesNotMatch(appTs, /data:image\/png;base64,raw/);
+        assert.match(styleCss, /\.tool-input-details \{[\s\S]*margin-top: var\(--space-sm\);/);
+        assert.match(styleCss, /\.tool-tweak-button \{[\s\S]*min-height: 32px;/);
+    });
+
     it("connection status exposes accessible status", () => {
         const doc = parseIndex();
         const status = doc.querySelector("#connection-status") as HTMLElement | null;

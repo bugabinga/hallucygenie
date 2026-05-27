@@ -1785,6 +1785,18 @@ describe("System Prompt", () => {
         );
     });
 
+    it("SYSTEM_PROMPT includes compact product self-help map", () => {
+        for (const text of [
+            "Chat, Create, Assets, Profile, and Sessions",
+            "Image, Music, Voice, Analyze, Search, and Assets tabs",
+            "Tool cards show previews, input details, and Tweak",
+            "Raw media bytes must stay in asset storage",
+            "Quota can run out",
+        ]) {
+            assert.ok(SYSTEM_PROMPT.includes(text), text);
+        }
+    });
+
     it("buildSystemPrompt returns base prompt when no preferences", () => {
         const result = buildSystemPrompt();
         assert.ok(result.includes(SYSTEM_PROMPT), "should include base prompt");

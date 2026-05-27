@@ -432,6 +432,7 @@ export async function handleChat(
                             const sseData = `event: tool_start\ndata: ${JSON.stringify({
                                 id: event.id,
                                 name: event.name,
+                                input: event.args,
                             })}\n\n`;
                             await writer.write(encoder.encode(sseData));
                             break;
@@ -479,6 +480,7 @@ export async function handleChat(
                                 id: event.id,
                                 name: event.name,
                                 result: saved,
+                                input: event.args,
                             })}\n\n`;
                             await writer.write(encoder.encode(sseData));
                             break;
@@ -859,7 +861,11 @@ function handleDirectToolExecution(
 
     (async () => {
         try {
-            await writeSse("tool_start", { id: toolCallId, name: directive.name });
+            await writeSse("tool_start", {
+                id: toolCallId,
+                name: directive.name,
+                input: directive.args,
+            });
 
             const feature = featureForTool(directive.name);
             const quotaAmount = quotaAmountForTool(directive.name, directive.args);
@@ -907,6 +913,7 @@ function handleDirectToolExecution(
                 id: toolCallId,
                 name: directive.name,
                 result: saved,
+                input: directive.args,
             });
             if (sessionId && saved.type !== "error" && clearCreateDraftOnSuccess) {
                 deleteDraft(database, sessionId, "create");

@@ -15,6 +15,7 @@ interface HistoryMessage {
 interface HistoryToolCall {
     id: string;
     name: string;
+    input?: Record<string, unknown>;
 }
 
 interface ToolResult {
@@ -35,12 +36,14 @@ type CreateToolName =
 interface ToolStartEvent {
     id: string;
     name: string;
+    input?: Record<string, unknown>;
 }
 
 interface ToolResultEvent {
     id: string;
     name: string;
     result: ToolResult;
+    input?: Record<string, unknown>;
 }
 
 interface SessionRow {
@@ -461,6 +464,64 @@ export function getToolEmoji(name: string): string {
     return TOOL_EMOJIS[name] ?? "🔧";
 }
 
+const TWEAKABLE_TOOL_KINDS: Record<string, string> = {
+    generate_image: "image",
+    generate_music: "music",
+    generate_music_cover: "music",
+    text_to_speech: "voice",
+    generate_lyrics: "music",
+    analyze_image: "analyze",
+    web_search: "search",
+};
+
+export function sanitizeToolInput(input?: Record<string, unknown>): Record<string, unknown> | null {
+    if (!input) return null;
+    const clean: Record<string, unknown> = {};
+    for (const [key, value] of Object.entries(input)) {
+        if (/api|key|token|secret|password/i.test(key)) continue;
+        if (typeof value === "string") {
+            if (/^data:/i.test(value)) continue;
+            clean[key] = value.slice(0, 500);
+            continue;
+        }
+        if (typeof value === "number" && Number.isFinite(value)) {
+            clean[key] = value;
+            continue;
+        }
+        if (typeof value === "boolean") clean[key] = value;
+    }
+    return Object.keys(clean).length ? clean : null;
+}
+
+function renderToolInputDetails(input: Record<string, unknown>): HTMLElement {
+    const details = createElement("details", { class: "tool-input-details" });
+    details.appendChild(createElement("summary", {}, ["Input details"]));
+    details.appendChild(createElement("pre", {}, [JSON.stringify(input, null, 2)]));
+    return details;
+}
+
+function renderToolTweakButton(
+    toolName: string,
+    input: Record<string, unknown>,
+): HTMLElement | null {
+    if (!TWEAKABLE_TOOL_KINDS[toolName]) return null;
+    const button = createElement(
+        "button",
+        {
+            type: "button",
+            class: "tool-tweak-button",
+            "data-tool-name": toolName,
+        },
+        ["Tweak"],
+    );
+    button.addEventListener("click", () => {
+        document.dispatchEvent(
+            new CustomEvent("hallucygenie:tweak-tool", { detail: { toolName, input } }),
+        );
+    });
+    return button;
+}
+
 export function renderToolCardLoading(name: string): HTMLElement {
     const card = createElement("div", { class: "tool-card" });
     const header = createElement("div", { class: "tool-card-header" });
@@ -478,13 +539,20 @@ export function renderToolCardLoading(name: string): HTMLElement {
     return card;
 }
 
-export function renderToolResult(toolName: string, result: ToolResult): HTMLElement {
+export function renderToolResult(
+    toolName: string,
+    result: ToolResult,
+    input?: Record<string, unknown>,
+): HTMLElement {
     const card = createElement("div", { class: "tool-card" });
     const header = createElement("div", { class: "tool-card-header" });
     const emoji = createElement("span", { class: "tool-emoji" }, [getToolEmoji(toolName)]);
     const label = createElement("span", {}, [toolName.replace(/_/g, " ")]);
     header.appendChild(emoji);
     header.appendChild(label);
+    const cleanInput = sanitizeToolInput(input);
+    const tweak = cleanInput ? renderToolTweakButton(toolName, cleanInput) : null;
+    if (tweak) header.appendChild(tweak);
 
     const body = createElement("div", { class: "tool-card-body" });
     card.appendChild(header);
@@ -519,6 +587,7 @@ export function renderToolResult(toolName: string, result: ToolResult): HTMLElem
         body.textContent = `😕 ${result.content}`;
         card.style.borderColor = "var(--color-error)";
     }
+    if (cleanInput) body.appendChild(renderToolInputDetails(cleanInput));
 
     return card;
 }
@@ -972,7 +1041,7 @@ function handleSSEEvent(event: SSEEvent): void {
                 capturedLyricsText = parsed.result.content;
             }
             const loadingCard = activeToolCards.get(parsed.id);
-            const resultCard = renderToolResult(parsed.name, parsed.result);
+            const resultCard = renderToolResult(parsed.name, parsed.result, parsed.input);
             const shouldFollowToolResize = isMessageListNearBottom();
             if (loadingCard?.isConnected) {
                 // Replace loading card with result
@@ -1321,7 +1390,9 @@ function inferHistoryToolResult(toolName: string, content: string): ToolResult {
     }
 
     if (
-        (toolName === "text_to_speech" || toolName === "generate_music") &&
+        (toolName === "text_to_speech" ||
+            toolName === "generate_music" ||
+            toolName === "generate_music_cover") &&
         /^(?:\/asset\/|https?:\/\/|data:audio\/)/i.test(content)
     ) {
         return { type: "audio", content };
@@ -1352,7 +1423,11 @@ function renderHistoryAssistantMessage(
         const toolRow = toolRows.get(call.id);
         if (!toolRow) continue;
         contentEl.appendChild(
-            renderToolResult(call.name, inferHistoryToolResult(call.name, toolRow.content)),
+            renderToolResult(
+                call.name,
+                inferHistoryToolResult(call.name, toolRow.content),
+                call.input,
+            ),
         );
     }
 
@@ -2183,9 +2258,12 @@ export function init(): void {
         })
         .catch(() => undefined);
 
-    function fillFormFromHistory(item: CreateHistoryItem): void {
-        const inputData = item.input;
-        if (item.kind === "image") {
+    function fillCreateFormFromToolInput(
+        toolName: string,
+        inputData: Record<string, unknown>,
+    ): void {
+        const kind = TWEAKABLE_TOOL_KINDS[toolName] ?? toolName;
+        if (kind === "image") {
             imgPromptInput.value = String(inputData.prompt ?? "");
             imgRatioInput.value = String(inputData.aspect_ratio ?? "16:9");
             imgCountInput.value = String(inputData.n ?? "");
@@ -2201,11 +2279,13 @@ export function init(): void {
                 : "Optional: same code can make a similar picture again.";
             imgPromptOptimizerInput.checked = inputData.prompt_optimizer === true;
             setCreateTab("image");
-        } else if (item.kind === "music") {
+        } else if (kind === "music") {
             musicPromptInput.value = String(inputData.prompt ?? "");
             musicLyricsInput.value = String(inputData.lyrics ?? "");
+            coverFeatureId.value = String(inputData.cover_feature_id ?? "");
+            coverLyrics.value = String(inputData.lyrics ?? "");
             setCreateTab("music");
-        } else if (item.kind === "voice") {
+        } else if (kind === "voice") {
             voiceTextInput.value = String(inputData.text ?? "");
             voiceSpeedInput.value = String(inputData.speed ?? "1.0");
             if (voiceIdInput)
@@ -2213,16 +2293,30 @@ export function init(): void {
             if (voiceVolumeInput) voiceVolumeInput.value = String(inputData.volume ?? "");
             if (voicePitchInput) voicePitchInput.value = String(inputData.pitch ?? "");
             setCreateTab("voice");
-        } else if (item.kind === "analyze") {
+        } else if (kind === "analyze") {
             analyzeUrlInput.value = String(inputData.image_url ?? "");
             analyzePromptInput.value = String(inputData.prompt ?? "What do you see?");
             setCreateTab("analyze");
-        } else if (item.kind === "search") {
+        } else if (kind === "search") {
             searchQueryInput.value = String(inputData.query ?? inputData.prompt ?? "");
             setCreateTab("search");
         }
         void putDraft("create", createDraftFromDom());
     }
+
+    function fillFormFromHistory(item: CreateHistoryItem): void {
+        fillCreateFormFromToolInput(item.tool_name, item.input);
+    }
+
+    document.addEventListener("hallucygenie:tweak-tool", (event) => {
+        const detail = (event as CustomEvent).detail as {
+            toolName?: string;
+            input?: Record<string, unknown>;
+        };
+        if (!detail?.toolName || !detail.input) return;
+        openCreateModal();
+        fillCreateFormFromToolInput(detail.toolName, detail.input);
+    });
 
     async function loadRecent(kind: string): Promise<void> {
         const container = createModal.querySelector<HTMLElement>(

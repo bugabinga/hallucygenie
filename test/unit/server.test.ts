@@ -926,6 +926,8 @@ describe("SSE streaming from Anthropic endpoint", () => {
             assert.ok(body.includes("tool_start"));
             assert.ok(body.includes("tool_result"));
             assert.ok(body.includes("/asset/"));
+            assert.ok(body.includes('"input"'));
+            assert.ok(body.includes('"prompt":"cat"'));
             assert.equal(body.includes("https://example.com/direct-cat-1.png"), false);
             assert.equal(body.includes("https://example.com/direct-cat-2.png"), false);
 
