@@ -20,6 +20,7 @@ interface HistoryToolCall {
 interface ToolResult {
     type: "image" | "audio" | "text" | "error";
     content: string;
+    urls?: string[];
 }
 
 type CreateToolName =
@@ -490,14 +491,19 @@ export function renderToolResult(toolName: string, result: ToolResult): HTMLElem
     card.appendChild(body);
 
     if (result.type === "image") {
-        const img = createElement("img", {
-            class: "tool-result-image",
-            src: result.content,
-            alt: "Generated image",
-            loading: "lazy",
-        });
-        img.addEventListener("click", () => openLightbox(result.content));
-        body.appendChild(img);
+        const urls = result.urls?.length ? result.urls : [result.content];
+        const grid = createElement("div", { class: "tool-result-image-grid" });
+        for (const url of urls) {
+            const img = createElement("img", {
+                class: "tool-result-image",
+                src: url,
+                alt: "Generated image",
+                loading: "lazy",
+            });
+            img.addEventListener("click", () => openLightbox(url));
+            grid.appendChild(img);
+        }
+        body.appendChild(grid);
     } else if (result.type === "audio") {
         const audio = createElement("audio", {
             class: "tool-result-audio",
@@ -1306,8 +1312,12 @@ function parseHistoryToolCalls(value?: string | null): HistoryToolCall[] {
 function inferHistoryToolResult(toolName: string, content: string): ToolResult {
     if (content.startsWith("Error: ")) return { type: "error", content: content.slice(7) };
 
-    if (toolName === "generate_image" && /^(?:\/asset\/|https?:\/\/|data:image\/)/i.test(content)) {
-        return { type: "image", content };
+    if (toolName === "generate_image") {
+        const urls = content
+            .split("\n")
+            .map((line) => line.trim())
+            .filter((line) => /^(?:\/asset\/|https?:\/\/|data:image\/)/i.test(line));
+        if (urls.length > 0) return { type: "image", content: urls[0], urls };
     }
 
     if (

@@ -707,6 +707,52 @@ async function runE2ETests(): Promise<void> {
         results,
     );
 
+    await runTest(
+        "create image keeps related helper text near its control",
+        async () => {
+            const page = await browser!.newPage();
+            await waitForApp(page, { dismissOnboarding: true });
+
+            await page.click("#create-btn");
+            await page.waitForSelector("#create-modal", { state: "visible" });
+
+            const boxes = await page.evaluate(() => {
+                const label = document
+                    .querySelector("label[for='img-prompt-optimizer']")
+                    ?.getBoundingClientRect();
+                const help = document
+                    .querySelector("#create-image-form .create-option-group .field-help")
+                    ?.getBoundingClientRect();
+                const action = document
+                    .querySelector("#create-image-form .create-submit")
+                    ?.getBoundingClientRect();
+                if (!label || !help || !action)
+                    throw new Error("Missing Create image spacing controls");
+                return {
+                    labelBottom: label.bottom,
+                    helpTop: help.top,
+                    helpBottom: help.bottom,
+                    actionTop: action.top,
+                };
+            });
+            const relatedGap = boxes.helpTop - boxes.labelBottom;
+            const actionGap = boxes.actionTop - boxes.helpBottom;
+            if (relatedGap > 8) {
+                throw new Error(
+                    `Create image help too far from checkbox: ${JSON.stringify(boxes)}`,
+                );
+            }
+            if (actionGap <= relatedGap * 2) {
+                throw new Error(
+                    `Create image action too close to helper text: ${JSON.stringify(boxes)}`,
+                );
+            }
+
+            await page.close();
+        },
+        results,
+    );
+
     // Test 14: Create modal switches tabs
     await runTest(
         "create modal switches tabs",
@@ -738,12 +784,19 @@ async function runE2ETests(): Promise<void> {
 
             await page.click("#create-btn");
             await page.fill("#img-prompt", "a neon fox gamer logo");
+            await page.selectOption("#img-count", "2");
             await page.click("#create-image-form button[type='submit']");
             await expectHidden(page, "#create-modal");
-            await expectVisible(page, ".tool-result-image");
-            await expectImageLoaded(page, ".tool-result-image");
+            await expectVisible(page, ".tool-result-image-grid");
+            await page.waitForFunction(
+                () => document.querySelectorAll(".tool-result-image").length === 2,
+            );
+            await expectImageLoaded(
+                page,
+                ".tool-result-image-grid .tool-result-image:nth-child(1)",
+            );
 
-            await page.click(".tool-result-image");
+            await page.click(".tool-result-image-grid .tool-result-image:nth-child(1)");
             await expectVisible(page, "#lightbox");
             await expectImageLoaded(page, "#lightbox-img");
             await page.click(".lightbox-close");
@@ -751,8 +804,32 @@ async function runE2ETests(): Promise<void> {
 
             await page.click("#create-btn");
             await page.click(".create-tab[data-tab='assets']");
-            await expectVisible(page, ".asset-card[data-type='image']");
+            await page
+                .locator(".asset-card[data-type='image']")
+                .first()
+                .waitFor({ state: "visible" });
+            await page.waitForFunction(
+                () => document.querySelectorAll(".asset-card[data-type='image']").length >= 2,
+            );
             await expectImageLoaded(page, ".asset-card[data-type='image'] .asset-thumb");
+            await page
+                .locator(".asset-card[data-type='image'] .asset-preview-button")
+                .first()
+                .click();
+            await expectVisible(page, "#lightbox");
+            await expectImageLoaded(page, "#lightbox-img");
+            const topLayer = await page.evaluate(() => {
+                const box = document.querySelector("#lightbox-img")!.getBoundingClientRect();
+                const top = document.elementFromPoint(
+                    box.left + box.width / 2,
+                    box.top + box.height / 2,
+                );
+                return top?.id || top?.closest("#lightbox, #create-modal")?.id || top?.tagName;
+            });
+            assertEqual(topLayer, "lightbox-img", "Asset lightbox is above Create modal");
+            await page.click(".lightbox-close");
+            await expectHidden(page, "#lightbox");
+            await expectVisible(page, "#create-modal");
 
             await page.close();
         },
@@ -901,6 +978,23 @@ async function runE2ETests(): Promise<void> {
             if (/Use generate_music|Tool params:/i.test(userText)) {
                 throw new Error(`Music message leaked internals: ${userText}`);
             }
+            await expectVisible(page, ".tool-card:has(.tool-result-audio)");
+            const widths = await page.evaluate(() => {
+                const row = document.querySelector(".message--assistant:has(.tool-result-audio)")!;
+                const bubble = row.querySelector(".message-bubble")!;
+                const card = row.querySelector(".tool-card")!;
+                return {
+                    row: row.getBoundingClientRect().width,
+                    bubble: bubble.getBoundingClientRect().width,
+                    card: card.getBoundingClientRect().width,
+                };
+            });
+            if (widths.bubble / widths.row < 0.7) {
+                throw new Error(`Music tool bubble too narrow: ${JSON.stringify(widths)}`);
+            }
+            if (widths.card / widths.bubble < 0.85) {
+                throw new Error(`Music tool card too narrow: ${JSON.stringify(widths)}`);
+            }
 
             await page.close();
         },
@@ -977,6 +1071,53 @@ async function runE2ETests(): Promise<void> {
             await expectVisible(page, ".quota-item[data-type='image']");
             await expectVisible(page, ".quota-item[data-type='speech']");
             await expectVisible(page, ".quota-item[data-type='music']");
+
+            await page.close();
+        },
+        results,
+    );
+
+    await runTest(
+        "profile avatar generate button stays near avatar",
+        async () => {
+            const page = await browser!.newPage();
+            await waitForApp(page, { dismissOnboarding: true });
+
+            const initialProfileLoad = page.waitForResponse(
+                (res) => res.url().includes("/api/profile") && res.request().method() === "GET",
+            );
+            await page.click("#profile-btn");
+            await expectVisible(page, "#profile-modal");
+            await initialProfileLoad;
+
+            const grouped = await page.locator(".profile-avatar-editor #profile-generate").count();
+            assertEqual(grouped, 1, "Generate avatar button is in avatar editor");
+
+            const boxes = await page.evaluate(() => {
+                const avatar = document
+                    .querySelector("#profile-avatar-preview")
+                    ?.getBoundingClientRect();
+                const generate = document
+                    .querySelector("#profile-generate")
+                    ?.getBoundingClientRect();
+                const save = document
+                    .querySelector(".profile-actions button[type='submit']")
+                    ?.getBoundingClientRect();
+                if (!avatar || !generate || !save) throw new Error("Missing profile controls");
+                return {
+                    avatarCenterY: avatar.top + avatar.height / 2,
+                    generateCenterY: generate.top + generate.height / 2,
+                    saveTop: save.top,
+                };
+            });
+            if (Math.abs(boxes.avatarCenterY - boxes.generateCenterY) > 80) {
+                throw new Error(`Generate avatar too far from avatar: ${JSON.stringify(boxes)}`);
+            }
+            if (boxes.saveTop <= boxes.generateCenterY) {
+                throw new Error(
+                    `Save action should stay below avatar group: ${JSON.stringify(boxes)}`,
+                );
+            }
 
             await page.close();
         },

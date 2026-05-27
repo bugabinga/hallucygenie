@@ -258,6 +258,22 @@ describe("index.html health", () => {
         );
     });
 
+    it("groups related Create image helper text tightly before the action", () => {
+        const doc = parseIndex();
+        const group = doc.querySelector("#create-image-form .create-option-group");
+        const checkbox = doc.querySelector("label[for='img-prompt-optimizer']");
+        const help = group?.querySelector(".field-help");
+        const submit = doc.querySelector("#create-image-form .create-submit");
+        assert.ok(checkbox);
+        assert.ok(help);
+        assert.ok(group?.contains(checkbox));
+        assert.ok(group?.contains(help));
+        assert.equal(submit?.textContent, "Generate image 🎨");
+        assert.match(styleCss, /\.create-option-group \{[\s\S]*margin-bottom: var\(--space-lg\);/);
+        assert.match(styleCss, /\.create-option-group \.checkbox-row \{[\s\S]*margin-bottom: 2px;/);
+        assert.match(styleCss, /\.create-submit \{[\s\S]*margin-top: var\(--space-sm\);/);
+    });
+
     it("Create forms do not send internal tool directives through chat", () => {
         assert.doesNotMatch(appTs, /Use generate_|Use analyze_|Use text_to_speech|Tool params:/);
         assert.match(appTs, /\/api\/create-tool/);
@@ -441,6 +457,12 @@ describe("index.html health", () => {
         assert.equal(lightbox?.getAttribute("aria-label"), "Image preview");
     });
 
+    it("layers image lightbox above open modals", () => {
+        const modalZ = Number(styleCss.match(/\.modal \{[\s\S]*?z-index: (\d+);/)?.[1]);
+        const lightboxZ = Number(styleCss.match(/\.lightbox \{[\s\S]*?z-index: (\d+);/)?.[1]);
+        assert.ok(lightboxZ > modalZ, `lightbox ${lightboxZ} <= modal ${modalZ}`);
+    });
+
     it("profile button and modal have accessible labels", () => {
         const doc = parseIndex();
         assert.equal(doc.querySelector("#profile-btn")?.getAttribute("aria-label"), "Open profile");
@@ -497,6 +519,34 @@ describe("index.html health", () => {
         assert.match(appTs, /profileAvatarStatus\.textContent = pending/);
         assert.match(styleCss, /\.profile-avatar-preview\.is-pending \.profile-avatar-spinner/);
         assert.match(styleCss, /prefers-reduced-motion: reduce[\s\S]*\.profile-avatar-spinner/);
+    });
+
+    it("keeps avatar generation inside the avatar editor", () => {
+        const doc = parseIndex();
+        const editor = doc.querySelector(".profile-avatar-editor");
+        const generate = doc.querySelector("#profile-generate");
+        const actions = doc.querySelector(".profile-actions");
+        assert.ok(editor?.contains(generate));
+        assert.equal(actions?.contains(generate), false);
+        assert.deepEqual(
+            Array.from(actions?.querySelectorAll("button") ?? []).map(
+                (button) => button.textContent,
+            ),
+            ["Save", "Reset"],
+        );
+    });
+
+    it("lets assistant tool cards use the wide message row", () => {
+        assert.match(
+            styleCss,
+            /\.message--assistant \.message-bubble:has\(\.tool-card\) \{[\s\S]*width: min\(100%, calc\(var\(--content-max-width\) - 48px\)\);/,
+        );
+        assert.match(
+            styleCss,
+            /\.message--assistant \.message-bubble:has\(\.tool-card\) \{[\s\S]*max-width: calc\(100% - 42px\);/,
+        );
+        assert.match(styleCss, /\.tool-card \{[\s\S]*width: 100%;/);
+        assert.match(styleCss, /\.tool-result-audio \{[\s\S]*display: block;/);
     });
 
     it("connection status exposes accessible status", () => {
@@ -912,7 +962,7 @@ describe("justfile health", () => {
         assert.match(justfile, /\ncontainer image="hallucygenie:local":/);
         assert.match(
             justfile,
-            /docker build -f deploy\/Dockerfile --build-arg VERSION="\$version" -t "\{\{ image \}\}" \./,
+            /podman build -f deploy\/Dockerfile --build-arg VERSION="\$version" -t "\{\{ image \}\}" \./,
         );
         assert.match(justfile, /\ncontainer-smoke image="hallucygenie:local":/);
         assert.match(justfile, /curl -fsS http:\/\/127\.0\.0\.1:3099\/api\/health/);
@@ -923,7 +973,7 @@ describe("justfile health", () => {
         assert.doesNotMatch(justfile, /curl -fsSI/);
         assert.match(justfile, /\nrelease-check image="hallucygenie:local": ready/);
         assert.match(justfile, /RELEASE_TAG="\$release_tag" bun scripts\/release-check\.ts/);
-        assert.match(justfile, /docker inspect "\$image"/);
+        assert.match(justfile, /podman inspect "\$image"/);
         assert.match(justfile, /image version label/);
         assert.match(justfile, /\nrelease tag:/);
         assert.doesNotMatch(justfile, /MANUAL_CHROME_OK/);
@@ -936,8 +986,12 @@ describe("justfile health", () => {
         assert.match(justfile, /\npublish-container image:/);
         assert.match(
             justfile,
-            /docker buildx build -f deploy\/Dockerfile --build-arg VERSION="\$release_tag" -t "\$image" --push \./,
+            /podman build -f deploy\/Dockerfile --build-arg VERSION="\$release_tag" -t "\$image" --push \./,
         );
+        assert.doesNotMatch(justfile, /\bdocker (?:build|buildx|volume|run|inspect|rm)\b/);
+        assert.match(readmeMd, /podman pull ghcr\.io\/bugabinga\/hallucygenie:v1\.0\.0/);
+        assert.match(readmeMd, /podman run --rm/);
+        assert.doesNotMatch(readmeMd, /\bdocker (?:pull|run)\b/);
         assert.match(justfile, /release tag:\n\s+set -e; \\/);
         assert.match(justfile, /release-check image="hallucygenie:local": ready\n\s+set -e; \\/);
     });
@@ -1154,7 +1208,7 @@ describe("GitHub Actions health", () => {
         assert.match(justfile, /\ncontainer image="hallucygenie:local":/);
         assert.match(
             justfile,
-            /docker build -f deploy\/Dockerfile --build-arg VERSION="\$version" -t "\{\{ image \}\}" \./,
+            /podman build -f deploy\/Dockerfile --build-arg VERSION="\$version" -t "\{\{ image \}\}" \./,
         );
         assert.match(justfile, /\nrelease-check image="hallucygenie:local": ready/);
         assert.doesNotMatch(justfile, /\ndeps-check:|bun outdated --latest/);

@@ -71,7 +71,16 @@ function jsonResponse(body: unknown): Response {
     });
 }
 
-function minimaxResponse(url: URL): Response | null {
+function requestBody(init?: RequestInit): Record<string, unknown> {
+    if (typeof init?.body !== "string") return {};
+    try {
+        return JSON.parse(init.body) as Record<string, unknown>;
+    } catch {
+        return {};
+    }
+}
+
+function minimaxResponse(url: URL, init?: RequestInit): Response | null {
     switch (url.pathname) {
         case "/anthropic/v1/messages":
             return new Response(
@@ -85,13 +94,18 @@ function minimaxResponse(url: URL): Response | null {
                 },
             );
 
-        case "/v1/image_generation":
+        case "/v1/image_generation": {
+            const n = Math.max(1, Math.min(4, Number(requestBody(init).n ?? 1)));
             return jsonResponse({
                 data: {
-                    image_urls: ["https://example.com/generated/test.png"],
+                    image_urls: Array.from(
+                        { length: n },
+                        (_, index) => `https://example.com/generated/test-${index + 1}.png`,
+                    ),
                 },
                 base_resp: { status_code: 0 },
             });
+        }
 
         case "/v1/t2a_v2":
             return jsonResponse({
@@ -185,10 +199,10 @@ export function setupMinimaxMocks(): void {
                 method: init?.method ?? "GET",
                 body: typeof init?.body === "string" ? init.body : "",
             });
-            const response = minimaxResponse(url);
+            const response = minimaxResponse(url, init);
             if (response) return response;
         }
-        if (url.href === "https://example.com/generated/test.png") {
+        if (/^https:\/\/example\.com\/generated\/test-\d+\.png$/.test(url.href)) {
             return new Response(GENERATED_IMAGE_PNG, {
                 status: 200,
                 headers: { "Content-Type": "image/png" },

@@ -637,6 +637,11 @@ textarea,
     max-width: 85%;
 }
 
+.message--assistant .message-bubble:has(.tool-card) {
+    width: min(100%, calc(var(--content-max-width) - 48px));
+    max-width: calc(100% - 42px);
+}
+
 .message-avatar {
     width: 34px;
     height: 34px;
@@ -791,6 +796,7 @@ textarea,
 /* ── Tool Call Cards ────────────────────────────────────────────────── */
 
 .tool-card {
+    width: 100%;
     background: var(--color-surface-raised);
     border: 1.5px solid var(--color-tertiary);
     border-radius: var(--radius-md);
@@ -860,6 +866,12 @@ textarea,
 
 /* ── Tool Result Images ─────────────────────────────────────────────── */
 
+.tool-result-image-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+    gap: var(--space-sm);
+}
+
 .tool-result-image {
     border-radius: var(--radius-sm);
     box-shadow: var(--shadow-md);
@@ -884,6 +896,7 @@ textarea,
 /* ── Audio Players ──────────────────────────────────────────────────── */
 
 .tool-result-audio {
+    display: block;
     width: 100%;
     margin-top: var(--space-sm);
     border-radius: var(--radius-sm);
@@ -1061,7 +1074,7 @@ textarea,
 .lightbox {
     position: fixed;
     inset: 0;
-    z-index: 1000;
+    z-index: 3000;
     display: flex;
     align-items: center;
     justify-content: center;
@@ -1325,6 +1338,18 @@ textarea,
     font-size: 0.75rem;
 }
 
+.create-option-group {
+    margin-bottom: var(--space-lg);
+}
+
+.create-option-group .checkbox-row {
+    margin-bottom: 2px;
+}
+
+.create-submit {
+    margin-top: var(--space-sm);
+}
+
 .checkbox-row input {
     width: auto;
 }
@@ -1425,6 +1450,8 @@ textarea,
 }
 
 .profile-avatar-fields {
+    display: grid;
+    gap: var(--space-sm);
     min-width: 0;
 }
 
@@ -1981,6 +2008,10 @@ textarea,
 
     .message--assistant .message-bubble {
         max-width: 70%;
+    }
+
+    .message--assistant .message-bubble:has(.tool-card) {
+        max-width: calc(100% - 42px);
     }
 }
 

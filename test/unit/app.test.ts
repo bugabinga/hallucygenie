@@ -2855,6 +2855,16 @@ describe("renderToolResult", () => {
         assert.ok(card.outerHTML.includes("img"));
     });
 
+    it("renders multiple image results", () => {
+        const card = renderToolResult("generate_image", {
+            type: "image",
+            content: "/asset/one",
+            urls: ["/asset/one", "/asset/two"],
+        });
+        assert.equal(card.querySelectorAll(".tool-result-image").length, 2);
+        assert.ok(card.querySelector(".tool-result-image-grid"));
+    });
+
     it("renders error result", () => {
         const card = renderToolResult("generate_image", {
             type: "error",

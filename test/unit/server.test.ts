@@ -875,14 +875,24 @@ describe("SSE streaming from Anthropic endpoint", () => {
         globalThis.fetch = async (url: string | URL | Request) => {
             const urlStr = url.toString();
             fetchUrls.push(urlStr);
-            if (urlStr === "https://example.com/direct-cat.png") {
+            if (
+                urlStr === "https://example.com/direct-cat-1.png" ||
+                urlStr === "https://example.com/direct-cat-2.png"
+            ) {
                 return new Response(new Uint8Array([4, 5, 6]), {
                     status: 200,
                     headers: { "Content-Type": "image/png" },
                 });
             }
             return new Response(
-                JSON.stringify({ data: { image_urls: ["https://example.com/direct-cat.png"] } }),
+                JSON.stringify({
+                    data: {
+                        image_urls: [
+                            "https://example.com/direct-cat-1.png",
+                            "https://example.com/direct-cat-2.png",
+                        ],
+                    },
+                }),
                 { status: 200, headers: { "Content-Type": "application/json" } },
             );
         };
@@ -916,7 +926,8 @@ describe("SSE streaming from Anthropic endpoint", () => {
             assert.ok(body.includes("tool_start"));
             assert.ok(body.includes("tool_result"));
             assert.ok(body.includes("/asset/"));
-            assert.equal(body.includes("https://example.com/direct-cat.png"), false);
+            assert.equal(body.includes("https://example.com/direct-cat-1.png"), false);
+            assert.equal(body.includes("https://example.com/direct-cat-2.png"), false);
 
             const db = getDb()!;
             const rows = getMessages(db, "explicit-direct-session");
@@ -928,9 +939,12 @@ describe("SSE streaming from Anthropic endpoint", () => {
             );
             assert.equal(rows.at(-2)?.tool_calls_json?.includes("generate_image"), true);
             assert.equal(rows.at(-1)?.role, "tool");
-            assert.ok(rows.at(-1)?.content.includes("/asset/"));
-            const asset = getAssets(db, "explicit-direct-session").at(-1)!;
-            assert.equal(asset.type, "image");
+            assert.equal((rows.at(-1)?.content.match(/\/asset\//g) ?? []).length, 2);
+            const assets = getAssets(db, "explicit-direct-session").filter(
+                (asset) => asset.type === "image",
+            );
+            assert.equal(assets.length, 2);
+            const asset = assets.at(-1)!;
             assert.deepEqual(JSON.parse(asset.params_json!), {
                 model: "image-01",
                 prompt: "cat",

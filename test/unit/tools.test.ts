@@ -575,7 +575,7 @@ describe("generateImage", () => {
         assert.ok(result.content.includes("no image URLs"));
     });
 
-    it("handles response with multiple URLs (returns first)", async () => {
+    it("handles response with multiple URLs", async () => {
         mockFetch(
             jsonResponse({
                 data: {
@@ -587,6 +587,10 @@ describe("generateImage", () => {
         const result = await generateImage("test", API_KEY);
         assert.equal(result.type, "image");
         assert.equal(result.content, "https://example.com/img1.png");
+        assert.deepEqual(result.urls, [
+            "https://example.com/img1.png",
+            "https://example.com/img2.png",
+        ]);
     });
 });
 

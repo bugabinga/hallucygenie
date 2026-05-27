@@ -162,6 +162,48 @@ describe("GET /", () => {
             .map((el: any) => el.id || el.outerHTML);
         assert.deepEqual(offenders, []);
     });
+
+    it("serves profile avatar generation grouped with avatar controls", async () => {
+        const r = await httpGet("/");
+        assert.equal(r.status, 200);
+        const win = new Window();
+        (win as unknown as { SyntaxError: typeof SyntaxError }).SyntaxError = SyntaxError;
+        win.document.write(await r.text());
+        const editor = win.document.querySelector(".profile-avatar-editor");
+        const generate = win.document.querySelector("#profile-generate");
+        const actions = win.document.querySelector(".profile-actions");
+        assert.ok(editor?.contains(generate));
+        assert.equal(actions?.contains(generate), false);
+    });
+});
+
+describe("GET /style.css", () => {
+    it("serves lightbox above modal stacking order", async () => {
+        const r = await httpGet("/style.css");
+        assert.equal(r.status, 200);
+        const css = await r.text();
+        const modalZ = Number(css.match(/\.modal \{[\s\S]*?z-index: (\d+);/)?.[1]);
+        const lightboxZ = Number(css.match(/\.lightbox \{[\s\S]*?z-index: (\d+);/)?.[1]);
+        assert.ok(lightboxZ > modalZ, `lightbox ${lightboxZ} <= modal ${modalZ}`);
+    });
+
+    it("serves wide assistant tool card layout", async () => {
+        const r = await httpGet("/style.css");
+        assert.equal(r.status, 200);
+        const css = await r.text();
+        assert.match(css, /\.message--assistant \.message-bubble:has\(\.tool-card\)/);
+        assert.match(css, /\.tool-card \{[\s\S]*width: 100%;/);
+        assert.match(css, /\.tool-result-audio \{[\s\S]*display: block;/);
+    });
+
+    it("serves Create image proximity spacing", async () => {
+        const r = await httpGet("/style.css");
+        assert.equal(r.status, 200);
+        const css = await r.text();
+        assert.match(css, /\.create-option-group \{[\s\S]*margin-bottom: var\(--space-lg\);/);
+        assert.match(css, /\.create-option-group \.checkbox-row \{[\s\S]*margin-bottom: 2px;/);
+        assert.match(css, /\.create-submit \{[\s\S]*margin-top: var\(--space-sm\);/);
+    });
 });
 
 describe("GET /fonts", () => {

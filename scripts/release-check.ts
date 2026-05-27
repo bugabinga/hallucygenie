@@ -28,6 +28,10 @@ function requireMatch(path: string, pattern: RegExp, message: string): void {
     if (!pattern.test(read(path))) fail(`${path}: ${message}`);
 }
 
+function forbidMatch(path: string, pattern: RegExp, message: string): void {
+    if (pattern.test(read(path))) fail(`${path}: ${message}`);
+}
+
 function exactGitTag(): string | null {
     try {
         return execFileSync("git", ["describe", "--tags", "--exact-match"], {
@@ -116,5 +120,11 @@ requireMatch(
     "missing build-push action",
 );
 requireMatch(".github/workflows/release.yml", /just release-check/, "missing local artifact proof");
+forbidMatch(
+    "justfile",
+    /\bdocker (?:build|buildx|volume|run|inspect|rm)\b/,
+    "local release recipes must use podman",
+);
+forbidMatch("README.md", /\bdocker (?:pull|run)\b/, "release image docs must use podman");
 
 console.log(`release-check metadata ok: ${tag}`);

@@ -292,7 +292,9 @@ function contentForPersistence(msg: ChatMessage, savedTool: ToolResult | null): 
         return msg.tool_calls ? "" : sanitizeAssistantMediaMarkup(msg.content);
     }
     if (savedTool) {
-        return savedTool.type === "error" ? `Error: ${savedTool.content}` : savedTool.content;
+        if (savedTool.type === "error") return `Error: ${savedTool.content}`;
+        if (savedTool.type === "image" && savedTool.urls?.length) return savedTool.urls.join("\n");
+        return savedTool.content;
     }
     return msg.content;
 }
@@ -650,6 +652,11 @@ function featureForTool(name: string): "image" | "speech" | "music" | "lyrics" |
 }
 
 function quotaAmountForTool(name: string, args: Record<string, unknown>): number {
+    if (name === "generate_image") {
+        const n = Number(args.n ?? 1);
+        if (!Number.isFinite(n)) return 1;
+        return Math.max(1, Math.min(9, Math.floor(n)));
+    }
     if (name !== "text_to_speech") return 1;
     const text = args.text;
     if (typeof text !== "string") return 1;
@@ -921,7 +928,11 @@ function handleDirectToolExecution(
                     database,
                     sessionId,
                     "tool",
-                    saved.type === "error" ? `Error: ${saved.content}` : saved.content,
+                    saved.type === "error"
+                        ? `Error: ${saved.content}`
+                        : saved.type === "image" && saved.urls?.length
+                          ? saved.urls.join("\n")
+                          : saved.content,
                     null,
                     toolCallId,
                 );
@@ -1686,7 +1697,8 @@ export function initDatabase(dbPath = "data/hallucygenie.db"): Database {
 }
 
 function assetIdFromToolResult(result: ToolResult): string | null {
-    const match = result.content.match(/^\/asset\/(asset_[0-9a-f-]+)$/i);
+    const first = result.urls?.[0] ?? result.content;
+    const match = first.match(/^\/asset\/(asset_[0-9a-f-]+)$/i);
     return match?.[1] ?? null;
 }
 
@@ -1853,6 +1865,26 @@ async function saveAssetFile(
     args?: Record<string, unknown>,
 ): Promise<ToolResult> {
     try {
+        if (result.type === "image" && result.urls?.some((url) => /^https?:\/\//i.test(url))) {
+            const saved: string[] = [];
+            for (const url of result.urls) {
+                if (!/^https?:\/\//i.test(url)) throw new Error("image asset URL must be http(s)");
+                const downloaded = await downloadImageAsset(url);
+                saved.push(
+                    saveAssetBuffer(
+                        "image",
+                        downloaded.buf,
+                        downloaded.mime,
+                        sessionId,
+                        toolName,
+                        prompt,
+                        args,
+                    ).content,
+                );
+            }
+            return { type: "image", content: saved[0], urls: saved };
+        }
+
         if (result.type === "image" && /^https?:\/\//i.test(result.content)) {
             const downloaded = await downloadImageAsset(result.content);
             return saveAssetBuffer(

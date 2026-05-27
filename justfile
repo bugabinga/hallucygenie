@@ -119,7 +119,7 @@ container image="hallucygenie:local":
     set -e; \
     package_tag="v$(bun -e 'console.log(JSON.parse(await Bun.file("package.json").text()).version)')"; \
     version="${RELEASE_TAG:-$package_tag}"; \
-    docker build -f deploy/Dockerfile --build-arg VERSION="$version" -t "{{ image }}" .
+    podman build -f deploy/Dockerfile --build-arg VERSION="$version" -t "{{ image }}" .
 
 # smoke-test production container image locally
 [group('deploy')]
@@ -127,10 +127,10 @@ container-smoke image="hallucygenie:local":
     set -e; \
     name="hallucygenie-smoke-$RANDOM"; \
     volume="$name-data"; \
-    docker volume create "$volume" >/dev/null; \
-    cleanup() { docker rm -f "$name" >/dev/null 2>&1 || true; docker volume rm "$volume" >/dev/null 2>&1 || true; }; \
+    podman volume create "$volume" >/dev/null; \
+    cleanup() { podman rm -f "$name" >/dev/null 2>&1 || true; podman volume rm "$volume" >/dev/null 2>&1 || true; }; \
     trap cleanup EXIT; \
-    docker run -d --name "$name" -p 127.0.0.1:3099:3000 -e MINIMAX_API_KEY=release-smoke -v "$volume:/app/data" "{{ image }}" >/dev/null; \
+    podman run -d --name "$name" -p 127.0.0.1:3099:3000 -e MINIMAX_API_KEY=release-smoke -v "$volume:/app/data" "{{ image }}" >/dev/null; \
     ok=0; \
     for _ in $(seq 1 30); do if curl -fsS http://127.0.0.1:3099/api/health >/dev/null 2>&1; then ok=1; break; fi; sleep 1; done; \
     test "$ok" = "1"; \
@@ -148,7 +148,7 @@ release-check image="hallucygenie:local": ready
     case "$image" in ghcr.io/bugabinga/hallucygenie:*) if [ "$image_tag" != "$release_tag" ]; then echo "image tag $image_tag != RELEASE_TAG $release_tag"; exit 1; fi ;; esac; \
     RELEASE_TAG="$release_tag" bun scripts/release-check.ts; \
     RELEASE_TAG="$release_tag" just container "$image"; \
-    docker inspect "$image" | RELEASE_TAG="$release_tag" bun -e 'const image = JSON.parse(await new Response(Bun.stdin.stream()).text())[0]; const got = image.Config.Labels["org.opencontainers.image.version"]; if (got !== process.env.RELEASE_TAG) throw new Error(`image version label ${got} != ${process.env.RELEASE_TAG}`);'; \
+    podman inspect "$image" | RELEASE_TAG="$release_tag" bun -e 'const image = JSON.parse(await new Response(Bun.stdin.stream()).text())[0]; const got = image.Config.Labels["org.opencontainers.image.version"]; if (got !== process.env.RELEASE_TAG) throw new Error(`image version label ${got} != ${process.env.RELEASE_TAG}`);'; \
     just container-smoke "$image"
 
 # cut release tag after local proof and interactive browser confirmation
@@ -169,10 +169,10 @@ release tag:
     name="hallucygenie-release-${tag#v}-$RANDOM"; \
     volume="$name-data"; \
     profile="$(mktemp -d)"; \
-    cleanup() { docker rm -f "$name" >/dev/null 2>&1 || true; docker volume rm "$volume" >/dev/null 2>&1 || true; rm -rf "$profile"; }; \
+    cleanup() { podman rm -f "$name" >/dev/null 2>&1 || true; podman volume rm "$volume" >/dev/null 2>&1 || true; rm -rf "$profile"; }; \
     trap cleanup EXIT; \
-    docker volume create "$volume" >/dev/null; \
-    docker run -d --name "$name" -p 127.0.0.1:3100:3000 -e MINIMAX_API_KEY -v "$volume:/app/data" "$image" >/dev/null; \
+    podman volume create "$volume" >/dev/null; \
+    podman run -d --name "$name" -p 127.0.0.1:3100:3000 -e MINIMAX_API_KEY -v "$volume:/app/data" "$image" >/dev/null; \
     ok=0; \
     for _ in $(seq 1 30); do if curl -fsS http://127.0.0.1:3100/api/health >/dev/null 2>&1; then ok=1; break; fi; sleep 1; done; \
     test "$ok" = "1"; \
@@ -197,7 +197,7 @@ publish-container image:
     case "$image" in ghcr.io/bugabinga/hallucygenie:v[0-9]*.[0-9]*.[0-9]*) ;; *) echo "image must be ghcr.io/bugabinga/hallucygenie:vX.Y.Z"; exit 1 ;; esac; \
     release_tag="${image##*:}"; \
     RELEASE_TAG="$release_tag" bun scripts/release-check.ts; \
-    docker buildx build -f deploy/Dockerfile --build-arg VERSION="$release_tag" -t "$image" --push .
+    podman build -f deploy/Dockerfile --build-arg VERSION="$release_tag" -t "$image" --push .
 
 # test MiniMax API endpoints + check quota (real API; consumes TTS/image/music quota)
 [group('pi')]

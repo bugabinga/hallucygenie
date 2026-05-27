@@ -26,8 +26,8 @@ Open <http://localhost:3000>.
 ## Run release image
 
 ```sh
-docker pull ghcr.io/bugabinga/hallucygenie:v1.0.0
-docker run --rm \
+podman pull ghcr.io/bugabinga/hallucygenie:v1.0.0
+podman run --rm \
   --name hallucygenie \
   -p 127.0.0.1:3000:3000 \
   -e MINIMAX_API_KEY="$MINIMAX_API_KEY" \

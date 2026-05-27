@@ -282,6 +282,8 @@
                                 />
                                 <!-- prettier-ignore -->
                                 <p class="profile-avatar-help">Click the avatar to upload an image.</p>
+                                <!-- prettier-ignore -->
+                                <button id="profile-generate" type="button" class="btn-secondary">Generate avatar 🎨</button>
                             </div>
                         </div>
                         <!-- prettier-ignore -->
@@ -290,8 +292,6 @@
                             <button type="submit" class="btn-primary">Save</button>
                             <!-- prettier-ignore -->
                             <button id="profile-reset" type="button" class="btn-secondary">Reset</button>
-                            <!-- prettier-ignore -->
-                            <button id="profile-generate" type="button" class="btn-secondary">Generate avatar 🎨</button>
                         </div>
                     </form>
                 </div>
@@ -385,11 +385,14 @@
                                 <!-- prettier-ignore -->
                                 <p id="img-seed-status" class="field-help" role="status">Optional: same code can make a similar picture again.</p>
                             </div>
+                            <div class="form-group create-option-group">
+                                <!-- prettier-ignore -->
+                                <label class="checkbox-row" for="img-prompt-optimizer"><input id="img-prompt-optimizer" type="checkbox" /> Let Genie improve my idea before drawing</label>
+                                <!-- prettier-ignore -->
+                                <p class="field-help">Adds clearer details so MiniMax understands your idea better.</p>
+                            </div>
                             <!-- prettier-ignore -->
-                            <label class="checkbox-row" for="img-prompt-optimizer"><input id="img-prompt-optimizer" type="checkbox" /> Let Genie improve my idea before drawing</label>
-                            <!-- prettier-ignore -->
-                            <p class="field-help">Adds clearer details so MiniMax understands your idea better.</p>
-                            <button type="submit" class="btn-primary">Generate image 🎨</button>
+                            <button type="submit" class="btn-primary create-submit">Generate image 🎨</button>
                         </form>
                         <form
                             id="create-music-form"

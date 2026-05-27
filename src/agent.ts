@@ -355,7 +355,9 @@ export function compactToolResultForModel(toolName: string, result: ToolResult):
     if (result.type === "error") return "Error: " + result.content;
 
     if (result.type === "image") {
-        return `Generated image with ${toolName}. The UI displays it in a tool card. Do not embed image URLs or markdown images in your reply.`;
+        const count = result.urls?.length ?? 1;
+        const noun = count === 1 ? "image" : `${count} images`;
+        return `Generated ${noun} with ${toolName}. The UI displays the result in a tool card. Do not embed image URLs or markdown images in your reply.`;
     }
 
     if (result.type === "audio") {

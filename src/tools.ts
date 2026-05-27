@@ -12,6 +12,7 @@ export interface ToolDefinition {
 export interface ToolResult {
     type: "image" | "audio" | "text" | "error";
     content: string;
+    urls?: string[];
 }
 
 export interface GenerateImageOptions {
@@ -422,7 +423,9 @@ export async function generateImage(
             };
         }
 
-        return { type: "image", content: urls[0] };
+        return urls.length === 1
+            ? { type: "image", content: urls[0] }
+            : { type: "image", content: urls[0], urls };
     } catch (err) {
         return {
             type: "error",
