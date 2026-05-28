@@ -298,6 +298,42 @@ describe("index.html health", () => {
         assert.match(appTs, /"generate_music_cover"/);
     });
 
+    it("music cover form has no rights attestation UI per spec HG-SPEC-013", () => {
+        const doc = parseIndex();
+        const coverPanel = doc.querySelector('.create-panel[data-panel="music"]');
+        assert.ok(coverPanel, "music cover panel should exist");
+        // No rights attestation elements
+        const rightsTerms = coverPanel?.querySelectorAll(
+            "[class*='rights'], [class*='attest'], [class*='legal'], [id*='rights'], [id*='attest'], [id*='legal'], [for*='rights'], [for*='attest']",
+        );
+        assert.equal(
+            rightsTerms?.length ?? 0,
+            0,
+            "no rights attestation elements in music cover form",
+        );
+        const copyrightText = coverPanel?.textContent ?? "";
+        assert.equal(
+            copyrightText.toLowerCase().includes("copyright"),
+            false,
+            "no copyright text in music cover form",
+        );
+        assert.equal(
+            copyrightText.toLowerCase().includes("rights"),
+            false,
+            "no rights text in music cover form",
+        );
+        assert.equal(
+            copyrightText.toLowerCase().includes("legal"),
+            false,
+            "no legal text in music cover form",
+        );
+        assert.equal(
+            copyrightText.toLowerCase().includes("attest"),
+            false,
+            "no attest text in music cover form",
+        );
+    });
+
     it("quota badge includes lyrics item", () => {
         const doc = parseIndex();
         const lyricsItem = doc.querySelector('.quota-item[data-type="lyrics"]');

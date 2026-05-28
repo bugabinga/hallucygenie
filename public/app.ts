@@ -2488,10 +2488,13 @@ export function init(): void {
                 cover_feature_id?: string;
                 lyrics?: string;
                 error?: string;
+                source_url?: string;
             };
             if (!resp.ok) throw new Error(data.error ?? "cover prepare failed");
             coverFeatureId.value = data.cover_feature_id ?? "";
             coverLyrics.value = data.lyrics ?? "";
+            // Store source URL for asset params
+            (window as unknown as { _coverSourceUrl?: string })._coverSourceUrl = data.source_url;
             coverStatus.textContent = "Ready. Edit lyrics/style, then generate.";
             void putDraft("create", createDraftFromDom());
         } catch (err) {
@@ -2522,11 +2525,10 @@ export function init(): void {
             return;
         }
         closeCreateModal();
-        void sendCreateTool(
-            "generate_music_cover",
-            { prompt, lyrics, cover_feature_id: featureId },
-            `Create cover: ${prompt}`,
-        );
+        const sourceUrl = (window as unknown as { _coverSourceUrl?: string })._coverSourceUrl;
+        const input: Record<string, unknown> = { prompt, lyrics, cover_feature_id: featureId };
+        if (sourceUrl) input.source_url = sourceUrl;
+        void sendCreateTool("generate_music_cover", input, `Create cover: ${prompt}`);
     });
 
     createVoiceForm.addEventListener("submit", (e) => {

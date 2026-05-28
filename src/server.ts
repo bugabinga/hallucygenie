@@ -22,7 +22,7 @@ const quotaEntry = (
 // Target: Node.js runtime
 
 import { randomUUID } from "node:crypto";
-import { mkdirSync, writeFileSync } from "node:fs";
+import { mkdirSync, writeFileSync, unlinkSync } from "node:fs";
 
 import {
     initDb,
@@ -1145,18 +1145,40 @@ async function handleAnalyzeImageUpload(req: Request, database: Database): Promi
 
 async function coverSourceFromSidecar(
     url: string,
-): Promise<{ audio_url?: string; audio_base64?: string }> {
+): Promise<{ audio_url?: string; audio_base64?: string; tmpPath?: string }> {
     const sidecar = process.env.COVER_EXTRACTOR_URL;
     if (!sidecar) throw new Error("Cover extractor is not configured.");
-    const resp = await fetch(sidecar, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ url }),
-    });
-    if (!resp.ok) throw new Error(`cover extractor failed: ${resp.status}`);
-    const data = (await resp.json()) as { audio_url?: string; audio_base64?: string };
-    if (!data.audio_url && !data.audio_base64) throw new Error("cover extractor returned no audio");
-    return data;
+    let tmpPath: string | undefined;
+    try {
+        const resp = await fetch(sidecar, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ url }),
+        });
+        if (!resp.ok) throw new Error(`cover extractor failed: ${resp.status}`);
+        const data = (await resp.json()) as { audio_url?: string; audio_base64?: string };
+        if (!data.audio_url && !data.audio_base64)
+            throw new Error("cover extractor returned no audio");
+
+        // Write temp file under data/tmp/cover/ per spec
+        if (data.audio_base64) {
+            const tmpDir = "data/tmp/cover";
+            mkdirSync(tmpDir, { recursive: true });
+            tmpPath = `${tmpDir}/cover_${randomUUID()}.audio`;
+            writeFileSync(tmpPath, Buffer.from(data.audio_base64, "base64"));
+        }
+
+        return { ...data, tmpPath };
+    } finally {
+        // Clean temp file on success or failure per spec
+        if (tmpPath) {
+            try {
+                unlinkSync(tmpPath);
+            } catch {
+                /* ignore cleanup errors */
+            }
+        }
+    }
 }
 
 async function handleMusicCoverPreprocess(req: Request, apiKey: string): Promise<Response> {
@@ -1181,7 +1203,16 @@ async function handleMusicCoverPreprocess(req: Request, apiKey: string): Promise
             const url = String(form.get("audio_url") ?? "").trim();
             if (!/^https?:\/\//i.test(url))
                 return jsonResponse({ error: "youtube url required" }, 400);
-            source = await coverSourceFromSidecar(url);
+            const sidecarResult = await coverSourceFromSidecar(url);
+            source = {
+                audio_url: sidecarResult.audio_url,
+                audio_base64: sidecarResult.audio_base64,
+            };
+            // Return source URL metadata for frontend to persist
+            return jsonResponse({
+                ...(await musicCoverPreprocess(source, apiKey)),
+                source_url: url,
+            });
         } else {
             return jsonResponse({ error: "source_kind invalid" }, 400);
         }
@@ -1743,12 +1774,14 @@ function assetParamsJson(
     }
     if (toolName === "generate_music_cover") {
         const lyrics = stringParam(args, "lyrics") ?? "";
+        const sourceUrl = stringParam(args, "source_url");
         return JSON.stringify({
             model: "music-cover",
             prompt: prompt ?? stringParam(args, "prompt") ?? null,
             cover_feature_id_present: Boolean(stringParam(args, "cover_feature_id")),
             lyrics_present: lyrics.length > 0,
             lyrics_excerpt: lyrics ? lyrics.slice(0, 200) : null,
+            source_url: sourceUrl ?? null,
         });
     }
     if (toolName === "generate_lyrics") {
