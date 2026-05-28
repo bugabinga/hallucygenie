@@ -1139,7 +1139,7 @@ describe("SSE streaming from Anthropic endpoint", () => {
             assert.equal(asset.tool_name, "generate_music_cover");
             const params = JSON.parse(asset.params_json!);
             assert.equal(params.cover_feature_id_present, true);
-            const history = listToolInputHistory(db, sessionId, { kind: "music" });
+            const history = listToolInputHistory(db, sessionId, { kind: "cover" });
             assert.equal(history[0]?.tool_name, "generate_music_cover");
         } finally {
             globalThis.fetch = originalFetch;

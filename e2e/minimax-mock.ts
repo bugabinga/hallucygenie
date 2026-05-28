@@ -129,6 +129,15 @@ function minimaxResponse(url: URL, init?: RequestInit): Response | null {
                 base_resp: { status_code: 0 },
             });
 
+        case "/v1/music_cover_preprocess":
+            return jsonResponse({
+                data: {
+                    cover_feature_id: "cover-e2e-1",
+                    formatted_lyrics: "Verse, cover ready\nChorus, remix go",
+                },
+                base_resp: { status_code: 0 },
+            });
+
         case "/v1/coding_plan/search":
             return jsonResponse({
                 data: {

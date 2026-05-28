@@ -1111,6 +1111,7 @@ function setupDOM(): { win: any; doc: any; errors: string[] } {
         <div class="create-tabs">
           <button class="create-tab active" data-tab="image">🎨 Image</button>
           <button class="create-tab" data-tab="music">🎵 Music</button>
+          <button class="create-tab" data-tab="cover">🎧 Cover Song</button>
           <button class="create-tab" data-tab="voice">🎤 Voice</button>
           <button class="create-tab" data-tab="analyze">🔎 Analyze</button>
           <button class="create-tab" data-tab="search">🔍 Search</button>
@@ -1143,9 +1144,11 @@ function setupDOM(): { win: any; doc: any; errors: string[] } {
               <textarea id="music-lyrics"></textarea>
             </div>
             <button id="write-lyrics-btn" type="button">Write lyrics</button>
+          </form>
+          <form id="create-cover-form" class="create-panel" data-panel="cover" hidden>
             <select id="cover-source-kind"><option value="direct">Audio URL</option><option value="upload">Audio file</option><option value="youtube">YouTube link</option></select>
-            <input id="cover-audio-url" />
-            <input id="cover-audio-file" type="file" />
+            <div class="cover-url-group"><input id="cover-audio-url" /></div>
+            <div class="cover-file-group"><input id="cover-audio-file" type="file" /></div>
             <textarea id="cover-style"></textarea>
             <button id="cover-preprocess" type="button">Prepare cover lyrics</button>
             <input id="cover-feature-id" type="hidden" />
@@ -1157,6 +1160,10 @@ function setupDOM(): { win: any; doc: any; errors: string[] } {
             <div class="form-group">
               <textarea id="voice-text"></textarea>
             </div>
+            <select id="voice-pause-duration"><option value="0.5">0.5 sec</option></select>
+            <button id="voice-insert-pause" type="button">Insert pause</button>
+            <button class="voice-interjection" type="button" data-tag="laugh">laugh</button>
+            <p id="voice-composer-status" role="status"></p>
             <div class="form-group">
               <select id="voice-speed">
                 <option value="1.0" selected>1.0x</option>
@@ -2626,6 +2633,124 @@ describe("init event binding", () => {
         steerClose.dispatchEvent(new win.Event("click"));
 
         assert.ok(steerHint.hidden, "steer hint should be hidden");
+    });
+
+    it("pasted chat image uploads asset and starts analyze tool", async () => {
+        setupFullDOM();
+        const calls: Array<{ url: string; method: string; body: unknown }> = [];
+        (globalThis as any).fetch = (url: string, init?: RequestInit) => {
+            calls.push({ url: String(url), method: init?.method ?? "GET", body: init?.body });
+            if (url === "/api/analyze-image") {
+                return Promise.resolve(
+                    new Response(
+                        JSON.stringify({ assetId: "asset_1", assetUrl: "/asset/asset_1" }),
+                        {
+                            status: 200,
+                            headers: { "Content-Type": "application/json" },
+                        },
+                    ),
+                );
+            }
+            if (url === "/api/create-tool") {
+                return Promise.resolve(createSSEResponse([sseDone()]));
+            }
+            if (url === "/api/profile") {
+                return Promise.resolve(
+                    new Response(
+                        JSON.stringify({
+                            version: 1,
+                            username: "",
+                            interests: "",
+                            hates: "",
+                            favorites: "",
+                            avatar: { type: "asset", value: "" },
+                            updatedAt: 0,
+                        }),
+                        { status: 200, headers: { "Content-Type": "application/json" } },
+                    ),
+                );
+            }
+            return Promise.resolve(new Response(JSON.stringify({}), { status: 200 }));
+        };
+        init();
+        const file = new win.File([new Uint8Array([1, 2, 3])], "paste.png", {
+            type: "image/png",
+        });
+        const event = new win.Event("paste", { bubbles: true, cancelable: true });
+        Object.defineProperty(event, "clipboardData", { value: { files: [file] } });
+        doc.querySelector("#chat-input").dispatchEvent(event);
+        await new Promise((resolve) => setTimeout(resolve, 40));
+
+        const upload = calls.find((call) => call.url === "/api/analyze-image");
+        const create = calls.find((call) => call.url === "/api/create-tool");
+        assert.ok(upload);
+        assert.ok(create);
+        assert.deepEqual(JSON.parse(String(create.body)), {
+            tool_name: "analyze_image",
+            input: { image_url: "/asset/asset_1", prompt: "What do you see in this image?" },
+        });
+        assert.equal(JSON.stringify(calls).includes("data:image"), false);
+    });
+
+    it("cover prepare prefers selected file over source dropdown", async () => {
+        setupFullDOM();
+        let body: FormData | null = null;
+        (globalThis as any).fetch = (url: string, init?: RequestInit) => {
+            if (url === "/api/music-cover/preprocess") {
+                body = init?.body as FormData;
+                return Promise.resolve(
+                    new Response(JSON.stringify({ cover_feature_id: "cover-1", lyrics: "la" }), {
+                        status: 200,
+                        headers: { "Content-Type": "application/json" },
+                    }),
+                );
+            }
+            if (url === "/api/profile") {
+                return Promise.resolve(
+                    new Response(
+                        JSON.stringify({
+                            version: 1,
+                            username: "",
+                            interests: "",
+                            hates: "",
+                            favorites: "",
+                            avatar: { type: "asset", value: "" },
+                            updatedAt: 0,
+                        }),
+                        { status: 200, headers: { "Content-Type": "application/json" } },
+                    ),
+                );
+            }
+            return Promise.resolve(new Response(JSON.stringify({}), { status: 200 }));
+        };
+        init();
+        const input = doc.querySelector("#cover-audio-file");
+        const file = new win.File([new Uint8Array([1])], "song.mp3", { type: "audio/mpeg" });
+        Object.defineProperty(input, "files", { value: [file], configurable: true });
+        input.dispatchEvent(new win.Event("change"));
+        doc.querySelector("#cover-preprocess").dispatchEvent(new win.Event("click"));
+        await new Promise((resolve) => setTimeout(resolve, 20));
+
+        assert.ok(body);
+        assert.equal(body.get("source_kind"), "upload");
+        assert.equal(String(body.get("audio")), "[object Blob]");
+    });
+
+    it("voice composer inserts pauses only between words", () => {
+        setupFullDOM();
+        init();
+        const text = doc.querySelector("#voice-text");
+        text.value = "hello world";
+        text.selectionStart = 5;
+        text.selectionEnd = 5;
+        doc.querySelector("#voice-insert-pause").dispatchEvent(new win.Event("click"));
+        assert.equal(text.value, "hello <#0.5#>  world");
+
+        text.value = "edge";
+        text.selectionStart = 0;
+        text.selectionEnd = 0;
+        doc.querySelector("#voice-insert-pause").dispatchEvent(new win.Event("click"));
+        assert.equal(text.value, "edge");
     });
 });
 

@@ -317,6 +317,8 @@
                         <!-- prettier-ignore -->
                         <button id="create-tab-music" class="create-tab" data-tab="music" type="button" role="tab" aria-selected="false" aria-controls="create-music-form" tabindex="-1">🎵 Music</button>
                         <!-- prettier-ignore -->
+                        <button id="create-tab-cover" class="create-tab" data-tab="cover" type="button" role="tab" aria-selected="false" aria-controls="create-cover-form" tabindex="-1">🎧 Cover Song</button>
+                        <!-- prettier-ignore -->
                         <button id="create-tab-voice" class="create-tab" data-tab="voice" type="button" role="tab" aria-selected="false" aria-controls="create-voice-form" tabindex="-1">🎤 Voice</button>
                         <!-- prettier-ignore -->
                         <button id="create-tab-analyze" class="create-tab" data-tab="analyze" type="button" role="tab" aria-selected="false" aria-controls="create-analyze-form" tabindex="-1">🔎 Analyze</button>
@@ -424,53 +426,63 @@
                             <!-- prettier-ignore -->
                             <button type="button" id="write-lyrics-btn" class="btn-secondary">Write lyrics for me ✨</button>
                             <button type="submit" class="btn-primary">Generate music 🎵</button>
-                            <section class="cover-box" aria-labelledby="music-cover-title">
-                                <h3 id="music-cover-title">Cover a song</h3>
-                                <div class="form-group">
-                                    <label for="cover-source-kind">Source</label>
-                                    <select id="cover-source-kind">
-                                        <option value="direct">Audio URL</option>
-                                        <option value="upload">Audio file</option>
-                                        <option value="youtube">YouTube link</option>
-                                    </select>
-                                </div>
-                                <div class="form-group">
-                                    <label for="cover-audio-url">Audio or YouTube URL</label>
-                                    <input
-                                        id="cover-audio-url"
-                                        type="url"
-                                        inputmode="url"
-                                        placeholder="https://..."
-                                    />
-                                </div>
-                                <div class="form-group">
-                                    <label for="cover-audio-file">Audio file</label>
-                                    <input id="cover-audio-file" type="file" accept="audio/*" />
-                                </div>
-                                <div class="form-group">
-                                    <label for="cover-style">New style</label>
-                                    <textarea
-                                        id="cover-style"
-                                        rows="2"
-                                        placeholder="Spooky boss battle chiptune"
-                                    ></textarea>
-                                </div>
-                                <!-- prettier-ignore -->
-                                <button id="cover-preprocess" class="btn-secondary" type="button">Prepare cover lyrics</button>
-                                <input id="cover-feature-id" type="hidden" />
-                                <!-- prettier-ignore -->
-                                <p id="cover-status" class="field-help" role="status">Prepare a source before generating a cover.</p>
-                                <div class="form-group">
-                                    <label for="cover-lyrics">Cover lyrics</label>
-                                    <textarea
-                                        id="cover-lyrics"
-                                        rows="4"
-                                        placeholder="Lyrics appear here after prepare"
-                                    ></textarea>
-                                </div>
-                                <!-- prettier-ignore -->
-                                <button id="cover-generate" class="btn-primary" type="button">Generate cover 🎵</button>
-                            </section>
+                        </form>
+                        <form
+                            id="create-cover-form"
+                            class="create-panel"
+                            data-panel="cover"
+                            role="tabpanel"
+                            aria-labelledby="create-tab-cover"
+                            hidden
+                        >
+                            <div class="create-recent" data-kind="cover"></div>
+                            <h3 id="music-cover-title">Cover a song</h3>
+                            <!-- prettier-ignore -->
+                            <p class="field-help cover-intro">Pick one song source, prepare lyrics, then make a new version.</p>
+                            <div class="form-group">
+                                <label for="cover-source-kind">Source</label>
+                                <select id="cover-source-kind">
+                                    <option value="direct">Audio URL</option>
+                                    <option value="upload">Audio file</option>
+                                    <option value="youtube">YouTube link</option>
+                                </select>
+                            </div>
+                            <div class="form-group cover-url-group">
+                                <label for="cover-audio-url">Audio or YouTube URL</label>
+                                <input
+                                    id="cover-audio-url"
+                                    type="url"
+                                    inputmode="url"
+                                    placeholder="https://..."
+                                />
+                            </div>
+                            <div class="form-group cover-file-group">
+                                <label for="cover-audio-file">Audio file</label>
+                                <input id="cover-audio-file" type="file" accept="audio/*" />
+                            </div>
+                            <div class="form-group">
+                                <label for="cover-style">New style</label>
+                                <textarea
+                                    id="cover-style"
+                                    rows="2"
+                                    placeholder="Spooky boss battle chiptune"
+                                ></textarea>
+                            </div>
+                            <!-- prettier-ignore -->
+                            <button id="cover-preprocess" class="btn-secondary" type="button">Prepare cover lyrics</button>
+                            <input id="cover-feature-id" type="hidden" />
+                            <!-- prettier-ignore -->
+                            <p id="cover-status" class="field-help" role="status">Prepare a source before generating a cover.</p>
+                            <div class="form-group">
+                                <label for="cover-lyrics">Cover lyrics</label>
+                                <textarea
+                                    id="cover-lyrics"
+                                    rows="4"
+                                    placeholder="Lyrics appear here after prepare"
+                                ></textarea>
+                            </div>
+                            <!-- prettier-ignore -->
+                            <button id="cover-generate" class="btn-primary" type="button">Generate cover 🎵</button>
                         </form>
                         <form
                             id="create-voice-form"
@@ -488,6 +500,28 @@
                                     rows="4"
                                     placeholder="Welcome to HallucyGenie! Your AI creative buddy."
                                 ></textarea>
+                            </div>
+                            <div class="tts-composer" aria-label="Voice builder">
+                                <div class="tts-composer-row">
+                                    <label for="voice-pause-duration">Pause</label>
+                                    <select id="voice-pause-duration">
+                                        <option value="0.5">0.5 sec</option>
+                                        <option value="1">1 sec</option>
+                                        <option value="2">2 sec</option>
+                                    </select>
+                                    <!-- prettier-ignore -->
+                                    <button id="voice-insert-pause" class="btn-secondary" type="button">Insert pause</button>
+                                </div>
+                                <div class="tts-composer-row" aria-label="Interjections">
+                                    <!-- prettier-ignore -->
+                                    <button class="btn-secondary voice-interjection" type="button" data-tag="laugh">laugh</button>
+                                    <!-- prettier-ignore -->
+                                    <button class="btn-secondary voice-interjection" type="button" data-tag="sigh">sigh</button>
+                                    <!-- prettier-ignore -->
+                                    <button class="btn-secondary voice-interjection" type="button" data-tag="breath">breath</button>
+                                </div>
+                                <!-- prettier-ignore -->
+                                <p id="voice-composer-status" class="field-help" role="status">Pauses go between words. Voice uses speech-2.8-hd.</p>
                             </div>
                             <div class="form-group">
                                 <label for="voice-speed">Speed</label>

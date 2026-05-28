@@ -117,7 +117,7 @@ describe("index.html health", () => {
 
     it("create type switcher uses ARIA tabs", () => {
         const doc = parseIndex();
-        const tabNames = ["image", "music", "voice", "analyze", "search", "assets"];
+        const tabNames = ["image", "music", "cover", "voice", "analyze", "search", "assets"];
         for (const name of tabNames) {
             const tab = doc.querySelector(`.create-tab[data-tab="${name}"]`) as HTMLElement | null;
             const panel = doc.querySelector(
@@ -293,8 +293,11 @@ describe("index.html health", () => {
         assert.equal(btn?.tagName.toLowerCase(), "button");
     });
 
-    it("has a two-step music cover flow in the music form", () => {
+    it("has a separate two-step music cover flow", () => {
         const doc = parseIndex();
+        assert.ok(doc.querySelector('.create-tab[data-tab="cover"]'));
+        assert.equal(doc.querySelector("#create-music-form #cover-source-kind"), null);
+        assert.equal(doc.querySelector("#create-cover-form")?.getAttribute("data-panel"), "cover");
         for (const id of [
             "#cover-source-kind",
             "#cover-audio-url",
@@ -306,12 +309,35 @@ describe("index.html health", () => {
             "#cover-lyrics",
             "#cover-generate",
         ]) {
-            assert.ok(doc.querySelector(id), id);
+            assert.ok(doc.querySelector(`#create-cover-form ${id}`), id);
         }
         assert.match(appTs, /\/api\/music-cover\/status/);
         assert.match(appTs, /\/api\/music-cover\/preprocess/);
         assert.match(appTs, /youtube\.disabled = true/);
-        assert.match(appTs, /"generate_music_cover"/);
+        assert.match(appTs, /generate_music_cover: "cover"/);
+    });
+
+    it("has voice pause and interjection composer controls", () => {
+        const doc = parseIndex();
+        assert.ok(doc.querySelector("#voice-pause-duration"));
+        assert.ok(doc.querySelector("#voice-insert-pause"));
+        assert.equal(doc.querySelectorAll(".voice-interjection[data-tag]").length, 3);
+        assert.match(appTs, /insertVoicePause/);
+        assert.match(indexHtml, /speech-2\.8-hd/);
+    });
+
+    it("chat input handles pasted images through asset upload", () => {
+        assert.match(appTs, /input\.addEventListener\("paste"/);
+        assert.match(appTs, /uploadAnalyzeImage\(file\)/);
+        assert.match(appTs, /"analyze_image"/);
+        assert.doesNotMatch(appTs, /readAsDataURL/);
+    });
+
+    it("uses child-readable base sizing", () => {
+        assert.match(styleCss, /body \{[\s\S]*font-size: 18px;/);
+        assert.match(styleCss, /\.message-bubble \{[\s\S]*font-size: 17px;/);
+        assert.match(styleCss, /\.form-group input,[\s\S]*font-size: 1rem;/);
+        assert.match(styleCss, /\.error-toast \{[\s\S]*z-index: 2000;/);
     });
 
     it("quota badge includes lyrics item", () => {

@@ -467,7 +467,7 @@ export function getToolEmoji(name: string): string {
 const TWEAKABLE_TOOL_KINDS: Record<string, string> = {
     generate_image: "image",
     generate_music: "music",
-    generate_music_cover: "music",
+    generate_music_cover: "cover",
     text_to_speech: "voice",
     generate_lyrics: "music",
     analyze_image: "analyze",
@@ -2223,6 +2223,8 @@ export function init(): void {
     const coverSourceKind = $("#cover-source-kind") as HTMLSelectElement;
     const coverAudioUrl = $("#cover-audio-url") as HTMLInputElement;
     const coverAudioFile = $("#cover-audio-file") as HTMLInputElement;
+    const coverUrlGroup = document.querySelector<HTMLElement>(".cover-url-group");
+    const coverFileGroup = document.querySelector<HTMLElement>(".cover-file-group");
     const coverStyle = $("#cover-style") as HTMLTextAreaElement;
     const coverPreprocess = $("#cover-preprocess") as HTMLButtonElement;
     const coverFeatureId = $("#cover-feature-id") as HTMLInputElement;
@@ -2234,6 +2236,10 @@ export function init(): void {
     const voiceIdInput = document.querySelector<HTMLSelectElement>("#voice-id");
     const voiceVolumeInput = document.querySelector<HTMLInputElement>("#voice-volume");
     const voicePitchInput = document.querySelector<HTMLInputElement>("#voice-pitch");
+    const voicePauseDurationInput =
+        document.querySelector<HTMLSelectElement>("#voice-pause-duration");
+    const voiceInsertPause = document.querySelector<HTMLButtonElement>("#voice-insert-pause");
+    const voiceComposerStatus = document.querySelector<HTMLElement>("#voice-composer-status");
     const analyzeFileInput = document.querySelector<HTMLInputElement>("#analyze-file");
     const analyzeDropzone = document.querySelector<HTMLButtonElement>("#analyze-dropzone");
     const analyzeFileStatus = document.querySelector<HTMLElement>("#analyze-file-status");
@@ -2258,6 +2264,51 @@ export function init(): void {
         })
         .catch(() => undefined);
 
+    function updateCoverSourceVisibility(): void {
+        const upload = coverSourceKind.value === "upload";
+        if (coverUrlGroup) coverUrlGroup.hidden = upload;
+        if (coverFileGroup) coverFileGroup.hidden = !upload;
+    }
+
+    function insertVoiceText(snippet: string): void {
+        const start = voiceTextInput.selectionStart ?? voiceTextInput.value.length;
+        const end = voiceTextInput.selectionEnd ?? start;
+        voiceTextInput.value =
+            voiceTextInput.value.slice(0, start) + snippet + voiceTextInput.value.slice(end);
+        const cursor = start + snippet.length;
+        voiceTextInput.selectionStart = cursor;
+        voiceTextInput.selectionEnd = cursor;
+        voiceTextInput.focus();
+        void putDraft("create", createDraftFromDom());
+    }
+
+    function insertVoicePause(): void {
+        const duration = Number(voicePauseDurationInput?.value ?? "0.5");
+        if (duration < 0.01 || duration > 99.99) {
+            if (voiceComposerStatus)
+                voiceComposerStatus.textContent = "Pause must be 0.01 to 99.99 seconds.";
+            return;
+        }
+        const start = voiceTextInput.selectionStart ?? voiceTextInput.value.length;
+        const end = voiceTextInput.selectionEnd ?? start;
+        const before = voiceTextInput.value.slice(0, start);
+        const after = voiceTextInput.value.slice(end);
+        if (
+            !before.trim() ||
+            !after.trim() ||
+            /<#\d+(?:\.\d+)?#>\s*$/.test(before) ||
+            /^\s*<#\d+(?:\.\d+)?#>/.test(after)
+        ) {
+            if (voiceComposerStatus)
+                voiceComposerStatus.textContent =
+                    "Put pauses between words, not at edges or beside another pause.";
+            return;
+        }
+        insertVoiceText(` <#${duration}#> `);
+        if (voiceComposerStatus)
+            voiceComposerStatus.textContent = `Inserted ${duration} sec pause.`;
+    }
+
     function fillCreateFormFromToolInput(
         toolName: string,
         inputData: Record<string, unknown>,
@@ -2279,12 +2330,12 @@ export function init(): void {
                 : "Optional: same code can make a similar picture again.";
             imgPromptOptimizerInput.checked = inputData.prompt_optimizer === true;
             setCreateTab("image");
-        } else if (kind === "music") {
+        } else if (kind === "music" || kind === "cover") {
             musicPromptInput.value = String(inputData.prompt ?? "");
             musicLyricsInput.value = String(inputData.lyrics ?? "");
             coverFeatureId.value = String(inputData.cover_feature_id ?? "");
             coverLyrics.value = String(inputData.lyrics ?? "");
-            setCreateTab("music");
+            setCreateTab(kind === "cover" ? "cover" : "music");
         } else if (kind === "voice") {
             voiceTextInput.value = String(inputData.text ?? "");
             voiceSpeedInput.value = String(inputData.speed ?? "1.0");
@@ -2451,6 +2502,11 @@ export function init(): void {
         imgPromptOptimizerInput,
         musicPromptInput,
         musicLyricsInput,
+        coverSourceKind,
+        coverAudioUrl,
+        coverAudioFile,
+        coverStyle,
+        coverLyrics,
         voiceTextInput,
         voiceSpeedInput,
         voiceIdInput,
@@ -2481,6 +2537,63 @@ export function init(): void {
 
     void refreshSessions().catch(() => undefined);
     void restoreDrafts().catch(() => undefined);
+
+    updateCoverSourceVisibility();
+    coverSourceKind.addEventListener("change", () => {
+        updateCoverSourceVisibility();
+        persistCreateDraft();
+    });
+    coverAudioFile.addEventListener("change", () => {
+        if (coverAudioFile.files?.[0]) {
+            coverSourceKind.value = "upload";
+            updateCoverSourceVisibility();
+        }
+        persistCreateDraft();
+    });
+    coverAudioUrl.addEventListener("input", () => {
+        if (!coverAudioUrl.value.trim()) return;
+        if (coverSourceKind.value === "upload") coverSourceKind.value = "direct";
+        updateCoverSourceVisibility();
+    });
+    voiceInsertPause?.addEventListener("click", insertVoicePause);
+    document
+        .querySelectorAll<HTMLButtonElement>(".voice-interjection[data-tag]")
+        .forEach((button) => {
+            button.addEventListener("click", () => {
+                insertVoiceText(` <${button.dataset.tag}> `);
+                if (voiceComposerStatus)
+                    voiceComposerStatus.textContent = `Inserted ${button.dataset.tag}.`;
+            });
+        });
+
+    input.addEventListener("paste", (event) => {
+        const file = Array.from(event.clipboardData?.files ?? []).find((item) =>
+            item.type.startsWith("image/"),
+        );
+        if (!file) return;
+        event.preventDefault();
+        void (async () => {
+            const error = rejectBadAnalyzeFile(file);
+            if (error) {
+                showError(error);
+                return;
+            }
+            const previousPlaceholder = input.placeholder;
+            input.placeholder = "Uploading pasted image...";
+            try {
+                const uploaded = await uploadAnalyzeImage(file);
+                await sendCreateTool(
+                    "analyze_image",
+                    { image_url: uploaded.assetUrl, prompt: "What do you see in this image?" },
+                    `Analyze pasted image: ${file.name || "clipboard image"}`,
+                );
+            } catch {
+                showError("Failed to upload pasted image 😕");
+            } finally {
+                input.placeholder = previousPlaceholder;
+            }
+        })();
+    });
 
     if (analyzeDropzone && analyzeFileInput && analyzeFileStatus && analyzeFilePreview) {
         analyzeDropzone.addEventListener("click", () => analyzeFileInput.click());
@@ -2566,9 +2679,12 @@ export function init(): void {
 
     coverPreprocess.addEventListener("click", async () => {
         const form = new FormData();
-        form.set("source_kind", coverSourceKind.value);
-        if (coverSourceKind.value === "upload") {
-            const file = coverAudioFile.files?.[0];
+        const file = coverAudioFile.files?.[0];
+        const sourceKind = file ? "upload" : coverSourceKind.value;
+        coverSourceKind.value = sourceKind;
+        updateCoverSourceVisibility();
+        form.set("source_kind", sourceKind);
+        if (sourceKind === "upload") {
             if (!file) {
                 showError("Choose an audio file first 🎵");
                 coverAudioFile.focus();

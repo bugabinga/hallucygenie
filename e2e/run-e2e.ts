@@ -1007,6 +1007,119 @@ async function runE2ETests(): Promise<void> {
     );
 
     await runTest(
+        "cover song uses separate tab and local file source",
+        async () => {
+            const page = await browser!.newPage();
+            await waitForApp(page, { dismissOnboarding: true });
+
+            await page.click("#create-btn");
+            await page.click(".create-tab[data-tab='cover']");
+            await expectVisible(page, "#create-cover-form");
+            await expectHidden(page, "#create-music-form #cover-source-kind");
+            await page.selectOption("#cover-source-kind", "direct");
+            await page.setInputFiles("#cover-audio-file", {
+                name: "song.mp3",
+                mimeType: "audio/mpeg",
+                buffer: Buffer.from("fake-audio"),
+            });
+            assertEqual(
+                await page.locator("#cover-source-kind").inputValue(),
+                "upload",
+                "Cover source switches to upload",
+            );
+            resetMinimaxMockCalls();
+            const preprocessRequest = page.waitForRequest(
+                (req) =>
+                    req.url().includes("/api/music-cover/preprocess") && req.method() === "POST",
+            );
+            await page.click("#cover-preprocess");
+            await preprocessRequest;
+            await page.waitForFunction(
+                () =>
+                    (document.querySelector("#cover-status")?.textContent ?? "").includes(
+                        "Ready",
+                    ) &&
+                    (
+                        document.querySelector("#cover-lyrics") as HTMLTextAreaElement | null
+                    )?.value.includes("Verse, cover ready"),
+            );
+            const minimaxCall = getMinimaxMockCalls().find((call) =>
+                call.url.includes("/v1/music_cover_preprocess"),
+            );
+            if (!minimaxCall) throw new Error("MiniMax cover preprocess was not called");
+            const payload = JSON.parse(minimaxCall.body);
+            if (!payload.audio_base64 || payload.audio_url) {
+                throw new Error(`Cover preprocess did not use uploaded audio: ${minimaxCall.body}`);
+            }
+
+            await page.close();
+        },
+        results,
+    );
+
+    await runTest(
+        "voice composer inserts pause and interjection tags",
+        async () => {
+            const page = await browser!.newPage();
+            await waitForApp(page, { dismissOnboarding: true });
+
+            await page.click("#create-btn");
+            await page.click(".create-tab[data-tab='voice']");
+            await page.fill("#voice-text", "hello world");
+            await page.locator("#voice-text").evaluate((el) => {
+                const input = el as HTMLTextAreaElement;
+                input.selectionStart = 5;
+                input.selectionEnd = 5;
+            });
+            await page.click("#voice-insert-pause");
+            await page.click(".voice-interjection[data-tag='laugh']");
+            const value = await page.locator("#voice-text").inputValue();
+            if (!value.includes("<#0.5#>") || !value.includes("<laugh>")) {
+                throw new Error(`Voice composer did not insert tags: ${value}`);
+            }
+
+            await page.close();
+        },
+        results,
+    );
+
+    await runTest(
+        "chat image paste uploads asset and analyzes without raw data",
+        async () => {
+            const page = await browser!.newPage();
+            await waitForApp(page, { dismissOnboarding: true });
+
+            const uploadRequest = page.waitForRequest(
+                (req) => req.url().includes("/api/analyze-image") && req.method() === "POST",
+            );
+            const createToolRequest = page.waitForRequest(
+                (req) => req.url().includes("/api/create-tool") && req.method() === "POST",
+            );
+            await page.evaluate((bytes) => {
+                const file = new File([new Uint8Array(bytes)], "paste.png", { type: "image/png" });
+                const event = new Event("paste", { bubbles: true, cancelable: true });
+                Object.defineProperty(event, "clipboardData", { value: { files: [file] } });
+                document.querySelector("#chat-input")!.dispatchEvent(event);
+            }, Array.from(TINY_PNG));
+            await uploadRequest;
+            const requestBody = JSON.parse((await createToolRequest).postData() ?? "{}");
+            assertEqual(requestBody.tool_name, "analyze_image", "Pasted image tool");
+            if (!String(requestBody.input?.image_url ?? "").startsWith("/asset/asset_")) {
+                throw new Error(
+                    `Pasted image did not use saved asset: ${JSON.stringify(requestBody)}`,
+                );
+            }
+            if (JSON.stringify(requestBody).includes("data:image")) {
+                throw new Error(`Pasted image leaked raw bytes: ${JSON.stringify(requestBody)}`);
+            }
+            await expectVisible(page, ".message--user:has-text('Analyze pasted image')");
+
+            await page.close();
+        },
+        results,
+    );
+
+    await runTest(
         "write lyrics draft survives reload",
         async () => {
             const page = await browser!.newPage();
