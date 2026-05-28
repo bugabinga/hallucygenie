@@ -2283,9 +2283,9 @@ describe("buildContext tool pair boundary conditions", () => {
         assert.equal(result[0].role, "system");
     });
 
-    it("oversized orphan tool result causes immediate break", () => {
+    it("oversized orphan break preserves only system (not older user)", () => {
         // When an oversized orphan is encountered, we break immediately.
-        // Older messages are NOT processed since we've exceeded budget.
+        // Older messages are NOT processed since we stop building context.
         const messages: ChatMessage[] = [
             { role: "system" as const, content: "a" },
             { role: "user" as const, content: "old msg" },
@@ -2293,6 +2293,21 @@ describe("buildContext tool pair boundary conditions", () => {
         ];
         const result = buildContext(messages, 10);
         // Break on oversized orphan returns only system message
+        assert.equal(result.length, 1);
+        assert.equal(result[0].role, "system");
+    });
+
+    it("oversized orphan break stops even when budget would fit older messages", () => {
+        // Budget=10: system(1) + user(1) = 2 tokens fit, orphan(≈20) does not.
+        // With break: we stop at oversized orphan before ever reaching the user.
+        // Older messages below the oversized orphan are NOT preserved.
+        const messages: ChatMessage[] = [
+            { role: "system" as const, content: "a" }, // 1 token
+            { role: "user" as const, content: "old msg" }, // 1 token
+            { role: "tool" as const, content: "x".repeat(80), tool_call_id: "nonexistent" }, // ~20 tokens
+        ];
+        const result = buildContext(messages, 10);
+        // Break immediately on oversized orphan — older user message not reached
         assert.equal(result.length, 1);
         assert.equal(result[0].role, "system");
     });
@@ -3256,13 +3271,17 @@ describe("SSE parser error paths", () => {
         assert.equal(musicResult.result?.type, "audio");
     });
 
-    it("processes trailing incomplete SSE line after stream ends", async () => {
-        // Simulates: chunk ends with incomplete SSE line like "data: {"partial"}"
-        // When reader.read() returns done=true, any incomplete line in buffer should be processed
+    it("processes trailing complete SSE line after stream ends", async () => {
+        // When reader.read() returns done=true, any complete SSE line still in
+        // the buffer should be processed. This exercises the post-loop handler:
+        // we send a content_block_delta ("Hello"), then a complete trailing data:
+        // line with another content_block_delta (" World", with trailing newline),
+        // no intervening content_block_stop, so currentEventType stays
+        // "content_block_delta" and the handler guard permits delta emission.
         const stream = new ReadableStream({
             start(controller) {
                 const enc = new TextEncoder();
-                // Send complete event
+                // Complete text block start + delta
                 controller.enqueue(
                     sseEvent("content_block_start", {
                         type: "content_block_start",
@@ -3277,12 +3296,20 @@ describe("SSE parser error paths", () => {
                         delta: { type: "text_delta", text: "Hello" },
                     }),
                 );
+                // Trailing complete SSE line: another content_block_delta with " World"
+                // The trailing \n means this complete line stays in buffer when stream ends
                 controller.enqueue(
-                    sseEvent("content_block_stop", { type: "content_block_stop", index: 0 }),
+                    enc.encode(
+                        "data: " +
+                            JSON.stringify({
+                                type: "content_block_delta",
+                                index: 0,
+                                delta: { type: "text_delta", text: " World" },
+                            }) +
+                            "\n",
+                    ),
                 );
-                // Now send an incomplete line as a raw chunk (no trailing newline)
-                controller.enqueue(enc.encode('data: {"type":"message_delta"'));
-                // Stream ends without proper newline termination
+                // No content_block_stop — stream ends while currentEventType is "content_block_delta"
                 controller.close();
             },
         });
@@ -3290,10 +3317,11 @@ describe("SSE parser error paths", () => {
             new Response(stream, { status: 200, headers: { "Content-Type": "text/event-stream" } });
         const { events: evTrailing, onEvent: onTrailing } = collectEvents();
         await runAgentLoop([{ role: "user", content: "hi" }], "test-key", onTrailing);
-        // Should still have processed the complete text before the incomplete line
+        // Both deltas should appear end-to-end
         const textEvents = evTrailing.filter((e) => e.type === "text");
-        assert.equal(textEvents.length, 1);
-        assert.equal(textEvents[0].content, "Hello");
+        assert.equal(textEvents.length, 2);
+        assert.ok(textEvents[0].content.includes("Hello"));
+        assert.ok(textEvents[1].content.includes(" World"));
         assert.equal(evTrailing[evTrailing.length - 1].type, "done");
     });
 });
