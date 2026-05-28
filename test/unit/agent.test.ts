@@ -3296,8 +3296,9 @@ describe("SSE parser error paths", () => {
                         delta: { type: "text_delta", text: "Hello" },
                     }),
                 );
-                // Trailing complete SSE line: another content_block_delta with " World"
-                // The trailing \n means this complete line stays in buffer when stream ends
+                // Trailing incomplete SSE line: another content_block_delta with " World"
+                // No trailing \n — the line stays in buffer when stream ends and is
+                // processed by the trailing-buffer handler in runAgentLoop.
                 controller.enqueue(
                     enc.encode(
                         "data: " +
@@ -3305,8 +3306,7 @@ describe("SSE parser error paths", () => {
                                 type: "content_block_delta",
                                 index: 0,
                                 delta: { type: "text_delta", text: " World" },
-                            }) +
-                            "\n",
+                            }),
                     ),
                 );
                 // No content_block_stop — stream ends while currentEventType is "content_block_delta"
