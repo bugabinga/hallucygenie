@@ -29,4 +29,4 @@ First release.
 
 • GHCR image: `ghcr.io/bugabinga/hallucygenie:v1.0.0`.
 • Runtime uses non-root `bun` user.
-• Image includes OCI labels and `/api/health` healthcheck.
+• Image includes OCI labels. Podman run/Quadlet config uses `/api/health` healthcheck.

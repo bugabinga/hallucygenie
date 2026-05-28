@@ -119,7 +119,7 @@ container image="hallucygenie:local":
     set -e; \
     package_tag="v$(bun -e 'console.log(JSON.parse(await Bun.file("package.json").text()).version)')"; \
     version="${RELEASE_TAG:-$package_tag}"; \
-    podman build -f deploy/Dockerfile --build-arg VERSION="$version" -t "{{ image }}" .
+    podman build -f deploy/Containerfile --build-arg VERSION="$version" -t "{{ image }}" .
 
 # smoke-test production container image locally
 [group('deploy')]
@@ -130,10 +130,15 @@ container-smoke image="hallucygenie:local":
     podman volume create "$volume" >/dev/null; \
     cleanup() { podman rm -f "$name" >/dev/null 2>&1 || true; podman volume rm "$volume" >/dev/null 2>&1 || true; }; \
     trap cleanup EXIT; \
-    podman run -d --name "$name" -p 127.0.0.1:3099:3000 -e MINIMAX_API_KEY=release-smoke -v "$volume:/app/data" "{{ image }}" >/dev/null; \
+    podman run -d --name "$name" -p 127.0.0.1:3099:3000 -e MINIMAX_API_KEY=release-smoke -v "$volume:/app/data" \
+      --health-cmd "bun --eval \"const port=process.env.PORT||'3000';fetch('http://127.0.0.1:'+port+'/api/health').then((r)=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))\"" \
+      --health-interval 30s --health-timeout 3s --health-start-period 5s --health-retries 3 \
+      "{{ image }}" >/dev/null; \
     ok=0; \
     for _ in $(seq 1 30); do if curl -fsS http://127.0.0.1:3099/api/health >/dev/null 2>&1; then ok=1; break; fi; sleep 1; done; \
     test "$ok" = "1"; \
+    podman healthcheck run "$name" >/dev/null; \
+    podman inspect "$name" | bun -e 'const container = JSON.parse(await new Response(Bun.stdin.stream()).text())[0]; if (container.State.Health.Status !== "healthy") throw new Error("container not healthy");'; \
     curl -fsS http://127.0.0.1:3099/ >/dev/null; \
     curl -fsS http://127.0.0.1:3099/fonts/pixelify-sans/PixelifySans.woff2 >/dev/null
 
@@ -172,7 +177,10 @@ release tag:
     cleanup() { podman rm -f "$name" >/dev/null 2>&1 || true; podman volume rm "$volume" >/dev/null 2>&1 || true; rm -rf "$profile"; }; \
     trap cleanup EXIT; \
     podman volume create "$volume" >/dev/null; \
-    podman run -d --name "$name" -p 127.0.0.1:3100:3000 -e MINIMAX_API_KEY -v "$volume:/app/data" "$image" >/dev/null; \
+    podman run -d --name "$name" -p 127.0.0.1:3100:3000 -e MINIMAX_API_KEY -v "$volume:/app/data" \
+      --health-cmd "bun --eval \"const port=process.env.PORT||'3000';fetch('http://127.0.0.1:'+port+'/api/health').then((r)=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))\"" \
+      --health-interval 30s --health-timeout 3s --health-start-period 5s --health-retries 3 \
+      "$image" >/dev/null; \
     ok=0; \
     for _ in $(seq 1 30); do if curl -fsS http://127.0.0.1:3100/api/health >/dev/null 2>&1; then ok=1; break; fi; sleep 1; done; \
     test "$ok" = "1"; \
@@ -197,24 +205,25 @@ publish-container image:
     case "$image" in ghcr.io/bugabinga/hallucygenie:v[0-9]*.[0-9]*.[0-9]*) ;; *) echo "image must be ghcr.io/bugabinga/hallucygenie:vX.Y.Z"; exit 1 ;; esac; \
     release_tag="${image##*:}"; \
     RELEASE_TAG="$release_tag" bun scripts/release-check.ts; \
-    podman build -f deploy/Dockerfile --build-arg VERSION="$release_tag" -t "$image" --push .
+    podman build -f deploy/Containerfile --build-arg VERSION="$release_tag" -t "$image" --push .
 
 # test MiniMax API endpoints + check quota (real API; consumes TTS/image/music quota)
 [group('pi')]
 minimax-test:
     bun scripts/minimax-test.ts
 
-# rm generated files and caches
+# rm generated files, logs, and caches
 [group('util')]
 clean:
-    rm -rf dist coverage reports .stryker-tmp node_modules/.cache test-data* public/app.js
+    rm -rf dist coverage reports .stryker-tmp node_modules/.cache test-data* tmp logs public/app.js
+    find test -type d -name 'test-data*' -prune -exec rm -rf {} +
 
 # reset local SQLite DB + generated assets
 [group('util')]
 reset:
-    rm -rf data
+    rm -rf data *.db *.db-shm *.db-wal
 
 # full local reset (keeps .env)
 [group('util')]
 nuke: clean reset
-    rm -rf node_modules logs
+    rm -rf node_modules

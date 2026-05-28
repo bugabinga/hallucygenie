@@ -17,7 +17,7 @@ const dbTest = readFileSync("test/unit/db.test.ts", "utf-8");
 const e2eRunner = readFileSync("e2e/run-e2e.ts", "utf-8");
 const serverTest = readFileSync("test/unit/server.test.ts", "utf-8");
 const gitignore = readFileSync(".gitignore", "utf-8");
-const dockerignore = readFileSync(".dockerignore", "utf-8");
+const containerignore = readFileSync(".containerignore", "utf-8");
 const prettierignore = readFileSync(".prettierignore", "utf-8");
 const lefthookYml = readFileSync("lefthook.yml", "utf-8");
 const ciYml = readFileSync(".github/workflows/ci.yml", "utf-8");
@@ -29,7 +29,7 @@ const slopChopperAgent = readFileSync(".github/agents/slop-chopper.ts", "utf-8")
 const strykerAgent = readFileSync("test/stryker.config.mjs", "utf-8");
 const strykerTools = readFileSync("test/stryker-tools.mjs", "utf-8");
 const strykerDb = readFileSync("test/stryker-db.mjs", "utf-8");
-const deployDockerfile = readFileSync("deploy/Dockerfile", "utf-8");
+const deployContainerfile = readFileSync("deploy/Containerfile", "utf-8");
 const agentsMd = readFileSync("AGENTS.md", "utf-8");
 const issuePrompt = readFileSync(".pi/prompts/issue.md", "utf-8");
 const manualPrompt = readFileSync(".pi/prompts/manual.md", "utf-8");
@@ -999,7 +999,7 @@ describe("justfile health", () => {
         assert.match(justfile, /\ncontainer image="hallucygenie:local":/);
         assert.match(
             justfile,
-            /podman build -f deploy\/Dockerfile --build-arg VERSION="\$version" -t "\{\{ image \}\}" \./,
+            /podman build -f deploy\/Containerfile --build-arg VERSION="\$version" -t "\{\{ image \}\}" \./,
         );
         assert.match(justfile, /\ncontainer-smoke image="hallucygenie:local":/);
         assert.match(justfile, /curl -fsS http:\/\/127\.0\.0\.1:3099\/api\/health/);
@@ -1012,6 +1012,8 @@ describe("justfile health", () => {
         assert.match(justfile, /RELEASE_TAG="\$release_tag" bun scripts\/release-check\.ts/);
         assert.match(justfile, /podman inspect "\$image"/);
         assert.match(justfile, /image version label/);
+        assert.match(justfile, /--health-cmd/);
+        assert.match(justfile, /podman healthcheck run/);
         assert.match(justfile, /\nrelease tag:/);
         assert.doesNotMatch(justfile, /MANUAL_CHROME_OK/);
         assert.match(justfile, /google-chrome-stable/);
@@ -1023,11 +1025,12 @@ describe("justfile health", () => {
         assert.match(justfile, /\npublish-container image:/);
         assert.match(
             justfile,
-            /podman build -f deploy\/Dockerfile --build-arg VERSION="\$release_tag" -t "\$image" --push \./,
+            /podman build -f deploy\/Containerfile --build-arg VERSION="\$release_tag" -t "\$image" --push \./,
         );
         assert.doesNotMatch(justfile, /\bdocker (?:build|buildx|volume|run|inspect|rm)\b/);
         assert.match(readmeMd, /podman pull ghcr\.io\/bugabinga\/hallucygenie:v1\.0\.0/);
         assert.match(readmeMd, /podman run --rm/);
+        assert.match(readmeMd, /--health-cmd/);
         assert.doesNotMatch(readmeMd, /\bdocker (?:pull|run)\b/);
         assert.match(justfile, /release tag:\n\s+set -e; \\/);
         assert.match(justfile, /release-check image="hallucygenie:local": ready\n\s+set -e; \\/);
@@ -1068,6 +1071,10 @@ describe("justfile health", () => {
         assert.match(justfile, /clean:\n\s+rm -rf .*public\/app\.js/);
         assert.match(justfile, /clean:\n\s+rm -rf .*\.stryker-tmp/);
         assert.match(justfile, /clean:\n\s+rm -rf .*coverage/);
+        assert.match(justfile, /clean:\n\s+rm -rf .*tmp/);
+        assert.match(justfile, /clean:\n\s+rm -rf .*logs/);
+        assert.match(justfile, /find test -type d -name 'test-data\*'/);
+        assert.match(justfile, /reset:\n\s+rm -rf .*\*\.db/);
     });
 
     it("does not define redundant recipes or aliases", () => {
@@ -1230,22 +1237,22 @@ describe("GitHub Actions health", () => {
             releaseYml,
             /run: RELEASE_TAG="\$RELEASE_TAG" just release-check "\$IMAGE:\$RELEASE_TAG"/,
         );
-        assert.match(releaseYml, /docker\/build-push-action@v7\.0\.0/);
-        assert.match(releaseYml, /cache-from: type=gha/);
-        assert.match(releaseYml, /latest=false/);
+        assert.match(releaseYml, /just publish-container/);
+        assert.match(releaseYml, /podman login ghcr\.io/);
+        assert.doesNotMatch(releaseYml, /docker\//);
         assert.doesNotMatch(ciYml, /env\.ACT/);
         assert.doesNotMatch(ciYml, /act \+ Podman/);
         assert.equal(existsSync(".github/workflows/updates.yml"), false);
         assert.match(dependabotYml, /package-ecosystem: bun/);
         assert.doesNotMatch(dependabotYml, /package-ecosystem: npm/);
         assert.match(dependabotYml, /package-ecosystem: github-actions/);
-        assert.match(dependabotYml, /package-ecosystem: docker/);
+        assert.doesNotMatch(dependabotYml, /package-ecosystem: docker/);
         assert.match(dependabotYml, /interval: weekly/);
         assert.doesNotMatch(dependabotYml, /workflow_dispatch|bun outdated|just deps-check/);
         assert.match(justfile, /\ncontainer image="hallucygenie:local":/);
         assert.match(
             justfile,
-            /podman build -f deploy\/Dockerfile --build-arg VERSION="\$version" -t "\{\{ image \}\}" \./,
+            /podman build -f deploy\/Containerfile --build-arg VERSION="\$version" -t "\{\{ image \}\}" \./,
         );
         assert.match(justfile, /\nrelease-check image="hallucygenie:local": ready/);
         assert.doesNotMatch(justfile, /\ndeps-check:|bun outdated --latest/);
@@ -1256,7 +1263,7 @@ describe("GitHub Actions health", () => {
         assert.doesNotMatch(justfile, /\bci-act(?:\b|-)/);
         assert.doesNotMatch(justfile, /\bagent-(?:spec|bugs|deslop|all)\b/);
         assert.doesNotMatch(justfile, /\bact\b/);
-        assert.equal(existsSync("deploy/act/Dockerfile"), false);
+        assert.equal(existsSync("deploy/act/Containerfile"), false);
         assert.doesNotMatch(gitignore, /\.artifacts\//);
         assert.doesNotMatch(gitignore, /\.act-cache\//);
     });
@@ -1293,50 +1300,74 @@ describe("agent janitor health", () => {
 
 describe("layout health", () => {
     it("deploy image uses hardened optimized Bun multi-stage build", () => {
-        assert.match(deployDockerfile, /^ARG BUN_VERSION=1\.3\.14$/m);
-        assert.match(deployDockerfile, /^FROM docker\.io\/oven\/bun:\$\{BUN_VERSION\} AS deps/m);
-        assert.match(deployDockerfile, /^FROM deps AS build/m);
-        assert.match(deployDockerfile, /^FROM docker\.io\/oven\/bun:\$\{BUN_VERSION\} AS runtime/m);
-        assert.match(deployDockerfile, /^ARG VERSION=1\.0\.0$/m);
+        assert.match(deployContainerfile, /^ARG BUN_VERSION=1\.3\.14$/m);
+        assert.match(deployContainerfile, /^FROM oven\/bun:\$\{BUN_VERSION\} AS deps/m);
+        assert.match(deployContainerfile, /^FROM deps AS build/m);
+        assert.match(deployContainerfile, /^FROM oven\/bun:\$\{BUN_VERSION\} AS runtime/m);
+        assert.match(deployContainerfile, /^ARG VERSION=1\.0\.0$/m);
         assert.match(
-            deployDockerfile,
+            deployContainerfile,
             /--mount=type=cache,target=\/root\/\.bun\/install\/cache,sharing=locked/,
         );
-        assert.match(deployDockerfile, /COPY package\.json bun\.lock \./);
-        assert.match(deployDockerfile, /COPY public \.\/public/);
-        assert.match(deployDockerfile, /COPY --chown=bun:bun src \.\/src/);
-        assert.match(deployDockerfile, /COPY --chown=bun:bun migrations \.\/migrations/);
+        assert.match(deployContainerfile, /COPY package\.json bun\.lock \./);
+        assert.match(deployContainerfile, /COPY public \.\/public/);
+        assert.match(deployContainerfile, /COPY --chown=bun:bun src \.\/src/);
+        assert.match(deployContainerfile, /COPY --chown=bun:bun migrations \.\/migrations/);
         assert.match(
-            deployDockerfile,
+            deployContainerfile,
             /COPY --from=build --chown=bun:bun \/app\/public\/app\.js \.\/public\/app\.js/,
         );
-        assert.match(deployDockerfile, /bunx esbuild public\/app\.ts/);
-        assert.match(deployDockerfile, /--minify/);
-        assert.match(deployDockerfile, /org\.opencontainers\.image\.version/);
-        assert.match(deployDockerfile, /^USER bun$/m);
-        assert.match(deployDockerfile, /^HEALTHCHECK /m);
-        assert.match(deployDockerfile, /\/api\/health/);
-        assert.doesNotMatch(deployDockerfile, /COPY \. \./);
+        assert.match(deployContainerfile, /bunx esbuild public\/app\.ts/);
+        assert.match(deployContainerfile, /--minify/);
+        assert.match(deployContainerfile, /org\.opencontainers\.image\.version/);
+        assert.match(deployContainerfile, /^USER bun$/m);
+        assert.doesNotMatch(deployContainerfile, /^HEALTHCHECK /m);
+        assert.match(justfile, /--health-cmd/);
+        assert.match(justfile, /podman healthcheck run/);
+        assert.match(readFileSync("deploy/hallucygenie.container", "utf-8"), /^HealthCmd=/m);
+        assert.doesNotMatch(deployContainerfile, /COPY \. \./);
     });
 
-    it("deploy build context excludes local caches and generated artifacts", () => {
+    it("deploy build context uses a whitelist", () => {
+        const lines = containerignore
+            .split("\n")
+            .map((line) => line.trim())
+            .filter(Boolean);
+        assert.equal(lines[0], "*");
         for (const path of [
-            ".git",
-            ".env",
-            "node_modules",
-            "coverage",
-            "reports",
-            "data",
-            "logs",
-            ".stryker-tmp",
-            "public/app.js",
-            "test-data*",
+            "package.json",
+            "bun.lock",
+            "src/",
+            "src/**",
+            "migrations/",
+            "migrations/**",
+            "public/",
+            "public/app.ts",
+            "public/index.html",
+            "public/markdown.ts",
+            "public/style.css",
+            "public/fonts/",
+            "public/fonts/**",
         ]) {
-            assert.match(
-                dockerignore,
-                new RegExp(`^${path.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}$`, "m"),
-            );
+            assert.ok(lines.includes(`!${path}`), `${path} must be allowed`);
         }
+        assert.equal(lines.includes("!public/**"), false);
+        assert.equal(
+            lines.some((line) => line.includes("screenshot")),
+            false,
+        );
+        assert.equal(
+            lines.some((line) => line.startsWith("!test")),
+            false,
+        );
+        assert.equal(
+            lines.some((line) => line.startsWith("!.system")),
+            false,
+        );
+        assert.equal(
+            lines.some((line) => line.startsWith("!node_modules")),
+            false,
+        );
     });
 
     it("keeps source in src, tests in test, deploy in deploy", () => {
@@ -1348,7 +1379,8 @@ describe("layout health", () => {
             assert.equal(existsSync(file), false, `${file} should not be in repo root`);
             assert.equal(existsSync(`test/unit/${file}`), true, `test/unit/${file} should exist`);
         }
-        assert.equal(existsSync("deploy/Dockerfile"), true);
+        assert.equal(existsSync("deploy/Containerfile"), true);
+        assert.equal(existsSync("deploy/Dockerfile"), false);
         assert.equal(existsSync("deploy/hallucygenie.container"), true);
     });
 

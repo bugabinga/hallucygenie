@@ -9,7 +9,7 @@ Repro:
 - `just --list` exposes `agent-spec`, `agent-bugs`, `agent-deslop`, `agent-all`.
 - These recipes depend on `ci-act-image` and run `.github/workflows/agents.yml` through `act`.
 - `hook-post-merge` still calls `just ci-act`.
-- `test/static.test.ts` asserts local act recipes and `deploy/act/Dockerfile` exist.
+- `test/static.test.ts` asserted local act recipes and `deploy/act/` image build files existed.
 - `.github/workflows/agents.yml` still carries `No git repo (act local run)` branches.
 
 Cause:

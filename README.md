@@ -32,6 +32,8 @@ podman run --rm \
   -p 127.0.0.1:3000:3000 \
   -e MINIMAX_API_KEY="$MINIMAX_API_KEY" \
   -v "$PWD/data:/app/data" \
+  --health-cmd 'bun --eval "fetch(\"http://127.0.0.1:3000/api/health\").then((r)=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"' \
+  --health-interval 30s --health-timeout 3s --health-start-period 5s --health-retries 3 \
   ghcr.io/bugabinga/hallucygenie:v1.0.0
 ```
 

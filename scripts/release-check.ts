@@ -71,6 +71,7 @@ requireMatch(
 requireMatch("README.md", /MINIMAX_API_KEY/, "missing API key docs");
 requireMatch("README.md", /No built-in auth/i, "missing no-auth warning");
 requireMatch("README.md", /data\//, "missing data volume docs");
+requireMatch("README.md", /--health-cmd/, "missing Podman healthcheck docs");
 requireMatch(".env.example", /^MINIMAX_API_KEY=$/m, "missing MINIMAX_API_KEY");
 requireMatch(".env.example", /^PORT=3000$/m, "missing PORT");
 requireMatch(".env.example", /^COVER_EXTRACTOR_URL=$/m, "missing COVER_EXTRACTOR_URL");
@@ -102,29 +103,40 @@ requireMatch(
     /Release -> `.pi\/prompts\/release\.md`/,
     "missing release prompt pointer",
 );
-requireMatch("deploy/Dockerfile", /^USER bun$/m, "runtime must use non-root bun user");
-requireMatch("deploy/Dockerfile", /^HEALTHCHECK /m, "missing healthcheck");
+requireMatch("deploy/Containerfile", /^USER bun$/m, "runtime must use non-root bun user");
 requireMatch(
-    "deploy/Dockerfile",
+    "deploy/Containerfile",
     /org\.opencontainers\.image\.version/,
     "missing OCI version label",
 );
+requireMatch("justfile", /--health-cmd/, "missing Podman-native healthcheck");
+requireMatch("justfile", /podman healthcheck run/, "missing Podman healthcheck proof");
 requireMatch(
     ".github/workflows/release.yml",
     /ghcr\.io\/bugabinga\/hallucygenie/,
     "missing GHCR image",
 );
+requireMatch(".github/workflows/release.yml", /just release-check/, "missing local artifact proof");
 requireMatch(
     ".github/workflows/release.yml",
-    /docker\/build-push-action@v7\.0\.0/,
-    "missing build-push action",
+    /just publish-container/,
+    "missing Podman publish proof",
 );
-requireMatch(".github/workflows/release.yml", /just release-check/, "missing local artifact proof");
 forbidMatch(
     "justfile",
     /\bdocker (?:build|buildx|volume|run|inspect|rm)\b/,
     "local release recipes must use podman",
 );
 forbidMatch("README.md", /\bdocker (?:pull|run)\b/, "release image docs must use podman");
+forbidMatch(
+    "justfile",
+    /Dockerfile|--format docker|image healthcheck/i,
+    "use OCI Containerfile and Podman-native healthchecks",
+);
+forbidMatch(
+    ".github/workflows/release.yml",
+    /docker\//,
+    "release workflow must not use Docker actions",
+);
 
 console.log(`release-check metadata ok: ${tag}`);

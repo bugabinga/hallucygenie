@@ -14,6 +14,7 @@ data/
 # Build
 coverage/
 dist/
+tmp/
 public/app.js
 
 # Mutation testing
@@ -30,6 +31,4 @@ reports/
 # Test artifacts
 test-data*/
 
-# Screenshots (local only)
-public/screenshot-*.png
 logs/
