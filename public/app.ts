@@ -2481,6 +2481,8 @@ export function init(): void {
             form.set("audio_url", url);
         }
         coverPreprocess.disabled = true;
+        // Clear stale YouTube URL from previous cover session
+        delete (window as unknown as { _coverSourceUrl?: string })._coverSourceUrl;
         coverStatus.textContent = "Preparing cover...";
         try {
             const resp = await fetch("/api/music-cover/preprocess", { method: "POST", body: form });

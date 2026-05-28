@@ -334,6 +334,26 @@ describe("index.html health", () => {
         );
     });
 
+    it("_coverSourceUrl global is cleared before preprocess fetch (no cross-call leak)", () => {
+        // Janitor: _coverSourceUrl was set for YouTube sources but never reset for
+        // direct/upload sources. A stale YouTube URL carried into the next cover.
+        // Fix: delete _coverSourceUrl at the top of the preprocess handler before fetch.
+        // The clearing must appear before the fetch call to /api/music-cover/preprocess
+        const clearIdx = appTs.indexOf(
+            "delete (window as unknown as { _coverSourceUrl?: string })._coverSourceUrl",
+        );
+        assert.ok(
+            clearIdx !== -1,
+            "_coverSourceUrl must be cleared at start of preprocess handler",
+        );
+        const fetchIdx = appTs.indexOf("/api/music-cover/preprocess");
+        assert.ok(fetchIdx !== -1, "preprocess fetch call must exist");
+        assert.ok(
+            clearIdx < fetchIdx,
+            "_coverSourceUrl clearing must appear BEFORE the preprocess fetch",
+        );
+    });
+
     it("quota badge includes lyrics item", () => {
         const doc = parseIndex();
         const lyricsItem = doc.querySelector('.quota-item[data-type="lyrics"]');

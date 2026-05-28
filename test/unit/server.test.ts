@@ -1081,6 +1081,78 @@ describe("SSE streaming from Anthropic endpoint", () => {
         }
     });
 
+    it("coverSourceFromSidecar does not write or delete temp files (no dead lifecycle)", async () => {
+        // Verify the sidecar path does not create/delete temp files.
+        // Janitor: data/tmp/cover/cover_<uuid>.audio was written then immediately
+        // deleted — tmpPath was never consumed by callers. Dead code removed.
+        const previousApiKey = process.env.MINIMAX_API_KEY;
+        const previousExtractor = process.env.COVER_EXTRACTOR_URL;
+        process.env.MINIMAX_API_KEY = "test-key";
+        process.env.COVER_EXTRACTOR_URL = "http://localhost:9999/extract";
+
+        // The real verification: sidecar returns audio_base64, preprocess succeeds,
+        // and no fs write/delete side-effects occur.
+        const originalFetch = globalThis.fetch;
+        globalThis.fetch = async (url: string | URL | Request) => {
+            const u = String(typeof url === "object" && "url" in url ? url.url : url);
+            if (u === "http://localhost:9999/extract") {
+                return new Response(
+                    JSON.stringify({
+                        audio_base64: Buffer.from("fake-audio-data").toString("base64"),
+                    }),
+                    { status: 200, headers: { "Content-Type": "application/json" } },
+                );
+            }
+            // MiniMax preprocess
+            if (u.includes("/v1/music_cover_preprocess")) {
+                return new Response(
+                    JSON.stringify({
+                        data: {
+                            cover_feature_id: "cover-sidecar-1",
+                            formatted_lyrics: "[Verse] test",
+                        },
+                    }),
+                    { status: 200, headers: { "Content-Type": "application/json" } },
+                );
+            }
+            return new Response("not found", { status: 404 });
+        };
+
+        try {
+            const form = new FormData();
+            form.set("source_kind", "youtube");
+            form.set("audio_url", "https://youtube.com/watch?v=abc");
+            const resp = await handleRequest(
+                new Request("http://localhost/api/music-cover/preprocess", {
+                    method: "POST",
+                    body: form,
+                }),
+            );
+            const body = JSON.parse(await readBody(resp));
+            assert.equal(resp.status, 200);
+            assert.equal(body.cover_feature_id, "cover-sidecar-1");
+            assert.equal(body.source_url, "https://youtube.com/watch?v=abc");
+            // Verify dead temp-file code is removed:
+            // unlinkSync must not be imported and no write-then-delete pattern.
+            const src = await Bun.file("src/server.ts").text();
+            assert.match(
+                src,
+                /^import \{ mkdirSync, writeFileSync \} from "node:fs";/m,
+                "unlinkSync must not be imported — dead temp-file code removed",
+            );
+            assert.ok(
+                !src.includes("tmpPath = `"),
+                "no tmpPath variable — dead write-then-delete removed",
+            );
+        } finally {
+            globalThis.fetch = originalFetch;
+            if (previousApiKey === undefined) delete process.env.MINIMAX_API_KEY;
+            else process.env.MINIMAX_API_KEY = previousApiKey;
+            if (previousExtractor === undefined) delete process.env.COVER_EXTRACTOR_URL;
+            else process.env.COVER_EXTRACTOR_URL = previousExtractor;
+        }
+    });
+
     it("executes Create music cover generation and saves asset", async () => {
         const sessionId = "create-tool-cover-session";
         const db = getDb()!;
