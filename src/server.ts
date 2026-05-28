@@ -681,7 +681,8 @@ async function localAnalyzeAssetDataUrl(
     if (!match) return imageUrl;
     const asset = getAsset(database, match[1]!);
     if (!asset || asset.session_id !== sessionId) throw new Error("analyze image asset not found");
-    if (!isAnalyzeImageMime(asset.mime_type)) throw new Error("analyze image type invalid");
+    if (!isAllowedImageMime(asset.mime_type, ANALYZE_IMAGE_MIMES))
+        throw new Error("analyze image type invalid");
     if (asset.size_bytes > 20 * 1024 * 1024) throw new Error("analyze image too large");
     const file = await readFile(`data/assets/${asset.session_id}/${asset.filename}`);
     if (file.byteLength > 20 * 1024 * 1024) throw new Error("analyze image too large");
@@ -1060,13 +1061,12 @@ export function parseLimitOffset(url: URL): { limit: number; offset: number } {
     return { limit, offset };
 }
 
-function isAvatarImageMime(mime: string): boolean {
-    return ["image/png", "image/jpeg", "image/webp", "image/gif"].includes(mime);
+function isAllowedImageMime(mime: string, allowedMimes: string[]): boolean {
+    return allowedMimes.includes(mime);
 }
 
-function isAnalyzeImageMime(mime: string): boolean {
-    return ["image/png", "image/jpeg", "image/webp"].includes(mime);
-}
+const AVATAR_IMAGE_MIMES = ["image/png", "image/jpeg", "image/webp", "image/gif"];
+const ANALYZE_IMAGE_MIMES = ["image/png", "image/jpeg", "image/webp"];
 
 function isCoverAudioMime(mime: string): boolean {
     return [
@@ -1111,7 +1111,7 @@ async function handleProfileAvatarUpload(req: Request, database: Database): Prom
         const form = await req.formData();
         const file = form.get("avatar");
         if (!(file instanceof File)) return jsonResponse({ error: "avatar file required" }, 400);
-        if (!isAvatarImageMime(file.type))
+        if (!isAllowedImageMime(file.type, AVATAR_IMAGE_MIMES))
             return jsonResponse({ error: "avatar image type invalid" }, 400);
         if (file.size > 2 * 1024 * 1024)
             return jsonResponse({ error: "avatar image too large" }, 400);
@@ -1141,7 +1141,7 @@ async function handleAnalyzeImageUpload(req: Request, database: Database): Promi
         const form = await req.formData();
         const file = form.get("image");
         if (!(file instanceof File)) return jsonResponse({ error: "image file required" }, 400);
-        if (!isAnalyzeImageMime(file.type))
+        if (!isAllowedImageMime(file.type, ANALYZE_IMAGE_MIMES))
             return jsonResponse({ error: "image type must be PNG, JPG, or WebP" }, 400);
         if (file.size > 20 * 1024 * 1024) return jsonResponse({ error: "image too large" }, 400);
         const saved = saveAssetBuffer(
