@@ -611,6 +611,8 @@ export async function musicCoverPreprocess(
     apiKey: string,
 ): Promise<MusicCoverPreprocessResult> {
     if (!input.audio_url && !input.audio_base64) throw new Error("cover source required");
+    if (input.audio_url && input.audio_base64)
+        throw new Error("audio_url and audio_base64 are mutually exclusive");
     const payload: Record<string, unknown> = { model: "music-cover" };
     if (input.audio_url) payload.audio_url = input.audio_url;
     if (input.audio_base64) payload.audio_base64 = input.audio_base64;

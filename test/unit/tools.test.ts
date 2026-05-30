@@ -1116,6 +1116,24 @@ describe("music cover", () => {
         await assert.rejects(() => musicCoverPreprocess({}, API_KEY), /cover source required/);
     });
 
+    it("rejects preprocess with both audio sources before fetch", async () => {
+        let called = false;
+        globalThis.fetch = async () => {
+            called = true;
+            return jsonResponse({ data: { cover_feature_id: "cover-1" } });
+        };
+
+        await assert.rejects(
+            () =>
+                musicCoverPreprocess(
+                    { audio_url: "https://example.com/a.mp3", audio_base64: "QUJD" },
+                    API_KEY,
+                ),
+            /audio_url and audio_base64 are mutually exclusive/,
+        );
+        assert.equal(called, false);
+    });
+
     it("reports preprocess HTTP, base_resp, and missing-id failures", async () => {
         globalThis.fetch = async () => new Response("broken", { status: 502 });
         await assert.rejects(
