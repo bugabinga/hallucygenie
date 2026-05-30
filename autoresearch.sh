@@ -122,6 +122,8 @@ check skill_lyrics_helper_drop_tag contains '[Drop]' .pi/skills/minimax/SKILL.md
 check skill_lyrics_helper_instrumental_tag contains '[Instrumental]' .pi/skills/minimax/SKILL.md
 check skill_get_voice_requires_voice_type contains 'Get voice requires `voice_type`' .pi/skills/minimax/SKILL.md
 check skill_get_voice_all_type contains '`all|system|voice_cloning|voice_generation`' .pi/skills/minimax/SKILL.md
+check skill_video_agent_diving_template contains '392747428568649728` Diving' .pi/skills/minimax/SKILL.md
+check skill_video_agent_run_template contains '393769180141805569` Run for Life' .pi/skills/minimax/SKILL.md
 check bounded_text_validator contains 'boundedText(' src/tools.ts
 check bounded_text_test contains 'rejects over-limit MiniMax text before fetch' test/unit/tools.test.ts
 check music_cover_bounds_test contains 'rejects invalid music cover text before fetch' test/unit/tools.test.ts
