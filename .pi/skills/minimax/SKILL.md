@@ -97,6 +97,7 @@ Current docs crawl: 2026-05-30 from `https://platform.minimax.io/docs/llms.txt` 
 - Voice clone: `POST /v1/voice_clone`; temp voice must be used within 168 hours (7 days) to keep permanently.
 - Voice design: `POST /v1/voice_design`; generated voice also temp until first use.
 - Voice management: `POST /v1/get_voice`, `POST /v1/delete_voice`.
+- Get voice requires `voice_type`; values: `all|system|voice_cloning|voice_generation`.
 
 ### Plan model availability (tested 2026-04-19)
 
