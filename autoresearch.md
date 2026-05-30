@@ -48,4 +48,5 @@ Latest docs fetched to `~/.pi/research/pages/`:
 - Expanded benchmark to require a unit test proving over-limit MiniMax text is rejected before `fetch`. Fixed by `d3a8e9e`.
 - Expanded benchmark to execute Node unit tests for `agent` and `tools`; caught invalid agent SSE fixtures hidden by old permissive tool validation. Fixed by `112af22`.
 - Expanded benchmark to enforce MiniMax music-cover documented prompt/lyrics ranges before provider calls. Fixed by `f7afcba`.
-- Expanded benchmark to enforce MiniMax music-cover preprocess exactly-one audio source contract (`audio_url` xor `audio_base64`).
+- Expanded benchmark to enforce MiniMax music-cover preprocess exactly-one audio source contract (`audio_url` xor `audio_base64`). Fixed by `abafb97`.
+- Expanded benchmark to parse latest documented top-level music-cover preprocess response shape while preserving offline mocks.
