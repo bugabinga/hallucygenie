@@ -102,6 +102,10 @@ check music_cover_preprocess_exclusive contains 'audio_url and audio_base64 are 
 check music_cover_preprocess_exclusive_test contains 'rejects preprocess with both audio sources before fetch' test/unit/tools.test.ts
 check music_cover_preprocess_top_level contains 'data.data ?? data' src/tools.ts
 check music_cover_preprocess_top_level_test contains 'parses top-level preprocess response' test/unit/tools.test.ts
+check understand_image_gif_doc contains 'Supported formats**: JPEG, PNG, GIF, WebP' /data/data/com.termux/files/home/.pi/research/pages/platform.minimax.io.docs.token-plan.mcp-guide.md.2026-05-30
+check analyze_image_gif_mime contains 'image/gif' src/tools.ts
+check analyze_image_gif_data_url contains 'data:image/(jpeg|png|webp|gif)' src/tools.ts
+check analyze_image_gif_test contains 'accepts gif images for analysis' test/unit/tools.test.ts
 check bounded_text_validator contains 'boundedText(' src/tools.ts
 check bounded_text_test contains 'rejects over-limit MiniMax text before fetch' test/unit/tools.test.ts
 check music_cover_bounds_test contains 'rejects invalid music cover text before fetch' test/unit/tools.test.ts
