@@ -60,4 +60,5 @@ Latest docs fetched to `~/.pi/research/pages/`:
 - Expanded benchmark to update MiniMax skill with latest lyrics helper structure tags: `[Pre-Chorus]`, `[Drop]`, `[Build-up]`, `[Instrumental]`, `[Breakdown]`. Fixed by `730d77f`.
 - Expanded benchmark to document `GET /v1/get_voice` request body requirement: `voice_type` (`all|system|voice_cloning|voice_generation`). Fixed by `c5e5c4e`.
 - Expanded benchmark to record latest Video Agent template examples from API overview (`Diving`, `Run for Life`) in the MiniMax skill. Fixed by `45aa435`.
-- Expanded benchmark to update file upload docs in MiniMax skill with latest upload purposes (`voice_clone|prompt_audio|t2a_async_input`) and async TTS file purpose.
+- Expanded benchmark to update file upload docs in MiniMax skill with latest upload purposes (`voice_clone|prompt_audio|t2a_async_input`) and async TTS file purpose. Fixed by `440ef49`.
+- Expanded benchmark to document MiniMax file retrieve endpoint split: `/retrieve` returns metadata/download_url; `/retrieve_content` returns file bytes.
