@@ -626,16 +626,20 @@ export async function musicCoverPreprocess(
     });
     if (!resp.ok) throw new Error(`music cover preprocess API error: ${resp.status}`);
     const data = (await resp.json()) as {
+        cover_feature_id?: string;
+        lyrics?: string;
+        formatted_lyrics?: string;
         data?: { cover_feature_id?: string; lyrics?: string; formatted_lyrics?: string };
         base_resp?: { status_code?: number; status_msg?: string };
     };
     const baseResp = baseRespError(data, "Music cover preprocess");
     if (baseResp) throw new Error(baseResp.content);
-    const coverFeatureId = data.data?.cover_feature_id;
+    const body = data.data ?? data;
+    const coverFeatureId = body.cover_feature_id;
     if (!coverFeatureId) throw new Error("music cover preprocess returned no cover_feature_id");
     return {
         cover_feature_id: coverFeatureId,
-        lyrics: data.data?.formatted_lyrics ?? data.data?.lyrics ?? "",
+        lyrics: body.formatted_lyrics ?? body.lyrics ?? "",
     };
 }
 

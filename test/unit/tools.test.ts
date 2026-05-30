@@ -1112,6 +1112,19 @@ describe("music cover", () => {
         );
     });
 
+    it("parses top-level preprocess response", async () => {
+        globalThis.fetch = async () =>
+            jsonResponse({ cover_feature_id: "cover-top", formatted_lyrics: "[Verse]\ntop" });
+
+        assert.deepEqual(
+            await musicCoverPreprocess({ audio_url: "https://example.com/a.mp3" }, API_KEY),
+            {
+                cover_feature_id: "cover-top",
+                lyrics: "[Verse]\ntop",
+            },
+        );
+    });
+
     it("rejects preprocess without source", async () => {
         await assert.rejects(() => musicCoverPreprocess({}, API_KEY), /cover source required/);
     });
