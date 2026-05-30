@@ -94,8 +94,13 @@ check music_prompt_runtime_limit contains 'MUSIC_PROMPT_MAX = 2000' src/tools.ts
 check music_lyrics_runtime_limit contains 'MUSIC_LYRICS_MAX = 3500' src/tools.ts
 check lyrics_prompt_runtime_limit contains 'LYRICS_PROMPT_MAX = 2000' src/tools.ts
 check lyrics_existing_runtime_limit contains 'LYRICS_EXISTING_MAX = 3500' src/tools.ts
+check music_cover_prompt_min contains 'MUSIC_COVER_PROMPT_MIN = 10' src/tools.ts
+check music_cover_prompt_max contains 'MUSIC_COVER_PROMPT_MAX = 300' src/tools.ts
+check music_cover_lyrics_min contains 'MUSIC_COVER_LYRICS_MIN = 10' src/tools.ts
+check music_cover_lyrics_max contains 'MUSIC_COVER_LYRICS_MAX = 1000' src/tools.ts
 check bounded_text_validator contains 'boundedText(' src/tools.ts
 check bounded_text_test contains 'rejects over-limit MiniMax text before fetch' test/unit/tools.test.ts
+check music_cover_bounds_test contains 'rejects invalid music cover text before fetch' test/unit/tools.test.ts
 check node_agent_tools_unit node_test
 
 elapsed_ms=$(( $(date +%s%3N) - start_ms ))
