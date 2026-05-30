@@ -128,6 +128,8 @@ check skill_file_upload_purposes contains '`voice_clone|prompt_audio|t2a_async_i
 check skill_file_upload_t2a_async_input contains '`t2a_async_input` text file for async long TTS' .pi/skills/minimax/SKILL.md
 check skill_file_retrieve_metadata contains '`GET /v1/files/retrieve` requires query `file_id` and returns metadata plus `download_url`' .pi/skills/minimax/SKILL.md
 check skill_file_retrieve_content_bytes contains '`GET /v1/files/retrieve_content` requires query `file_id` and returns raw file bytes' .pi/skills/minimax/SKILL.md
+check skill_file_list_requires_purpose contains '`GET /v1/files/list` requires query `purpose`' .pi/skills/minimax/SKILL.md
+check skill_file_delete_requires_json contains '`POST /v1/files/delete` requires JSON `file_id` plus `purpose`' .pi/skills/minimax/SKILL.md
 check bounded_text_validator contains 'boundedText(' src/tools.ts
 check bounded_text_test contains 'rejects over-limit MiniMax text before fetch' test/unit/tools.test.ts
 check music_cover_bounds_test contains 'rejects invalid music cover text before fetch' test/unit/tools.test.ts
