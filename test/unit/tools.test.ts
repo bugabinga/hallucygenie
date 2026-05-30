@@ -468,7 +468,7 @@ describe("executeTool", () => {
 
         const result = await executeTool(
             "generate_music_cover",
-            { prompt: "boss fight", lyrics: "la", cover_feature_id: "cover-1" },
+            { prompt: "boss fight", lyrics: "valid lyric", cover_feature_id: "cover-1" },
             API_KEY,
         );
         assert.equal(result.type, "audio");
@@ -1025,7 +1025,7 @@ describe("music cover", () => {
         globalThis.fetch = async () => new Response("broken", { status: 503 });
 
         const result = await generateMusicCover(
-            { prompt: "spooky", lyrics: "[Verse]\nhi", cover_feature_id: "cover-1" },
+            { prompt: "spooky boss", lyrics: "[Verse]\nhi", cover_feature_id: "cover-1" },
             API_KEY,
         );
 
@@ -1036,7 +1036,7 @@ describe("music cover", () => {
         mockFetch(jsonResponse({ base_resp: { status_code: 2013, status_msg: "bad cover" } }));
 
         const result = await generateMusicCover(
-            { prompt: "spooky", lyrics: "[Verse]\nhi", cover_feature_id: "cover-1" },
+            { prompt: "spooky boss", lyrics: "[Verse]\nhi", cover_feature_id: "cover-1" },
             API_KEY,
         );
 
@@ -1047,7 +1047,7 @@ describe("music cover", () => {
         mockFetch(jsonResponse({ data: {} }));
 
         const result = await generateMusicCover(
-            { prompt: "spooky", lyrics: "[Verse]\nhi", cover_feature_id: "cover-1" },
+            { prompt: "spooky boss", lyrics: "[Verse]\nhi", cover_feature_id: "cover-1" },
             API_KEY,
         );
 
@@ -1060,7 +1060,7 @@ describe("music cover", () => {
         };
 
         const result = await generateMusicCover(
-            { prompt: "spooky", lyrics: "[Verse]\nhi", cover_feature_id: "cover-1" },
+            { prompt: "spooky boss", lyrics: "[Verse]\nhi", cover_feature_id: "cover-1" },
             API_KEY,
         );
 
