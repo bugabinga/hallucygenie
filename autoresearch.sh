@@ -109,6 +109,8 @@ check analyze_image_gif_test contains 'accepts gif images for analysis' test/uni
 check analyze_image_schema_mentions_gif contains 'JPG, PNG, GIF, or WebP' src/tools.ts
 check analyze_image_error_mentions_gif contains 'JPG, PNG, GIF, or WebP' src/agent.ts
 check web_search_nested_results_parser contains 'data.data?.results' src/tools.ts
+check web_search_empty_organic_fallback contains 'data.organic?.length ? data.organic : data.data?.results' src/tools.ts
+check web_search_empty_organic_fallback_test contains 'falls back to nested results when organic is empty' test/unit/tools.test.ts
 check web_search_url_result_test contains 'parses nested data results with url field' test/unit/tools.test.ts
 check bounded_text_validator contains 'boundedText(' src/tools.ts
 check bounded_text_test contains 'rejects over-limit MiniMax text before fetch' test/unit/tools.test.ts
