@@ -71,6 +71,13 @@ export interface AnalyzeImageOptions {
 
 export const MINIMAX_BASE = "https://api.minimax.io";
 
+const IMAGE_PROMPT_MAX = 1500;
+const TTS_TEXT_MAX = 10000;
+const LYRICS_PROMPT_MAX = 2000;
+const LYRICS_EXISTING_MAX = 3500;
+const MUSIC_PROMPT_MAX = 2000;
+const MUSIC_LYRICS_MAX = 3500;
+
 // ── Auth note ───────────────────────────────────────────────────────
 //
 // CRITICAL: All MiniMax endpoints (except /anthropic/v1/messages) require
@@ -92,7 +99,7 @@ export function getToolDefinitions(): ToolDefinition[] {
                 properties: {
                     prompt: {
                         type: "string",
-                        maxLength: 1500,
+                        maxLength: IMAGE_PROMPT_MAX,
                         description: "Text description of the image to generate",
                     },
                     aspect_ratio: {
@@ -118,7 +125,7 @@ export function getToolDefinitions(): ToolDefinition[] {
                 properties: {
                     text: {
                         type: "string",
-                        maxLength: 10000,
+                        maxLength: TTS_TEXT_MAX,
                         description: "The text to convert to speech",
                     },
                     voice_id: {
@@ -157,7 +164,7 @@ export function getToolDefinitions(): ToolDefinition[] {
                 properties: {
                     prompt: {
                         type: "string",
-                        maxLength: 2000,
+                        maxLength: LYRICS_PROMPT_MAX,
                         description:
                             "Description or topic for the lyrics (e.g., 'a happy birthday song', 'an adventure theme').",
                     },
@@ -169,7 +176,7 @@ export function getToolDefinitions(): ToolDefinition[] {
                     },
                     lyrics: {
                         type: "string",
-                        maxLength: 3500,
+                        maxLength: LYRICS_EXISTING_MAX,
                         description: "Existing lyrics to edit or continue when mode is edit.",
                     },
                     title: {
@@ -189,12 +196,12 @@ export function getToolDefinitions(): ToolDefinition[] {
                 properties: {
                     prompt: {
                         type: "string",
-                        maxLength: 2000,
+                        maxLength: MUSIC_PROMPT_MAX,
                         description: "Description of the music to generate",
                     },
                     lyrics: {
                         type: "string",
-                        maxLength: 3500,
+                        maxLength: MUSIC_LYRICS_MAX,
                         description: "Optional lyrics. Omit or leave empty for instrumental music.",
                     },
                 },
@@ -368,6 +375,23 @@ function validateLyricsMode(value: unknown): GenerateLyricsOptions["mode"] | und
     return value === "write_full_song" || value === "edit" ? value : undefined;
 }
 
+function boundedText(value: unknown, label: string, maxLength: number): string {
+    if (typeof value !== "string") throw new Error(`${label} required`);
+    const text = value.trim();
+    if (!text) throw new Error(`${label} required`);
+    if (text.length > maxLength) throw new Error(`${label} too long`);
+    return text;
+}
+
+function optionalBoundedText(value: unknown, label: string, maxLength: number): string | undefined {
+    if (value === undefined || value === null) return undefined;
+    if (typeof value !== "string") throw new Error(`${label} must be text`);
+    const text = value.trim();
+    if (!text) return undefined;
+    if (text.length > maxLength) throw new Error(`${label} too long`);
+    return text;
+}
+
 /**
  * Generate an image from a text prompt.
  * Calls POST /v1/image_generation with model "image-01".
@@ -378,9 +402,10 @@ export async function generateImage(
 ): Promise<ToolResult> {
     const options = (isObject(input) ? input : { prompt: input }) as GenerateImageOptions;
     try {
+        const prompt = boundedText(options.prompt, "image prompt", IMAGE_PROMPT_MAX);
         const payload: Record<string, unknown> = {
             model: "image-01",
-            prompt: options.prompt,
+            prompt,
             response_format: "url",
         };
         const aspectRatio = validateAspectRatio(options.aspect_ratio);
@@ -457,6 +482,7 @@ export async function textToSpeech(
     const voice = options.voice_id || "English_expressive_narrator";
 
     try {
+        const text = boundedText(options.text, "speech text", TTS_TEXT_MAX);
         const voiceSetting: Record<string, unknown> = { voice_id: voice };
         const speed = clampAudioParam(options.speed, 0.5, 2);
         const volume = validateVolume(options.volume);
@@ -473,7 +499,7 @@ export async function textToSpeech(
             },
             body: JSON.stringify({
                 model: "speech-2.8-hd",
-                text: options.text,
+                text,
                 output_format: "hex",
                 voice_setting: voiceSetting,
                 audio_setting: { format: "mp3" },
@@ -595,11 +621,16 @@ export async function generateLyrics(
 ): Promise<ToolResult> {
     const options = typeof input === "string" ? { prompt: input } : input;
     try {
-        const existingLyrics = options.lyrics?.trim() ?? "";
+        const prompt = boundedText(options.prompt, "lyrics prompt", LYRICS_PROMPT_MAX);
+        const existingLyrics = optionalBoundedText(
+            options.lyrics,
+            "existing lyrics",
+            LYRICS_EXISTING_MAX,
+        );
         const mode = options.mode ?? (existingLyrics ? "edit" : "write_full_song");
         const payload: Record<string, unknown> = {
             mode,
-            prompt: options.prompt,
+            prompt,
         };
         if (existingLyrics) payload.lyrics = existingLyrics;
         if (options.title?.trim()) payload.title = options.title.trim();
@@ -654,11 +685,12 @@ export async function generateMusic(
 ): Promise<ToolResult> {
     const options = (isObject(input) ? input : { prompt: input, lyrics }) as GenerateMusicOptions;
     try {
-        const lyricsText = options.lyrics?.trim() ?? "";
+        const prompt = boundedText(options.prompt, "music prompt", MUSIC_PROMPT_MAX);
+        const lyricsText = optionalBoundedText(options.lyrics, "music lyrics", MUSIC_LYRICS_MAX) ?? "";
         const isInstrumental = lyricsText.length === 0;
         const payload: Record<string, unknown> = {
             model: "music-2.6",
-            prompt: options.prompt,
+            prompt,
             is_instrumental: isInstrumental,
             output_format: "hex",
             audio_setting: { format: "mp3" },
