@@ -25,6 +25,10 @@ check() {
 }
 
 contains() { rg -q --fixed-strings "$1" "$2"; }
+contains_either() {
+  local a="$1" b="$2" file="$3"
+  rg -q --fixed-strings "$a" "$file" || rg -q --fixed-strings "$b" "$file"
+}
 count_at_least() {
   local needle="$1" file="$2" min="$3"
   local n
@@ -47,23 +51,30 @@ check chat_thinking_signature_preserved contains 'thinking_signature' src/agent.
 check image_model_latest contains 'model: "image-01"' src/tools.ts
 check image_model_in_docs contains 'image-01' "$image_doc"
 check image_response_format_explicit contains 'response_format: "url"' src/tools.ts
-check image_prompt_schema_limit contains 'maxLength: 1500' src/tools.ts
+check image_prompt_schema_limit contains_either 'maxLength: 1500' 'maxLength: IMAGE_PROMPT_MAX' src/tools.ts
+check image_prompt_runtime_limit contains 'IMAGE_PROMPT_MAX = 1500' src/tools.ts
 
 check tts_model_latest contains 'model: "speech-2.8-hd"' src/tools.ts
 check tts_model_in_docs contains 'speech-2.8-hd' "$tts_doc"
 check tts_output_format_explicit contains 'output_format: "hex"' src/tools.ts
 check tts_audio_format_explicit contains 'audio_setting: { format: "mp3" }' src/tools.ts
-check tts_text_schema_limit contains 'maxLength: 10000' src/tools.ts
+check tts_text_schema_limit contains_either 'maxLength: 10000' 'maxLength: TTS_TEXT_MAX' src/tools.ts
+check tts_text_runtime_limit contains 'TTS_TEXT_MAX = 10000' src/tools.ts
 
 check music_model_latest contains 'model: "music-2.6"' src/tools.ts
 check music_model_in_docs contains 'music-2.6' "$music_doc"
 check music_instrumental_field contains 'is_instrumental' src/tools.ts
 check music_output_formats_explicit count_at_least 'output_format: "hex"' src/tools.ts 3
 check music_audio_formats_explicit count_at_least 'audio_setting: { format: "mp3" }' src/tools.ts 3
-check music_prompt_schema_limit contains 'maxLength: 2000' src/tools.ts
-check music_lyrics_schema_limit contains 'maxLength: 3500' src/tools.ts
-check lyrics_prompt_schema_limit contains 'maxLength: 2000' src/tools.ts
-check lyrics_existing_schema_limit contains 'maxLength: 3500' src/tools.ts
+check music_prompt_schema_limit contains_either 'maxLength: 2000' 'maxLength: MUSIC_PROMPT_MAX' src/tools.ts
+check music_lyrics_schema_limit contains_either 'maxLength: 3500' 'maxLength: MUSIC_LYRICS_MAX' src/tools.ts
+check lyrics_prompt_schema_limit contains_either 'maxLength: 2000' 'maxLength: LYRICS_PROMPT_MAX' src/tools.ts
+check lyrics_existing_schema_limit contains_either 'maxLength: 3500' 'maxLength: LYRICS_EXISTING_MAX' src/tools.ts
+check music_prompt_runtime_limit contains 'MUSIC_PROMPT_MAX = 2000' src/tools.ts
+check music_lyrics_runtime_limit contains 'MUSIC_LYRICS_MAX = 3500' src/tools.ts
+check lyrics_prompt_runtime_limit contains 'LYRICS_PROMPT_MAX = 2000' src/tools.ts
+check lyrics_existing_runtime_limit contains 'LYRICS_EXISTING_MAX = 3500' src/tools.ts
+check bounded_text_validator contains 'boundedText(' src/tools.ts
 
 elapsed_ms=$(( $(date +%s%3N) - start_ms ))
 printf 'METRIC contract_failures=%s\n' "$failures"

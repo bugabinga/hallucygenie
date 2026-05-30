@@ -38,4 +38,5 @@ Latest docs fetched to `~/.pi/research/pages/`:
 ## What's Been Tried
 - Session start: fetched latest MiniMax llms/docs/OpenAPI pages. Current code already uses M2.7-highspeed, Bearer auth for non-chat endpoints, Anthropic cache_control, speech-2.8-hd, image-01, music-2.6, and is_instrumental.
 - Initial benchmark targeted implicit provider defaults: image URL response, TTS/music hex audio, MP3 data URL format. Fixed by `eb20b15`.
-- Expanded benchmark to include latest docs maxLength limits in Anthropic tool schemas, so the model sees provider bounds before calling tools.
+- Expanded benchmark to include latest docs maxLength limits in Anthropic tool schemas, so the model sees provider bounds before calling tools. Fixed by `99d3672`.
+- Expanded benchmark to require shared runtime limit constants and bounded text validation before MiniMax calls consume quota.
