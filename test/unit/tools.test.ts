@@ -365,6 +365,25 @@ describe("MiniMax parameter contract", () => {
             assert.equal(key in body, false, `${key} should stay omitted`);
         }
     });
+
+    it("rejects over-limit MiniMax text before fetch", async () => {
+        let called = false;
+        globalThis.fetch = async () => {
+            called = true;
+            return jsonResponse({ data: { audio: "00" } });
+        };
+
+        const image = await generateImage({ prompt: "x".repeat(1501) }, API_KEY);
+        const speech = await textToSpeech({ text: "x".repeat(10001) }, API_KEY);
+        const lyrics = await generateLyrics({ prompt: "x".repeat(2001) }, API_KEY);
+        const music = await generateMusic({ prompt: "x".repeat(2001) }, API_KEY);
+
+        assert.equal(called, false);
+        assert.equal(image.type, "error");
+        assert.equal(speech.type, "error");
+        assert.equal(lyrics.type, "error");
+        assert.equal(music.type, "error");
+    });
 });
 
 // ── executeTool dispatcher ───────────────────────────────────────────
