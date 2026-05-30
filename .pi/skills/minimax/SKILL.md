@@ -181,6 +181,8 @@ Used by async TTS/video and uploads.
 - `POST /v1/files/delete`
 - `GET /v1/files/retrieve` requires query `file_id` and returns metadata plus `download_url`.
 - `GET /v1/files/retrieve_content` requires query `file_id` and returns raw file bytes.
+- `GET /v1/files/list` requires query `purpose`.
+- `POST /v1/files/delete` requires JSON `file_id` plus `purpose`.
 - Upload `purpose` values: `voice_clone|prompt_audio|t2a_async_input`.
 - Upload formats by purpose: `voice_clone` and `prompt_audio` support `mp3|m4a|wav`; `t2a_async_input` text file for async long TTS.
 - Limits: 100GB total capacity, 512MB single document.
