@@ -79,8 +79,8 @@ Current docs crawl: 2026-05-30 from `https://platform.minimax.io/docs/llms.txt` 
 
 ### Async long TTS
 
-- `POST /v1/t2a_async_v2` — create task, up to **1,000,000 chars/request**.
-- `file_id` text-file input is now documented up to **1,000,000 chars**; supported file formats: `txt`, `zip`.
+- `POST /v1/t2a_async_v2` — create async speech task; direct text input max **50,000 characters**.
+- `text_file_id` input max **1,000,000 characters**; supported file formats: `txt`, `zip`.
 - Async `audio_setting.format`: `mp3|pcm|flac|wav|pcmu_raw|pcmu_wav|opus`; `voice_modify` supports `mp3|wav|flac` only.
 - Async `audio_setting.format=opus` only supports sample rates `8000|12000|16000|24000|48000`; other sample rates fail.
 - Async `audio_setting.channel` docs default is `2`.
