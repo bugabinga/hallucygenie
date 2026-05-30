@@ -1695,6 +1695,28 @@ describe("webSearch HTTP request structure", () => {
         assert.ok(result.content.includes("Nested snippet"));
     });
 
+    it("falls back to nested results when organic is empty", async () => {
+        globalThis.fetch = async () =>
+            jsonResponse({
+                organic: [],
+                data: {
+                    results: [
+                        {
+                            title: "Fallback Result",
+                            url: "https://example.com/fallback",
+                            snippet: "Fallback snippet",
+                        },
+                    ],
+                },
+            });
+
+        const result = await webSearch("fallback", API_KEY);
+        assert.equal(result.type, "text");
+        assert.ok(result.content.includes("Fallback Result"));
+        assert.ok(result.content.includes("https://example.com/fallback"));
+        assert.ok(result.content.includes("Fallback snippet"));
+    });
+
     it("enriches YouTube result links with oEmbed metadata", async () => {
         const urls: string[] = [];
         globalThis.fetch = async (url: string | URL | Request) => {

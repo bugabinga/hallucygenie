@@ -863,7 +863,8 @@ function formatYouTubeMetadata(items: YouTubeMetadata[]): string {
 }
 
 function normalizeSearchResults(data: SearchResponse): SearchResult[] {
-    return (data.organic ?? data.data?.results ?? [])
+    const raw = data.organic?.length ? data.organic : (data.data?.results ?? []);
+    return raw
         .map((item) => ({
             title: item.title ?? "Untitled",
             link: item.link ?? item.url ?? "",
