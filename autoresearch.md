@@ -53,4 +53,5 @@ Latest docs fetched to `~/.pi/research/pages/`:
 - Expanded benchmark to support GIF in `analyze_image`, matching latest Token Plan MCP `understand_image` docs (JPEG, PNG, GIF, WebP, max 20MB). Fixed by `dca6add`.
 - Expanded benchmark to parse nested web search `data.results` with `url` fields, matching existing E2E MiniMax mock shape while preserving `organic[].link` support. Fixed by `51bfad1`.
 - Expanded benchmark to update user/model-facing analyze_image copy after adding GIF support. Fixed by `7281210`.
-- Expanded benchmark to make web search fall back to nested `data.results` when `organic` exists but is empty.
+- Expanded benchmark to make web search fall back to nested `data.results` when `organic` exists but is empty. Fixed by `96c8e67`.
+- Expanded benchmark to update MiniMax skill async TTS limits from latest docs: direct text max 50,000; `text_file_id` max 1,000,000.

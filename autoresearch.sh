@@ -112,6 +112,8 @@ check web_search_nested_results_parser contains 'data.data?.results' src/tools.t
 check web_search_empty_organic_fallback contains 'data.organic?.length ? data.organic' src/tools.ts
 check web_search_empty_organic_fallback_test contains 'falls back to nested results when organic is empty' test/unit/tools.test.ts
 check web_search_url_result_test contains 'parses nested data results with url field' test/unit/tools.test.ts
+check skill_async_tts_text_limit contains 'text input max **50,000 characters**' .pi/skills/minimax/SKILL.md
+check skill_async_tts_file_limit contains 'text_file_id input max **1,000,000 characters**' .pi/skills/minimax/SKILL.md
 check bounded_text_validator contains 'boundedText(' src/tools.ts
 check bounded_text_test contains 'rejects over-limit MiniMax text before fetch' test/unit/tools.test.ts
 check music_cover_bounds_test contains 'rejects invalid music cover text before fetch' test/unit/tools.test.ts
