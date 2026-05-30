@@ -139,8 +139,8 @@ Unsupported TTS models returned `{"base_resp":{"status_code":2061,"status_msg":"
 - For `music-2.6` with `is_instrumental: true`: `prompt` required 1–2000 chars, `lyrics` not required.
 - For non-instrumental: `lyrics` required 1–3500 chars, `prompt` optional 0–2000 chars.
 - `lyrics_optimizer: true` can auto-generate lyrics from prompt when `lyrics` empty.
-- Lyrics support structure tags: `[Intro]`, `[Verse]`, `[Pre Chorus]`, `[Chorus]`, `[Interlude]`, `[Bridge]`, `[Outro]`, `[Post Chorus]`, `[Transition]`, `[Break]`, `[Hook]`, `[Build Up]`, `[Inst]`, `[Solo]`.
-- Lyrics helper: `POST /v1/lyrics_generation`.
+- Music generation lyrics support structure tags: `[Intro]`, `[Verse]`, `[Pre Chorus]`, `[Chorus]`, `[Interlude]`, `[Bridge]`, `[Outro]`, `[Post Chorus]`, `[Transition]`, `[Break]`, `[Hook]`, `[Build Up]`, `[Inst]`, `[Solo]`.
+- Lyrics helper: `POST /v1/lyrics_generation`; output tags include `[Intro]`, `[Verse]`, `[Pre-Chorus]`, `[Chorus]`, `[Hook]`, `[Drop]`, `[Bridge]`, `[Solo]`, `[Build-up]`, `[Instrumental]`, `[Breakdown]`, `[Break]`, `[Interlude]`, `[Outro]`.
 - Cover generation: `music-cover` with `audio_url` or `audio_base64`, or `cover_feature_id` from `POST /v1/music_cover_preprocess`; feature id valid 24h.
 - `music-2.5` has no HallucyGenie quota allocated in project testing.
 
