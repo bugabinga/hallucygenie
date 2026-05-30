@@ -57,6 +57,7 @@ check chat_single_system_cache_test contains 'caches only final system block' te
 check image_model_latest contains 'model: "image-01"' src/tools.ts
 check image_model_in_docs contains 'image-01' "$image_doc"
 check image_response_format_explicit contains 'response_format: "url"' src/tools.ts
+check image_response_format_test contains 'assert.equal(body.response_format, "url")' test/unit/tools.test.ts
 check image_prompt_schema_limit contains_either 'maxLength: 1500' 'maxLength: IMAGE_PROMPT_MAX' src/tools.ts
 check image_prompt_runtime_limit contains 'IMAGE_PROMPT_MAX = 1500' src/tools.ts
 
@@ -64,6 +65,8 @@ check tts_model_latest contains 'model: "speech-2.8-hd"' src/tools.ts
 check tts_model_in_docs contains 'speech-2.8-hd' "$tts_doc"
 check tts_output_format_explicit contains 'output_format: "hex"' src/tools.ts
 check tts_audio_format_explicit contains 'audio_setting: { format: "mp3" }' src/tools.ts
+check tts_output_format_test contains 'assert.equal(body.output_format, "hex")' test/unit/tools.test.ts
+check tts_audio_format_test contains 'assert.deepEqual(body.audio_setting, { format: "mp3" })' test/unit/tools.test.ts
 check tts_text_schema_limit contains_either 'maxLength: 10000' 'maxLength: TTS_TEXT_MAX' src/tools.ts
 check tts_text_runtime_limit contains 'TTS_TEXT_MAX = 10000' src/tools.ts
 
@@ -72,6 +75,8 @@ check music_model_in_docs contains 'music-2.6' "$music_doc"
 check music_instrumental_field contains 'is_instrumental' src/tools.ts
 check music_output_formats_explicit count_at_least 'output_format: "hex"' src/tools.ts 3
 check music_audio_formats_explicit count_at_least 'audio_setting: { format: "mp3" }' src/tools.ts 3
+check music_output_format_test count_at_least 'assert.equal(body.output_format, "hex")' test/unit/tools.test.ts 2
+check music_audio_format_test count_at_least 'assert.deepEqual(body.audio_setting, { format: "mp3" })' test/unit/tools.test.ts 2
 check music_prompt_schema_limit contains_either 'maxLength: 2000' 'maxLength: MUSIC_PROMPT_MAX' src/tools.ts
 check music_lyrics_schema_limit contains_either 'maxLength: 3500' 'maxLength: MUSIC_LYRICS_MAX' src/tools.ts
 check lyrics_prompt_schema_limit contains_either 'maxLength: 2000' 'maxLength: LYRICS_PROMPT_MAX' src/tools.ts
