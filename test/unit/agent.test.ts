@@ -2463,6 +2463,17 @@ describe("toAnthropicPayload edge cases", () => {
         assert.equal(payload.tools[1].cache_control?.type, "ephemeral");
     });
 
+    it("caches only final system block", () => {
+        const messages: ChatMessage[] = [
+            { role: "system" as const, content: "first" },
+            { role: "system" as const, content: "second" },
+            { role: "user" as const, content: "hi" },
+        ];
+        const payload = toAnthropicPayload(messages, []) as any;
+        assert.equal(payload.system[0].cache_control, undefined);
+        assert.equal(payload.system[1].cache_control?.type, "ephemeral");
+    });
+
     it("tool result with error prefix when result type is error", () => {
         const messages: ChatMessage[] = [
             { role: "system" as const, content: "sys" },
