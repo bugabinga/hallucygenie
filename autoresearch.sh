@@ -106,6 +106,8 @@ check understand_image_gif_doc contains 'Supported formats**: JPEG, PNG, GIF, We
 check analyze_image_gif_mime contains 'image/gif' src/tools.ts
 check analyze_image_gif_data_url contains 'data:image\/(jpeg|png|webp|gif)' src/tools.ts
 check analyze_image_gif_test contains 'accepts gif images for analysis' test/unit/tools.test.ts
+check web_search_nested_results_parser contains 'data.data?.results' src/tools.ts
+check web_search_url_result_test contains 'parses nested data results with url field' test/unit/tools.test.ts
 check bounded_text_validator contains 'boundedText(' src/tools.ts
 check bounded_text_test contains 'rejects over-limit MiniMax text before fetch' test/unit/tools.test.ts
 check music_cover_bounds_test contains 'rejects invalid music cover text before fetch' test/unit/tools.test.ts

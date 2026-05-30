@@ -50,4 +50,5 @@ Latest docs fetched to `~/.pi/research/pages/`:
 - Expanded benchmark to enforce MiniMax music-cover documented prompt/lyrics ranges before provider calls. Fixed by `f7afcba`.
 - Expanded benchmark to enforce MiniMax music-cover preprocess exactly-one audio source contract (`audio_url` xor `audio_base64`). Fixed by `abafb97`.
 - Expanded benchmark to parse latest documented top-level music-cover preprocess response shape while preserving offline mocks. Fixed by `e9c390d`.
-- Expanded benchmark to support GIF in `analyze_image`, matching latest Token Plan MCP `understand_image` docs (JPEG, PNG, GIF, WebP, max 20MB).
+- Expanded benchmark to support GIF in `analyze_image`, matching latest Token Plan MCP `understand_image` docs (JPEG, PNG, GIF, WebP, max 20MB). Fixed by `dca6add`.
+- Expanded benchmark to parse nested web search `data.results` with `url` fields, matching existing E2E MiniMax mock shape while preserving `organic[].link` support.
