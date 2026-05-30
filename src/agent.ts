@@ -397,7 +397,7 @@ export function toAnthropicPayload(
 
     for (const msg of messages) {
         if (msg.role === "system") {
-            system.push({ type: "text", text: msg.content, cache_control: { type: "ephemeral" } });
+            system.push({ type: "text", text: msg.content });
         } else if (msg.role === "user") {
             anthropicMessages.push({ role: "user", content: msg.content });
         } else if (msg.role === "assistant") {
@@ -448,6 +448,10 @@ export function toAnthropicPayload(
                 });
             }
         }
+    }
+
+    if (system.length > 0) {
+        system[system.length - 1]!.cache_control = { type: "ephemeral" };
     }
 
     // Add cache_control to last tool for prompt caching
