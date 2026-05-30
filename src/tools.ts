@@ -895,11 +895,12 @@ export async function webSearch(query: string, apiKey: string): Promise<ToolResu
 
 const MAX_ANALYZE_IMAGE_BYTES = 20 * 1024 * 1024;
 
-function vlmMime(contentType: string): "jpeg" | "png" | "webp" {
+function vlmMime(contentType: string): "jpeg" | "png" | "webp" | "gif" {
     const mime = contentType.split(";")[0]!.trim().toLowerCase();
     if (mime === "image/jpeg" || mime === "image/jpg") return "jpeg";
     if (mime === "image/png") return "png";
     if (mime === "image/webp") return "webp";
+    if (mime === "image/gif") return "gif";
     throw new Error(`unsupported image type: ${mime || "unknown"}`);
 }
 
@@ -919,7 +920,7 @@ async function imageUrlToDataUrl(imageUrl: string): Promise<string> {
 }
 
 function validateAnalyzeDataUrl(value: string): string {
-    const match = value.match(/^data:image\/(jpeg|png|webp);base64,([A-Za-z0-9+/=]+)$/);
+    const match = value.match(/^data:image\/(jpeg|png|webp|gif);base64,([A-Za-z0-9+/=]+)$/);
     if (!match) throw new Error("unsupported image data URL");
     const bytes = Buffer.from(match[2]!, "base64");
     if (bytes.byteLength > MAX_ANALYZE_IMAGE_BYTES) throw new Error("image too large");

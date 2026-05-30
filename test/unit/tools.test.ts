@@ -1940,9 +1940,21 @@ describe("analyzeImage HTTP request structure", () => {
         assert.match(capturedBody, /data:image\/png;base64,AQID/);
     });
 
+    it("accepts gif images for analysis", async () => {
+        let capturedBody = "";
+        globalThis.fetch = async (url: string | URL | Request, init?: RequestInit) => {
+            if (!url.toString().includes("/v1/coding_plan/vlm")) return imageResponse("image/gif");
+            capturedBody = String(init?.body ?? "");
+            return jsonResponse({ content: "animated image description" });
+        };
+        const result = await analyzeImage("https://example.com/animated.gif", API_KEY);
+        assert.deepEqual(result, { type: "text", content: "animated image description" });
+        assert.match(capturedBody, /data:image\/gif;base64/);
+    });
+
     it("rejects unsupported image content types", async () => {
-        globalThis.fetch = async () => imageResponse("image/gif");
-        const result = await analyzeImage("https://example.com/no-content.gif", API_KEY);
+        globalThis.fetch = async () => imageResponse("image/bmp");
+        const result = await analyzeImage("https://example.com/no-content.bmp", API_KEY);
         assert.equal(result.type, "error");
         assert.ok(result.content.includes("unsupported image type"));
     });
