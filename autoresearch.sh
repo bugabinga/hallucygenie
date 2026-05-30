@@ -116,6 +116,7 @@ check skill_async_tts_text_limit contains 'text input max **50,000 characters**'
 check skill_async_tts_file_limit contains '`text_file_id` input max **1,000,000 characters**' .pi/skills/minimax/SKILL.md
 check skill_async_tts_audio_sample_rate contains 'Async `audio_setting.audio_sample_rate`' .pi/skills/minimax/SKILL.md
 check skill_async_tts_english_normalization contains 'voice_setting.english_normalization' .pi/skills/minimax/SKILL.md
+check skill_async_tts_extra_interjections contains 'Async extra interjection tags: `(whistles)`, `(crying)`, `(applause)`' .pi/skills/minimax/SKILL.md
 check bounded_text_validator contains 'boundedText(' src/tools.ts
 check bounded_text_test contains 'rejects over-limit MiniMax text before fetch' test/unit/tools.test.ts
 check music_cover_bounds_test contains 'rejects invalid music cover text before fetch' test/unit/tools.test.ts
