@@ -25,6 +25,7 @@ check() {
 }
 
 contains() { rg -q --fixed-strings "$1" "$2"; }
+not_contains() { ! rg -q --fixed-strings "$1" "$2"; }
 contains_either() {
   local a="$1" b="$2" file="$3"
   rg -q --fixed-strings "$a" "$file" || rg -q --fixed-strings "$b" "$file"
@@ -50,6 +51,7 @@ check chat_model_in_docs contains 'MiniMax-M2.7-highspeed' "$anthropic_doc"
 check chat_prompt_cache_control contains 'cache_control: { type: "ephemeral" }' src/agent.ts
 check chat_thinking_signature_preserved contains 'thinking_signature' src/agent.ts
 check chat_auth_header_official contains '"X-Api-Key": apiKey' src/agent.ts
+check chat_single_system_cache_breakpoint not_contains 'system.push({ type: "text", text: msg.content, cache_control' src/agent.ts
 
 check image_model_latest contains 'model: "image-01"' src/tools.ts
 check image_model_in_docs contains 'image-01' "$image_doc"

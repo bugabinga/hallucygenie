@@ -41,4 +41,5 @@ Latest docs fetched to `~/.pi/research/pages/`:
 - Expanded benchmark to include latest docs maxLength limits in Anthropic tool schemas, so the model sees provider bounds before calling tools. Fixed by `99d3672`.
 - Expanded benchmark to require shared runtime limit constants and bounded text validation before MiniMax calls consume quota. Fixed by `e63b98a`.
 - Expanded benchmark to require official Anthropic-compatible `X-Api-Key` header spelling from latest docs. Fixed by `4cadb2e`.
-- Expanded benchmark to keep `.pi/skills/minimax/SKILL.md` factual with 2026-05-30 crawl date and prompt caching notes.
+- Expanded benchmark to keep `.pi/skills/minimax/SKILL.md` factual with 2026-05-30 crawl date and prompt caching notes. Fixed by `3875018`.
+- Expanded benchmark to avoid adding `cache_control` to every system block; docs support up to 4 active cache breakpoints, so system should use a single end breakpoint.
