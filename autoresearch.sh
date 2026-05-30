@@ -124,6 +124,8 @@ check skill_get_voice_requires_voice_type contains 'Get voice requires `voice_ty
 check skill_get_voice_all_type contains '`all|system|voice_cloning|voice_generation`' .pi/skills/minimax/SKILL.md
 check skill_video_agent_diving_template contains '392747428568649728` Diving' .pi/skills/minimax/SKILL.md
 check skill_video_agent_run_template contains '393769180141805569` Run for Life' .pi/skills/minimax/SKILL.md
+check skill_file_upload_purposes contains '`voice_clone|prompt_audio|t2a_async_input`' .pi/skills/minimax/SKILL.md
+check skill_file_upload_t2a_async_input contains '`t2a_async_input` text file for async long TTS' .pi/skills/minimax/SKILL.md
 check bounded_text_validator contains 'boundedText(' src/tools.ts
 check bounded_text_test contains 'rejects over-limit MiniMax text before fetch' test/unit/tools.test.ts
 check music_cover_bounds_test contains 'rejects invalid music cover text before fetch' test/unit/tools.test.ts
