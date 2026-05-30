@@ -279,8 +279,8 @@ describe("MiniMax parameter contract", () => {
             API_KEY,
         );
         const body = JSON.parse(capturedBody);
+        assert.equal(body.response_format, "url");
         for (const key of [
-            "response_format",
             "subject_reference",
             "image_url",
             "height",
@@ -310,18 +310,20 @@ describe("MiniMax parameter contract", () => {
             API_KEY,
         );
         const body = JSON.parse(capturedBody);
+        assert.equal(body.output_format, "hex");
+        assert.deepEqual(body.audio_setting, { format: "mp3" });
         for (const key of [
             "emotion",
             "language_boost",
             "subtitle_enable",
-            "audio_setting",
-            "output_format",
             "stream",
             "stream_options",
         ]) {
             assert.equal(key in body, false, `${key} should stay omitted`);
             assert.equal(key in body.voice_setting, false, `${key} should not be voice_setting`);
         }
+        assert.equal("audio_setting" in body.voice_setting, false);
+        assert.equal("output_format" in body.voice_setting, false);
     });
 
     it("keeps music cover/raw params out and derives instrumental state", async () => {
@@ -350,11 +352,11 @@ describe("MiniMax parameter contract", () => {
         const body = JSON.parse(capturedBody);
         assert.equal(body.is_instrumental, true);
         assert.equal("lyrics" in body, false);
+        assert.equal(body.output_format, "hex");
+        assert.deepEqual(body.audio_setting, { format: "mp3" });
         for (const key of [
             "instrumental",
             "lyrics_optimizer",
-            "audio_setting",
-            "output_format",
             "audio_url",
             "audio_base64",
             "cover_feature_id",
@@ -959,7 +961,11 @@ describe("music cover", () => {
             cover_feature_id: "cover-1",
             prompt: "spooky boss battle",
             lyrics: "[Verse]\nhi",
+            output_format: "hex",
+            audio_setting: { format: "mp3" },
         });
+        assert.equal(body.output_format, "hex");
+        assert.deepEqual(body.audio_setting, { format: "mp3" });
         const headers = capturedInit!.headers as Record<string, string>;
         assert.equal(headers["Authorization"], `Bearer ${API_KEY}`);
         assert.equal(headers["Content-Type"], "application/json");
