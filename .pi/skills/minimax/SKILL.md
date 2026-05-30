@@ -81,9 +81,11 @@ Current docs crawl: 2026-05-30 from `https://platform.minimax.io/docs/llms.txt` 
 
 - `POST /v1/t2a_async_v2` — create async speech task; direct text input max **50,000 characters**.
 - `text_file_id` input max **1,000,000 characters**; supported file formats: `txt`, `zip`.
+- Async `audio_setting.audio_sample_rate`: `8000|16000|22050|24000|32000|44100`; unlike sync TTS, async uses `audio_sample_rate`, not `sample_rate`.
 - Async `audio_setting.format`: `mp3|pcm|flac|wav|pcmu_raw|pcmu_wav|opus`; `voice_modify` supports `mp3|wav|flac` only.
 - Async `audio_setting.format=opus` only supports sample rates `8000|12000|16000|24000|48000`; other sample rates fail.
 - Async `audio_setting.channel` docs default is `2`.
+- Async `voice_setting.english_normalization` enables English text normalization; sync TTS uses `text_normalization`.
 - Async now includes `subtitle_enable`, `subtitle_type`, and `continuous_sound` (`speech-2.8-hd|speech-2.8-turbo`; default `false`; `true` keeps model-side continuous inference for better long-text prosody, `false` splits text for lower latency).
 - `GET /v1/query/t2a_async_query_v2` — query task → get `file_id` → use File API retrieve/download.
 - Returned audio URL valid 9 hours (32,400 seconds).
