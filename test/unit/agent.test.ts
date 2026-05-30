@@ -2848,7 +2848,7 @@ describe("SSE parser error paths", () => {
                             JSON.stringify({
                                 type: "content_block_delta",
                                 index: 0,
-                                delta: { type: "input_json_delta", partial_json: '{\\"p' },
+                                delta: { type: "input_json_delta", partial_json: '{"p' },
                             }) +
                             "\n\n",
                     ),
@@ -2862,7 +2862,7 @@ describe("SSE parser error paths", () => {
                                 index: 0,
                                 delta: {
                                     type: "input_json_delta",
-                                    partial_json: '\\"prompt\\":\\"a cat\\"}',
+                                    partial_json: 'rompt":"a cat"}',
                                 },
                             }) +
                             "\n\n",
@@ -3217,7 +3217,7 @@ describe("SSE parser error paths", () => {
             toolUseResponse(
                 "tu_2",
                 "generate_music",
-                '{"prompt":"epic adventure song","lyrics":"[Verse]\nWe are heroes"}',
+                JSON.stringify({ prompt: "epic adventure song", lyrics: "[Verse]\nWe are heroes" }),
             ),
         );
         const third = anthropicResponse(textResponse(["Done!"]));
