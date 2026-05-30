@@ -86,6 +86,7 @@ check music_lyrics_runtime_limit contains 'MUSIC_LYRICS_MAX = 3500' src/tools.ts
 check lyrics_prompt_runtime_limit contains 'LYRICS_PROMPT_MAX = 2000' src/tools.ts
 check lyrics_existing_runtime_limit contains 'LYRICS_EXISTING_MAX = 3500' src/tools.ts
 check bounded_text_validator contains 'boundedText(' src/tools.ts
+check bounded_text_test contains 'rejects over-limit MiniMax text before fetch' test/unit/tools.test.ts
 
 elapsed_ms=$(( $(date +%s%3N) - start_ms ))
 printf 'METRIC contract_failures=%s\n' "$failures"

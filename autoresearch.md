@@ -44,4 +44,5 @@ Latest docs fetched to `~/.pi/research/pages/`:
 - Expanded benchmark to keep `.pi/skills/minimax/SKILL.md` factual with 2026-05-30 crawl date and prompt caching notes. Fixed by `3875018`.
 - Expanded benchmark to avoid adding `cache_control` to every system block; docs support up to 4 active cache breakpoints, so system should use a single end breakpoint. Fixed by `92edafa`.
 - Expanded benchmark to require a unit contract for final-system-block-only caching. Fixed by `97da34d`.
-- Expanded benchmark to require unit tests to assert explicit MiniMax media formats now sent by `src/tools.ts`.
+- Expanded benchmark to require unit tests to assert explicit MiniMax media formats now sent by `src/tools.ts`. Fixed by `fce50eb`.
+- Expanded benchmark to require a unit test proving over-limit MiniMax text is rejected before `fetch`.
