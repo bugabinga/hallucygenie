@@ -57,4 +57,5 @@ Latest docs fetched to `~/.pi/research/pages/`:
 - Expanded benchmark to update MiniMax skill async TTS limits from latest docs: direct text max 50,000; `text_file_id` max 1,000,000. Fixed by `bd35402`.
 - Expanded benchmark to update MiniMax skill async TTS parameter names: `audio_setting.audio_sample_rate` and `voice_setting.english_normalization`. Fixed by `74aee39`.
 - Expanded benchmark to record async TTS-only interjection tags from latest docs: `(whistles)`, `(crying)`, `(applause)`. Fixed by `5498c1a`.
-- Expanded benchmark to update MiniMax skill with latest lyrics helper structure tags: `[Pre-Chorus]`, `[Drop]`, `[Build-up]`, `[Instrumental]`, `[Breakdown]`.
+- Expanded benchmark to update MiniMax skill with latest lyrics helper structure tags: `[Pre-Chorus]`, `[Drop]`, `[Build-up]`, `[Instrumental]`, `[Breakdown]`. Fixed by `730d77f`.
+- Expanded benchmark to document `GET /v1/get_voice` request body requirement: `voice_type` (`all|system|voice_cloning|voice_generation`).
