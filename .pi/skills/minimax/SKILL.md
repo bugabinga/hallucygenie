@@ -168,7 +168,7 @@ Unsupported TTS models returned `{"base_resp":{"status_code":2061,"status_msg":"
   - `MiniMax-Hailuo-2.3`: T2V + I2V; 1080p 6s, 768p 6s/10s.
   - `MiniMax-Hailuo-2.3-Fast`: I2V; 1080p 6s, 768p 6s/10s.
   - `MiniMax-Hailuo-02`: T2V + I2V; 1080p 6s, 768p 6s/10s, 512p 6s/10s.
-- Video Agent API: template-based videos; create + query endpoints. Docs list templates.
+- Video Agent API: template-based videos; create + query endpoints. Example templates: `392747428568649728` Diving (image required, prompt not required), `393769180141805569` Run for Life (image + prompt required).
 
 ## File Management
 
