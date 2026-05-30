@@ -36,6 +36,15 @@ count_at_least() {
   n=$(rg -o --fixed-strings "$needle" "$file" | wc -l | tr -d ' ')
   test "$n" -ge "$min"
 }
+node_test() {
+  local log=.autoresearch-tmp/node-agent-tools.log
+  mkdir -p .autoresearch-tmp
+  if node --test test/unit/agent.test.ts test/unit/tools.test.ts >"$log" 2>&1; then
+    return 0
+  fi
+  tail -40 "$log"
+  return 1
+}
 
 check docs_llms_present test -s "$llms"
 check docs_anthropic_present test -s "$anthropic_doc"
@@ -87,6 +96,7 @@ check lyrics_prompt_runtime_limit contains 'LYRICS_PROMPT_MAX = 2000' src/tools.
 check lyrics_existing_runtime_limit contains 'LYRICS_EXISTING_MAX = 3500' src/tools.ts
 check bounded_text_validator contains 'boundedText(' src/tools.ts
 check bounded_text_test contains 'rejects over-limit MiniMax text before fetch' test/unit/tools.test.ts
+check node_agent_tools_unit node_test
 
 elapsed_ms=$(( $(date +%s%3N) - start_ms ))
 printf 'METRIC contract_failures=%s\n' "$failures"

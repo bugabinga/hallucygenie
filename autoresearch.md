@@ -45,4 +45,5 @@ Latest docs fetched to `~/.pi/research/pages/`:
 - Expanded benchmark to avoid adding `cache_control` to every system block; docs support up to 4 active cache breakpoints, so system should use a single end breakpoint. Fixed by `92edafa`.
 - Expanded benchmark to require a unit contract for final-system-block-only caching. Fixed by `97da34d`.
 - Expanded benchmark to require unit tests to assert explicit MiniMax media formats now sent by `src/tools.ts`. Fixed by `fce50eb`.
-- Expanded benchmark to require a unit test proving over-limit MiniMax text is rejected before `fetch`.
+- Expanded benchmark to require a unit test proving over-limit MiniMax text is rejected before `fetch`. Fixed by `d3a8e9e`.
+- Expanded benchmark to execute Node unit tests for `agent` and `tools`; caught invalid agent SSE fixtures hidden by old permissive tool validation.
