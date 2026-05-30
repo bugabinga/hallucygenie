@@ -375,6 +375,7 @@ export async function generateImage(
         const payload: Record<string, unknown> = {
             model: "image-01",
             prompt: options.prompt,
+            response_format: "url",
         };
         const aspectRatio = validateAspectRatio(options.aspect_ratio);
         if (aspectRatio) payload.aspect_ratio = aspectRatio;
@@ -467,7 +468,9 @@ export async function textToSpeech(
             body: JSON.stringify({
                 model: "speech-2.8-hd",
                 text: options.text,
+                output_format: "hex",
                 voice_setting: voiceSetting,
+                audio_setting: { format: "mp3" },
             }),
         });
 
@@ -529,6 +532,8 @@ export async function generateMusicCover(
                 prompt: input.prompt,
                 lyrics: input.lyrics,
                 cover_feature_id: input.cover_feature_id,
+                output_format: "hex",
+                audio_setting: { format: "mp3" },
             }),
         });
         if (!resp.ok) return { type: "error", content: `Music cover API error: ${resp.status}` };
@@ -649,6 +654,8 @@ export async function generateMusic(
             model: "music-2.6",
             prompt: options.prompt,
             is_instrumental: isInstrumental,
+            output_format: "hex",
+            audio_setting: { format: "mp3" },
         };
         if (!isInstrumental) {
             payload.lyrics = lyricsText;
