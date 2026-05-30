@@ -5,7 +5,7 @@ description: MiniMax API integration for HallucyGenie. Use when working with Min
 
 # MiniMax API — HallucyGenie
 
-Current docs crawl: 2026-05-27 from `https://platform.minimax.io/docs/llms.txt` into `~/.pi/research/pages/`. Cross-checked `MiniMax-AI/MiniMax-Coding-Plan-MCP` source via `git_clone_safe`.
+Current docs crawl: 2026-05-30 from `https://platform.minimax.io/docs/llms.txt` into `~/.pi/research/pages/`. Cross-checked `MiniMax-AI/MiniMax-Coding-Plan-MCP` source via `git_clone_safe`.
 
 ## Base URLs
 
@@ -36,6 +36,7 @@ Current docs crawl: 2026-05-27 from `https://platform.minimax.io/docs/llms.txt` 
 - `max_tokens` request max is now documented as 204,800 tokens.
 - Highspeed output: ~100 tps. Standard: ~60 tps.
 - Supported params: `model`, `messages`, `max_tokens`, `stream`, `system`, `temperature`, `tool_choice`, `tools`, `top_p`, `metadata`, `thinking`.
+- Explicit prompt caching: add `cache_control: {"type":"ephemeral"}` to content/tool blocks that should be cached. HallucyGenie caches the system block and last tool definition.
 - Ignored params: `top_k`, `stop_sequences`, `service_tier`, `mcp_servers`, `context_management`, `container`.
 - Message blocks supported: `text`, `tool_use`, `tool_result`, `thinking`.
 - Message blocks NOT supported: `image`, `document`.
