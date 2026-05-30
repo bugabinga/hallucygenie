@@ -47,6 +47,7 @@ check chat_model_latest contains 'MiniMax-M2.7-highspeed' src/agent.ts
 check chat_model_in_docs contains 'MiniMax-M2.7-highspeed' "$anthropic_doc"
 check chat_prompt_cache_control contains 'cache_control: { type: "ephemeral" }' src/agent.ts
 check chat_thinking_signature_preserved contains 'thinking_signature' src/agent.ts
+check chat_auth_header_official contains '"X-Api-Key": apiKey' src/agent.ts
 
 check image_model_latest contains 'model: "image-01"' src/tools.ts
 check image_model_in_docs contains 'image-01' "$image_doc"
