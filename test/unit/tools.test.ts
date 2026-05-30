@@ -384,6 +384,37 @@ describe("MiniMax parameter contract", () => {
         assert.equal(lyrics.type, "error");
         assert.equal(music.type, "error");
     });
+
+    it("rejects invalid music cover text before fetch", async () => {
+        let called = false;
+        globalThis.fetch = async () => {
+            called = true;
+            return jsonResponse({ data: { audio: "00" } });
+        };
+
+        const shortPrompt = await generateMusicCover(
+            { prompt: "short", lyrics: "valid lyric", cover_feature_id: "cover-1" },
+            API_KEY,
+        );
+        const longPrompt = await generateMusicCover(
+            { prompt: "x".repeat(301), lyrics: "valid lyric", cover_feature_id: "cover-1" },
+            API_KEY,
+        );
+        const shortLyrics = await generateMusicCover(
+            { prompt: "valid style", lyrics: "short", cover_feature_id: "cover-1" },
+            API_KEY,
+        );
+        const longLyrics = await generateMusicCover(
+            { prompt: "valid style", lyrics: "x".repeat(1001), cover_feature_id: "cover-1" },
+            API_KEY,
+        );
+
+        assert.equal(called, false);
+        assert.equal(shortPrompt.type, "error");
+        assert.equal(longPrompt.type, "error");
+        assert.equal(shortLyrics.type, "error");
+        assert.equal(longLyrics.type, "error");
+    });
 });
 
 // ── executeTool dispatcher ───────────────────────────────────────────

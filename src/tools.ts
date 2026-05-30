@@ -77,6 +77,10 @@ const LYRICS_PROMPT_MAX = 2000;
 const LYRICS_EXISTING_MAX = 3500;
 const MUSIC_PROMPT_MAX = 2000;
 const MUSIC_LYRICS_MAX = 3500;
+const MUSIC_COVER_PROMPT_MIN = 10;
+const MUSIC_COVER_PROMPT_MAX = 300;
+const MUSIC_COVER_LYRICS_MIN = 10;
+const MUSIC_COVER_LYRICS_MAX = 1000;
 
 // ── Auth note ───────────────────────────────────────────────────────
 //
@@ -392,6 +396,12 @@ function optionalBoundedText(value: unknown, label: string, maxLength: number): 
     return text;
 }
 
+function boundedTextRange(value: unknown, label: string, minLength: number, maxLength: number): string {
+    const text = boundedText(value, label, maxLength);
+    if (text.length < minLength) throw new Error(`${label} too short`);
+    return text;
+}
+
 /**
  * Generate an image from a text prompt.
  * Calls POST /v1/image_generation with model "image-01".
@@ -553,6 +563,18 @@ export async function generateMusicCover(
     apiKey: string,
 ): Promise<ToolResult> {
     try {
+        const prompt = boundedTextRange(
+            input.prompt,
+            "music cover prompt",
+            MUSIC_COVER_PROMPT_MIN,
+            MUSIC_COVER_PROMPT_MAX,
+        );
+        const lyrics = boundedTextRange(
+            input.lyrics,
+            "music cover lyrics",
+            MUSIC_COVER_LYRICS_MIN,
+            MUSIC_COVER_LYRICS_MAX,
+        );
         const resp = await fetch(`${MINIMAX_BASE}/v1/music_generation`, {
             method: "POST",
             headers: {
@@ -561,8 +583,8 @@ export async function generateMusicCover(
             },
             body: JSON.stringify({
                 model: "music-cover",
-                prompt: input.prompt,
-                lyrics: input.lyrics,
+                prompt,
+                lyrics,
                 cover_feature_id: input.cover_feature_id,
                 output_format: "hex",
                 audio_setting: { format: "mp3" },
