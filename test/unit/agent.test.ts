@@ -1121,7 +1121,7 @@ describe("runAgentLoop", () => {
         assert.equal(textEvents[0].content, "OK");
     });
 
-    it("sends x-api-key header instead of Authorization Bearer", async () => {
+    it("sends X-Api-Key header instead of Authorization Bearer", async () => {
         let capturedInit: RequestInit | undefined;
         globalThis.fetch = async (_url: string | URL | Request, init?: RequestInit) => {
             capturedInit = init;
@@ -1132,7 +1132,7 @@ describe("runAgentLoop", () => {
         await runAgentLoop([{ role: "user", content: "hi" }], "my-secret-key", onEvent);
 
         const headers = capturedInit!.headers as Record<string, string>;
-        assert.equal(headers["x-api-key"], "my-secret-key");
+        assert.equal(headers["X-Api-Key"], "my-secret-key");
         assert.equal(headers["Authorization"], undefined);
     });
 

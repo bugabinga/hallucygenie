@@ -501,7 +501,7 @@ export async function runAgentLoop(
                 method: "POST",
                 headers: {
                     "Content-Type": "application/json",
-                    "x-api-key": apiKey,
+                    "X-Api-Key": apiKey,
                 },
                 body: JSON.stringify(payload),
             });
