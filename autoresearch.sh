@@ -52,6 +52,7 @@ check chat_prompt_cache_control contains 'cache_control: { type: "ephemeral" }' 
 check chat_thinking_signature_preserved contains 'thinking_signature' src/agent.ts
 check chat_auth_header_official contains '"X-Api-Key": apiKey' src/agent.ts
 check chat_single_system_cache_breakpoint not_contains 'system.push({ type: "text", text: msg.content, cache_control' src/agent.ts
+check chat_single_system_cache_test contains 'caches only final system block' test/unit/agent.test.ts
 
 check image_model_latest contains 'model: "image-01"' src/tools.ts
 check image_model_in_docs contains 'image-01' "$image_doc"
