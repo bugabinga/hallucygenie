@@ -92,6 +92,7 @@ export function getToolDefinitions(): ToolDefinition[] {
                 properties: {
                     prompt: {
                         type: "string",
+                        maxLength: 1500,
                         description: "Text description of the image to generate",
                     },
                     aspect_ratio: {
@@ -117,6 +118,7 @@ export function getToolDefinitions(): ToolDefinition[] {
                 properties: {
                     text: {
                         type: "string",
+                        maxLength: 10000,
                         description: "The text to convert to speech",
                     },
                     voice_id: {
@@ -155,6 +157,7 @@ export function getToolDefinitions(): ToolDefinition[] {
                 properties: {
                     prompt: {
                         type: "string",
+                        maxLength: 2000,
                         description:
                             "Description or topic for the lyrics (e.g., 'a happy birthday song', 'an adventure theme').",
                     },
@@ -166,6 +169,7 @@ export function getToolDefinitions(): ToolDefinition[] {
                     },
                     lyrics: {
                         type: "string",
+                        maxLength: 3500,
                         description: "Existing lyrics to edit or continue when mode is edit.",
                     },
                     title: {
@@ -185,10 +189,12 @@ export function getToolDefinitions(): ToolDefinition[] {
                 properties: {
                     prompt: {
                         type: "string",
+                        maxLength: 2000,
                         description: "Description of the music to generate",
                     },
                     lyrics: {
                         type: "string",
+                        maxLength: 3500,
                         description: "Optional lyrics. Omit or leave empty for instrumental music.",
                     },
                 },
