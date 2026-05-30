@@ -1674,6 +1674,27 @@ describe("webSearch HTTP request structure", () => {
         assert.ok(!result.content.includes("Result 6"), "should limit to 5 results");
     });
 
+    it("parses nested data results with url field", async () => {
+        globalThis.fetch = async () =>
+            jsonResponse({
+                data: {
+                    results: [
+                        {
+                            title: "Nested Result",
+                            url: "https://example.com/nested",
+                            snippet: "Nested snippet",
+                        },
+                    ],
+                },
+            });
+
+        const result = await webSearch("nested", API_KEY);
+        assert.equal(result.type, "text");
+        assert.ok(result.content.includes("Nested Result"));
+        assert.ok(result.content.includes("https://example.com/nested"));
+        assert.ok(result.content.includes("Nested snippet"));
+    });
+
     it("enriches YouTube result links with oEmbed metadata", async () => {
         const urls: string[] = [];
         globalThis.fetch = async (url: string | URL | Request) => {

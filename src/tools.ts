@@ -778,6 +778,8 @@ export async function generateMusic(
 const YOUTUBE_OEMBED_LIMIT = 2;
 
 type SearchResult = { title: string; link: string; snippet: string };
+type RawSearchResult = { title?: string; link?: string; url?: string; snippet?: string };
+type SearchResponse = { organic?: RawSearchResult[]; data?: { results?: RawSearchResult[] } };
 type YouTubeMetadata = {
     source: string;
     title: string;
@@ -860,6 +862,16 @@ function formatYouTubeMetadata(items: YouTubeMetadata[]): string {
         .join("\n\n");
 }
 
+function normalizeSearchResults(data: SearchResponse): SearchResult[] {
+    return (data.organic ?? data.data?.results ?? [])
+        .map((item) => ({
+            title: item.title ?? "Untitled",
+            link: item.link ?? item.url ?? "",
+            snippet: item.snippet ?? "",
+        }))
+        .filter((item) => item.link);
+}
+
 export async function webSearch(query: string, apiKey: string): Promise<ToolResult> {
     try {
         const resp = await fetch(`${MINIMAX_BASE}/v1/coding_plan/search`, {
@@ -873,10 +885,8 @@ export async function webSearch(query: string, apiKey: string): Promise<ToolResu
         if (!resp.ok) {
             return { type: "error", content: `Search failed: HTTP ${resp.status}` };
         }
-        const data = (await resp.json()) as {
-            organic?: SearchResult[];
-        };
-        const results = (data.organic ?? []).slice(0, 5);
+        const data = (await resp.json()) as SearchResponse;
+        const results = normalizeSearchResults(data).slice(0, 5);
         const metadata = (
             await Promise.all(youtubeUrls(query, results).map((url) => fetchYouTubeMetadata(url)))
         ).filter((item): item is YouTubeMetadata => item !== null);
