@@ -40,4 +40,5 @@ Latest docs fetched to `~/.pi/research/pages/`:
 - Initial benchmark targeted implicit provider defaults: image URL response, TTS/music hex audio, MP3 data URL format. Fixed by `eb20b15`.
 - Expanded benchmark to include latest docs maxLength limits in Anthropic tool schemas, so the model sees provider bounds before calling tools. Fixed by `99d3672`.
 - Expanded benchmark to require shared runtime limit constants and bounded text validation before MiniMax calls consume quota. Fixed by `e63b98a`.
-- Expanded benchmark to require official Anthropic-compatible `X-Api-Key` header spelling from latest docs.
+- Expanded benchmark to require official Anthropic-compatible `X-Api-Key` header spelling from latest docs. Fixed by `4cadb2e`.
+- Expanded benchmark to keep `.pi/skills/minimax/SKILL.md` factual with 2026-05-30 crawl date and prompt caching notes.

@@ -42,6 +42,8 @@ check docs_tts_present test -s "$tts_doc"
 check docs_image_present test -s "$image_doc"
 check docs_music_present test -s "$music_doc"
 check docs_lyrics_present test -s "$lyrics_doc"
+check skill_docs_date contains 'Current docs crawl: 2026-05-30' .pi/skills/minimax/SKILL.md
+check skill_prompt_caching contains 'cache_control' .pi/skills/minimax/SKILL.md
 
 check chat_model_latest contains 'MiniMax-M2.7-highspeed' src/agent.ts
 check chat_model_in_docs contains 'MiniMax-M2.7-highspeed' "$anthropic_doc"
