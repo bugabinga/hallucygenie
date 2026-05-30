@@ -185,7 +185,7 @@ Used by async TTS/video and uploads.
 - `POST /v1/files/delete` requires JSON `file_id` plus `purpose`.
 - Delete `purpose` values: `voice_clone|prompt_audio|t2a_async|t2a_async_input|video_generation`.
 - Upload `purpose` values: `voice_clone|prompt_audio|t2a_async_input`.
-- Upload formats by purpose: `voice_clone` and `prompt_audio` support `mp3|m4a|wav`; `t2a_async_input` text file for async long TTS.
+- Upload formats by purpose: `voice_clone` and `prompt_audio` support `mp3|m4a|wav`; `t2a_async_input` text file for async long TTS; `t2a_async_input` supports `txt|zip` for async long TTS.
 - Limits: 100GB total capacity, 512MB single document.
 
 ## Quotas — Token Plan Plus-Highspeed
