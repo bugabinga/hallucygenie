@@ -221,7 +221,7 @@ export function getToolDefinitions(): ToolDefinition[] {
                 properties: {
                     image_url: {
                         type: "string",
-                        description: "HTTPS URL of a JPG, PNG, or WebP image to analyze.",
+                        description: "HTTPS URL of a JPG, PNG, GIF, or WebP image to analyze.",
                     },
                     prompt: {
                         type: "string",

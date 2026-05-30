@@ -123,7 +123,7 @@ export function safeToolResultForUser(toolName: string, result: ToolResult): Too
         text_to_speech: "Couldn't generate voice audio. Try shorter text.",
         generate_music: "Couldn't generate music. Try a shorter prompt or lyrics.",
         generate_lyrics: "Couldn't generate lyrics. Try a different topic.",
-        analyze_image: "Couldn't analyze the image. Try a direct JPG, PNG, or WebP URL.",
+        analyze_image: "Couldn't analyze the image. Try a direct JPG, PNG, GIF, or WebP URL.",
     };
     const msg = ERROR_MESSAGES[toolName] ?? "Tool failed. Try again.";
     return { type: "error", content: msg };
