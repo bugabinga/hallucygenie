@@ -27,6 +27,9 @@ reports/
 # Pi/runtime browser cache
 .pi-lens/
 
+# Autoresearch runtime state
+autoresearch.jsonl
+.autoresearch-tmp/
 
 # Test artifacts
 test-data*/
