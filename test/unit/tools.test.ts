@@ -280,12 +280,7 @@ describe("MiniMax parameter contract", () => {
         );
         const body = JSON.parse(capturedBody);
         assert.equal(body.response_format, "url");
-        for (const key of [
-            "subject_reference",
-            "image_url",
-            "height",
-            "width",
-        ]) {
+        for (const key of ["subject_reference", "image_url", "height", "width"]) {
             assert.equal(key in body, false, `${key} should stay omitted`);
         }
     });
