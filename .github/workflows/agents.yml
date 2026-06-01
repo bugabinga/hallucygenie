@@ -49,7 +49,7 @@ jobs:
                   path: ~/.bun/install/cache
                   key: ${{ runner.os }}-bun-${{ hashFiles('bun.lock') }}
                   restore-keys: ${{ runner.os }}-bun-
-            - uses: taiki-e/install-action@v2.79.7
+            - uses: taiki-e/install-action@v2.81.1
               with:
                   tool: just
             - uses: browser-actions/setup-chrome@v2.1.2
@@ -145,7 +145,7 @@ jobs:
                   path: ~/.bun/install/cache
                   key: ${{ runner.os }}-bun-${{ hashFiles('bun.lock') }}
                   restore-keys: ${{ runner.os }}-bun-
-            - uses: taiki-e/install-action@v2.79.7
+            - uses: taiki-e/install-action@v2.81.1
               with:
                   tool: just
             - uses: browser-actions/setup-chrome@v2.1.2
@@ -240,7 +240,7 @@ jobs:
                   path: ~/.bun/install/cache
                   key: ${{ runner.os }}-bun-${{ hashFiles('bun.lock') }}
                   restore-keys: ${{ runner.os }}-bun-
-            - uses: taiki-e/install-action@v2.79.7
+            - uses: taiki-e/install-action@v2.81.1
               with:
                   tool: just
             - uses: browser-actions/setup-chrome@v2.1.2
@@ -335,7 +335,7 @@ jobs:
                   path: ~/.bun/install/cache
                   key: ${{ runner.os }}-bun-${{ hashFiles('bun.lock') }}
                   restore-keys: ${{ runner.os }}-bun-
-            - uses: taiki-e/install-action@v2.79.7
+            - uses: taiki-e/install-action@v2.81.1
               with:
                   tool: just
             - uses: browser-actions/setup-chrome@v2.1.2
