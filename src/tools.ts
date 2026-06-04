@@ -396,7 +396,12 @@ function optionalBoundedText(value: unknown, label: string, maxLength: number): 
     return text;
 }
 
-function boundedTextRange(value: unknown, label: string, minLength: number, maxLength: number): string {
+function boundedTextRange(
+    value: unknown,
+    label: string,
+    minLength: number,
+    maxLength: number,
+): string {
     const text = boundedText(value, label, maxLength);
     if (text.length < minLength) throw new Error(`${label} too short`);
     return text;
@@ -714,7 +719,8 @@ export async function generateMusic(
     const options = (isObject(input) ? input : { prompt: input, lyrics }) as GenerateMusicOptions;
     try {
         const prompt = boundedText(options.prompt, "music prompt", MUSIC_PROMPT_MAX);
-        const lyricsText = optionalBoundedText(options.lyrics, "music lyrics", MUSIC_LYRICS_MAX) ?? "";
+        const lyricsText =
+            optionalBoundedText(options.lyrics, "music lyrics", MUSIC_LYRICS_MAX) ?? "";
         const isInstrumental = lyricsText.length === 0;
         const payload: Record<string, unknown> = {
             model: "music-2.6",

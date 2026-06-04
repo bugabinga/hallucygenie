@@ -1181,7 +1181,7 @@ describe("SSE streaming from Anthropic endpoint", () => {
                 selectedTab: "music",
                 music: { prompt: "boss", lyrics: "" },
             });
-            const history = listToolInputHistory(db, sessionId, { kind: "music" });
+            const history = listToolInputHistory(db, sessionId, { kind: "lyrics" });
             assert.equal(history[0]?.origin, "create");
             assert.equal(history[0]?.tool_name, "generate_lyrics");
         } finally {
