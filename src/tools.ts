@@ -379,6 +379,10 @@ function validateLyricsMode(value: unknown): GenerateLyricsOptions["mode"] | und
     return value === "write_full_song" || value === "edit" ? value : undefined;
 }
 
+function hexToBase64(hex: string): string {
+    return Buffer.from(hex, "hex").toString("base64");
+}
+
 function boundedText(value: unknown, label: string, maxLength: number): string {
     if (typeof value !== "string") throw new Error(`${label} required`);
     const text = value.trim();
@@ -396,7 +400,12 @@ function optionalBoundedText(value: unknown, label: string, maxLength: number): 
     return text;
 }
 
-function boundedTextRange(value: unknown, label: string, minLength: number, maxLength: number): string {
+function boundedTextRange(
+    value: unknown,
+    label: string,
+    minLength: number,
+    maxLength: number,
+): string {
     const text = boundedText(value, label, maxLength);
     if (text.length < minLength) throw new Error(`${label} too short`);
     return text;
@@ -540,7 +549,7 @@ export async function textToSpeech(
             };
         }
 
-        const base64 = Buffer.from(hex, "hex").toString("base64");
+        const base64 = hexToBase64(hex);
         return {
             type: "audio",
             content: `data:audio/mp3;base64,${base64}`,
@@ -599,7 +608,7 @@ export async function generateMusicCover(
         if (baseResp) return baseResp;
         const audioHex = data.data?.audio;
         if (!audioHex) return { type: "error", content: "Music cover returned no audio" };
-        const audioBase64 = Buffer.from(audioHex, "hex").toString("base64");
+        const audioBase64 = hexToBase64(audioHex);
         return { type: "audio", content: `data:audio/mp3;base64,${audioBase64}` };
     } catch (err) {
         return { type: "error", content: `Music cover failed: ${String(err)}` };
@@ -714,7 +723,8 @@ export async function generateMusic(
     const options = (isObject(input) ? input : { prompt: input, lyrics }) as GenerateMusicOptions;
     try {
         const prompt = boundedText(options.prompt, "music prompt", MUSIC_PROMPT_MAX);
-        const lyricsText = optionalBoundedText(options.lyrics, "music lyrics", MUSIC_LYRICS_MAX) ?? "";
+        const lyricsText =
+            optionalBoundedText(options.lyrics, "music lyrics", MUSIC_LYRICS_MAX) ?? "";
         const isInstrumental = lyricsText.length === 0;
         const payload: Record<string, unknown> = {
             model: "music-2.6",
@@ -760,7 +770,7 @@ export async function generateMusic(
             };
         }
 
-        const base64 = Buffer.from(hex, "hex").toString("base64");
+        const base64 = hexToBase64(hex);
         return {
             type: "audio",
             content: `data:audio/mp3;base64,${base64}`,
