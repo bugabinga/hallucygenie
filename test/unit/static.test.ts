@@ -1209,10 +1209,10 @@ describe("GitHub Actions health", () => {
 
     it("caches Bun deps and uploads mutation HTML artifacts", () => {
         assert.match(ciYml, /bun-version: 1\.3\.14/);
-        assert.match(ciYml, /actions\/checkout@v6\.0\.2/);
+        assert.match(ciYml, /actions\/checkout@v6\.0\.3/);
         assert.match(ciYml, /oven-sh\/setup-bun@v2\.2\.0/);
         assert.match(ciYml, /actions\/cache@v5\.0\.5/);
-        assert.match(ciYml, /taiki-e\/install-action@v2\.79\.7/);
+        assert.match(ciYml, /taiki-e\/install-action@v2\.81\.8/);
         assert.match(ciYml, /tool: just/);
         assert.match(ciYml, /path: ~\/\.bun\/install\/cache/);
         assert.match(ciYml, /hashFiles\('bun\.lock'\)/);
