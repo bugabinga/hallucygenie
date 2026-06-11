@@ -461,7 +461,7 @@ describe("index.html health", () => {
         assert.ok(doc.querySelector('input#analyze-file[type="file"]'));
         assert.equal(
             doc.querySelector("#analyze-file")?.getAttribute("accept"),
-            "image/png,image/jpeg,image/webp",
+            "image/png,image/jpeg,image/webp,image/gif",
         );
         assert.ok(doc.querySelector('#analyze-dropzone[aria-describedby*="analyze-file-status"]'));
         assert.ok(doc.querySelector('#analyze-file-status[role="status"]'));
@@ -469,8 +469,9 @@ describe("index.html health", () => {
         assert.ok(doc.querySelector('label[for="analyze-url"]'));
         assert.ok(doc.querySelector('label[for="analyze-prompt"]'));
         assert.match(appTs, /uploadAnalyzeImage\(file: File\)/);
+        assert.match(appTs, /PNG, JPG, GIF, or WebP/);
         assert.match(appTs, /analyzeDropzone\.addEventListener\("drop"/);
-        assert.match(appTs, /\["image\/png", "image\/jpeg", "image\/webp"\]/);
+        assert.match(appTs, /\["image\/png", "image\/jpeg", "image\/webp", "image\/gif"\]/);
         assert.match(appTs, /sendCreateTool\([\s\S]*"analyze_image"/);
         assert.doesNotMatch(appTs, /FileReader|readAsDataURL/);
     });
@@ -1208,10 +1209,10 @@ describe("GitHub Actions health", () => {
 
     it("caches Bun deps and uploads mutation HTML artifacts", () => {
         assert.match(ciYml, /bun-version: 1\.3\.14/);
-        assert.match(ciYml, /actions\/checkout@v6\.0\.2/);
+        assert.match(ciYml, /actions\/checkout@v6\.0\.3/);
         assert.match(ciYml, /oven-sh\/setup-bun@v2\.2\.0/);
         assert.match(ciYml, /actions\/cache@v5\.0\.5/);
-        assert.match(ciYml, /taiki-e\/install-action@v2\.79\.7/);
+        assert.match(ciYml, /taiki-e\/install-action@v2\.81\.8/);
         assert.match(ciYml, /tool: just/);
         assert.match(ciYml, /path: ~\/\.bun\/install\/cache/);
         assert.match(ciYml, /hashFiles\('bun\.lock'\)/);

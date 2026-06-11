@@ -2409,8 +2409,8 @@ export function init(): void {
     }
 
     function rejectBadAnalyzeFile(file: File): string | null {
-        if (!["image/png", "image/jpeg", "image/webp"].includes(file.type)) {
-            return "Use a PNG, JPG, or WebP image.";
+        if (!["image/png", "image/jpeg", "image/webp", "image/gif"].includes(file.type)) {
+            return "Use a PNG, JPG, GIF, or WebP image.";
         }
         if (file.size > 20 * 1024 * 1024) return "Image is too big. Max is 20 MB.";
         return null;
