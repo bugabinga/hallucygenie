@@ -482,6 +482,12 @@ function validateVideoResolution(value: unknown): GenerateVideoOptions["resoluti
     return value === "768p" || value === "1080p" ? value : undefined;
 }
 
+function providerVideoResolution(
+    value: GenerateVideoOptions["resolution"] | undefined,
+): "768P" | "1080P" {
+    return value === "1080p" ? "1080P" : "768P";
+}
+
 function hexToBase64(hex: string): string {
     return Buffer.from(hex, "hex").toString("base64");
 }
@@ -1080,7 +1086,7 @@ export async function generateVideo(
             model: VIDEO_MODEL,
             prompt,
             duration: validateVideoDuration(options.duration) ?? 6,
-            resolution: validateVideoResolution(options.resolution) ?? "768p",
+            resolution: providerVideoResolution(validateVideoResolution(options.resolution)),
         };
         const createResp = await fetch(`${MINIMAX_BASE}/v1/video_generation`, {
             method: "POST",

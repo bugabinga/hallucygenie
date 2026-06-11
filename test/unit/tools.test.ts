@@ -1624,7 +1624,7 @@ describe("generateVideo", () => {
             model: "MiniMax-Hailuo-02",
             prompt: "A fox mascot jumps through a neon portal",
             duration: 6,
-            resolution: "768p",
+            resolution: "768P",
         });
         assert.ok(calls.some((url) => url.includes("task_id=task_1")));
         assert.ok(calls.some((url) => url.includes("file_id=file_1")));

@@ -3863,6 +3863,50 @@ describe("GET /api/quota", () => {
         }
     });
 
+    it("maps MiniMax general quota to unknown header quotas", async () => {
+        const mockResp: Response = {
+            ok: true,
+            status: 200,
+            json: async () => ({
+                model_remains: [
+                    {
+                        model_name: "general",
+                        current_interval_total_count: 0,
+                        current_interval_usage_count: 0,
+                        remains_time: 431284,
+                    },
+                    {
+                        model_name: "video",
+                        current_interval_total_count: 0,
+                        current_interval_usage_count: 0,
+                        remains_time: 431284,
+                    },
+                ],
+            }),
+        } as unknown as Response;
+
+        const prevFetch = globalThis.fetch;
+        const prevKey = process.env.MINIMAX_API_KEY;
+        process.env.MINIMAX_API_KEY = "test-key";
+        globalThis.fetch = async () => mockResp;
+
+        try {
+            const req = new Request("http://localhost/api/quota");
+            const resp = await handleRequest(req);
+            assert.equal(resp.status, 200);
+            const body = (await resp.json()) as Record<string, Record<string, number>>;
+            assert.equal(body.image.total, 0);
+            assert.equal(body.speech.total, 0);
+            assert.equal(body.music.total, 0);
+            assert.equal(body.lyrics.total, 0);
+            assert.equal(body.video.total, 0);
+        } finally {
+            globalThis.fetch = prevFetch;
+            if (prevKey) process.env.MINIMAX_API_KEY = prevKey;
+            else delete process.env.MINIMAX_API_KEY;
+        }
+    });
+
     it("returns 502 when MiniMax quota API fails", async () => {
         const mockResp: Response = { ok: false, status: 500 } as unknown as Response;
         const prevFetch = globalThis.fetch;

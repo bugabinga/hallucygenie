@@ -1510,11 +1510,12 @@ export async function handleRequest(req: Request): Promise<Response> {
             };
             const find = (prefix: string) =>
                 data.model_remains.find((m) => m.model_name.startsWith(prefix)) ?? null;
-            const m2 = find("MiniMax-M");
-            const speech = find("speech-hd");
-            const image = find("image-01");
-            const music = find("music-2.6");
-            const lyrics = find("lyrics-01") ?? find("lyrics");
+            const general = find("general");
+            const m2 = find("MiniMax-M") ?? general;
+            const speech = find("speech-hd") ?? general;
+            const image = find("image-01") ?? general;
+            const music = find("music-2.6") ?? general;
+            const lyrics = find("lyrics-01") ?? find("lyrics") ?? general;
             const video = find("video") ?? find("MiniMax-Hailuo");
             return jsonResponse({
                 chat: quotaEntry(m2),
@@ -1522,7 +1523,7 @@ export async function handleRequest(req: Request): Promise<Response> {
                 image: quotaEntry(image),
                 music: quotaEntry(music),
                 lyrics: quotaEntry(lyrics),
-                video: video && video.current_interval_total_count > 0 ? quotaEntry(video) : null,
+                video: quotaEntry(video),
             });
         } catch (err) {
             log.error("quota api error", { error: String(err) });

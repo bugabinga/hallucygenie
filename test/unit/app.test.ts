@@ -3806,6 +3806,37 @@ describe("updateQuotaBadge", () => {
         assert.match(label, /Video: 4 of 5 remaining, ok/);
     });
 
+    it("shows unknown instead of broken dashes when MiniMax only reports general quota", async () => {
+        const { doc } = setupDOM();
+        (globalThis as any).fetch = () =>
+            Promise.resolve(
+                new Response(
+                    JSON.stringify({
+                        image: { used: 0, total: 0 },
+                        speech: { used: 0, total: 0 },
+                        music: { used: 0, total: 0 },
+                        video: { used: 0, total: 0 },
+                    }),
+                    { headers: { "Content-Type": "application/json" } },
+                ),
+            );
+
+        await updateQuotaBadge();
+
+        assert.equal(
+            doc.querySelector('.quota-item[data-type="image"] .quota-used')!.textContent,
+            "?",
+        );
+        assert.equal(
+            doc.querySelector('.quota-item[data-type="video"] .quota-used')!.textContent,
+            "?",
+        );
+        const label = doc.querySelector("#quota-badge")!.getAttribute("aria-label") ?? "";
+        assert.match(label, /Images quota exact count unknown/);
+        assert.match(label, /Video quota exact count unknown/);
+        assert.equal(label.includes("unavailable"), false);
+    });
+
     it("does not crash on fetch failure", async () => {
         setupDOM();
         (globalThis as any).fetch = () => Promise.reject(new Error("network fail"));

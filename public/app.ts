@@ -1868,10 +1868,16 @@ export async function updateQuotaBadge(): Promise<void> {
             const type = item.dataset.type as keyof QuotaData;
             const q = data[type];
             const label = item.title || QUOTA_LABELS[type] || type;
-            if (!q || q.total === 0) {
+            if (!q) {
                 item.querySelector(".quota-used")!.textContent = "—";
                 item.className = "quota-item";
                 labels.push(`${label} quota unavailable`);
+                continue;
+            }
+            if (q.total === 0) {
+                item.querySelector(".quota-used")!.textContent = "?";
+                item.className = "quota-item";
+                labels.push(`${label} quota exact count unknown`);
                 continue;
             }
             const remaining = q.total - q.used;
