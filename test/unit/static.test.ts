@@ -461,7 +461,7 @@ describe("index.html health", () => {
         assert.ok(doc.querySelector('input#analyze-file[type="file"]'));
         assert.equal(
             doc.querySelector("#analyze-file")?.getAttribute("accept"),
-            "image/png,image/jpeg,image/webp",
+            "image/png,image/jpeg,image/webp,image/gif",
         );
         assert.ok(doc.querySelector('#analyze-dropzone[aria-describedby*="analyze-file-status"]'));
         assert.ok(doc.querySelector('#analyze-file-status[role="status"]'));
@@ -469,8 +469,9 @@ describe("index.html health", () => {
         assert.ok(doc.querySelector('label[for="analyze-url"]'));
         assert.ok(doc.querySelector('label[for="analyze-prompt"]'));
         assert.match(appTs, /uploadAnalyzeImage\(file: File\)/);
+        assert.match(appTs, /PNG, JPG, GIF, or WebP/);
         assert.match(appTs, /analyzeDropzone\.addEventListener\("drop"/);
-        assert.match(appTs, /\["image\/png", "image\/jpeg", "image\/webp"\]/);
+        assert.match(appTs, /\["image\/png", "image\/jpeg", "image\/webp", "image\/gif"\]/);
         assert.match(appTs, /sendCreateTool\([\s\S]*"analyze_image"/);
         assert.doesNotMatch(appTs, /FileReader|readAsDataURL/);
     });

@@ -914,7 +914,7 @@ async function runE2ETests(): Promise<void> {
             await expectVisible(page, "#create-analyze-form");
 
             await page.evaluate(() => {
-                const file = new File(["GIF89a"], "sparkle.gif", { type: "image/gif" });
+                const file = new File(["BM"], "bad.bmp", { type: "image/bmp" });
                 const dataTransfer = new DataTransfer();
                 dataTransfer.items.add(file);
                 document.querySelector("#analyze-dropzone")!.dispatchEvent(
@@ -928,7 +928,7 @@ async function runE2ETests(): Promise<void> {
             await page.waitForFunction(
                 () =>
                     document.querySelector("#analyze-file-status")?.textContent ===
-                    "Use a PNG, JPG, or WebP image.",
+                    "Use a PNG, JPG, GIF, or WebP image.",
             );
             await expectHidden(page, "#analyze-file-preview img");
 

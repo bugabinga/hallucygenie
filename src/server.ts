@@ -673,10 +673,11 @@ function quotaAmountForTool(name: string, args: Record<string, unknown>): number
     return Math.max(1, Array.from(text).length);
 }
 
-function analyzeDataMime(mime: string): "jpeg" | "png" | "webp" {
+function analyzeDataMime(mime: string): "jpeg" | "png" | "webp" | "gif" {
     if (mime === "image/jpeg") return "jpeg";
     if (mime === "image/png") return "png";
     if (mime === "image/webp") return "webp";
+    if (mime === "image/gif") return "gif";
     throw new Error("analyze image type invalid");
 }
 
@@ -1074,7 +1075,7 @@ function isAllowedImageMime(mime: string, allowedMimes: string[]): boolean {
 }
 
 const AVATAR_IMAGE_MIMES = ["image/png", "image/jpeg", "image/webp", "image/gif"];
-const ANALYZE_IMAGE_MIMES = ["image/png", "image/jpeg", "image/webp"];
+const ANALYZE_IMAGE_MIMES = ["image/png", "image/jpeg", "image/webp", "image/gif"];
 
 function isCoverAudioMime(mime: string): boolean {
     return [
@@ -1150,7 +1151,7 @@ async function handleAnalyzeImageUpload(req: Request, database: Database): Promi
         const file = form.get("image");
         if (!(file instanceof File)) return jsonResponse({ error: "image file required" }, 400);
         if (!isAllowedImageMime(file.type, ANALYZE_IMAGE_MIMES))
-            return jsonResponse({ error: "image type must be PNG, JPG, or WebP" }, 400);
+            return jsonResponse({ error: "image type must be PNG, JPG, GIF, or WebP" }, 400);
         if (file.size > 20 * 1024 * 1024) return jsonResponse({ error: "image too large" }, 400);
         const saved = saveAssetBuffer(
             "image",

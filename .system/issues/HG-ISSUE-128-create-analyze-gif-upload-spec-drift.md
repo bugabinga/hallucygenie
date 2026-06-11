@@ -1,5 +1,5 @@
 ---
-{ "status": "open", "specs": ["HG-SPEC-016", "HG-SPEC-011"] }
+{ "status": "fixed", "specs": ["HG-SPEC-016", "HG-SPEC-011"] }
 ---
 
 # HG-ISSUE-128: Create Analyze GIF upload spec drift

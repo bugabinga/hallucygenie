@@ -287,15 +287,35 @@ describe("Explicit Create directives", () => {
         assert.equal(asset?.mime_type, "image/png");
     });
 
+    it("accepts GIF uploads for analyze image", async () => {
+        const db = getDb()!;
+        const session = createSession(db);
+        setActiveSessionId(db, session.id);
+        const body = new FormData();
+        body.set(
+            "image",
+            new File([new Uint8Array([71, 73, 70, 56])], "anim.gif", { type: "image/gif" }),
+        );
+        const resp = await handleRequest(
+            new Request("http://localhost/api/analyze-image", { method: "POST", body }),
+        );
+        assert.equal(resp.status, 200);
+        const json = (await readJson(resp)) as { assetId: string; assetUrl: string };
+        assert.match(json.assetId, /^asset_[0-9a-f-]+$/i);
+        const asset = getAssets(db, session.id).find((item) => item.id === json.assetId);
+        assert.equal(asset?.tool_name, "analyze_image");
+        assert.equal(asset?.mime_type, "image/gif");
+    });
+
     it("rejects unsupported local analyze image files", async () => {
         const body = new FormData();
-        body.set("image", new File([new Uint8Array([1, 2, 3])], "bad.gif", { type: "image/gif" }));
+        body.set("image", new File([new Uint8Array([1, 2, 3])], "bad.bmp", { type: "image/bmp" }));
         const resp = await handleRequest(
             new Request("http://localhost/api/analyze-image", { method: "POST", body }),
         );
         assert.equal(resp.status, 400);
         const json = (await readJson(resp)) as { error: string };
-        assert.match(json.error, /PNG, JPG, or WebP/);
+        assert.match(json.error, /PNG, JPG, GIF, or WebP/);
     });
 
     it("analyzes uploaded assets without storing raw data URLs", async () => {
