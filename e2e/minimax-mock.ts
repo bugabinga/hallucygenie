@@ -32,7 +32,7 @@ function anthropicTextSSE(text: string): string {
                     type: "message",
                     role: "assistant",
                     content: [],
-                    model: "MiniMax-M2.7-highspeed",
+                    model: "MiniMax-M3",
                 },
             },
         },
@@ -164,7 +164,7 @@ function minimaxResponse(url: URL, init?: RequestInit): Response | null {
             return jsonResponse({
                 model_remains: [
                     {
-                        model_name: "MiniMax-M2.7-highspeed",
+                        model_name: "MiniMax-M3",
                         current_interval_total_count: 1000,
                         current_interval_usage_count: 5,
                         remains_time: 86400000,

@@ -415,6 +415,7 @@ export function kindForTool(toolName: string): string {
     if (toolName === "generate_music") return "music";
     if (toolName === "generate_lyrics") return "lyrics";
     if (toolName === "text_to_speech") return "voice";
+    if (toolName === "generate_long_speech") return "narration";
     if (toolName === "web_search") return "search";
     if (toolName === "analyze_image") return "analyze";
     return "other";
@@ -701,7 +702,7 @@ export function releaseQuota(db: Database, feature: string, amount = 1): void {
 export interface AssetRow {
     id: string;
     session_id: string;
-    type: "image" | "audio" | "music";
+    type: "image" | "audio" | "music" | "video";
     filename: string;
     mime_type: string;
     prompt: string | null;
@@ -751,4 +752,118 @@ export function getAsset(db: Database, assetId: string): AssetRow | null {
     return db
         .prepare("SELECT * FROM assets WHERE id = ?")
         .get(assetId) as unknown as AssetRow | null;
+}
+
+export interface VideoTaskRow {
+    id: string;
+    session_id: string;
+    provider_task_id: string;
+    status: "pending" | "running" | "succeeded" | "failed" | "timeout" | "cancelled";
+    prompt: string;
+    file_id: string | null;
+    asset_id: string | null;
+    error: string | null;
+    created_at: number;
+    updated_at: number;
+}
+
+export function saveVideoTask(db: Database, task: VideoTaskRow): void {
+    assertNoRawAssetDataInMessage(JSON.stringify(task));
+    db.prepare(
+        `INSERT INTO video_tasks (id, session_id, provider_task_id, status, prompt, file_id, asset_id, error, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    ).run(
+        task.id,
+        task.session_id,
+        task.provider_task_id,
+        task.status,
+        task.prompt,
+        task.file_id,
+        task.asset_id,
+        task.error,
+        task.created_at,
+        task.updated_at,
+    );
+}
+
+export function updateVideoTask(
+    db: Database,
+    id: string,
+    patch: Partial<Pick<VideoTaskRow, "status" | "file_id" | "asset_id" | "error">>,
+): void {
+    const current = db.prepare("SELECT * FROM video_tasks WHERE id = ?").get(id) as
+        | VideoTaskRow
+        | undefined;
+    if (!current) throw new Error("video task not found");
+    const next = { ...current, ...patch, updated_at: Date.now() };
+    assertNoRawAssetDataInMessage(JSON.stringify(next));
+    db.prepare(
+        `UPDATE video_tasks
+         SET status = ?, file_id = ?, asset_id = ?, error = ?, updated_at = ?
+         WHERE id = ?`,
+    ).run(next.status, next.file_id, next.asset_id, next.error, next.updated_at, id);
+}
+
+export function listVideoTasks(db: Database, sessionId: string): VideoTaskRow[] {
+    return db
+        .prepare("SELECT * FROM video_tasks WHERE session_id = ? ORDER BY updated_at DESC")
+        .all(sessionId) as unknown as VideoTaskRow[];
+}
+
+export interface AsyncTtsTaskRow {
+    id: string;
+    session_id: string;
+    provider_task_id: string;
+    status: "pending" | "running" | "succeeded" | "failed" | "timeout" | "cancelled";
+    text_summary: string;
+    voice_id: string | null;
+    file_id: string | null;
+    asset_id: string | null;
+    error: string | null;
+    created_at: number;
+    updated_at: number;
+}
+
+export function saveAsyncTtsTask(db: Database, task: AsyncTtsTaskRow): void {
+    assertNoRawAssetDataInMessage(JSON.stringify(task));
+    db.prepare(
+        `INSERT INTO async_tts_tasks (id, session_id, provider_task_id, status, text_summary, voice_id, file_id, asset_id, error, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    ).run(
+        task.id,
+        task.session_id,
+        task.provider_task_id,
+        task.status,
+        task.text_summary,
+        task.voice_id,
+        task.file_id,
+        task.asset_id,
+        task.error,
+        task.created_at,
+        task.updated_at,
+    );
+}
+
+export function updateAsyncTtsTask(
+    db: Database,
+    id: string,
+    patch: Partial<Pick<AsyncTtsTaskRow, "status" | "file_id" | "asset_id" | "error">>,
+): void {
+    const current = db.prepare("SELECT * FROM async_tts_tasks WHERE id = ?").get(id) as
+        | AsyncTtsTaskRow
+        | undefined;
+    if (!current) throw new Error("async tts task not found");
+    const next = { ...current, ...patch, updated_at: Date.now() };
+    assertNoRawAssetDataInMessage(JSON.stringify(next));
+    db.prepare(
+        `UPDATE async_tts_tasks
+         SET status = ?, file_id = ?, asset_id = ?, error = ?, updated_at = ?
+         WHERE id = ?`,
+    ).run(next.status, next.file_id, next.asset_id, next.error, next.updated_at, id);
+}
+
+export function listAsyncTtsTasks(db: Database, sessionId: string): AsyncTtsTaskRow[] {
+    return db
+        .prepare("SELECT * FROM async_tts_tasks WHERE session_id = ? ORDER BY updated_at DESC")
+        .all(sessionId) as unknown as AsyncTtsTaskRow[];
 }

@@ -20,6 +20,8 @@ It needs task creation, polling, download, asset storage, preview, and quota han
 - Generated video bytes are asset storage only.
 - Chat/model context receives compact video summary only.
 - Assets tab shows native video preview and download.
+- Quota UI must not treat `/v1/token_plan/remains` as authoritative for video availability.
+- Provider create/query errors are authoritative for unavailable video quota or spend.
 - Failed/expired tasks show loud user-safe errors.
 
 ## Behavioral contracts
@@ -27,8 +29,10 @@ It needs task creation, polling, download, asset storage, preview, and quota han
 - Create Video starts a provider task.
 - UI shows pending state while task runs.
 - Polling stops on success, failure, timeout, or user cancel.
-- Success downloads video into asset storage.
+- Success retrieves file metadata, downloads the provider URL immediately, and stores video bytes in asset storage.
+- File metadata may report `bytes: 0`; download success and stored bytes decide asset size.
 - Asset row records prompt, tool, model, params, mime, size.
 - Chat renders video result card from `/asset/{id}`.
 - No raw video bytes, base64, or provider URLs enter chat history.
-- Tests cover task create/query/download, reload persistence, asset preview, and failure states.
+- Quota display may show unknown for video when plan-remains data is absent or zero but provider calls still succeed.
+- Tests cover task create/query/download, reload persistence, asset preview, quota-unknown state, and failure states.

@@ -26,7 +26,8 @@ Tool rules:
 - If the user asks to generate, create, make, draw, render, or use generate_image for an image, MUST call generate_image. Do not answer with text only.
 - If the user asks to generate, create, make, or use generate_music for music/song/audio bed, MUST call generate_music. Do not answer with text only.
 - If the user asks to generate, create, make, or use generate_lyrics for lyrics/song words/song lyrics, MUST call generate_lyrics. Do not answer with text only.
-- If the user asks for voice, speech, narration, TTS, or use text_to_speech, MUST call text_to_speech. Do not answer with text only.
+- If the user asks for short voice, speech, narration, TTS, or use text_to_speech, MUST call text_to_speech. For long narration/scripts over ~1000 chars or use generate_long_speech, MUST call generate_long_speech. Do not answer with text only.
+- If the user asks to generate, create, make, or use generate_video for a video, MUST call generate_video. Do not answer with text only.
 - If the user asks to analyze, inspect, describe, or use analyze_image for an image URL, MUST call analyze_image with image_url and a concise prompt. Do not answer from the URL alone.
 - For image/music/voice/analysis requests, craft strong prompts yourself if needed, then call the tool.
 - Never claim media was generated unless the matching tool returned a result.
@@ -40,7 +41,7 @@ Tool rules:
 
 Product help:
 - HallucyGenie has Chat, Create, Assets, Profile, and Sessions.
-- Create has Image, Music, Voice, Analyze, Search, and Assets tabs.
+- Create has Image, Music, Video, Voice, Narration, Analyze, Search, and Assets tabs.
 - Image makes thumbnails, avatars, logos, and game art; count controls how many pictures.
 - Music makes new songs from prompt/lyrics. Voice makes narration. Analyze explains an uploaded image or image URL. Search finds web facts.
 - Assets keeps generated/downloaded media. Tool cards show previews, input details, and Tweak to reopen Create with the same params.
@@ -93,7 +94,8 @@ export function buildSystemPrompt(
 
 // ── Configuration ────────────────────────────────────────────────────
 
-export const MINIMAX_MODEL = "MiniMax-M2.7-highspeed";
+export const MINIMAX_MODEL = "MiniMax-M3";
+export const MINIMAX_OUTPUT_TOKENS = 4096;
 
 // ── Types ────────────────────────────────────────────────────────────
 
@@ -122,9 +124,11 @@ export function safeToolResultForUser(toolName: string, result: ToolResult): Too
     const ERROR_MESSAGES: Record<string, string> = {
         generate_image: "Couldn't generate the image. Try a shorter, clearer prompt.",
         text_to_speech: "Couldn't generate voice audio. Try shorter text.",
+        generate_long_speech: "Couldn't generate long narration. Try shorter text.",
         generate_music: "Couldn't generate music. Try a shorter prompt or lyrics.",
         generate_lyrics: "Couldn't generate lyrics. Try a different topic.",
         analyze_image: "Couldn't analyze the image. Try a direct JPG, PNG, GIF, or WebP URL.",
+        generate_video: "Couldn't generate the video. Try a shorter, clearer prompt.",
     };
     const msg = ERROR_MESSAGES[toolName] ?? "Tool failed. Try again.";
     return { type: "error", content: msg };
@@ -178,9 +182,8 @@ export function parseToolArguments(args: string): Record<string, unknown> {
 
 // ── Token estimation & context window ──────────────────────────────
 
-/** Default max tokens for context input (reserve 4,096 for model output out of 204,800).
- */
-export const DEFAULT_MAX_CONTEXT_TOKENS = 200_000;
+/** Default max tokens for context input (M3 1M window minus output reserve). */
+export const DEFAULT_MAX_CONTEXT_TOKENS = 1_000_000 - MINIMAX_OUTPUT_TOKENS;
 
 /** Estimate tokens for a single message using chars/4 heuristic.
  * Images are estimated at ~1200 tokens each.
@@ -375,6 +378,10 @@ export function compactToolResultForModel(toolName: string, result: ToolResult):
         return `Generated audio with ${toolName}. The UI displays it in a tool card. Do not embed audio data, audio URLs, or markdown media in your reply.`;
     }
 
+    if (result.type === "video") {
+        return `Generated video with ${toolName}. The UI displays it in a tool card. Do not embed video URLs, provider URLs, or markdown media in your reply.`;
+    }
+
     if (result.content.length > 4000) {
         return `${result.content.slice(0, 4000)}\n[Tool result truncated for context]`;
     }
@@ -462,10 +469,11 @@ export function toAnthropicPayload(
 
     const payload: Record<string, unknown> = {
         model: MINIMAX_MODEL,
-        max_tokens: 4096,
+        max_tokens: MINIMAX_OUTPUT_TOKENS,
         messages: anthropicMessages,
         tools: cachedTools,
         stream: true,
+        thinking: { type: "adaptive" },
     };
     if (system.length > 0) {
         payload.system = system;

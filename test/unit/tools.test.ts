@@ -7,8 +7,10 @@ import {
     executeTool,
     generateImage,
     textToSpeech,
+    generateLongSpeech,
     generateMusic,
     generateLyrics,
+    generateVideo,
     webSearch,
     analyzeImage,
     generateMusicCover,
@@ -64,11 +66,19 @@ function schemaFor(toolName: string): { properties: Record<string, unknown>; req
 // ── Tool definitions ─────────────────────────────────────────────────
 
 describe("getToolDefinitions", () => {
-    it("returns six live tool definitions", () => {
+    it("returns eight live tool definitions", () => {
         const defs = getToolDefinitions();
-        assert.equal(defs.length, 6);
+        assert.equal(defs.length, 8);
         assert.equal(
             defs.some((tool) => tool.name === "analyze_image"),
+            true,
+        );
+        assert.equal(
+            defs.some((tool) => tool.name === "generate_video"),
+            true,
+        );
+        assert.equal(
+            defs.some((tool) => tool.name === "generate_long_speech"),
             true,
         );
     });
@@ -164,6 +174,14 @@ describe("getToolDefinitions", () => {
         assert.deepEqual(schema.required, ["image_url"]);
     });
 
+    it("defines generate_video with preset schema", () => {
+        const schema = schemaFor("generate_video");
+        assert.ok(schema.properties.prompt);
+        assert.ok(schema.properties.duration);
+        assert.ok(schema.properties.resolution);
+        assert.deepEqual(schema.required, ["prompt"]);
+    });
+
     it("all definitions have descriptions", () => {
         const defs = getToolDefinitions();
         for (const def of defs) {
@@ -219,6 +237,19 @@ describe("MiniMax parameter contract", () => {
             ],
             required: ["text"],
         },
+        generate_long_speech: {
+            supported: ["text", "voice_id", "speed", "volume", "pitch"],
+            forbidden: [
+                "text_file_id",
+                "subtitle_enable",
+                "subtitle_type",
+                "stream",
+                "output_format",
+                "file_id",
+                "task_id",
+            ],
+            required: ["text"],
+        },
         generate_lyrics: {
             supported: ["prompt", "mode", "lyrics", "title"],
             forbidden: [],
@@ -237,6 +268,11 @@ describe("MiniMax parameter contract", () => {
                 "audio_base64",
                 "cover_feature_id",
             ],
+            required: ["prompt"],
+        },
+        generate_video: {
+            supported: ["prompt", "duration", "resolution"],
+            forbidden: ["model", "first_frame_image", "subject_reference", "prompt_optimizer"],
             required: ["prompt"],
         },
         analyze_image: {
@@ -577,6 +613,28 @@ describe("generateImage", () => {
         assert.equal(body.width, 512);
         assert.equal(body.height, 2048);
         assert.equal(body.prompt_optimizer, false);
+    });
+
+    it("passes internal subject reference payload", async () => {
+        let capturedBody = "";
+        globalThis.fetch = async (_url: string | URL | Request, init?: RequestInit) => {
+            capturedBody = init!.body as string;
+            return jsonResponse({ data: { image_urls: ["https://example.com/ref.png"] } });
+        };
+
+        await generateImage(
+            {
+                prompt: "same fox in armor",
+                subject_reference: [
+                    { type: "character", image_file: "data:image/png;base64,cmVm" },
+                ],
+            },
+            API_KEY,
+        );
+        const body = JSON.parse(capturedBody);
+        assert.deepEqual(body.subject_reference, [
+            { type: "character", image_file: "data:image/png;base64,cmVm" },
+        ]);
     });
 
     it("returns helpful error when seed is used with multiple images", async () => {
@@ -1449,6 +1507,145 @@ describe("Audio hex-to-base64 conversion", () => {
         const base64Part = result.content.replace("data:audio/mp3;base64,", "");
         const decoded = Buffer.from(base64Part, "base64").toString("hex");
         assert.equal(decoded, longHex.toLowerCase());
+    });
+});
+
+// ── generateLongSpeech ──────────────────────────────────────────────
+
+describe("generateLongSpeech", () => {
+    beforeEach(() => {
+        originalFetch = globalThis.fetch;
+    });
+
+    afterEach(() => {
+        globalThis.fetch = originalFetch;
+    });
+
+    it("creates, polls, retrieves, and returns provider download URL", async () => {
+        const calls: string[] = [];
+        let createBody = "";
+        globalThis.fetch = async (url: string | URL | Request, init?: RequestInit) => {
+            const urlStr = url.toString();
+            calls.push(urlStr);
+            if (urlStr.endsWith("/v1/t2a_async_v2")) {
+                createBody = String(init?.body ?? "");
+                return jsonResponse({ task_id: "tts-task-1" });
+            }
+            if (urlStr.includes("/v1/query/t2a_async_query_v2")) {
+                return jsonResponse({ data: { status: "Success", file_id: "file-1" } });
+            }
+            if (urlStr.includes("/v1/files/retrieve")) {
+                return jsonResponse({ file: { download_url: "https://cdn.example/tts.tar" } });
+            }
+            throw new Error(`unexpected fetch ${urlStr}`);
+        };
+
+        const result = await generateLongSpeech(
+            { text: "Long narration", voice_id: "English_CaptivatingStoryteller", speed: 1.2 },
+            API_KEY,
+            { pollDelayMs: 0, maxPolls: 1 },
+        );
+        const payload = JSON.parse(createBody);
+
+        assert.equal(result.type, "audio");
+        assert.equal(result.content, "https://cdn.example/tts.tar");
+        assert.deepEqual(
+            calls.map((url) => new URL(url).pathname),
+            ["/v1/t2a_async_v2", "/v1/query/t2a_async_query_v2", "/v1/files/retrieve"],
+        );
+        assert.equal(payload.model, "speech-2.8-hd");
+        assert.equal(payload.voice_setting.voice_id, "English_CaptivatingStoryteller");
+        assert.equal(payload.audio_setting.audio_sample_rate, 32000);
+    });
+
+    it("returns timeout when provider never finishes", async () => {
+        globalThis.fetch = async (url: string | URL | Request) => {
+            const urlStr = url.toString();
+            if (urlStr.endsWith("/v1/t2a_async_v2")) return jsonResponse({ task_id: "tts-task-1" });
+            if (urlStr.includes("/v1/query/t2a_async_query_v2")) {
+                return jsonResponse({ data: { status: "Processing" } });
+            }
+            throw new Error(`unexpected fetch ${urlStr}`);
+        };
+
+        const result = await generateLongSpeech("Long narration", API_KEY, {
+            pollDelayMs: 0,
+            maxPolls: 1,
+        });
+
+        assert.equal(result.type, "error");
+        assert.match(result.content, /timed out/);
+    });
+});
+
+// ── generateVideo ───────────────────────────────────────────────────
+
+describe("generateVideo", () => {
+    beforeEach(() => {
+        originalFetch = globalThis.fetch;
+    });
+
+    afterEach(() => {
+        globalThis.fetch = originalFetch;
+    });
+
+    it("creates, polls, retrieves, and returns provider download URL", async () => {
+        const calls: string[] = [];
+        const bodies: unknown[] = [];
+        globalThis.fetch = async (url: string | URL | Request, init?: RequestInit) => {
+            const urlStr = url.toString();
+            calls.push(urlStr);
+            if (init?.body) bodies.push(JSON.parse(init.body as string));
+            if (urlStr.endsWith("/v1/video_generation")) {
+                return jsonResponse({ task_id: "task_1", base_resp: { status_code: 0 } });
+            }
+            if (urlStr.includes("/v1/query/video_generation")) {
+                return jsonResponse({ status: "Success", file_id: "file_1" });
+            }
+            if (urlStr.includes("/v1/files/retrieve")) {
+                return jsonResponse({
+                    file_id: "file_1",
+                    filename: "output.mp4",
+                    download_url: "https://cdn.example/video.mp4",
+                });
+            }
+            throw new Error(`unexpected fetch ${urlStr}`);
+        };
+
+        const result = await generateVideo(
+            { prompt: "A fox mascot jumps through a neon portal", duration: 6, resolution: "768p" },
+            API_KEY,
+            { pollDelayMs: 0, maxPolls: 1 },
+        );
+
+        assert.equal(result.type, "video");
+        assert.equal(result.content, "https://cdn.example/video.mp4");
+        assert.deepEqual(bodies[0], {
+            model: "MiniMax-Hailuo-02",
+            prompt: "A fox mascot jumps through a neon portal",
+            duration: 6,
+            resolution: "768p",
+        });
+        assert.ok(calls.some((url) => url.includes("task_id=task_1")));
+        assert.ok(calls.some((url) => url.includes("file_id=file_1")));
+    });
+
+    it("returns loud user-safe failure when provider task fails", async () => {
+        globalThis.fetch = async (url: string | URL | Request) => {
+            const urlStr = url.toString();
+            if (urlStr.endsWith("/v1/video_generation")) return jsonResponse({ task_id: "task_1" });
+            if (urlStr.includes("/v1/query/video_generation"))
+                return jsonResponse({ status: "Fail", message: "quota gone" });
+            throw new Error(`unexpected fetch ${urlStr}`);
+        };
+
+        const result = await generateVideo("make a trailer", API_KEY, {
+            pollDelayMs: 0,
+            maxPolls: 1,
+        });
+
+        assert.equal(result.type, "error");
+        assert.match(result.content, /Video generation failed/);
     });
 });
 

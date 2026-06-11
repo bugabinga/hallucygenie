@@ -55,10 +55,11 @@ check docs_lyrics_present test -s "$lyrics_doc"
 check skill_docs_date contains 'Current docs crawl: 2026-05-30' .pi/skills/minimax/SKILL.md
 check skill_prompt_caching contains 'cache_control' .pi/skills/minimax/SKILL.md
 
-check chat_model_latest contains 'MiniMax-M2.7-highspeed' src/agent.ts
-check chat_model_in_docs contains 'MiniMax-M2.7-highspeed' "$anthropic_doc"
+check chat_model_latest contains 'MiniMax-M3' src/agent.ts
+check chat_model_in_docs contains 'MiniMax-M3' "$anthropic_doc"
 check chat_prompt_cache_control contains 'cache_control: { type: "ephemeral" }' src/agent.ts
 check chat_thinking_signature_preserved contains 'thinking_signature' src/agent.ts
+check chat_m3_adaptive_thinking contains 'thinking: { type: "adaptive" }' src/agent.ts
 check chat_auth_header_official contains '"X-Api-Key": apiKey' src/agent.ts
 check chat_single_system_cache_breakpoint not_contains 'system.push({ type: "text", text: msg.content, cache_control' src/agent.ts
 check chat_single_system_cache_test contains 'caches only final system block' test/unit/agent.test.ts

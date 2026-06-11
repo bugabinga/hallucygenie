@@ -53,6 +53,11 @@ import {
     recordToolInputHistory,
     listToolInputHistory,
     hideToolInputHistory,
+    saveVideoTask,
+    updateVideoTask,
+    saveAsyncTtsTask,
+    updateAsyncTtsTask,
+    listAsyncTtsTasks,
     QUOTAS,
     type AssetRow,
 } from "./db.ts";
@@ -65,6 +70,27 @@ import { createLogger, nextReqId } from "./log.ts";
 const log = createLogger({ service: "hallucygenie" });
 function truncateLogText(text: string, max = 500): string {
     return text.length > max ? `${text.slice(0, max)}…` : text;
+}
+
+function longTextSummary(text: string): string {
+    const compact = text.replace(/\s+/g, " ").trim();
+    return `${compact.slice(0, 180)}${compact.length > 180 ? "…" : ""} (${text.length} chars)`;
+}
+
+function compactLongSpeechInput(args: Record<string, unknown>): Record<string, unknown> {
+    const text = typeof args.text === "string" ? args.text : "";
+    const out: Record<string, unknown> = {
+        text_summary: longTextSummary(text),
+        text_length: text.length,
+    };
+    for (const key of ["voice_id", "speed", "volume", "pitch"] as const) {
+        if (args[key] !== undefined) out[key] = args[key];
+    }
+    return out;
+}
+
+function publicToolInput(toolName: string, args: Record<string, unknown>): Record<string, unknown> {
+    return toolName === "generate_long_speech" ? compactLongSpeechInput(args) : args;
 }
 import type { Database } from "bun:sqlite";
 import { MINIMAX_BASE, musicCoverPreprocess, type ToolResult } from "./tools.ts";
@@ -113,7 +139,9 @@ export type DirectToolName =
     | "generate_image"
     | "generate_music"
     | "generate_music_cover"
+    | "generate_video"
     | "text_to_speech"
+    | "generate_long_speech"
     | "generate_lyrics"
     | "analyze_image"
     | "web_search";
@@ -128,7 +156,9 @@ export interface ExplicitToolDirective extends DirectToolExecution {
     name:
         | "generate_image"
         | "generate_music"
+        | "generate_video"
         | "text_to_speech"
+        | "generate_long_speech"
         | "generate_lyrics"
         | "analyze_image";
 }
@@ -609,7 +639,7 @@ function parseToolParams(raw: string | undefined, allowed: Set<string>): Record<
 
 export function parseExplicitToolDirective(content: string): ExplicitToolDirective | null {
     const match = content.match(
-        /^Use\s+(generate_image|generate_music|text_to_speech|generate_lyrics|analyze_image)\s+with\s+(prompt|text|image_url|lyrics):\s*([\s\S]*?)(?:\nTool params:\s*([\s\S]*))?$/i,
+        /^Use\s+(generate_image|generate_music|generate_video|text_to_speech|generate_long_speech|generate_lyrics|analyze_image)\s+with\s+(prompt|text|image_url|lyrics):\s*([\s\S]*?)(?:\nTool params:\s*([\s\S]*))?$/i,
     );
     if (!match) return null;
 
@@ -628,15 +658,21 @@ export function parseExplicitToolDirective(content: string): ExplicitToolDirecti
             "prompt_optimizer",
         ]),
         generate_music: new Set(["lyrics"]),
+        generate_video: new Set(["duration", "resolution"]),
         text_to_speech: new Set(["voice_id", "speed", "volume", "pitch"]),
+        generate_long_speech: new Set(["voice_id", "speed", "volume", "pitch"]),
         generate_lyrics: new Set(["mode", "lyrics", "title"]),
         analyze_image: new Set(["prompt"]),
     };
     const args = parseToolParams(match[4], allowedParams[name]);
 
-    if (name === "text_to_speech") {
+    if (name === "text_to_speech" || name === "generate_long_speech") {
         args.text = value;
-        return { name, args, prompt: value };
+        return {
+            name,
+            args,
+            prompt: name === "generate_long_speech" ? longTextSummary(value) : value,
+        };
     }
 
     if (name === "analyze_image") {
@@ -658,7 +694,7 @@ export function parseExplicitToolDirective(content: string): ExplicitToolDirecti
 
 function featureForTool(name: string): "image" | "speech" | "music" | "lyrics" | null {
     if (name === "generate_image") return "image";
-    if (name === "text_to_speech") return "speech";
+    if (name === "text_to_speech" || name === "generate_long_speech") return "speech";
     if (name === "generate_music" || name === "generate_music_cover") return "music";
     if (name === "generate_lyrics") return "lyrics";
     return null;
@@ -670,7 +706,7 @@ function quotaAmountForTool(name: string, args: Record<string, unknown>): number
         if (!Number.isFinite(n)) return 1;
         return Math.max(1, Math.min(9, Math.floor(n)));
     }
-    if (name !== "text_to_speech") return 1;
+    if (name !== "text_to_speech" && name !== "generate_long_speech") return 1;
     const text = args.text;
     if (typeof text !== "string") return 1;
     return Math.max(1, Array.from(text).length);
@@ -701,11 +737,47 @@ async function localAnalyzeAssetDataUrl(
     return `data:image/${analyzeDataMime(asset.mime_type)};base64,${Buffer.from(file).toString("base64")}`;
 }
 
+async function localReferenceAssetDataUrl(
+    database: Database,
+    sessionId: string,
+    assetId: string,
+): Promise<string> {
+    if (!/^asset_[0-9a-f-]+$/i.test(assetId)) throw new Error("reference image asset invalid");
+    const asset = getAsset(database, assetId);
+    if (!asset || asset.session_id !== sessionId)
+        throw new Error("reference image asset not found");
+    if (!isAllowedImageMime(asset.mime_type, REFERENCE_IMAGE_MIMES))
+        throw new Error("reference image must be PNG or JPG");
+    if (asset.size_bytes > 20 * 1024 * 1024) throw new Error("reference image too large");
+    const file = await readFile(`data/assets/${asset.session_id}/${asset.filename}`);
+    if (file.byteLength > 20 * 1024 * 1024) throw new Error("reference image too large");
+    return `data:${asset.mime_type};base64,${Buffer.from(file).toString("base64")}`;
+}
+
 async function explicitExecutionArgs(
     directive: DirectToolExecution,
     database: Database,
     sessionId?: string,
 ): Promise<Record<string, unknown>> {
+    if (directive.name === "generate_image") {
+        const referenceAssetId = directive.args.reference_asset_id;
+        if (typeof referenceAssetId !== "string") return directive.args;
+        if (!sessionId) throw new Error("reference image asset requires a session");
+        const { reference_asset_id: _referenceAssetId, ...args } = directive.args;
+        return {
+            ...args,
+            subject_reference: [
+                {
+                    type: "character",
+                    image_file: await localReferenceAssetDataUrl(
+                        database,
+                        sessionId,
+                        referenceAssetId,
+                    ),
+                },
+            ],
+        };
+    }
     if (directive.name !== "analyze_image") return directive.args;
     const imageUrl = directive.args.image_url;
     if (typeof imageUrl !== "string" || !imageUrl.startsWith("/asset/")) return directive.args;
@@ -788,6 +860,8 @@ function normalizeCreateToolExecution(body: unknown): DirectToolExecution | stri
         if (height !== undefined) args.height = height;
         const promptOptimizer = optionalBooleanField(fields, "prompt_optimizer");
         if (promptOptimizer !== undefined) args.prompt_optimizer = promptOptimizer;
+        const referenceAssetId = optionalStringField(fields, "reference_asset_id", 80);
+        if (referenceAssetId !== undefined) args.reference_asset_id = referenceAssetId;
         return { name, args, prompt };
     }
 
@@ -797,6 +871,17 @@ function normalizeCreateToolExecution(body: unknown): DirectToolExecution | stri
         const args: Record<string, unknown> = { prompt };
         const lyrics = optionalStringField(fields, "lyrics", 3500);
         if (lyrics !== undefined) args.lyrics = lyrics;
+        return { name, args, prompt };
+    }
+
+    if (name === "generate_video") {
+        const prompt = parseStringField(fields, "prompt", 2000);
+        if (!prompt) return "prompt required";
+        const args: Record<string, unknown> = { prompt };
+        const duration = optionalIntegerField(fields, "duration", 6, 10);
+        if (duration === 6 || duration === 10) args.duration = duration;
+        const resolution = optionalStringField(fields, "resolution", 20);
+        if (resolution === "768p" || resolution === "1080p") args.resolution = resolution;
         return { name, args, prompt };
     }
 
@@ -823,6 +908,21 @@ function normalizeCreateToolExecution(body: unknown): DirectToolExecution | stri
         const pitch = optionalNumberField(fields, "pitch", -12, 12);
         if (pitch !== undefined) args.pitch = pitch;
         return { name, args, prompt: text };
+    }
+
+    if (name === "generate_long_speech") {
+        const text = parseStringField(fields, "text", 50000);
+        if (!text) return "text required";
+        const args: Record<string, unknown> = { text };
+        const voiceId = optionalStringField(fields, "voice_id", 120);
+        if (voiceId !== undefined) args.voice_id = voiceId;
+        const speed = optionalNumberField(fields, "speed", 0.5, 2);
+        if (speed !== undefined) args.speed = speed;
+        const volume = optionalNumberField(fields, "volume", 0.01, 10);
+        if (volume !== undefined) args.volume = volume;
+        const pitch = optionalNumberField(fields, "pitch", -12, 12);
+        if (pitch !== undefined) args.pitch = pitch;
+        return { name, args, prompt: longTextSummary(text) };
     }
 
     if (name === "generate_lyrics") {
@@ -874,10 +974,11 @@ function handleDirectToolExecution(
 
     (async () => {
         try {
+            const publicInput = publicToolInput(directive.name, directive.args);
             await writeSse("tool_start", {
                 id: toolCallId,
                 name: directive.name,
-                input: directive.args,
+                input: publicInput,
             });
 
             const feature = featureForTool(directive.name);
@@ -888,6 +989,46 @@ function handleDirectToolExecution(
             const executionArgs = quotaBlocked
                 ? directive.args
                 : await explicitExecutionArgs(directive, database, sessionId);
+            const videoTaskId =
+                sessionId && directive.name === "generate_video" ? `video_${randomUUID()}` : null;
+            const asyncTtsTaskId =
+                sessionId && directive.name === "generate_long_speech"
+                    ? `tts_${randomUUID()}`
+                    : null;
+            if (videoTaskId && sessionId) {
+                const now = Date.now();
+                saveVideoTask(database, {
+                    id: videoTaskId,
+                    session_id: sessionId,
+                    provider_task_id: toolCallId,
+                    status: quotaBlocked ? "failed" : "running",
+                    prompt: directive.prompt ?? "",
+                    file_id: null,
+                    asset_id: null,
+                    error: quotaBlocked ? `Daily ${feature} quota is used up.` : null,
+                    created_at: now,
+                    updated_at: now,
+                });
+            }
+            if (asyncTtsTaskId && sessionId) {
+                const now = Date.now();
+                saveAsyncTtsTask(database, {
+                    id: asyncTtsTaskId,
+                    session_id: sessionId,
+                    provider_task_id: toolCallId,
+                    status: quotaBlocked ? "failed" : "running",
+                    text_summary: longTextSummary(String(directive.args.text ?? "")),
+                    voice_id:
+                        typeof directive.args.voice_id === "string"
+                            ? directive.args.voice_id
+                            : null,
+                    file_id: null,
+                    asset_id: null,
+                    error: quotaBlocked ? `Daily ${feature} quota is used up.` : null,
+                    created_at: now,
+                    updated_at: now,
+                });
+            }
             const result = quotaBlocked
                 ? { type: "error" as const, content: `Daily ${feature} quota is used up.` }
                 : safeToolResultForUser(
@@ -903,6 +1044,24 @@ function handleDirectToolExecution(
                       directive.args,
                   )
                 : result;
+            if (videoTaskId) {
+                updateVideoTask(
+                    database,
+                    videoTaskId,
+                    saved.type === "error"
+                        ? { status: "failed", error: saved.content }
+                        : { status: "succeeded", asset_id: assetIdFromToolResult(saved) },
+                );
+            }
+            if (asyncTtsTaskId) {
+                updateAsyncTtsTask(
+                    database,
+                    asyncTtsTaskId,
+                    saved.type === "error"
+                        ? { status: "failed", error: saved.content }
+                        : { status: "succeeded", asset_id: assetIdFromToolResult(saved) },
+                );
+            }
             if (feature && !quotaBlocked && saved.type === "error") {
                 releaseQuota(database, feature, quotaAmount);
             }
@@ -913,7 +1072,7 @@ function handleDirectToolExecution(
                         session_id: sessionId,
                         origin,
                         tool_name: directive.name,
-                        input: directive.args,
+                        input: publicInput,
                         status: saved.type === "error" ? "failed" : "succeeded",
                         asset_id: assetIdFromToolResult(saved),
                     });
@@ -926,7 +1085,7 @@ function handleDirectToolExecution(
                 id: toolCallId,
                 name: directive.name,
                 result: saved,
-                input: directive.args,
+                input: publicInput,
             });
             if (sessionId && saved.type !== "error" && clearCreateDraftOnSuccess) {
                 deleteDraft(database, sessionId, "create");
@@ -939,9 +1098,7 @@ function handleDirectToolExecution(
                     sessionId,
                     "assistant",
                     "",
-                    JSON.stringify([
-                        { id: toolCallId, name: directive.name, input: directive.args },
-                    ]),
+                    JSON.stringify([{ id: toolCallId, name: directive.name, input: publicInput }]),
                     null,
                 );
                 saveMessage(
@@ -1079,6 +1236,7 @@ function isAllowedImageMime(mime: string, allowedMimes: string[]): boolean {
 
 const AVATAR_IMAGE_MIMES = ["image/png", "image/jpeg", "image/webp", "image/gif"];
 const ANALYZE_IMAGE_MIMES = ["image/png", "image/jpeg", "image/webp", "image/gif"];
+const REFERENCE_IMAGE_MIMES = ["image/png", "image/jpeg"];
 
 function isCoverAudioMime(mime: string): boolean {
     return [
@@ -1167,6 +1325,34 @@ async function handleAnalyzeImageUpload(req: Request, database: Database): Promi
         );
         const assetId = assetIdFromToolResult(saved);
         if (!assetId) throw new Error("analyze image asset save failed");
+        return jsonResponse({ assetId, assetUrl: saved.content });
+    } catch (err) {
+        return jsonResponse({ error: String(err instanceof Error ? err.message : err) }, 400);
+    }
+}
+
+async function handleReferenceImageUpload(req: Request, database: Database): Promise<Response> {
+    try {
+        const sessionId = resolveSessionId(req, database);
+        const form = await req.formData();
+        const file = form.get("image");
+        if (!(file instanceof File))
+            return jsonResponse({ error: "reference image required" }, 400);
+        if (!isAllowedImageMime(file.type, REFERENCE_IMAGE_MIMES))
+            return jsonResponse({ error: "reference image must be PNG or JPG" }, 400);
+        if (file.size > 20 * 1024 * 1024)
+            return jsonResponse({ error: "reference image too large" }, 400);
+        const saved = saveAssetBuffer(
+            "image",
+            Buffer.from(await file.arrayBuffer()),
+            file.type,
+            sessionId,
+            "reference_image",
+            "Uploaded character reference",
+            { source: "upload" },
+        );
+        const assetId = assetIdFromToolResult(saved);
+        if (!assetId) throw new Error("reference image asset save failed");
         return jsonResponse({ assetId, assetUrl: saved.content });
     } catch (err) {
         return jsonResponse({ error: String(err instanceof Error ? err.message : err) }, 400);
@@ -1329,12 +1515,14 @@ export async function handleRequest(req: Request): Promise<Response> {
             const image = find("image-01");
             const music = find("music-2.6");
             const lyrics = find("lyrics-01") ?? find("lyrics");
+            const video = find("video") ?? find("MiniMax-Hailuo");
             return jsonResponse({
                 chat: quotaEntry(m2),
                 speech: quotaEntry(speech),
                 image: quotaEntry(image),
                 music: quotaEntry(music),
                 lyrics: quotaEntry(lyrics),
+                video: video && video.current_interval_total_count > 0 ? quotaEntry(video) : null,
             });
         } catch (err) {
             log.error("quota api error", { error: String(err) });
@@ -1373,6 +1561,16 @@ export async function handleRequest(req: Request): Promise<Response> {
 
         if (path === "/api/analyze-image" && method === "POST") {
             return handleAnalyzeImageUpload(req, database);
+        }
+
+        if (path === "/api/reference-image" && method === "POST") {
+            return handleReferenceImageUpload(req, database);
+        }
+
+        if (path === "/api/async-tts-tasks" && method === "GET") {
+            return jsonResponse({
+                tasks: listAsyncTtsTasks(database, resolveSessionId(req, database)),
+            });
         }
 
         if (path === "/api/music-cover/status" && method === "GET") {
@@ -1761,6 +1959,7 @@ function extensionForMime(mime: string): string {
     if (mime === "image/webp") return "webp";
     if (mime === "image/gif") return "gif";
     if (mime === "audio/mpeg" || mime === "audio/mp3") return "mp3";
+    if (mime === "video/mp4") return "mp4";
     return mime.split("/")[1]?.replace(/jpeg/, "jpg") ?? "bin";
 }
 
@@ -1780,16 +1979,32 @@ function assetParamsJson(
     args?: Record<string, unknown>,
 ): string | null {
     if (toolName === "generate_image") {
-        return JSON.stringify({
+        const params: Record<string, unknown> = {
             model: "image-01",
             prompt: prompt ?? stringParam(args, "prompt") ?? null,
             aspect_ratio: stringParam(args, "aspect_ratio") ?? null,
-        });
+        };
+        const referenceAssetId = stringParam(args, "reference_asset_id");
+        if (referenceAssetId) params.reference_asset_id = referenceAssetId;
+        return JSON.stringify(params);
     }
     if (toolName === "text_to_speech") {
         return JSON.stringify({
             model: "speech-2.8-hd",
             text: prompt ?? stringParam(args, "text") ?? null,
+            voice_id: stringParam(args, "voice_id") ?? null,
+            speed: numberParam(args, "speed") ?? null,
+            volume: numberParam(args, "volume") ?? null,
+            pitch: numberParam(args, "pitch") ?? null,
+        });
+    }
+    if (toolName === "generate_long_speech") {
+        const text = stringParam(args, "text") ?? "";
+        return JSON.stringify({
+            model: "speech-2.8-hd",
+            endpoint: "t2a_async_v2",
+            text_summary: prompt ?? longTextSummary(text),
+            text_length: text.length,
             voice_id: stringParam(args, "voice_id") ?? null,
             speed: numberParam(args, "speed") ?? null,
             volume: numberParam(args, "volume") ?? null,
@@ -1825,6 +2040,14 @@ function assetParamsJson(
             lyrics_present: Boolean(stringParam(args, "lyrics")),
         });
     }
+    if (toolName === "generate_video") {
+        return JSON.stringify({
+            model: "MiniMax-Hailuo-02",
+            prompt: prompt ?? stringParam(args, "prompt") ?? null,
+            duration: numberParam(args, "duration") ?? 6,
+            resolution: stringParam(args, "resolution") ?? "768p",
+        });
+    }
     return null;
 }
 
@@ -1850,9 +2073,11 @@ function saveAssetBuffer(
         type:
             resultType === "image"
                 ? "image"
-                : toolName === "generate_music" || toolName === "generate_music_cover"
-                  ? "music"
-                  : "audio",
+                : resultType === "video"
+                  ? "video"
+                  : toolName === "generate_music" || toolName === "generate_music_cover"
+                    ? "music"
+                    : "audio",
         filename,
         mime_type: mime,
         prompt,
@@ -1865,7 +2090,19 @@ function saveAssetBuffer(
 }
 
 const MAX_GENERATED_IMAGE_BYTES = 20 * 1024 * 1024;
+const MAX_GENERATED_AUDIO_BYTES = 200 * 1024 * 1024;
+const MAX_GENERATED_VIDEO_BYTES = 200 * 1024 * 1024;
 const GENERATED_IMAGE_MIMES = new Set(["image/jpeg", "image/png", "image/webp", "image/gif"]);
+const GENERATED_AUDIO_MIMES = new Set([
+    "audio/mpeg",
+    "audio/mp3",
+    "audio/wav",
+    "audio/x-wav",
+    "audio/flac",
+    "audio/opus",
+]);
+const GENERATED_AUDIO_BUNDLE_MIMES = new Set(["application/x-tar", "application/tar"]);
+const GENERATED_VIDEO_MIMES = new Set(["video/mp4"]);
 
 async function readResponseBytesCapped(resp: Response, maxBytes: number): Promise<Buffer> {
     if (!resp.body) {
@@ -1906,6 +2143,76 @@ async function downloadImageAsset(url: string): Promise<{ buf: Buffer; mime: str
     return { buf: await readResponseBytesCapped(resp, MAX_GENERATED_IMAGE_BYTES), mime };
 }
 
+async function downloadVideoAsset(url: string): Promise<{ buf: Buffer; mime: string }> {
+    const parsed = new URL(url);
+    if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
+        throw new Error("video asset URL must be http(s)");
+    }
+
+    const resp = await fetch(url);
+    if (!resp.ok) throw new Error(`video download failed: ${resp.status}`);
+
+    const mime = resp.headers.get("Content-Type")?.split(";")[0]?.trim().toLowerCase() ?? "";
+    if (!GENERATED_VIDEO_MIMES.has(mime)) {
+        throw new Error(`video download returned ${mime || "unknown"}`);
+    }
+    const contentLength = Number(resp.headers.get("Content-Length") ?? "0");
+    if (contentLength > MAX_GENERATED_VIDEO_BYTES) throw new Error("video download too large");
+
+    return { buf: await readResponseBytesCapped(resp, MAX_GENERATED_VIDEO_BYTES), mime };
+}
+
+function audioMimeForFilename(filename: string): string | null {
+    const lower = filename.toLowerCase();
+    if (lower.endsWith(".mp3")) return "audio/mpeg";
+    if (lower.endsWith(".wav")) return "audio/wav";
+    if (lower.endsWith(".flac")) return "audio/flac";
+    if (lower.endsWith(".opus")) return "audio/opus";
+    return null;
+}
+
+function parseTarSize(raw: string): number {
+    const clean = raw.replace(/\0.*$/, "").trim();
+    return clean ? Number.parseInt(clean, 8) : 0;
+}
+
+function extractAudioFromTar(buf: Buffer): { buf: Buffer; mime: string } {
+    let offset = 0;
+    while (offset + 512 <= buf.byteLength) {
+        const header = buf.subarray(offset, offset + 512);
+        if (header.every((byte) => byte === 0)) break;
+        const filename = header.subarray(0, 100).toString("utf8").replace(/\0.*$/, "");
+        const size = parseTarSize(header.subarray(124, 136).toString("ascii"));
+        const dataStart = offset + 512;
+        const dataEnd = dataStart + size;
+        if (dataEnd > buf.byteLength) throw new Error("audio bundle truncated");
+        const mime = audioMimeForFilename(filename);
+        if (mime) return { buf: Buffer.from(buf.subarray(dataStart, dataEnd)), mime };
+        offset = dataStart + Math.ceil(size / 512) * 512;
+    }
+    throw new Error("audio bundle had no generated audio");
+}
+
+async function downloadAudioAsset(url: string): Promise<{ buf: Buffer; mime: string }> {
+    const parsed = new URL(url);
+    if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
+        throw new Error("audio asset URL must be http(s)");
+    }
+
+    const resp = await fetch(url);
+    if (!resp.ok) throw new Error(`audio download failed: ${resp.status}`);
+
+    const mime = resp.headers.get("Content-Type")?.split(";")[0]?.trim().toLowerCase() ?? "";
+    if (!GENERATED_AUDIO_MIMES.has(mime) && !GENERATED_AUDIO_BUNDLE_MIMES.has(mime)) {
+        throw new Error(`audio download returned ${mime || "unknown"}`);
+    }
+    const contentLength = Number(resp.headers.get("Content-Length") ?? "0");
+    if (contentLength > MAX_GENERATED_AUDIO_BYTES) throw new Error("audio download too large");
+    const buf = await readResponseBytesCapped(resp, MAX_GENERATED_AUDIO_BYTES);
+    if (GENERATED_AUDIO_BUNDLE_MIMES.has(mime)) return extractAudioFromTar(buf);
+    return { buf, mime };
+}
+
 /**
  * Save generated media to disk and record in SQLite.
  * Returns a local /asset URL for browser rendering.
@@ -1942,6 +2249,32 @@ async function saveAssetFile(
             const downloaded = await downloadImageAsset(result.content);
             return saveAssetBuffer(
                 "image",
+                downloaded.buf,
+                downloaded.mime,
+                sessionId,
+                toolName,
+                prompt,
+                args,
+            );
+        }
+
+        if (result.type === "video" && /^https?:\/\//i.test(result.content)) {
+            const downloaded = await downloadVideoAsset(result.content);
+            return saveAssetBuffer(
+                "video",
+                downloaded.buf,
+                downloaded.mime,
+                sessionId,
+                toolName,
+                prompt,
+                args,
+            );
+        }
+
+        if (result.type === "audio" && /^https?:\/\//i.test(result.content)) {
+            const downloaded = await downloadAudioAsset(result.content);
+            return saveAssetBuffer(
+                "audio",
                 downloaded.buf,
                 downloaded.mime,
                 sessionId,

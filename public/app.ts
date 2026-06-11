@@ -19,7 +19,7 @@ interface HistoryToolCall {
 }
 
 interface ToolResult {
-    type: "image" | "audio" | "text" | "error";
+    type: "image" | "audio" | "video" | "text" | "error";
     content: string;
     urls?: string[];
 }
@@ -28,7 +28,9 @@ type CreateToolName =
     | "generate_image"
     | "generate_music"
     | "generate_music_cover"
+    | "generate_video"
     | "text_to_speech"
+    | "generate_long_speech"
     | "generate_lyrics"
     | "analyze_image"
     | "web_search";
@@ -65,6 +67,7 @@ interface CreateDraft {
         width: string;
         height: string;
         prompt_optimizer: boolean;
+        reference_asset_id: string;
     };
     music: {
         prompt: string;
@@ -75,7 +78,9 @@ interface CreateDraft {
         cover_feature_id: string;
         cover_lyrics: string;
     };
+    video: { prompt: string; duration: string; resolution: string };
     voice: { text: string; speed: string; voice_id: string; volume: string; pitch: string };
+    narration: { text: string; speed: string; voice_id: string; volume: string; pitch: string };
     analyze: { image_url: string; prompt: string };
     search: { query: string };
 }
@@ -187,6 +192,14 @@ async function uploadAnalyzeImage(file: File): Promise<{ assetId: string; assetU
     body.set("image", file);
     const resp = await fetch("/api/analyze-image", { method: "POST", body });
     if (!resp.ok) throw new Error(`Failed to upload image: ${resp.status}`);
+    return (await resp.json()) as { assetId: string; assetUrl: string };
+}
+
+async function uploadReferenceImage(file: File): Promise<{ assetId: string; assetUrl: string }> {
+    const body = new FormData();
+    body.set("image", file);
+    const resp = await fetch("/api/reference-image", { method: "POST", body });
+    if (!resp.ok) throw new Error(`Failed to upload reference image: ${resp.status}`);
     return (await resp.json()) as { assetId: string; assetUrl: string };
 }
 
@@ -453,8 +466,10 @@ export function renderSteerMessage(content: string): HTMLElement {
 const TOOL_EMOJIS: Record<string, string> = {
     generate_image: "🎨",
     text_to_speech: "🎙️",
+    generate_long_speech: "📖",
     generate_music: "🎵",
     generate_music_cover: "🎵",
+    generate_video: "🎬",
     generate_lyrics: "📝",
     analyze_image: "🔎",
     web_search: "🔍",
@@ -468,7 +483,9 @@ const TWEAKABLE_TOOL_KINDS: Record<string, string> = {
     generate_image: "image",
     generate_music: "music",
     generate_music_cover: "cover",
+    generate_video: "video",
     text_to_speech: "voice",
+    generate_long_speech: "narration",
     generate_lyrics: "music",
     analyze_image: "analyze",
     web_search: "search",
@@ -605,6 +622,14 @@ export function renderToolResult(
             src: result.content,
         });
         body.appendChild(audio);
+    } else if (result.type === "video") {
+        const video = createElement("video", {
+            class: "tool-result-video",
+            controls: "",
+            src: result.content,
+            preload: "metadata",
+        });
+        body.appendChild(video);
     } else {
         // text or other — render as formatted text
         body.innerHTML = renderMarkdown(result.content);
@@ -668,7 +693,7 @@ export function closeLightbox(): void {
 interface Asset {
     id: string;
     session_id: string;
-    type: "image" | "audio" | "music";
+    type: "image" | "audio" | "music" | "video";
     filename: string;
     mime_type: string;
     prompt: string | null;
@@ -721,16 +746,36 @@ function renderAssetParams(params: Record<string, unknown>): string {
         parts.push(voiceId.slice(0, 8) + "…");
     }
 
+    const duration = params["duration"];
+    if (typeof duration === "number") parts.push(`${duration}s`);
+
+    const resolution = params["resolution"];
+    if (typeof resolution === "string" && resolution) parts.push(resolution);
+
     return parts.join(" · ");
 }
 
 function assetTypeLabel(type: Asset["type"]): string {
     if (type === "image") return "Image";
     if (type === "music") return "Music";
+    if (type === "video") return "Video";
     return "Voice";
 }
 
+function isReferenceImageAsset(asset: Asset): boolean {
+    return asset.type === "image" && ["image/png", "image/jpeg"].includes(asset.mime_type);
+}
+
 function renderAssetPreview(asset: Asset, url: string): HTMLElement {
+    if (asset.type === "video") {
+        const video = document.createElement("video");
+        video.className = "asset-video";
+        video.src = url;
+        video.controls = true;
+        video.preload = "metadata";
+        return video;
+    }
+
     if (asset.type !== "image") {
         const audio = document.createElement("audio");
         audio.className = "asset-audio";
@@ -817,6 +862,25 @@ function renderAssetCard(asset: Asset): HTMLElement {
         paramsEl.className = "asset-params";
         paramsEl.textContent = paramsStr;
         card.appendChild(paramsEl);
+    }
+
+    if (isReferenceImageAsset(asset)) {
+        const reference = document.createElement("button");
+        reference.type = "button";
+        reference.className = "asset-use-reference";
+        reference.textContent = "Use as character";
+        reference.setAttribute(
+            "aria-label",
+            "Use this image as the Create Image character reference",
+        );
+        reference.addEventListener("click", () => {
+            document.dispatchEvent(
+                new CustomEvent("hallucygenie:use-reference-asset", {
+                    detail: { assetId: asset.id, assetUrl: asset.url },
+                }),
+            );
+        });
+        card.appendChild(reference);
     }
 
     const download = document.createElement("a");
@@ -1211,6 +1275,10 @@ function keepToolResultInView(card: HTMLElement, shouldFollow: boolean): void {
         audio.addEventListener("loadedmetadata", scrollToBottom, { once: true });
         audio.addEventListener("loadeddata", scrollToBottom, { once: true });
     });
+    card.querySelectorAll<HTMLVideoElement>("video.tool-result-video").forEach((video) => {
+        video.addEventListener("loadedmetadata", scrollToBottom, { once: true });
+        video.addEventListener("loadeddata", scrollToBottom, { once: true });
+    });
 }
 
 function unwrapStreamChunks(root: ParentNode): void {
@@ -1417,11 +1485,16 @@ function inferHistoryToolResult(toolName: string, content: string): ToolResult {
 
     if (
         (toolName === "text_to_speech" ||
+            toolName === "generate_long_speech" ||
             toolName === "generate_music" ||
             toolName === "generate_music_cover") &&
         /^(?:\/asset\/|https?:\/\/|data:audio\/)/i.test(content)
     ) {
         return { type: "audio", content };
+    }
+
+    if (toolName === "generate_video" && /^(?:\/asset\/|https?:\/\/)/i.test(content)) {
+        return { type: "video", content };
     }
 
     return { type: "text", content };
@@ -1607,6 +1680,7 @@ function defaultCreateDraft(): CreateDraft {
             width: "",
             height: "",
             prompt_optimizer: false,
+            reference_asset_id: "",
         },
         music: {
             prompt: "",
@@ -1617,7 +1691,15 @@ function defaultCreateDraft(): CreateDraft {
             cover_feature_id: "",
             cover_lyrics: "",
         },
+        video: { prompt: "", duration: "6", resolution: "768p" },
         voice: {
+            text: "",
+            speed: "1.0",
+            voice_id: "English_expressive_narrator",
+            volume: "",
+            pitch: "",
+        },
+        narration: {
             text: "",
             speed: "1.0",
             voice_id: "English_expressive_narrator",
@@ -1640,6 +1722,7 @@ function createDraftFromDom(): CreateDraft {
             width: ($("#img-width") as HTMLInputElement).value,
             height: ($("#img-height") as HTMLInputElement).value,
             prompt_optimizer: ($("#img-prompt-optimizer") as HTMLInputElement).checked,
+            reference_asset_id: ($("#img-reference-asset") as HTMLInputElement).value,
         },
         music: {
             prompt: ($("#music-prompt") as HTMLTextAreaElement).value,
@@ -1650,6 +1733,11 @@ function createDraftFromDom(): CreateDraft {
             cover_feature_id: ($("#cover-feature-id") as HTMLInputElement).value,
             cover_lyrics: ($("#cover-lyrics") as HTMLTextAreaElement).value,
         },
+        video: {
+            prompt: ($("#video-prompt") as HTMLTextAreaElement).value,
+            duration: ($("#video-duration") as HTMLSelectElement).value,
+            resolution: ($("#video-resolution") as HTMLSelectElement).value,
+        },
         voice: {
             text: ($("#voice-text") as HTMLTextAreaElement).value,
             speed: ($("#voice-speed") as HTMLSelectElement).value,
@@ -1659,6 +1747,19 @@ function createDraftFromDom(): CreateDraft {
             volume:
                 (document.querySelector("#voice-volume") as HTMLInputElement | null)?.value ?? "",
             pitch: (document.querySelector("#voice-pitch") as HTMLInputElement | null)?.value ?? "",
+        },
+        narration: {
+            text: ($("#narration-text") as HTMLTextAreaElement).value,
+            speed: ($("#narration-speed") as HTMLSelectElement).value,
+            voice_id:
+                (document.querySelector("#narration-voice-id") as HTMLSelectElement | null)
+                    ?.value ?? "English_expressive_narrator",
+            volume:
+                (document.querySelector("#narration-volume") as HTMLInputElement | null)?.value ??
+                "",
+            pitch:
+                (document.querySelector("#narration-pitch") as HTMLInputElement | null)?.value ??
+                "",
         },
         analyze: {
             image_url: ($("#analyze-url") as HTMLInputElement).value,
@@ -1688,6 +1789,7 @@ function applyCreateDraft(draft: CreateDraft): void {
     ($("#img-prompt-optimizer") as HTMLInputElement).checked = Boolean(
         draft.image.prompt_optimizer,
     );
+    ($("#img-reference-asset") as HTMLInputElement).value = draft.image.reference_asset_id ?? "";
     ($("#music-prompt") as HTMLTextAreaElement).value = draft.music.prompt;
     ($("#music-lyrics") as HTMLTextAreaElement).value = draft.music.lyrics;
     ($("#cover-source-kind") as HTMLSelectElement).value =
@@ -1696,6 +1798,9 @@ function applyCreateDraft(draft: CreateDraft): void {
     ($("#cover-style") as HTMLTextAreaElement).value = draft.music.cover_style ?? "";
     ($("#cover-feature-id") as HTMLInputElement).value = draft.music.cover_feature_id ?? "";
     ($("#cover-lyrics") as HTMLTextAreaElement).value = draft.music.cover_lyrics ?? "";
+    ($("#video-prompt") as HTMLTextAreaElement).value = draft.video?.prompt ?? "";
+    ($("#video-duration") as HTMLSelectElement).value = draft.video?.duration ?? "6";
+    ($("#video-resolution") as HTMLSelectElement).value = draft.video?.resolution ?? "768p";
     ($("#voice-text") as HTMLTextAreaElement).value = draft.voice.text;
     ($("#voice-speed") as HTMLSelectElement).value = draft.voice.speed;
     const voiceId = document.querySelector("#voice-id") as HTMLSelectElement | null;
@@ -1704,6 +1809,17 @@ function applyCreateDraft(draft: CreateDraft): void {
     if (voiceId) voiceId.value = draft.voice.voice_id ?? "English_expressive_narrator";
     if (voiceVolume) voiceVolume.value = draft.voice.volume || "1";
     if (voicePitch) voicePitch.value = draft.voice.pitch || "0";
+    ($("#narration-text") as HTMLTextAreaElement).value = draft.narration?.text ?? "";
+    ($("#narration-speed") as HTMLSelectElement).value = draft.narration?.speed ?? "1.0";
+    const narrationVoiceId = document.querySelector(
+        "#narration-voice-id",
+    ) as HTMLSelectElement | null;
+    const narrationVolume = document.querySelector("#narration-volume") as HTMLInputElement | null;
+    const narrationPitch = document.querySelector("#narration-pitch") as HTMLInputElement | null;
+    if (narrationVoiceId)
+        narrationVoiceId.value = draft.narration?.voice_id ?? "English_expressive_narrator";
+    if (narrationVolume) narrationVolume.value = draft.narration?.volume || "1";
+    if (narrationPitch) narrationPitch.value = draft.narration?.pitch || "0";
     ($("#analyze-url") as HTMLInputElement).value = draft.analyze?.image_url ?? "";
     ($("#analyze-prompt") as HTMLTextAreaElement).value =
         draft.analyze?.prompt ?? "What do you see?";
@@ -1723,6 +1839,7 @@ interface QuotaData {
     speech: { used: number; total: number } | null;
     image: { used: number; total: number } | null;
     music: { used: number; total: number } | null;
+    video: { used: number; total: number } | null;
     lyrics: { used: number; total: number } | null;
 }
 
@@ -1731,6 +1848,7 @@ const QUOTA_LABELS: Record<keyof QuotaData, string> = {
     speech: "Voice",
     image: "Images",
     music: "Music",
+    video: "Video",
     lyrics: "Lyrics",
 };
 
@@ -2265,7 +2383,9 @@ export function init(): void {
     // Form submissions — send as prompt to chat
     const createImgForm = $("#create-image-form") as HTMLFormElement;
     const createMusicForm = $("#create-music-form") as HTMLFormElement;
+    const createVideoForm = $("#create-video-form") as HTMLFormElement;
     const createVoiceForm = $("#create-voice-form") as HTMLFormElement;
+    const createNarrationForm = $("#create-narration-form") as HTMLFormElement;
     const createAnalyzeForm = $("#create-analyze-form") as HTMLFormElement;
     const createSearchForm = $("#create-search-form") as HTMLFormElement;
     const imgPromptInput = $("#img-prompt") as HTMLTextAreaElement;
@@ -2277,11 +2397,19 @@ export function init(): void {
     const imgSeedClear = $("#img-seed-clear") as HTMLButtonElement;
     const imgSeedStatus = $("#img-seed-status") as HTMLElement;
     const imgSubmit = $("#img-submit") as HTMLButtonElement;
+    const imgReferenceFile = $("#img-reference-file") as HTMLInputElement;
+    const imgReferenceAsset = $("#img-reference-asset") as HTMLInputElement;
+    const imgReferenceStatus = $("#img-reference-status") as HTMLElement;
+    const imgReferencePreview = $("#img-reference-preview") as HTMLElement;
+    const imgReferenceClear = $("#img-reference-clear") as HTMLButtonElement;
     const imgWidthInput = $("#img-width") as HTMLInputElement;
     const imgHeightInput = $("#img-height") as HTMLInputElement;
     const imgPromptOptimizerInput = $("#img-prompt-optimizer") as HTMLInputElement;
     const musicPromptInput = $("#music-prompt") as HTMLTextAreaElement;
     const musicLyricsInput = $("#music-lyrics") as HTMLTextAreaElement;
+    const videoPromptInput = $("#video-prompt") as HTMLTextAreaElement;
+    const videoDurationInput = $("#video-duration") as HTMLSelectElement;
+    const videoResolutionInput = $("#video-resolution") as HTMLSelectElement;
     const writeLyricsBtn = $("#write-lyrics-btn") as HTMLButtonElement;
     const coverSourceKind = $("#cover-source-kind") as HTMLSelectElement;
     const coverAudioUrl = $("#cover-audio-url") as HTMLInputElement;
@@ -2299,6 +2427,11 @@ export function init(): void {
     const voiceIdInput = document.querySelector<HTMLSelectElement>("#voice-id");
     const voiceVolumeInput = document.querySelector<HTMLInputElement>("#voice-volume");
     const voicePitchInput = document.querySelector<HTMLInputElement>("#voice-pitch");
+    const narrationTextInput = $("#narration-text") as HTMLTextAreaElement;
+    const narrationSpeedInput = $("#narration-speed") as HTMLSelectElement;
+    const narrationVoiceIdInput = document.querySelector<HTMLSelectElement>("#narration-voice-id");
+    const narrationVolumeInput = document.querySelector<HTMLInputElement>("#narration-volume");
+    const narrationPitchInput = document.querySelector<HTMLInputElement>("#narration-pitch");
     const voicePauseDurationInput =
         document.querySelector<HTMLSelectElement>("#voice-pause-duration");
     const voiceInsertPause = document.querySelector<HTMLButtonElement>("#voice-insert-pause");
@@ -2410,6 +2543,8 @@ export function init(): void {
                 imgCountInput.value,
                 imgSeedInput.value,
             );
+            imgReferenceAsset.value = String(inputData.reference_asset_id ?? "");
+            updateImageReferenceUi();
             updateImageCreateUi();
             imgPromptOptimizerInput.checked = inputData.prompt_optimizer === true;
             setCreateTab("image");
@@ -2419,6 +2554,11 @@ export function init(): void {
             coverFeatureId.value = String(inputData.cover_feature_id ?? "");
             coverLyrics.value = String(inputData.lyrics ?? "");
             setCreateTab(kind === "cover" ? "cover" : "music");
+        } else if (kind === "video") {
+            videoPromptInput.value = String(inputData.prompt ?? "");
+            videoDurationInput.value = String(inputData.duration ?? "6");
+            videoResolutionInput.value = String(inputData.resolution ?? "768p");
+            setCreateTab("video");
         } else if (kind === "voice") {
             voiceTextInput.value = String(inputData.text ?? "");
             voiceSpeedInput.value = String(inputData.speed ?? "1.0");
@@ -2427,6 +2567,16 @@ export function init(): void {
             if (voiceVolumeInput) voiceVolumeInput.value = String(inputData.volume ?? "");
             if (voicePitchInput) voicePitchInput.value = String(inputData.pitch ?? "");
             setCreateTab("voice");
+        } else if (kind === "narration") {
+            narrationTextInput.value = String(inputData.text ?? "");
+            narrationSpeedInput.value = String(inputData.speed ?? "1.0");
+            if (narrationVoiceIdInput)
+                narrationVoiceIdInput.value = String(
+                    inputData.voice_id ?? "English_expressive_narrator",
+                );
+            if (narrationVolumeInput) narrationVolumeInput.value = String(inputData.volume ?? "");
+            if (narrationPitchInput) narrationPitchInput.value = String(inputData.pitch ?? "");
+            setCreateTab("narration");
         } else if (kind === "analyze") {
             analyzeUrlInput.value = String(inputData.image_url ?? "");
             analyzePromptInput.value = String(inputData.prompt ?? "What do you see?");
@@ -2452,6 +2602,17 @@ export function init(): void {
         if (!detail?.toolName || !detail.input) return;
         openCreateModal();
         fillCreateFormFromToolInput(detail.toolName, detail.input);
+    });
+
+    document.addEventListener("hallucygenie:use-reference-asset", (event) => {
+        const detail = (event as CustomEvent).detail as { assetId?: string; assetUrl?: string };
+        if (!detail?.assetId || !/^asset_[0-9a-f-]+$/i.test(detail.assetId)) return;
+        openCreateModal();
+        imgReferenceAsset.value = detail.assetId;
+        updateImageReferenceUi(detail.assetUrl ?? "");
+        updateImageCreateUi();
+        setCreateTab("image");
+        void putDraft("create", createDraftFromDom());
     });
 
     async function loadRecent(kind: string): Promise<void> {
@@ -2543,6 +2704,21 @@ export function init(): void {
         imgHeightInput.value = dimensions ? String(dimensions.height) : "";
     }
 
+    function updateImageReferenceUi(assetUrl = ""): void {
+        const assetId = imgReferenceAsset.value.trim();
+        imgReferenceClear.disabled = !assetId;
+        imgReferenceStatus.textContent = assetId
+            ? "Reference ready. Genie will keep the same character/photo."
+            : "PNG or JPG only. Upload one here or pick an image in Assets.";
+        imgReferencePreview.innerHTML = "";
+        imgReferencePreview.hidden = !assetUrl;
+        if (!assetUrl) return;
+        const img = document.createElement("img");
+        img.src = assetUrl;
+        img.alt = "Selected reference image";
+        imgReferencePreview.appendChild(img);
+    }
+
     function updateImageCreateUi(): void {
         imgSeedStatus.textContent = imageSeedStatusText(imgCountInput.value, imgSeedInput.value);
         imgSeedClear.disabled = !imgSeedInput.value.trim();
@@ -2573,12 +2749,14 @@ export function init(): void {
         const createDraft = await getDraft("create");
         if (isCreateDraft(createDraft)) {
             applyCreateDraft(createDraft);
+            updateImageReferenceUi();
             updateImageCreateUi();
             updateLyricsButton();
             updateCoverGenerateUi();
             setCreateTab(createDraft.selectedTab || "image");
         } else {
             applyCreateDraft(defaultCreateDraft());
+            updateImageReferenceUi();
             updateImageCreateUi();
             updateLyricsButton();
             updateCoverGenerateUi();
@@ -2596,6 +2774,38 @@ export function init(): void {
     });
     imgSeedRandom.addEventListener("click", rollImageSeed);
     imgSeedClear.addEventListener("click", clearImageSeed);
+    imgReferenceClear.addEventListener("click", () => {
+        imgReferenceAsset.value = "";
+        imgReferenceFile.value = "";
+        updateImageReferenceUi();
+        void putDraft("create", createDraftFromDom());
+    });
+    imgReferenceFile.addEventListener("change", () => {
+        const file = imgReferenceFile.files?.[0];
+        if (!file) return;
+        if (!["image/png", "image/jpeg"].includes(file.type)) {
+            showError("Use a PNG or JPG reference image.");
+            imgReferenceFile.value = "";
+            return;
+        }
+        imgReferenceFile.disabled = true;
+        imgReferenceStatus.textContent = `Uploading ${file.name}...`;
+        void uploadReferenceImage(file)
+            .then((uploaded) => {
+                imgReferenceAsset.value = uploaded.assetId;
+                updateImageReferenceUi(uploaded.assetUrl);
+                void putDraft("create", createDraftFromDom());
+            })
+            .catch(() => {
+                imgReferenceAsset.value = "";
+                updateImageReferenceUi();
+                showError("Failed to upload reference image 😕");
+            })
+            .finally(() => {
+                imgReferenceFile.disabled = false;
+                imgReferenceFile.value = "";
+            });
+    });
     [imgPromptInput, imgCountInput, imgSeedInput].forEach((el) => {
         el.addEventListener("input", updateImageCreateUi);
         el.addEventListener("change", updateImageCreateUi);
@@ -2610,8 +2820,12 @@ export function init(): void {
         imgWidthInput,
         imgHeightInput,
         imgPromptOptimizerInput,
+        imgReferenceAsset,
         musicPromptInput,
         musicLyricsInput,
+        videoPromptInput,
+        videoDurationInput,
+        videoResolutionInput,
         coverSourceKind,
         coverAudioUrl,
         coverAudioFile,
@@ -2622,6 +2836,11 @@ export function init(): void {
         voiceIdInput,
         voiceVolumeInput,
         voicePitchInput,
+        narrationTextInput,
+        narrationSpeedInput,
+        narrationVoiceIdInput,
+        narrationVolumeInput,
+        narrationPitchInput,
         analyzeUrlInput,
         analyzePromptInput,
         searchQueryInput,
@@ -2764,6 +2983,8 @@ export function init(): void {
             input.width = Number(imgWidthInput.value.trim());
             input.height = Number(imgHeightInput.value.trim());
         }
+        if (imgReferenceAsset.value.trim())
+            input.reference_asset_id = imgReferenceAsset.value.trim();
         if (prompt) {
             closeCreateModal();
             void sendCreateTool("generate_image", input, `Create image: ${prompt}`);
@@ -2777,6 +2998,23 @@ export function init(): void {
         if (prompt) {
             closeCreateModal();
             void sendCreateTool("generate_music", { prompt, lyrics }, `Create music: ${prompt}`);
+        }
+    });
+
+    createVideoForm.addEventListener("submit", (e) => {
+        e.preventDefault();
+        const prompt = videoPromptInput.value.trim();
+        if (prompt) {
+            closeCreateModal();
+            void sendCreateTool(
+                "generate_video",
+                {
+                    prompt,
+                    duration: Number(videoDurationInput.value),
+                    resolution: videoResolutionInput.value,
+                },
+                `Create video: ${prompt}`,
+            );
         }
     });
 
@@ -2897,6 +3135,29 @@ export function init(): void {
         if (text) {
             closeCreateModal();
             void sendCreateTool("text_to_speech", input, `Create voice: ${text}`);
+        }
+    });
+
+    createNarrationForm.addEventListener("submit", (e) => {
+        e.preventDefault();
+        const text = narrationTextInput.value.trim();
+        const input: Record<string, unknown> = {
+            text,
+            speed: Number(narrationSpeedInput.value),
+        };
+        if (narrationVoiceIdInput?.value.trim())
+            input.voice_id = narrationVoiceIdInput.value.trim();
+        if (narrationVolumeInput?.value.trim())
+            input.volume = Number(narrationVolumeInput.value.trim());
+        if (narrationPitchInput?.value.trim())
+            input.pitch = Number(narrationPitchInput.value.trim());
+        if (text) {
+            closeCreateModal();
+            void sendCreateTool(
+                "generate_long_speech",
+                input,
+                `Create long narration: ${text.slice(0, 80)}${text.length > 80 ? "…" : ""}`,
+            );
         }
     });
 

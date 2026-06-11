@@ -1,5 +1,5 @@
 // HallucyGenie — Tool definitions and execution
-// Implements generate_image, text_to_speech, generate_lyrics, generate_music, analyze_image
+// Implements generate_image, text_to_speech, generate_long_speech, generate_lyrics, generate_music, analyze_image
 
 // ── Types ────────────────────────────────────────────────────────────
 
@@ -10,7 +10,7 @@ export interface ToolDefinition {
 }
 
 export interface ToolResult {
-    type: "image" | "audio" | "text" | "error";
+    type: "image" | "audio" | "video" | "text" | "error";
     content: string;
     urls?: string[];
 }
@@ -23,6 +23,7 @@ export interface GenerateImageOptions {
     width?: number;
     height?: number;
     prompt_optimizer?: boolean;
+    subject_reference?: { type: "character"; image_file: string }[];
 }
 
 export interface TextToSpeechOptions {
@@ -32,6 +33,8 @@ export interface TextToSpeechOptions {
     volume?: number;
     pitch?: number;
 }
+
+export interface GenerateLongSpeechOptions extends TextToSpeechOptions {}
 
 export interface GenerateLyricsOptions {
     prompt: string;
@@ -43,6 +46,12 @@ export interface GenerateLyricsOptions {
 export interface GenerateMusicOptions {
     prompt: string;
     lyrics?: string;
+}
+
+export interface GenerateVideoOptions {
+    prompt: string;
+    duration?: 6 | 10;
+    resolution?: "768p" | "1080p";
 }
 
 export interface GenerateMusicCoverOptions {
@@ -73,6 +82,8 @@ export const MINIMAX_BASE = "https://api.minimax.io";
 
 const IMAGE_PROMPT_MAX = 1500;
 const TTS_TEXT_MAX = 10000;
+const LONG_TTS_TEXT_MAX = 50000;
+const TTS_MODEL = "speech-2.8-hd";
 const LYRICS_PROMPT_MAX = 2000;
 const LYRICS_EXISTING_MAX = 3500;
 const MUSIC_PROMPT_MAX = 2000;
@@ -81,6 +92,8 @@ const MUSIC_COVER_PROMPT_MIN = 10;
 const MUSIC_COVER_PROMPT_MAX = 300;
 const MUSIC_COVER_LYRICS_MIN = 10;
 const MUSIC_COVER_LYRICS_MAX = 1000;
+const VIDEO_PROMPT_MAX = 2000;
+const VIDEO_MODEL = "MiniMax-Hailuo-02";
 
 // ── Auth note ───────────────────────────────────────────────────────
 //
@@ -170,6 +183,29 @@ export function getToolDefinitions(): ToolDefinition[] {
             },
         },
         {
+            name: "generate_long_speech",
+            description:
+                "Convert long narration text to speech with MiniMax async TTS. Returns a provider audio download URL that HallucyGenie saves as an audio asset.",
+            input_schema: {
+                type: "object",
+                properties: {
+                    text: {
+                        type: "string",
+                        maxLength: LONG_TTS_TEXT_MAX,
+                        description: "Long narration text to convert to speech",
+                    },
+                    voice_id: {
+                        type: "string",
+                        description: 'Voice ID to use. Defaults to "English_expressive_narrator".',
+                    },
+                    speed: { type: "number", minimum: 0.5, maximum: 2 },
+                    volume: { type: "number", exclusiveMinimum: 0, maximum: 10 },
+                    pitch: { type: "number", minimum: -12, maximum: 12 },
+                },
+                required: ["text"],
+            },
+        },
+        {
             name: "generate_lyrics",
             description:
                 "Generate kid-friendly song lyrics from a music prompt. Returns plain text lyrics ready for editing or use in music generation.",
@@ -217,6 +253,32 @@ export function getToolDefinitions(): ToolDefinition[] {
                         type: "string",
                         maxLength: MUSIC_LYRICS_MAX,
                         description: "Optional lyrics. Omit or leave empty for instrumental music.",
+                    },
+                },
+                required: ["prompt"],
+            },
+        },
+        {
+            name: "generate_video",
+            description:
+                "Generate a short video from a text prompt. Returns a provider download URL that HallucyGenie saves as a video asset.",
+            input_schema: {
+                type: "object",
+                properties: {
+                    prompt: {
+                        type: "string",
+                        maxLength: VIDEO_PROMPT_MAX,
+                        description: "Text description of the video to generate",
+                    },
+                    duration: {
+                        type: "number",
+                        enum: [6, 10],
+                        description: "Video length preset in seconds. Defaults to 6.",
+                    },
+                    resolution: {
+                        type: "string",
+                        enum: ["768p", "1080p"],
+                        description: "Video quality preset. Defaults to 768p.",
                     },
                 },
                 required: ["prompt"],
@@ -281,11 +343,25 @@ export async function executeTool(
                     width: args.width as number | undefined,
                     height: args.height as number | undefined,
                     prompt_optimizer: args.prompt_optimizer as boolean | undefined,
+                    subject_reference: Array.isArray(args.subject_reference)
+                        ? (args.subject_reference as GenerateImageOptions["subject_reference"])
+                        : undefined,
                 },
                 apiKey,
             );
         case "text_to_speech":
             return textToSpeech(
+                {
+                    text: args.text as string,
+                    voice_id: args.voice_id as string | undefined,
+                    speed: clampAudioParam(args.speed, 0.5, 2),
+                    volume: validateVolume(args.volume),
+                    pitch: clampAudioParam(args.pitch, -12, 12),
+                },
+                apiKey,
+            );
+        case "generate_long_speech":
+            return generateLongSpeech(
                 {
                     text: args.text as string,
                     voice_id: args.voice_id as string | undefined,
@@ -310,6 +386,15 @@ export async function executeTool(
                 {
                     prompt: args.prompt as string,
                     lyrics: args.lyrics as string | undefined,
+                },
+                apiKey,
+            );
+        case "generate_video":
+            return generateVideo(
+                {
+                    prompt: args.prompt as string,
+                    duration: validateVideoDuration(args.duration),
+                    resolution: validateVideoResolution(args.resolution),
                 },
                 apiKey,
             );
@@ -389,6 +474,14 @@ function validateLyricsMode(value: unknown): GenerateLyricsOptions["mode"] | und
     return value === "write_full_song" || value === "edit" ? value : undefined;
 }
 
+function validateVideoDuration(value: unknown): GenerateVideoOptions["duration"] | undefined {
+    return value === 6 || value === 10 ? value : undefined;
+}
+
+function validateVideoResolution(value: unknown): GenerateVideoOptions["resolution"] | undefined {
+    return value === "768p" || value === "1080p" ? value : undefined;
+}
+
 function hexToBase64(hex: string): string {
     return Buffer.from(hex, "hex").toString("base64");
 }
@@ -461,6 +554,12 @@ export async function generateImage(
         }
         if (typeof options.prompt_optimizer === "boolean")
             payload.prompt_optimizer = options.prompt_optimizer;
+        if (Array.isArray(options.subject_reference) && options.subject_reference.length > 0) {
+            payload.subject_reference = options.subject_reference.map((ref) => ({
+                type: "character",
+                image_file: boundedText(ref.image_file, "reference image", 30_000_000),
+            }));
+        }
 
         const resp = await fetch(`${MINIMAX_BASE}/v1/image_generation`, {
             method: "POST",
@@ -537,7 +636,7 @@ export async function textToSpeech(
                 Authorization: `Bearer ${apiKey}`,
             },
             body: JSON.stringify({
-                model: "speech-2.8-hd",
+                model: TTS_MODEL,
                 text,
                 output_format: "hex",
                 voice_setting: voiceSetting,
@@ -579,6 +678,126 @@ export async function textToSpeech(
             type: "error",
             content: `TTS failed: ${String(err)}`,
         };
+    }
+}
+
+export interface GenerateLongSpeechRuntimeOptions {
+    pollDelayMs?: number;
+    maxPolls?: number;
+}
+
+type AsyncTtsCreateResponse = {
+    task_id?: string;
+    data?: { task_id?: string };
+    base_resp?: { status_code?: number; status_msg?: string };
+};
+
+type AsyncTtsQueryResponse = {
+    status?: string;
+    task_status?: string;
+    file_id?: string;
+    audio_file_id?: string;
+    output_file_id?: string;
+    message?: string;
+    data?: {
+        status?: string;
+        task_status?: string;
+        file_id?: string;
+        audio_file_id?: string;
+        output_file_id?: string;
+        message?: string;
+    };
+    base_resp?: { status_code?: number; status_msg?: string };
+};
+
+function asyncTtsQueryValue(
+    data: AsyncTtsQueryResponse,
+): AsyncTtsQueryResponse["data"] & AsyncTtsQueryResponse {
+    return { ...data, ...(data.data ?? {}) };
+}
+
+export async function generateLongSpeech(
+    input: string | GenerateLongSpeechOptions,
+    apiKey: string,
+    runtime: GenerateLongSpeechRuntimeOptions = {},
+): Promise<ToolResult> {
+    const options = (isObject(input) ? input : { text: input }) as GenerateLongSpeechOptions;
+    try {
+        const text = boundedText(options.text, "long speech text", LONG_TTS_TEXT_MAX);
+        const voiceSetting: Record<string, unknown> = {
+            voice_id: options.voice_id || "English_expressive_narrator",
+        };
+        const speed = clampAudioParam(options.speed, 0.5, 2);
+        const volume = validateVolume(options.volume);
+        const pitch = clampAudioParam(options.pitch, -12, 12);
+        if (speed !== undefined) voiceSetting.speed = speed;
+        if (volume !== undefined) voiceSetting.vol = volume;
+        if (pitch !== undefined) voiceSetting.pitch = pitch;
+
+        const createResp = await fetch(`${MINIMAX_BASE}/v1/t2a_async_v2`, {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json",
+                Authorization: `Bearer ${apiKey}`,
+            },
+            body: JSON.stringify({
+                model: TTS_MODEL,
+                text,
+                voice_setting: voiceSetting,
+                audio_setting: { format: "mp3", audio_sample_rate: 32000, channel: 2 },
+            }),
+        });
+        if (!createResp.ok)
+            return { type: "error", content: `Long TTS API error: ${createResp.status}` };
+        const created = (await createResp.json()) as AsyncTtsCreateResponse;
+        const createBaseResp = baseRespError(created, "Long TTS");
+        if (createBaseResp) return createBaseResp;
+        const taskId = created.task_id ?? created.data?.task_id;
+        if (!taskId) return { type: "error", content: "Long TTS returned no task_id" };
+
+        const maxPolls = runtime.maxPolls ?? 90;
+        const pollDelayMs = runtime.pollDelayMs ?? 2000;
+        let fileId = "";
+        for (let i = 0; i < maxPolls; i++) {
+            if (i > 0 && pollDelayMs > 0) await sleep(pollDelayMs);
+            const queryUrl = new URL(`${MINIMAX_BASE}/v1/query/t2a_async_query_v2`);
+            queryUrl.searchParams.set("task_id", taskId);
+            const queryResp = await fetch(queryUrl, {
+                headers: { Authorization: `Bearer ${apiKey}` },
+            });
+            if (!queryResp.ok)
+                return { type: "error", content: `Long TTS query API error: ${queryResp.status}` };
+            const queried = (await queryResp.json()) as AsyncTtsQueryResponse;
+            const queryBaseResp = baseRespError(queried, "Long TTS query");
+            if (queryBaseResp) return queryBaseResp;
+            const q = asyncTtsQueryValue(queried);
+            const status = String(q.status ?? q.task_status ?? "").toLowerCase();
+            if (status === "success" || status === "succeeded") {
+                fileId = q.file_id ?? q.audio_file_id ?? q.output_file_id ?? "";
+                break;
+            }
+            if (status === "fail" || status === "failed" || status === "error") {
+                return { type: "error", content: `Long TTS failed: ${q.message ?? status}` };
+            }
+        }
+        if (!fileId) return { type: "error", content: "Long TTS timed out" };
+
+        const fileUrl = new URL(`${MINIMAX_BASE}/v1/files/retrieve`);
+        fileUrl.searchParams.set("file_id", fileId);
+        const fileResp = await fetch(fileUrl, {
+            headers: { Authorization: `Bearer ${apiKey}` },
+        });
+        if (!fileResp.ok)
+            return { type: "error", content: `Long TTS file API error: ${fileResp.status}` };
+        const file = (await fileResp.json()) as FileRetrieveResponse;
+        const fileBaseResp = baseRespError(file, "Long TTS file retrieve");
+        if (fileBaseResp) return fileBaseResp;
+        const downloadUrl = fileDownloadUrl(file);
+        if (!downloadUrl)
+            return { type: "error", content: "Long TTS file retrieve returned no download_url" };
+        return { type: "audio", content: downloadUrl };
+    } catch (err) {
+        return { type: "error", content: `Long TTS failed: ${String(err)}` };
     }
 }
 
@@ -800,6 +1019,131 @@ export async function generateMusic(
             type: "error",
             content: `Music generation failed: ${String(err)}`,
         };
+    }
+}
+
+// ── Video Generation ───────────────────────────────────────────────
+
+export interface GenerateVideoRuntimeOptions {
+    pollDelayMs?: number;
+    maxPolls?: number;
+}
+
+type VideoCreateResponse = {
+    task_id?: string;
+    data?: { task_id?: string };
+    base_resp?: { status_code?: number; status_msg?: string };
+};
+
+type VideoQueryResponse = {
+    status?: string;
+    task_status?: string;
+    file_id?: string;
+    message?: string;
+    data?: { status?: string; task_status?: string; file_id?: string; message?: string };
+    base_resp?: { status_code?: number; status_msg?: string };
+};
+
+type FileRetrieveResponse = {
+    download_url?: string;
+    file?: { download_url?: string };
+    data?: { download_url?: string; file?: { download_url?: string } };
+    base_resp?: { status_code?: number; status_msg?: string };
+};
+
+function sleep(ms: number): Promise<void> {
+    return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function queryValue(data: VideoQueryResponse): VideoQueryResponse["data"] & VideoQueryResponse {
+    return { ...data, ...(data.data ?? {}) };
+}
+
+function fileDownloadUrl(data: FileRetrieveResponse): string | undefined {
+    return (
+        data.download_url ??
+        data.file?.download_url ??
+        data.data?.download_url ??
+        data.data?.file?.download_url
+    );
+}
+
+export async function generateVideo(
+    input: string | GenerateVideoOptions,
+    apiKey: string,
+    runtime: GenerateVideoRuntimeOptions = {},
+): Promise<ToolResult> {
+    const options = (isObject(input) ? input : { prompt: input }) as GenerateVideoOptions;
+    try {
+        const prompt = boundedText(options.prompt, "video prompt", VIDEO_PROMPT_MAX);
+        const payload: Record<string, unknown> = {
+            model: VIDEO_MODEL,
+            prompt,
+            duration: validateVideoDuration(options.duration) ?? 6,
+            resolution: validateVideoResolution(options.resolution) ?? "768p",
+        };
+        const createResp = await fetch(`${MINIMAX_BASE}/v1/video_generation`, {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json",
+                Authorization: `Bearer ${apiKey}`,
+            },
+            body: JSON.stringify(payload),
+        });
+        if (!createResp.ok)
+            return { type: "error", content: `Video generation API error: ${createResp.status}` };
+        const created = (await createResp.json()) as VideoCreateResponse;
+        const createBaseResp = baseRespError(created, "Video generation");
+        if (createBaseResp) return createBaseResp;
+        const taskId = created.task_id ?? created.data?.task_id;
+        if (!taskId) return { type: "error", content: "Video generation returned no task_id" };
+
+        const maxPolls = runtime.maxPolls ?? 90;
+        const pollDelayMs = runtime.pollDelayMs ?? 2000;
+        let fileId = "";
+        for (let i = 0; i < maxPolls; i++) {
+            if (i > 0 && pollDelayMs > 0) await sleep(pollDelayMs);
+            const queryUrl = new URL(`${MINIMAX_BASE}/v1/query/video_generation`);
+            queryUrl.searchParams.set("task_id", taskId);
+            const queryResp = await fetch(queryUrl, {
+                headers: { Authorization: `Bearer ${apiKey}` },
+            });
+            if (!queryResp.ok)
+                return { type: "error", content: `Video query API error: ${queryResp.status}` };
+            const queried = (await queryResp.json()) as VideoQueryResponse;
+            const queryBaseResp = baseRespError(queried, "Video query");
+            if (queryBaseResp) return queryBaseResp;
+            const q = queryValue(queried);
+            const status = String(q.status ?? q.task_status ?? "").toLowerCase();
+            if (status === "success" || status === "succeeded") {
+                fileId = q.file_id ?? "";
+                break;
+            }
+            if (status === "fail" || status === "failed" || status === "error") {
+                return {
+                    type: "error",
+                    content: `Video generation failed: ${q.message ?? status}`,
+                };
+            }
+        }
+        if (!fileId) return { type: "error", content: "Video generation timed out" };
+
+        const fileUrl = new URL(`${MINIMAX_BASE}/v1/files/retrieve`);
+        fileUrl.searchParams.set("file_id", fileId);
+        const fileResp = await fetch(fileUrl, {
+            headers: { Authorization: `Bearer ${apiKey}` },
+        });
+        if (!fileResp.ok)
+            return { type: "error", content: `Video file API error: ${fileResp.status}` };
+        const file = (await fileResp.json()) as FileRetrieveResponse;
+        const fileBaseResp = baseRespError(file, "Video file retrieve");
+        if (fileBaseResp) return fileBaseResp;
+        const downloadUrl = fileDownloadUrl(file);
+        if (!downloadUrl)
+            return { type: "error", content: "Video file retrieve returned no download_url" };
+        return { type: "video", content: downloadUrl };
+    } catch (err) {
+        return { type: "error", content: `Video generation failed: ${String(err)}` };
     }
 }
 

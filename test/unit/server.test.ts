@@ -28,6 +28,8 @@ import {
     getDraft,
     createSession,
     listToolInputHistory,
+    listVideoTasks,
+    listAsyncTtsTasks,
 } from "../../src/db.ts";
 import {
     trackUsage,
@@ -85,6 +87,26 @@ async function readJson(resp: Response): Promise<unknown> {
     return JSON.parse(await resp.text());
 }
 
+function tarWithFile(filename: string, bytes: Uint8Array): Buffer {
+    const data = Buffer.from(bytes);
+    const header = Buffer.alloc(512);
+    header.write(filename, 0, "utf8");
+    header.write("0000777\0", 100, "ascii");
+    header.write("0000000\0", 108, "ascii");
+    header.write("0000000\0", 116, "ascii");
+    header.write(data.byteLength.toString(8).padStart(11, "0") + "\0", 124, "ascii");
+    header.write("00000000000\0", 136, "ascii");
+    header.fill(0x20, 148, 156);
+    header[156] = 48;
+    header.write("ustar\0", 257, "ascii");
+    header.write("00", 263, "ascii");
+    let sum = 0;
+    for (const byte of header) sum += byte;
+    header.write(sum.toString(8).padStart(6, "0") + "\0 ", 148, "ascii");
+    const pad = Buffer.alloc(Math.ceil(data.byteLength / 512) * 512 - data.byteLength);
+    return Buffer.concat([header, data, pad, Buffer.alloc(1024)]);
+}
+
 // -- Test database setup -----------------------------------------------
 
 const testDbDir = join(import.meta.dirname ?? ".", "test-data");
@@ -92,6 +114,7 @@ const testDbPath = join(testDbDir, "test.db");
 
 before(() => {
     resetStateForTesting();
+    rmSync(testDbDir, { recursive: true, force: true });
     // Initialize test database
     initDatabase(testDbPath);
 });
@@ -964,10 +987,10 @@ describe("SSE streaming from Anthropic endpoint", () => {
             assert.equal(rows.at(-1)?.role, "tool");
             assert.equal((rows.at(-1)?.content.match(/\/asset\//g) ?? []).length, 2);
             const assets = getAssets(db, "explicit-direct-session").filter(
-                (asset) => asset.type === "image",
+                (asset) => asset.type === "image" && asset.tool_name === "generate_image",
             );
-            assert.equal(assets.length, 2);
-            const asset = assets.at(-1)!;
+            assert.ok(assets.length >= 2);
+            const asset = assets.find((item) => item.prompt === "cat")!;
             assert.deepEqual(JSON.parse(asset.params_json!), {
                 model: "image-01",
                 prompt: "cat",
@@ -1060,6 +1083,267 @@ describe("SSE streaming from Anthropic endpoint", () => {
             const history = listToolInputHistory(db, sessionId, { kind: "music" });
             assert.equal(history[0]?.origin, "create");
             assert.equal(JSON.parse(history[0]!.input_json).lyrics, lyrics);
+        } finally {
+            globalThis.fetch = REAL_FETCH;
+            if (previousApiKey === undefined) delete process.env.MINIMAX_API_KEY;
+            else process.env.MINIMAX_API_KEY = previousApiKey;
+        }
+    });
+
+    it("rejects invalid reference image uploads before provider use", async () => {
+        const sessionId = "bad-reference-upload-session";
+        const database = getDb()!;
+        createSession(database, sessionId, "Bad Reference Upload");
+        const form = new FormData();
+        form.set("image", new File([new Uint8Array([1])], "bad.txt", { type: "text/plain" }));
+
+        const resp = await handleRequest(
+            new Request("http://localhost/api/reference-image", {
+                method: "POST",
+                body: form,
+                headers: { "X-Session-Id": sessionId },
+            }),
+        );
+        const body = await readBody(resp);
+
+        assert.equal(resp.status, 400);
+        assert.match(body, /PNG or JPG/);
+    });
+
+    it("executes Create image with uploaded subject reference without storing raw reference", async () => {
+        const sessionId = "create-image-reference-session";
+        const database = getDb()!;
+        createSession(database, sessionId, "Create Image Reference");
+        const previousApiKey = process.env.MINIMAX_API_KEY;
+        process.env.MINIMAX_API_KEY = "test-key";
+
+        try {
+            const form = new FormData();
+            form.set(
+                "image",
+                new File([new Uint8Array([1, 2, 3])], "ref.png", { type: "image/png" }),
+            );
+            const uploadResp = await handleRequest(
+                new Request("http://localhost/api/reference-image", {
+                    method: "POST",
+                    body: form,
+                    headers: { "X-Session-Id": sessionId },
+                }),
+            );
+            assert.equal(uploadResp.status, 200);
+            const uploaded = (await readJson(uploadResp)) as { assetId: string; assetUrl: string };
+            let providerPayload: Record<string, unknown> | null = null;
+            globalThis.fetch = async (url: string | URL | Request, init?: RequestInit) => {
+                const urlStr = url.toString();
+                if (urlStr.endsWith("/v1/image_generation")) {
+                    providerPayload = JSON.parse(String(init?.body));
+                    return new Response(
+                        JSON.stringify({
+                            data: { image_urls: ["https://cdn.example/ref-out.png"] },
+                        }),
+                        { status: 200, headers: { "Content-Type": "application/json" } },
+                    );
+                }
+                if (urlStr === "https://cdn.example/ref-out.png") {
+                    return new Response(new Uint8Array([4, 5, 6]), {
+                        status: 200,
+                        headers: { "Content-Type": "image/png", "Content-Length": "3" },
+                    });
+                }
+                throw new Error(`unexpected fetch ${urlStr}`);
+            };
+
+            const resp = await handleRequest(
+                makeRequest(
+                    "POST",
+                    "/api/create-tool",
+                    {
+                        tool_name: "generate_image",
+                        input: {
+                            prompt: "same fox in space",
+                            reference_asset_id: uploaded.assetId,
+                        },
+                    },
+                    { "X-Session-Id": sessionId },
+                ),
+            );
+            const body = await readBody(resp);
+            const subjectRef = providerPayload?.subject_reference as Array<Record<string, string>>;
+            const history = listToolInputHistory(database, sessionId, { kind: "image" });
+            const rows = getMessages(database, sessionId);
+
+            assert.ok(body.includes('"type":"image"'));
+            assert.equal(subjectRef[0]?.type, "character");
+            assert.match(subjectRef[0]?.image_file ?? "", /^data:image\/png;base64,/);
+            assert.equal(history[0]?.input_json.includes(uploaded.assetId), true);
+            assert.equal(history[0]?.input_json.includes("data:image"), false);
+            assert.equal(
+                rows.some((row) => row.content.includes("data:image")),
+                false,
+            );
+        } finally {
+            globalThis.fetch = REAL_FETCH;
+            if (previousApiKey === undefined) delete process.env.MINIMAX_API_KEY;
+            else process.env.MINIMAX_API_KEY = previousApiKey;
+        }
+    });
+
+    it("executes long narration async TTS, extracts bundle audio, and stores compact history", async () => {
+        const sessionId = "long-tts-session";
+        const database = getDb()!;
+        createSession(database, sessionId, "Long TTS");
+        const previousApiKey = process.env.MINIMAX_API_KEY;
+        process.env.MINIMAX_API_KEY = "test-key";
+        const longText = "Long story ".repeat(220).trim();
+        let providerPayload: Record<string, unknown> | null = null;
+
+        try {
+            globalThis.fetch = async (url: string | URL | Request, init?: RequestInit) => {
+                const urlStr = url.toString();
+                if (urlStr.endsWith("/v1/t2a_async_v2")) {
+                    providerPayload = JSON.parse(String(init?.body));
+                    return new Response(JSON.stringify({ task_id: "tts-task-1" }), {
+                        status: 200,
+                        headers: { "Content-Type": "application/json" },
+                    });
+                }
+                if (urlStr.includes("/v1/query/t2a_async_query_v2")) {
+                    return new Response(
+                        JSON.stringify({ data: { status: "Success", file_id: "tts-file-1" } }),
+                        { status: 200, headers: { "Content-Type": "application/json" } },
+                    );
+                }
+                if (urlStr.includes("/v1/files/retrieve")) {
+                    return new Response(
+                        JSON.stringify({ file: { download_url: "https://cdn.example/tts.tar" } }),
+                        { status: 200, headers: { "Content-Type": "application/json" } },
+                    );
+                }
+                if (urlStr === "https://cdn.example/tts.tar") {
+                    const tar = tarWithFile("audio/result.mp3", new Uint8Array([0x49, 0x44, 0x33]));
+                    return new Response(tar, {
+                        status: 200,
+                        headers: {
+                            "Content-Type": "application/x-tar",
+                            "Content-Length": String(tar.byteLength),
+                        },
+                    });
+                }
+                throw new Error(`unexpected fetch ${urlStr}`);
+            };
+
+            const resp = await handleRequest(
+                makeRequest(
+                    "POST",
+                    "/api/create-tool",
+                    {
+                        tool_name: "generate_long_speech",
+                        input: {
+                            text: longText,
+                            voice_id: "English_CaptivatingStoryteller",
+                            speed: 1.2,
+                        },
+                    },
+                    { "X-Session-Id": sessionId },
+                ),
+            );
+            const body = await readBody(resp);
+            const assets = getAssets(database, sessionId);
+            const history = listToolInputHistory(database, sessionId, { kind: "narration" });
+            const rows = getMessages(database, sessionId);
+            const tasks = listAsyncTtsTasks(database, sessionId);
+            const serializedRows = JSON.stringify(rows);
+
+            assert.ok(body.includes('"type":"audio"'));
+            assert.equal(providerPayload?.model, "speech-2.8-hd");
+            assert.equal(providerPayload?.text, longText);
+            assert.equal(assets[0]?.mime_type, "audio/mpeg");
+            assert.equal(assets[0]?.size_bytes, 3);
+            assert.equal(tasks[0]?.status, "succeeded");
+            assert.equal(tasks[0]?.asset_id, assets[0]?.id);
+            assert.equal(history[0]?.input_json.includes("text_summary"), true);
+            assert.equal(history[0]?.input_json.includes(longText), false);
+            assert.equal(serializedRows.includes(longText), false);
+            assert.equal(serializedRows.includes("https://cdn.example/tts.tar"), false);
+        } finally {
+            globalThis.fetch = REAL_FETCH;
+            if (previousApiKey === undefined) delete process.env.MINIMAX_API_KEY;
+            else process.env.MINIMAX_API_KEY = previousApiKey;
+        }
+    });
+
+    it("executes Create video, downloads asset, and keeps provider URL out of history", async () => {
+        const sessionId = "create-video-session";
+        const database = getDb()!;
+        createSession(database, sessionId, "Create Video");
+        const previousApiKey = process.env.MINIMAX_API_KEY;
+        process.env.MINIMAX_API_KEY = "test-key";
+        const calls: string[] = [];
+        globalThis.fetch = async (url: string | URL | Request, init?: RequestInit) => {
+            const urlStr = url.toString();
+            calls.push(urlStr);
+            if (urlStr.endsWith("/v1/video_generation")) {
+                const payload = JSON.parse(String(init?.body));
+                assert.equal(payload.model, "MiniMax-Hailuo-02");
+                assert.equal(payload.prompt, "fox mascot intro");
+                return new Response(JSON.stringify({ task_id: "video-task-1" }), {
+                    status: 200,
+                    headers: { "Content-Type": "application/json" },
+                });
+            }
+            if (urlStr.includes("/v1/query/video_generation")) {
+                return new Response(JSON.stringify({ status: "Success", file_id: "file-1" }), {
+                    status: 200,
+                    headers: { "Content-Type": "application/json" },
+                });
+            }
+            if (urlStr.includes("/v1/files/retrieve")) {
+                return new Response(
+                    JSON.stringify({ download_url: "https://cdn.example/output.mp4" }),
+                    { status: 200, headers: { "Content-Type": "application/json" } },
+                );
+            }
+            if (urlStr === "https://cdn.example/output.mp4") {
+                return new Response(new Uint8Array([0, 1, 2, 3]), {
+                    status: 200,
+                    headers: { "Content-Type": "video/mp4", "Content-Length": "4" },
+                });
+            }
+            throw new Error(`unexpected fetch ${urlStr}`);
+        };
+
+        try {
+            const resp = await handleRequest(
+                makeRequest(
+                    "POST",
+                    "/api/create-tool",
+                    {
+                        tool_name: "generate_video",
+                        input: { prompt: "fox mascot intro", duration: 6, resolution: "768p" },
+                    },
+                    { "X-Session-Id": sessionId },
+                ),
+            );
+            const body = await readBody(resp);
+            const assets = getAssets(database, sessionId);
+            const rows = getMessages(database, sessionId);
+
+            assert.ok(body.includes('"type":"video"'));
+            assert.ok(body.includes("/asset/asset_"));
+            assert.equal(body.includes("https://cdn.example/output.mp4"), false);
+            assert.equal(assets.length, 1);
+            assert.equal(assets[0]!.type, "video");
+            assert.equal(assets[0]!.mime_type, "video/mp4");
+            assert.equal(assets[0]!.size_bytes, 4);
+            assert.equal(
+                rows.some((row) => row.content.includes("https://cdn.example/output.mp4")),
+                false,
+            );
+            const tasks = listVideoTasks(database, sessionId);
+            assert.equal(tasks.length, 1);
+            assert.equal(tasks[0]!.status, "succeeded");
+            assert.equal(tasks[0]!.asset_id, assets[0]!.id);
+            assert.ok(calls.some((url) => url.includes("task_id=video-task-1")));
         } finally {
             globalThis.fetch = REAL_FETCH;
             if (previousApiKey === undefined) delete process.env.MINIMAX_API_KEY;
@@ -2261,7 +2545,7 @@ describe("Integration: chat with agent loop + persistence", () => {
         // untrimmed messages array. If the save loop uses messages.length here, it
         // starts past finalMessages.length and silently drops the assistant response.
         const sessionId = "context-trim-session-" + Date.now();
-        const oversizedHistoryMessage = "old history ".repeat(90_000);
+        const oversizedHistoryMessage = "old history ".repeat(400_000);
         saveMessage(getDb()!, sessionId, "user", oversizedHistoryMessage);
 
         globalThis.fetch = async (_url, init) => {

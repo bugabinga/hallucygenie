@@ -43,7 +43,7 @@
                     <!-- prettier-ignore -->
                     <button id="create-btn" class="create-btn" title="Create something" aria-label="Create media">✨ Create</button>
                     <!-- prettier-ignore -->
-                    <span id="quota-badge" class="quota-badge" title="Images, voice, music, and lyrics remaining today" role="status" aria-label="Images, voice, music, and lyrics remaining today"><span class="quota-item" data-type="image" title="Images">🎨 <span class="quota-used">—</span></span><span class="quota-item" data-type="speech" title="Voice">🎙️ <span class="quota-used">—</span></span><span class="quota-item" data-type="music" title="Music">🎵 <span class="quota-used">—</span></span><span class="quota-item" data-type="lyrics" title="Lyrics">📝 <span class="quota-used">—</span></span></span>
+                    <span id="quota-badge" class="quota-badge" title="Images, voice, music, video, and lyrics remaining today" role="status" aria-label="Images, voice, music, video, and lyrics remaining today"><span class="quota-item" data-type="image" title="Images">🎨 <span class="quota-used">—</span></span><span class="quota-item" data-type="speech" title="Voice">🎙️ <span class="quota-used">—</span></span><span class="quota-item" data-type="music" title="Music">🎵 <span class="quota-used">—</span></span><span class="quota-item" data-type="video" title="Video">🎬 <span class="quota-used">—</span></span><span class="quota-item" data-type="lyrics" title="Lyrics">📝 <span class="quota-used">—</span></span></span>
                 </div>
             </header>
 
@@ -317,9 +317,13 @@
                         <!-- prettier-ignore -->
                         <button id="create-tab-music" class="create-tab" data-tab="music" type="button" role="tab" aria-selected="false" aria-controls="create-music-form" tabindex="-1">🎵 Music</button>
                         <!-- prettier-ignore -->
+                        <button id="create-tab-video" class="create-tab" data-tab="video" type="button" role="tab" aria-selected="false" aria-controls="create-video-form" tabindex="-1">🎬 Video</button>
+                        <!-- prettier-ignore -->
                         <button id="create-tab-cover" class="create-tab" data-tab="cover" type="button" role="tab" aria-selected="false" aria-controls="create-cover-form" tabindex="-1">🎧 Cover Song</button>
                         <!-- prettier-ignore -->
                         <button id="create-tab-voice" class="create-tab" data-tab="voice" type="button" role="tab" aria-selected="false" aria-controls="create-voice-form" tabindex="-1">🎤 Voice</button>
+                        <!-- prettier-ignore -->
+                        <button id="create-tab-narration" class="create-tab" data-tab="narration" type="button" role="tab" aria-selected="false" aria-controls="create-narration-form" tabindex="-1">📖 Narration</button>
                         <!-- prettier-ignore -->
                         <button id="create-tab-analyze" class="create-tab" data-tab="analyze" type="button" role="tab" aria-selected="false" aria-controls="create-analyze-form" tabindex="-1">🔎 Analyze</button>
                         <!-- prettier-ignore -->
@@ -381,6 +385,26 @@
                             </div>
                             <input id="img-width" type="hidden" />
                             <input id="img-height" type="hidden" />
+                            <input id="img-reference-asset" type="hidden" />
+                            <div class="form-group">
+                                <label for="img-reference-file"
+                                    >Use my character/photo (optional)</label
+                                >
+                                <input
+                                    id="img-reference-file"
+                                    type="file"
+                                    accept="image/png,image/jpeg"
+                                />
+                                <!-- prettier-ignore -->
+                                <p id="img-reference-status" class="field-help" role="status">PNG or JPG only. Upload one here or pick an image in Assets.</p>
+                                <div
+                                    id="img-reference-preview"
+                                    class="analyze-preview"
+                                    hidden
+                                ></div>
+                                <!-- prettier-ignore -->
+                                <button id="img-reference-clear" class="btn-secondary" type="button" disabled>Clear reference</button>
+                            </div>
                             <div class="form-group">
                                 <input id="img-seed" type="hidden" />
                                 <!-- prettier-ignore -->
@@ -429,6 +453,42 @@
                             <!-- prettier-ignore -->
                             <button type="button" id="write-lyrics-btn" class="btn-secondary">Write lyrics for me ✨</button>
                             <button type="submit" class="btn-primary">Generate music 🎵</button>
+                        </form>
+                        <form
+                            id="create-video-form"
+                            class="create-panel"
+                            data-panel="video"
+                            role="tabpanel"
+                            aria-labelledby="create-tab-video"
+                            hidden
+                        >
+                            <div class="create-recent" data-kind="video"></div>
+                            <div class="form-group">
+                                <label for="video-prompt">Describe your video</label>
+                                <textarea
+                                    id="video-prompt"
+                                    rows="3"
+                                    maxlength="2000"
+                                    placeholder="A fox mascot running through a neon game world"
+                                ></textarea>
+                            </div>
+                            <div class="form-row">
+                                <div class="form-group">
+                                    <label for="video-duration">Length</label>
+                                    <select id="video-duration">
+                                        <option value="6" selected>6 seconds</option>
+                                        <option value="10">10 seconds</option>
+                                    </select>
+                                </div>
+                                <div class="form-group">
+                                    <label for="video-resolution">Quality</label>
+                                    <select id="video-resolution">
+                                        <option value="768p" selected>768p</option>
+                                        <option value="1080p">1080p</option>
+                                    </select>
+                                </div>
+                            </div>
+                            <button type="submit" class="btn-primary">Generate video 🎬</button>
                         </form>
                         <form
                             id="create-cover-form"
@@ -635,6 +695,72 @@
                                 </div>
                             </div>
                             <button type="submit" class="btn-primary">Read it to me 🎤</button>
+                        </form>
+                        <form
+                            id="create-narration-form"
+                            class="create-panel"
+                            data-panel="narration"
+                            role="tabpanel"
+                            aria-labelledby="create-tab-narration"
+                            hidden
+                        >
+                            <div class="create-recent" data-kind="narration"></div>
+                            <div class="form-group">
+                                <label for="narration-text">Long narration script</label>
+                                <textarea
+                                    id="narration-text"
+                                    rows="8"
+                                    maxlength="50000"
+                                    placeholder="Paste a long story, intro, or YouTube narration script"
+                                ></textarea>
+                                <!-- prettier-ignore -->
+                                <p class="field-help">Async voice. Genie saves the finished audio asset when MiniMax is done.</p>
+                            </div>
+                            <div class="form-group">
+                                <label for="narration-speed">Speed</label>
+                                <select id="narration-speed">
+                                    <option value="0.8">0.8x (slower)</option>
+                                    <option value="1.0" selected>1.0x (normal)</option>
+                                    <option value="1.2">1.2x (faster)</option>
+                                </select>
+                            </div>
+                            <div class="form-group">
+                                <label for="narration-voice-id">Voice</label>
+                                <select id="narration-voice-id">
+                                    <option value="English_expressive_narrator" selected>
+                                        Expressive Narrator
+                                    </option>
+                                    <option value="English_CaptivatingStoryteller">
+                                        Storyteller
+                                    </option>
+                                    <option value="English_PlayfulGirl">Playful Girl</option>
+                                    <option value="English_FriendlyPerson">Friendly Guy</option>
+                                </select>
+                            </div>
+                            <div class="form-group range-group">
+                                <label for="narration-volume">Volume</label>
+                                <input
+                                    id="narration-volume"
+                                    type="range"
+                                    min="0.5"
+                                    max="2"
+                                    step="0.1"
+                                    value="1"
+                                />
+                            </div>
+                            <div class="form-group range-group">
+                                <label for="narration-pitch">Pitch</label>
+                                <input
+                                    id="narration-pitch"
+                                    type="range"
+                                    min="-6"
+                                    max="6"
+                                    step="1"
+                                    value="0"
+                                />
+                            </div>
+                            <!-- prettier-ignore -->
+                            <button type="submit" class="btn-primary">Make long narration 📖</button>
                         </form>
                         <form
                             id="create-analyze-form"

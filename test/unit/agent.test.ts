@@ -22,6 +22,7 @@ import {
     executeToolSafely,
     DEFAULT_MAX_CONTEXT_TOKENS,
     MINIMAX_BASE,
+    MINIMAX_MODEL,
 } from "../../src/agent.ts";
 import type { AgentEvent, OnBeforeTool } from "../../src/agent.ts";
 import { getToolDefinitions } from "../../src/tools.ts";
@@ -58,7 +59,7 @@ function messageStart(): string {
                 type: "message",
                 role: "assistant",
                 content: [],
-                model: "MiniMax-M2.7-highspeed",
+                model: "MiniMax-M3",
                 stop_reason: null,
             },
         }),
@@ -1172,8 +1173,9 @@ describe("runAgentLoop", () => {
         assert.equal(parsed.system[0].text, "You are helpful");
         // Messages should not contain system role
         assert.ok(!parsed.messages.some((m: { role: string }) => m.role === "system"));
-        assert.equal(parsed.model, "MiniMax-M2.7-highspeed");
+        assert.equal(parsed.model, "MiniMax-M3");
         assert.equal(parsed.max_tokens, 4096);
+        assert.deepEqual(parsed.thinking, { type: "adaptive" });
         assert.equal(parsed.stream, true);
         assert.ok(parsed.tools);
     });
@@ -1800,7 +1802,7 @@ describe("System Prompt", () => {
     it("SYSTEM_PROMPT includes compact product self-help map", () => {
         for (const text of [
             "Chat, Create, Assets, Profile, and Sessions",
-            "Image, Music, Voice, Analyze, Search, and Assets tabs",
+            "Image, Music, Video, Voice, Narration, Analyze, Search, and Assets tabs",
             "Tool cards show previews, input details, and Tweak",
             "Raw media bytes must stay in asset storage",
             "Quota can run out",
@@ -2094,8 +2096,8 @@ describe("buildContext", () => {
         assert.equal(result[4].content, "reply2");
     });
 
-    it("uses DEFAULT_MAX_CONTEXT_TOKENS as default limit", () => {
-        assert.equal(DEFAULT_MAX_CONTEXT_TOKENS, 200_000);
+    it("uses M3 context window minus output reserve as default limit", () => {
+        assert.equal(DEFAULT_MAX_CONTEXT_TOKENS, 995_904);
     });
 
     it("handles exact fit at limit", () => {
@@ -2458,10 +2460,12 @@ describe("toAnthropicPayload edge cases", () => {
         assert.equal(payload.max_tokens, 4096);
     });
 
-    it("sends correct model name", () => {
+    it("sends M3 with adaptive thinking", () => {
         const messages: ChatMessage[] = [{ role: "user" as const, content: "hi" }];
         const payload = toAnthropicPayload(messages, []);
-        assert.equal(payload.model, "MiniMax-M2.7-highspeed");
+        assert.equal(payload.model, MINIMAX_MODEL);
+        assert.equal(payload.model, "MiniMax-M3");
+        assert.deepEqual(payload.thinking, { type: "adaptive" });
     });
 
     it("prompt caching adds cache_control to last tool only", () => {

@@ -90,7 +90,7 @@ writeFileSync("/tmp/pi-agent-spec-name", specName);
 const specContent = readFileSync(join(SPECS_DIR, chosen), "utf-8");
 
 // --- Pass 1: analyze ---
-console.log("\n=== Pass 1: Analyze (minimax/MiniMax-M2.7-highspeed) ===\n");
+console.log("\n=== Pass 1: Analyze (minimax/MiniMax-M3) ===\n");
 
 runPi(
     "analyze",
@@ -100,7 +100,7 @@ runPi(
         "--provider",
         "minimax",
         "--model",
-        "MiniMax-M2.7-highspeed",
+        "MiniMax-M3",
         "--thinking",
         "high",
         "--tools",

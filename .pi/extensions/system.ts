@@ -2,7 +2,8 @@
  * System Extension
  *
  * - Injects MISSION and RULES into every system prompt.
- * - Protects readonly .system files (MISSION, RULES, specs) from agent writes.
+ * - Protects readonly .system files (MISSION, RULES) from agent writes.
+ * - Requires human approval for spec writes.
  * - Validates issue frontmatter on write/edit: blocks on bad syntax/status,
  *   advisory notifications for dangling spec refs.
  * - /system issues command to list collected advisory problems.
@@ -20,9 +21,8 @@ import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
 // Config
 // ---------------------------------------------------------------------------
 
-const READONLY_FILES = ["MISSION.md", "RULES.md", "SYSTEM.md"];
-
-const READONLY_DIRS = ["specs"];
+const HARD_READONLY_FILES = ["MISSION.md", "RULES.md", "SYSTEM.md"];
+const APPROVAL_DIRS = ["specs"];
 const VALID_STATUSES = new Set(["open", "fixed"]);
 const ISSUE_DIR_NAME = "issues";
 
@@ -34,13 +34,20 @@ function systemDir(cwd: string): string {
     return path.join(cwd, ".system");
 }
 
-function isReadonlyPath(filePath: string, cwd: string): boolean {
-    const abs = path.resolve(filePath);
+function absPath(filePath: string, cwd: string): string {
+    return path.isAbsolute(filePath) ? path.resolve(filePath) : path.resolve(cwd, filePath);
+}
+
+function isHardReadonlyPath(filePath: string, cwd: string): boolean {
+    const abs = absPath(filePath, cwd);
     const sysDir = systemDir(cwd);
-    for (const name of READONLY_FILES) {
-        if (abs === path.join(sysDir, name)) return true;
-    }
-    for (const dir of READONLY_DIRS) {
+    return HARD_READONLY_FILES.some((name) => abs === path.join(sysDir, name));
+}
+
+function isApprovalPath(filePath: string, cwd: string): boolean {
+    const abs = absPath(filePath, cwd);
+    const sysDir = systemDir(cwd);
+    for (const dir of APPROVAL_DIRS) {
         const dirPath = path.join(sysDir, dir);
         if (abs.startsWith(dirPath + path.sep) || abs === dirPath) return true;
     }
@@ -48,7 +55,7 @@ function isReadonlyPath(filePath: string, cwd: string): boolean {
 }
 
 function isIssuePath(filePath: string, cwd: string): boolean {
-    const abs = path.resolve(filePath);
+    const abs = absPath(filePath, cwd);
     const issueDir = path.join(systemDir(cwd), ISSUE_DIR_NAME);
     return abs.startsWith(issueDir + path.sep) && abs.endsWith(".md");
 }
@@ -204,31 +211,55 @@ export default function (pi: ExtensionAPI) {
     pi.on("tool_call", async (event, ctx) => {
         const cwd = ctx.cwd;
 
+        async function requireHumanApproval(targetPath: string, action: string) {
+            const rel = path.relative(cwd, absPath(targetPath, cwd));
+            if (!ctx.hasUI) {
+                return {
+                    block: true,
+                    reason: `${rel} human approval required, but no UI is available.`,
+                };
+            }
+            const ok = await ctx.ui.confirm(
+                "Human approval required",
+                `Allow ${action} to ${rel}?`,
+            );
+            if (!ok) return { block: true, reason: `${rel} blocked by human approval gate.` };
+            return undefined;
+        }
+
         // --- Readonly path protection ---
         if (event.toolName === "write" || event.toolName === "edit") {
             const targetPath = event.input?.path as string | undefined;
-            if (targetPath && isReadonlyPath(targetPath, cwd)) {
-                return {
-                    block: true,
-                    reason: `${path.relative(cwd, path.resolve(targetPath))} is readonly. Only humans may edit MISSION, RULES, and specs.`,
-                };
+            if (targetPath && isHardReadonlyPath(targetPath, cwd)) {
+                const rel = path.relative(cwd, absPath(targetPath, cwd));
+                return { block: true, reason: `${rel} is readonly.` };
+            }
+            if (targetPath && isApprovalPath(targetPath, cwd)) {
+                const approval = await requireHumanApproval(targetPath, event.toolName);
+                if (approval) return approval;
             }
         }
 
         if (event.toolName === "bash") {
             const cmd = (event.input?.command as string) || "";
             const sysDir = systemDir(cwd);
-            for (const name of [...READONLY_FILES, ...READONLY_DIRS]) {
+            for (const name of HARD_READONLY_FILES) {
                 const protectedPath = path.join(sysDir, name);
                 const rel = path.relative(cwd, protectedPath);
                 const pattern = new RegExp(
                     `(>>|>|tee\\s).*${rel.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}`,
                 );
+                if (pattern.test(cmd)) return { block: true, reason: `${rel} is readonly.` };
+            }
+            for (const dir of APPROVAL_DIRS) {
+                const approvalPath = path.join(sysDir, dir);
+                const rel = path.relative(cwd, approvalPath);
+                const pattern = new RegExp(
+                    `(>>|>|tee\\s).*${rel.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}`,
+                );
                 if (pattern.test(cmd)) {
-                    return {
-                        block: true,
-                        reason: `${rel} is readonly. Only humans may edit MISSION, RULES, and specs.`,
-                    };
+                    const approval = await requireHumanApproval(approvalPath, "bash write");
+                    if (approval) return approval;
                 }
             }
         }

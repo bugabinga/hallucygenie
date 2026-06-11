@@ -938,13 +938,19 @@ textarea,
 
 /* ── Audio Players ──────────────────────────────────────────────────── */
 
-.tool-result-audio {
+.tool-result-audio,
+.tool-result-video {
     display: block;
     width: 100%;
     margin-top: var(--space-sm);
     border-radius: var(--radius-sm);
     outline: none;
     filter: hue-rotate(80deg) brightness(1.1);
+}
+
+.tool-result-video {
+    aspect-ratio: 16 / 9;
+    background: #000;
 }
 
 /* ── Typing Indicator ───────────────────────────────────────────────── */
@@ -1630,9 +1636,15 @@ textarea,
     object-fit: cover;
     display: block;
 }
-.asset-audio {
+.asset-audio,
+.asset-video {
     width: calc(100% - 12px);
     margin: 6px;
+}
+
+.asset-video {
+    aspect-ratio: 16 / 9;
+    background: #000;
 }
 .asset-header {
     display: flex;
@@ -1691,6 +1703,22 @@ textarea,
     padding: 0 6px 2px;
     font-size: 0.55rem;
     color: var(--color-secondary);
+}
+.asset-use-reference {
+    display: block;
+    width: calc(100% - 12px);
+    margin: 4px 6px;
+    padding: 6px;
+    border: 1px solid var(--color-primary-dim);
+    border-radius: 6px;
+    background: transparent;
+    color: var(--color-primary);
+    font-size: 0.65rem;
+    font-weight: 800;
+    cursor: pointer;
+}
+.asset-use-reference:hover {
+    background: var(--color-primary-dim);
 }
 .asset-download {
     display: block;

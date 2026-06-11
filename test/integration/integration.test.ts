@@ -193,7 +193,7 @@ describe("GET /style.css", () => {
         const css = await r.text();
         assert.match(css, /\.message--assistant \.message-bubble:has\(\.tool-card\)/);
         assert.match(css, /\.tool-card \{[\s\S]*width: 100%;/);
-        assert.match(css, /\.tool-result-audio \{[\s\S]*display: block;/);
+        assert.match(css, /\.tool-result-audio,\n\.tool-result-video \{[\s\S]*display: block;/);
     });
 
     it("serves tool details and tweak control styles", async () => {

@@ -2,7 +2,7 @@
 
 ## Problem
 
-MiniMax supports image-to-image with subject references.
+MiniMax supports image-to-image subject references.
 HallucyGenie only supports text-to-image.
 
 Kids need “make a picture using this character/photo” without raw API controls.

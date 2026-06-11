@@ -95,8 +95,10 @@ function createApiHeaders(): Record<string, string> {
 const TOOL_EMOJIS: Record<string, string> = {
     generate_image: "🎨",
     text_to_speech: "🎙️",
+    generate_long_speech: "📖",
     generate_music: "🎵",
     generate_music_cover: "🎵",
+    generate_video: "🎬",
     analyze_image: "🔎",
     web_search: "🔍",
 };
@@ -293,8 +295,16 @@ describe("Tool Emojis", () => {
         assert.equal(getToolEmoji("text_to_speech"), "🎙️");
     });
 
+    it("returns correct emoji for generate_long_speech", () => {
+        assert.equal(getToolEmoji("generate_long_speech"), "📖");
+    });
+
     it("returns correct emoji for generate_music", () => {
         assert.equal(getToolEmoji("generate_music"), "🎵");
+    });
+
+    it("returns correct emoji for generate_video", () => {
+        assert.equal(getToolEmoji("generate_video"), "🎬");
     });
 
     it("returns default wrench emoji for unknown tool", () => {
@@ -423,6 +433,14 @@ describe("DOM Rendering", () => {
                 src: result.content,
             });
             body.appendChild(audio);
+        } else if (result.type === "video") {
+            const video = createElement("video", {
+                class: "tool-result-video",
+                controls: "",
+                src: result.content,
+                preload: "metadata",
+            });
+            body.appendChild(video);
         } else if (result.type === "error") {
             body.textContent = `😕 ${result.content}`;
             (card as HTMLElement).style.borderColor = "var(--color-error)";
@@ -503,6 +521,17 @@ describe("DOM Rendering", () => {
         const audio = card.querySelector("audio");
         assert.ok(audio);
         assert.equal(audio!.getAttribute("src"), "http://example.com/music.mp3");
+    });
+
+    it("tool result video card has video element", () => {
+        const card = renderToolResult("generate_video", {
+            type: "video",
+            content: "/asset/asset_video",
+        });
+        const video = card.querySelector("video");
+        assert.ok(video);
+        assert.equal(video!.getAttribute("src"), "/asset/asset_video");
+        assert.equal(video!.getAttribute("controls"), "");
     });
 
     it("tool result error card shows friendly error", () => {
@@ -1049,6 +1078,7 @@ function setupDOM(): { win: any; doc: any; errors: string[] } {
           <span class="quota-item" data-type="image">🎨 <span class="quota-used">—</span></span>
           <span class="quota-item" data-type="speech">🎙️ <span class="quota-used">—</span></span>
           <span class="quota-item" data-type="music">🎵 <span class="quota-used">—</span></span>
+          <span class="quota-item" data-type="video">🎬 <span class="quota-used">—</span></span>
         </button>
         <button id="profile-btn" data-avatar="🎮">🎮 Profile</button>
         <button id="create-btn">✨ Create</button>
@@ -1133,8 +1163,10 @@ function setupDOM(): { win: any; doc: any; errors: string[] } {
         <div class="create-tabs">
           <button class="create-tab active" data-tab="image">🎨 Image</button>
           <button class="create-tab" data-tab="music">🎵 Music</button>
+          <button class="create-tab" data-tab="video">🎬 Video</button>
           <button class="create-tab" data-tab="cover">🎧 Cover Song</button>
           <button class="create-tab" data-tab="voice">🎤 Voice</button>
+          <button class="create-tab" data-tab="narration">📖 Narration</button>
           <button class="create-tab" data-tab="analyze">🔎 Analyze</button>
           <button class="create-tab" data-tab="search">🔍 Search</button>
         </div>
@@ -1157,6 +1189,11 @@ function setupDOM(): { win: any; doc: any; errors: string[] } {
             <p id="img-seed-status" role="status">Optional: same code can make a similar picture again.</p>
             <input id="img-width" type="hidden" />
             <input id="img-height" type="hidden" />
+            <input id="img-reference-asset" type="hidden" />
+            <input id="img-reference-file" type="file" />
+            <p id="img-reference-status" role="status"></p>
+            <div id="img-reference-preview" hidden></div>
+            <button id="img-reference-clear" type="button" disabled>Clear reference</button>
             <input id="img-prompt-optimizer" type="checkbox" />
             <button id="img-submit" class="create-submit" type="submit" disabled>Generate image</button>
           </form>
@@ -1168,6 +1205,11 @@ function setupDOM(): { win: any; doc: any; errors: string[] } {
               <textarea id="music-lyrics"></textarea>
             </div>
             <button id="write-lyrics-btn" type="button">Write lyrics</button>
+          </form>
+          <form id="create-video-form" class="create-panel" data-panel="video" hidden>
+            <textarea id="video-prompt"></textarea>
+            <select id="video-duration"><option value="6">6 seconds</option><option value="10">10 seconds</option></select>
+            <select id="video-resolution"><option value="768p">768p</option><option value="1080p">1080p</option></select>
           </form>
           <form id="create-cover-form" class="create-panel" data-panel="cover" hidden>
             <select id="cover-source-kind"><option value="direct">Audio URL</option><option value="upload">Audio file</option><option value="youtube">YouTube link</option></select>
@@ -1196,6 +1238,13 @@ function setupDOM(): { win: any; doc: any; errors: string[] } {
             <select id="voice-id"><option value="English_expressive_narrator">Expressive Narrator</option></select>
             <input id="voice-volume" type="range" value="1" />
             <input id="voice-pitch" type="range" value="0" />
+          </form>
+          <form id="create-narration-form" class="create-panel" data-panel="narration" hidden>
+            <textarea id="narration-text"></textarea>
+            <select id="narration-speed"><option value="1.0" selected>1.0x</option></select>
+            <select id="narration-voice-id"><option value="English_expressive_narrator">Expressive Narrator</option></select>
+            <input id="narration-volume" type="range" value="1" />
+            <input id="narration-pitch" type="range" value="0" />
           </form>
           <form id="create-analyze-form" class="create-panel" data-panel="analyze" hidden>
             <div class="form-group">
@@ -1228,6 +1277,7 @@ function setupDOM(): { win: any; doc: any; errors: string[] } {
         KeyboardEvent: win.KeyboardEvent,
         InputEvent: win.InputEvent,
         FocusEvent: win.FocusEvent,
+        CustomEvent: win.CustomEvent,
     });
     const localStore = new Map<string, string>();
     (globalThis as any).localStorage = {
@@ -2642,6 +2692,28 @@ describe("init event binding", () => {
         assert.match(status.textContent, /Optional/);
     });
 
+    it("Create image can use an existing asset as reference", async () => {
+        setupFullDOM();
+        init();
+        await new Promise((resolve) => setTimeout(resolve, 0));
+
+        document.dispatchEvent(
+            new win.CustomEvent("hallucygenie:use-reference-asset", {
+                detail: {
+                    assetId: "asset_12345678-1234-1234-1234-123456789abc",
+                    assetUrl: "/asset/asset_12345678-1234-1234-1234-123456789abc",
+                },
+            }),
+        );
+
+        const referenceAsset = doc.querySelector("#img-reference-asset") as HTMLInputElement;
+        const status = doc.querySelector("#img-reference-status") as HTMLElement;
+        const preview = doc.querySelector("#img-reference-preview img") as HTMLImageElement;
+        assert.equal(referenceAsset.value, "asset_12345678-1234-1234-1234-123456789abc");
+        assert.match(status.textContent ?? "", /Reference ready/);
+        assert.ok(preview.src.includes("/asset/asset_12345678"));
+    });
+
     it("Escape → closes lightbox", () => {
         setupFullDOM();
 
@@ -2739,6 +2811,52 @@ describe("init event binding", () => {
             input: { image_url: "/asset/asset_1", prompt: "What do you see in this image?" },
         });
         assert.equal(JSON.stringify(calls).includes("data:image"), false);
+    });
+
+    it("long narration form sends async TTS create tool", async () => {
+        setupFullDOM();
+        const calls: Array<{ url: string; body: string }> = [];
+        (globalThis as any).fetch = (url: string, init?: RequestInit) => {
+            calls.push({ url: String(url), body: String(init?.body ?? "") });
+            if (url === "/api/create-tool") return Promise.resolve(createSSEResponse([sseDone()]));
+            if (url === "/api/profile") {
+                return Promise.resolve(
+                    new Response(
+                        JSON.stringify({
+                            version: 1,
+                            username: "",
+                            interests: "",
+                            hates: "",
+                            favorites: "",
+                            avatar: { type: "asset", value: "" },
+                            updatedAt: 0,
+                        }),
+                        { status: 200, headers: { "Content-Type": "application/json" } },
+                    ),
+                );
+            }
+            return Promise.resolve(new Response(JSON.stringify({}), { status: 200 }));
+        };
+        init();
+        const text = doc.querySelector("#narration-text") as HTMLTextAreaElement;
+        text.value = "Long story for a YouTube intro";
+        (doc.querySelector("#create-narration-form") as HTMLFormElement).dispatchEvent(
+            new win.Event("submit", { bubbles: true, cancelable: true }),
+        );
+        await new Promise((resolve) => setTimeout(resolve, 40));
+
+        const create = calls.find((call) => call.url === "/api/create-tool");
+        assert.ok(create);
+        assert.deepEqual(JSON.parse(create.body), {
+            tool_name: "generate_long_speech",
+            input: {
+                text: "Long story for a YouTube intro",
+                speed: 1,
+                voice_id: "English_expressive_narrator",
+                volume: 1,
+                pitch: 0,
+            },
+        });
     });
 
     it("lyrics helper edits current lyrics when textarea has text", async () => {
@@ -3126,6 +3244,16 @@ describe("renderToolResult", () => {
             content: "data:audio/mp3;base64,abc",
         });
         assert.ok(card.outerHTML.includes("audio"));
+    });
+
+    it("renders video result", () => {
+        const card = renderToolResult("generate_video", {
+            type: "video",
+            content: "/asset/asset_video",
+        });
+        const video = card.querySelector("video.tool-result-video");
+        assert.ok(video);
+        assert.equal(video.getAttribute("src"), "/asset/asset_video");
     });
 
     it("renders sanitized input details and tweak button", () => {
@@ -3651,6 +3779,7 @@ describe("updateQuotaBadge", () => {
                         speech: { used: 5, total: 100 },
                         image: { used: 10, total: 100 },
                         music: { used: 3, total: 100 },
+                        video: { used: 1, total: 5 },
                     }),
                     { headers: { "Content-Type": "application/json" } },
                 ),
@@ -3668,8 +3797,13 @@ describe("updateQuotaBadge", () => {
         const speechUsed = speechItem!.querySelector(".quota-used");
         assert.equal(speechUsed!.textContent, "95"); // 100 - 5
         const label = doc.querySelector("#quota-badge")!.getAttribute("aria-label") ?? "";
+        const videoItem = doc.querySelector('.quota-item[data-type="video"]');
+        assert.ok(videoItem, "video quota item exists");
+        const videoUsed = videoItem!.querySelector(".quota-used");
+        assert.equal(videoUsed!.textContent, "4");
         assert.match(label, /Images: 90 of 100 remaining, ok/);
         assert.match(label, /Voice: 95 of 100 remaining, ok/);
+        assert.match(label, /Video: 4 of 5 remaining, ok/);
     });
 
     it("does not crash on fetch failure", async () => {
@@ -3720,6 +3854,20 @@ describe("loadAssets", () => {
                                     url: "/asset/aud-1",
                                     download_url: "/asset/aud-1",
                                 },
+                                {
+                                    id: "vid-1",
+                                    session_id: "active-session",
+                                    type: "video",
+                                    filename: "vid-1.mp4",
+                                    mime_type: "video/mp4",
+                                    prompt: "clip",
+                                    tool_name: "generate_video",
+                                    size_bytes: 4096,
+                                    created_at: Date.now(),
+                                    params: { duration: 6, resolution: "768p" },
+                                    url: "/asset/vid-1",
+                                    download_url: "/asset/vid-1",
+                                },
                             ],
                         }),
                         { headers: { "Content-Type": "application/json" } },
@@ -3737,7 +3885,7 @@ describe("loadAssets", () => {
         assert.equal(requestOpts, undefined);
 
         const cards = doc.querySelectorAll(".asset-card");
-        assert.equal(cards.length, 2, "should render both asset cards");
+        assert.equal(cards.length, 3, "should render asset cards");
 
         const img = doc.querySelector(".asset-thumb");
         assert.ok(img, "should have image thumbnail");
@@ -3752,13 +3900,63 @@ describe("loadAssets", () => {
         assert.equal(audio!.src.includes("?s="), false);
         assert.equal(audio!.src.includes("/asset/aud-1"), true);
 
+        const video = doc.querySelector("video.asset-video") as HTMLVideoElement | null;
+        assert.ok(video, "video assets should use native controls");
+        assert.equal(video!.controls, true);
+        assert.equal(video!.preload, "metadata");
+        assert.equal(video!.src.includes("/asset/vid-1"), true);
+
         const downloads = doc.querySelectorAll(".asset-download");
-        assert.equal(downloads.length, 2, "every asset should have a download link");
+        assert.equal(downloads.length, 3, "every asset should have a download link");
         assert.equal((downloads[0] as HTMLAnchorElement).href.includes("/asset/img-1"), true);
+
+        const referenceButtons = doc.querySelectorAll(".asset-use-reference");
+        assert.equal(referenceButtons.length, 1, "PNG/JPG image assets can become references");
 
         // No 20-item cap — all assets rendered
         const grid = doc.querySelector("#assets-grid");
-        assert.equal(grid!.children.length, 2, "no slice cap");
+        assert.equal(grid!.children.length, 3, "no slice cap");
+    });
+
+    it("lets an existing image asset become the Create Image reference", async () => {
+        const { doc } = setupDOM();
+        let selected: { assetId?: string; assetUrl?: string } | null = null;
+        doc.addEventListener("hallucygenie:use-reference-asset", (event) => {
+            selected = (event as CustomEvent).detail;
+        });
+        (globalThis as any).fetch = () =>
+            Promise.resolve(
+                new Response(
+                    JSON.stringify({
+                        assets: [
+                            {
+                                id: "asset_12345678-1234-1234-1234-123456789abc",
+                                session_id: "active-session",
+                                type: "image",
+                                filename: "ref.png",
+                                mime_type: "image/png",
+                                prompt: "same fox",
+                                tool_name: "generate_image",
+                                size_bytes: 1024,
+                                created_at: Date.now(),
+                                params: {},
+                                url: "/asset/asset_12345678-1234-1234-1234-123456789abc",
+                                download_url: "/asset/asset_12345678-1234-1234-1234-123456789abc",
+                            },
+                        ],
+                    }),
+                    { headers: { "Content-Type": "application/json" } },
+                ),
+            );
+
+        loadAssets();
+        await new Promise((r) => setTimeout(r, 50));
+        (doc.querySelector(".asset-use-reference") as HTMLButtonElement).click();
+
+        assert.deepEqual(selected, {
+            assetId: "asset_12345678-1234-1234-1234-123456789abc",
+            assetUrl: "/asset/asset_12345678-1234-1234-1234-123456789abc",
+        });
     });
 
     it("renders tool name, model, and date on asset cards", async () => {

@@ -50,6 +50,9 @@ import {
     recordToolInputHistory,
     listToolInputHistory,
     hideToolInputHistory,
+    saveAsyncTtsTask,
+    updateAsyncTtsTask,
+    listAsyncTtsTasks,
     QUOTAS,
 } from "../../src/db.ts";
 
@@ -87,6 +90,7 @@ describe("runMigrations", () => {
         assert.ok(tables.includes("daily_usage"));
         assert.ok(tables.includes("app_state"));
         assert.ok(tables.includes("sessions"));
+        assert.ok(tables.includes("async_tts_tasks"));
 
         const assetColumns = db
             .prepare("PRAGMA table_info(assets)")
@@ -99,7 +103,7 @@ describe("runMigrations", () => {
             .prepare("SELECT version FROM schema_migrations ORDER BY version")
             .all()
             .map((r: any) => r.version);
-        assert.deepEqual(versions, [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]);
+        assert.deepEqual(versions, [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13]);
 
         db.close();
     });
@@ -208,7 +212,7 @@ describe("runMigrations", () => {
             .prepare("SELECT version FROM schema_migrations ORDER BY version")
             .all()
             .map((r: any) => r.version);
-        assert.deepEqual(versions, [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]);
+        assert.deepEqual(versions, [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13]);
         assert.ok(getOrCreateActiveSession(db));
         db.close();
     });
@@ -1155,6 +1159,7 @@ describe("Mutation-strength DB invariants", () => {
             ["generate_lyrics", "lyrics"],
             ["generate_music_cover", "cover"],
             ["text_to_speech", "voice"],
+            ["generate_long_speech", "narration"],
             ["web_search", "search"],
             ["unknown", "other"],
         ] as const;
@@ -1222,5 +1227,33 @@ describe("Mutation-strength DB invariants", () => {
             () => assertNoRawAssetDataInMessage(`data:image/png;base64,${"A".repeat(4096)}`),
             /raw asset data/,
         );
+    });
+
+    it("persists async TTS task state", () => {
+        const db = freshDb();
+        const now = Date.now();
+        saveAsyncTtsTask(db, {
+            id: "tts_1",
+            session_id: "session-1",
+            provider_task_id: "provider-1",
+            status: "running",
+            text_summary: "story (1000 chars)",
+            voice_id: "English_expressive_narrator",
+            file_id: null,
+            asset_id: null,
+            error: null,
+            created_at: now,
+            updated_at: now,
+        });
+        updateAsyncTtsTask(db, "tts_1", {
+            status: "succeeded",
+            file_id: "file-1",
+            asset_id: "asset_1",
+        });
+        const tasks = listAsyncTtsTasks(db, "session-1");
+        assert.equal(tasks.length, 1);
+        assert.equal(tasks[0].status, "succeeded");
+        assert.equal(tasks[0].asset_id, "asset_1");
+        db.close();
     });
 });

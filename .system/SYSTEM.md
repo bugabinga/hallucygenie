@@ -15,8 +15,8 @@ ISSUES     → bug memory
 ## Ownership
 
 - MISSION, RULES, specs:
-  human-only.
-  Agent cannot write.
+  human-owned.
+  Agent only write, after explicit human approval.
 - Issues, research:
   agent can create/update.
 

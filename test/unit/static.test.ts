@@ -41,6 +41,7 @@ const changelogMd = readFileSync("CHANGELOG.md", "utf-8");
 const envExample = readFileSync(".env.example", "utf-8");
 const licenseMd = readFileSync("LICENSE", "utf-8");
 const rulesMd = readFileSync(".system/RULES.md", "utf-8");
+const systemExtension = readFileSync(".pi/extensions/system.ts", "utf-8");
 const musicCreatorSpec = readFileSync(
     ".system/specs/HG-SPEC-012-minimax-music-creator-tools.md",
     "utf-8",
@@ -286,6 +287,7 @@ describe("index.html health", () => {
         assert.match(appTs, /sendCreateTool\([\s\S]*"generate_music"/);
         assert.match(appTs, /sendCreateTool\([\s\S]*"generate_music_cover"/);
         assert.match(appTs, /sendCreateTool\([\s\S]*"text_to_speech"/);
+        assert.match(appTs, /sendCreateTool\([\s\S]*"generate_long_speech"/);
         assert.match(appTs, /sendCreateTool\([\s\S]*"generate_lyrics"/);
         assert.match(appTs, /sendCreateTool\([\s\S]*"analyze_image"/);
         assert.match(appTs, /sendCreateTool\([\s\S]*"web_search"/);
@@ -619,7 +621,10 @@ describe("index.html health", () => {
             /\.message--assistant \.message-bubble:has\(\.tool-card\) \{[\s\S]*max-width: calc\(100% - 42px\);/,
         );
         assert.match(styleCss, /\.tool-card \{[\s\S]*width: 100%;/);
-        assert.match(styleCss, /\.tool-result-audio \{[\s\S]*display: block;/);
+        assert.match(
+            styleCss,
+            /\.tool-result-audio,\n\.tool-result-video \{[\s\S]*display: block;/,
+        );
     });
 
     it("shows tool input details and tweak affordance", () => {
@@ -650,13 +655,14 @@ describe("index.html health", () => {
         assert.equal(badge?.getAttribute("role"), "status");
         assert.equal(
             badge?.getAttribute("title"),
-            "Images, voice, music, and lyrics remaining today",
+            "Images, voice, music, video, and lyrics remaining today",
         );
         assert.equal(
             badge?.getAttribute("aria-label"),
-            "Images, voice, music, and lyrics remaining today",
+            "Images, voice, music, video, and lyrics remaining today",
         );
         assert.ok(doc.querySelector('.quota-item[data-type="speech"]'));
+        assert.ok(doc.querySelector('.quota-item[data-type="video"]'));
         assert.equal(styleCss.includes(".quota-badge:hover"), false);
         assert.match(styleCss, /\.quota-badge \{[^}]*cursor: default;/);
     });
@@ -1003,6 +1009,18 @@ describe("system metadata health", () => {
                 assert.ok(spec, `${issue.path} references missing ${specId}`);
             }
         }
+    });
+
+    it("requires human approval for spec writes instead of hard-blocking them", () => {
+        assert.match(
+            systemExtension,
+            /const HARD_READONLY_FILES = \["MISSION\.md", "RULES\.md", "SYSTEM\.md"\]/,
+        );
+        assert.match(systemExtension, /const APPROVAL_DIRS = \["specs"\]/);
+        assert.match(systemExtension, /ctx\.ui\.confirm\(/);
+        assert.match(systemExtension, /human approval required/);
+        assert.doesNotMatch(systemExtension, /const READONLY_DIRS = \["specs"\]/);
+        assert.doesNotMatch(systemExtension, /Only humans may edit MISSION, RULES, and specs/);
     });
 
     it("keeps issue status valid", () => {
