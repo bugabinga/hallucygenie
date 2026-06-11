@@ -933,11 +933,12 @@ describe("SSE streaming from Anthropic endpoint", () => {
 
             const db = getDb()!;
             const rows = getMessages(db, "explicit-direct-session");
-            assert.equal(
+            // User message should be persisted for explicit tool directives
+            assert.ok(
                 rows.some(
                     (row) => row.role === "user" && row.content.includes("Use generate_image"),
                 ),
-                false,
+                "user message should be persisted for explicit tool directive",
             );
             assert.equal(rows.at(-2)?.tool_calls_json?.includes("generate_image"), true);
             assert.equal(rows.at(-1)?.role, "tool");
@@ -3396,6 +3397,63 @@ describe("Session, draft, and create-history APIs", () => {
                 history.origin,
                 "chat",
                 "origin should be 'chat' for explicit directive in chat",
+            );
+        } finally {
+            globalThis.fetch = prevFetch;
+            if (prevKey) process.env.MINIMAX_API_KEY = prevKey;
+            else delete process.env.MINIMAX_API_KEY;
+        }
+    });
+
+    it("persists user message for explicit tool directive", async () => {
+        const db = getDb()!;
+        const sessionId = resolveSessionId(new Request("http://localhost/api/state"), db);
+
+        const prevKey = process.env.MINIMAX_API_KEY;
+        process.env.MINIMAX_API_KEY = "test-key";
+        const prevFetch = globalThis.fetch;
+        globalThis.fetch = async () => {
+            return new Response(
+                JSON.stringify({
+                    data: {
+                        image_urls: ["https://example.com/cat.png"],
+                    },
+                    base_resp: { status_code: 0 },
+                }),
+                { status: 200, headers: { "Content-Type": "application/json" } },
+            );
+        };
+
+        try {
+            const directiveText = "Use generate_image with prompt: a cute cat";
+            const resp = await handleRequest(
+                new Request("http://localhost/api/chat", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                        messages: [{ role: "user", content: directiveText }],
+                    }),
+                }),
+            );
+            assert.equal(resp.status, 200);
+            await readBody(resp);
+
+            // Verify user message was persisted to DB
+            const rows = getMessages(db, sessionId);
+            const userMessages = rows.filter((row) => row.role === "user");
+            assert.ok(
+                userMessages.some((row) => row.content === directiveText),
+                `user message should be persisted. Got: ${JSON.stringify(userMessages.map((r) => r.content))}`,
+            );
+
+            // Verify assistant and tool messages are also present
+            assert.ok(
+                rows.some((row) => row.role === "assistant"),
+                "assistant message should be present",
+            );
+            assert.ok(
+                rows.some((row) => row.role === "tool"),
+                "tool message should be present",
             );
         } finally {
             globalThis.fetch = prevFetch;

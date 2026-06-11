@@ -362,8 +362,16 @@ export async function handleChat(
 
     const explicitTool = parseExplicitToolDirective(lastUserMsg.content);
     if (explicitTool) {
-        if (sessionId && countSessionUserMessages(database, sessionId) === 0) {
-            autoNameDefaultSession(database, sessionId, explicitTool.prompt ?? explicitTool.name);
+        if (sessionId) {
+            const userCount = countSessionUserMessages(database, sessionId);
+            saveMessage(database, sessionId, "user", lastUserMsg.content);
+            if (userCount === 0) {
+                autoNameDefaultSession(
+                    database,
+                    sessionId,
+                    explicitTool.prompt ?? explicitTool.name,
+                );
+            }
         }
         return handleExplicitToolDirective(explicitTool, apiKey, database, sessionId);
     }
