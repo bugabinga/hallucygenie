@@ -5,7 +5,7 @@ description: MiniMax API integration for HallucyGenie. Use when working with Min
 
 # MiniMax API — HallucyGenie
 
-Current docs crawl: 2026-05-31 from `https://platform.minimax.io/docs/llms.txt` into `~/.pi/research/pages/`. Cross-checked `MiniMax-AI/MiniMax-Coding-Plan-MCP` source via `git_clone_safe`.
+Current docs crawl: 2026-06-11 from `https://platform.minimax.io/docs/llms.txt` into `~/.pi/research/pages/`. Cross-checked `MiniMax-AI/MiniMax-Coding-Plan-MCP` source via `git_clone_safe` on earlier crawls.
 
 ## Base URLs
 
@@ -18,12 +18,12 @@ Current docs crawl: 2026-05-31 from `https://platform.minimax.io/docs/llms.txt` 
 ## Authentication
 
 - Use `Authorization: Bearer <key>` for all endpoints.
-- CRITICAL: `/anthropic/v1/messages` docs now specify `X-Api-Key`; earlier project testing found both `Authorization: Bearer` and `x-api-key` accepted in practice.
+- `/anthropic/v1/messages` docs list both `Authorization: Bearer` and `x-api-key`; `Authorization` is recommended and takes precedence when both are present.
 - All other endpoints (TTS, image, music, web search, VLM, video, file mgmt) **ONLY** accept `Authorization: Bearer`.
 - Using `x-api-key` on other endpoints returns `{"base_resp":{"status_code":1004}}`.
-- Token Plan Keys are separate from pay-as-you-go API keys.
-- Token Plan Keys now also spend prepaid Credits. Credits use Token Plan Key auth, not pay-as-you-go API key auth.
-- Each user has a dedicated Token Plan Key per Team. The key can exist with no usable paid resources until a Token Plan seat or Credits access is available.
+- Subscription Keys are separate from pay-as-you-go API keys.
+- Subscription Keys now also spend prepaid Credits. Credits use Subscription Key auth, not pay-as-you-go API key auth.
+- Each user has a dedicated Subscription Key per Team. The key can exist with no usable paid resources until a Token Plan seat or Credits access is available.
 - If Token Plan quota and Credits both apply, MiniMax consumes Token Plan quota first, then Credits automatically.
 
 ## Text / Chat
@@ -31,23 +31,32 @@ Current docs crawl: 2026-05-31 from `https://platform.minimax.io/docs/llms.txt` 
 ### Anthropic-compatible chat
 
 - `POST /anthropic/v1/messages`
-- Models: `MiniMax-M2.7-highspeed`, `MiniMax-M2.7`, `MiniMax-M2.5-highspeed`, `MiniMax-M2.5`, `MiniMax-M2.1-highspeed`, `MiniMax-M2.1`, `MiniMax-M2`. Current Anthropic OpenAPI enum lists `MiniMax-M2.7`, `MiniMax-M2.7-highspeed`, `MiniMax-M2.5`, `MiniMax-M2.1`; models/rate-limit pages still mention legacy/highspeed variants.
-- Context window: 204,800 tokens. Max token count means input + output.
-- `max_tokens` request max is now documented as 204,800 tokens.
-- Highspeed output: ~100 tps. Standard: ~60 tps.
+- Models: `MiniMax-M3`, `MiniMax-M2.7-highspeed`, `MiniMax-M2.7`, `MiniMax-M2.5-highspeed`, `MiniMax-M2.5`, `MiniMax-M2.1-highspeed`, `MiniMax-M2.1`, `MiniMax-M2`.
+- Context window: `MiniMax-M3` 1,000,000 tokens; M2.x 204,800 tokens. Max token count means input + output.
+- `max_tokens`: M3 recommended 131,072 and max 524,288; M2.x recommended 65,536 and max 204,800.
+- Highspeed M2.x output: ~100 tps. Standard M2.x: ~60 tps.
 - Supported params: `model`, `messages`, `max_tokens`, `stream`, `system`, `temperature`, `tool_choice`, `tools`, `top_p`, `metadata`, `thinking`.
 - Explicit prompt caching: add `cache_control: {"type":"ephemeral"}` to content/tool blocks that should be cached. HallucyGenie caches the system block and last tool definition.
 - Ignored params: `top_k`, `stop_sequences`, `service_tier`, `mcp_servers`, `context_management`, `container`.
-- Message blocks supported: `text`, `tool_use`, `tool_result`, `thinking`.
-- Message blocks NOT supported: `image`, `document`.
+- Message blocks supported on M2.x: `text`, `tool_use`, `tool_result`, `thinking`.
+- Message blocks supported on M3: `text`, `image`, `video`, `tool_use`, `tool_result`, `thinking`, `mid_conv_system`.
+- Message blocks NOT supported: `document`.
 - Thinking: response uses Anthropic `thinking` content blocks; no tag parsing needed.
+- M3 thinking is disabled by default unless `thinking: {"type":"adaptive"}` is sent. M2.x thinking cannot be disabled.
 - Tool use critical: for multi-turn tool calls, append the full assistant response content back into history, including `thinking` blocks + `signature` + `tool_use`. Dropping thinking/signature can break reasoning continuity.
+- Token count endpoint: `POST /anthropic/v1/messages/count_tokens`.
 
 ### OpenAI-compatible chat
 
 - `POST /v1/chat/completions`
 - Base for SDK: `https://api.minimax.io/v1`
-- Supports M2.7/M2.5/M2.1/M2 models.
+- Supports M3/M2.7/M2.5/M2.1/M2 models.
+
+### OpenAI Responses API
+
+- `POST /v1/responses`
+- `POST /v1/responses/input_tokens`
+- Supports text input/output, image input, and video input content parts.
 
 ### Model list endpoints
 
@@ -62,7 +71,7 @@ Current docs crawl: 2026-05-31 from `https://platform.minimax.io/docs/llms.txt` 
 
 - `POST /v1/t2a_v2` — synchronous, up to **10,000 chars/request**.
 - Docs models: `speech-2.8-hd`, `speech-2.8-turbo`, `speech-2.6-hd`, `speech-2.6-turbo`, `speech-02-hd`, `speech-02-turbo`, `speech-01-hd`, `speech-01-turbo`.
-- Model for HallucyGenie Plus-Highspeed: `speech-2.8-hd`.
+- HallucyGenie currently uses `speech-2.8-hd`.
 - Output: `output_format: "hex"` by default. Convert with `Buffer.from(hex, "hex").toString("base64")` → data URL.
 - Text >3,000 chars: streaming recommended.
 - Pause markers: `<#1.5#>` range `[0.01, 99.99]`, between speakable segments, no consecutive pauses.
@@ -74,7 +83,7 @@ Current docs crawl: 2026-05-31 from `https://platform.minimax.io/docs/llms.txt` 
 - `language_boost`: 40 language values or `auto`.
 - `subtitle_enable`: returns `subtitle_file` URL.
 - `subtitle_type`: `sentence` (default), `word`, `word_streaming` (only valid with `stream=true`).
-- System voices: docs list `English_expressive_narrator` and many others; latest list also via `GET /v1/voice/get`.
+- System voices: docs list `English_expressive_narrator` and many others; latest list also via `POST /v1/get_voice`.
 - Cantonese system voices now documented: `Cantonese_GentleLady`, `Cantonese_podacast_host_1`; set `language_boost` to `Chinese,Yue`.
 
 ### Async long TTS
@@ -158,7 +167,7 @@ Unsupported TTS models returned `{"base_resp":{"status_code":2061,"status_msg":"
 
 ## Video Generation
 
-- No Plus-Highspeed video quota. Max/Ultra plans include limited 768P 6s video quota.
+- Current Token Plan docs say eligible video draws from shared coverage; new Ultra notes 5 video generations/day. Project has not live-tested video quota.
 - Create/query/download async flow: create task → `task_id` → query → `file_id` → download.
 - Endpoints:
   - `POST /v1/video_generation` variants: text-to-video, image-to-video, first+last frame, subject-reference video.
@@ -188,29 +197,30 @@ Used by async TTS/video and uploads.
 - Upload formats by purpose: `voice_clone` and `prompt_audio` support `mp3|m4a|wav`; `t2a_async_input` text file for async long TTS; `t2a_async_input` supports `txt|zip` for async long TTS.
 - Limits: 100GB total capacity, 512MB single document.
 
-## Quotas — Token Plan Plus-Highspeed
+## Quotas — Token Plan
 
-| Feature        | Limit                 | Model                                  |
-| -------------- | --------------------- | -------------------------------------- |
-| M2.7-highspeed | 4,500 requests/5hrs   | `MiniMax-M2.7-highspeed`               |
-| Speech 2.8     | 9,000 chars/day       | `speech-2.8-hd` works for HallucyGenie |
-| Images         | 100/day               | `image-01`                             |
-| Music          | 100 songs/day (≤5min) | `music-2.6`                            |
-| Video          | ❌ No quota           | —                                      |
+Current 2026-06-11 docs no longer publish fixed per-model daily/request quota tables.
+
+| Tier  | Price      | Quota windows                     | Agent usage | Resource coverage          |
+| ----- | ---------- | --------------------------------- | ----------- | -------------------------- |
+| Plus  | $20/month  | 5-hour rolling and weekly windows | 3-4 agents  | All models on API Platform |
+| Max   | $50/month  | 5-hour rolling and weekly windows | 4-5 agents  | All models on API Platform |
+| Ultra | $120/month | 5-hour rolling and weekly windows | 6-7 agents  | All models on API Platform |
 
 Token Plan quotas:
 
-- Text resets on rolling 5-hour window.
-- Non-text resets daily.
-- Credits can automatically cover usage after Token Plan quota is exhausted, or covered resources outside the current subscription quota.
-- Credits usage is shown separately from Token Plan usage and expires after its validity period.
-- Weekly text quota may apply to users purchased from 2026-03-23 onward: 10× 5-hour quota.
-- Peak dynamic limits: Starter/Plus ~1 continuous agent, Max ~2, Ultra ~4.
+- Usage is shown as a shared usage bar in the console.
+- Text, image, speech, music, and eligible video draw from shared Token Plan coverage.
+- Plus-Highspeed and Starter are preserved only for existing legacy subscribers; no longer offered to new users.
+- M3 access is included in current and preserved legacy plans, sharing quota with M2.7.
+- Credits can automatically cover usage after Token Plan quota is exhausted, or covered resources outside current subscription quota.
+- Credits price: 1,000 credits = $1. Credits expire 365 days after purchase.
 
 ## Rate Limits
 
 | Feature      | RPM | TPM/Conn       |
 | ------------ | --- | -------------- |
+| Text M3      | 200 | 10,000,000 TPM |
 | Text M2.x    | 500 | 20,000,000 TPM |
 | TTS          | 60  | —              |
 | Voice clone  | 60  | —              |

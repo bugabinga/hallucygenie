@@ -21,15 +21,7 @@ public/app.js
 .stryker-tmp/
 reports/
 
-# OS
-.DS_Store
-
-# Pi/runtime browser cache
-.pi-lens/
-
-# Autoresearch runtime state
-autoresearch.jsonl
-.autoresearch-tmp/
+.pi/research
 
 # Test artifacts
 test-data*/

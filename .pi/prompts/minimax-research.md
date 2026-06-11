@@ -5,7 +5,7 @@ description: Research MiniMax API changes
 Research MiniMax API capabilities for HallucyGenie.
 
 1. Read `/skill:minimax` and `/skill:research`.
-2. Fetch current MiniMax docs into `~/.pi/research/pages/` with date suffix:
+2. Fetch current MiniMax docs into `.pi/research/pages/` with date suffix:
    - `https://platform.minimax.io/docs/llms.txt`
    - relevant `.md` docs
    - linked OpenAPI JSON for affected APIs
