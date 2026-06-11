@@ -63,6 +63,9 @@ import { Readable } from "node:stream";
 import { createLogger, nextReqId } from "./log.ts";
 
 const log = createLogger({ service: "hallucygenie" });
+function truncateLogText(text: string, max = 500): string {
+    return text.length > max ? `${text.slice(0, max)}…` : text;
+}
 import type { Database } from "bun:sqlite";
 import { MINIMAX_BASE, musicCoverPreprocess, type ToolResult } from "./tools.ts";
 import {
@@ -1187,34 +1190,68 @@ async function coverSourceFromSidecar(
 }
 
 async function handleMusicCoverPreprocess(req: Request, apiKey: string): Promise<Response> {
+    let sourceKind = "direct";
     try {
         const form = await req.formData();
-        const sourceKind = String(form.get("source_kind") ?? "direct");
+        sourceKind = String(form.get("source_kind") ?? "direct");
         let source: { audio_url?: string; audio_base64?: string };
         if (sourceKind === "direct") {
             const audioUrl = String(form.get("audio_url") ?? "").trim();
-            if (!/^https?:\/\//i.test(audioUrl))
-                return jsonResponse({ error: "audio_url required" }, 400);
+            if (!/^https?:\/\//i.test(audioUrl)) {
+                log.warn("music cover preprocess rejected", {
+                    sourceKind,
+                    error: "audio_url required",
+                });
+                return jsonResponse({ error: "audio URL required" }, 400);
+            }
             source = { audio_url: audioUrl };
         } else if (sourceKind === "upload") {
             const file = form.get("audio");
-            if (!(file instanceof File)) return jsonResponse({ error: "audio file required" }, 400);
-            if (!isCoverAudioMime(file.type))
-                return jsonResponse({ error: "audio type invalid" }, 400);
-            if (file.size > 20 * 1024 * 1024)
-                return jsonResponse({ error: "audio too large" }, 400);
+            if (!(file instanceof File)) {
+                log.warn("music cover preprocess rejected", {
+                    sourceKind,
+                    error: "audio file required",
+                });
+                return jsonResponse({ error: "audio file required" }, 400);
+            }
+            const metadata = { sourceKind, mime: file.type, size: file.size };
+            if (!isCoverAudioMime(file.type)) {
+                log.warn("music cover preprocess rejected", {
+                    ...metadata,
+                    error: "audio type invalid",
+                });
+                return jsonResponse({ error: "audio type must be MP3, M4A, MP4, or WAV" }, 400);
+            }
+            if (file.size > 50 * 1024 * 1024) {
+                log.warn("music cover preprocess rejected", {
+                    ...metadata,
+                    error: "audio too large",
+                });
+                return jsonResponse({ error: "audio too large: max 50 MB" }, 400);
+            }
             source = { audio_base64: Buffer.from(await file.arrayBuffer()).toString("base64") };
         } else if (sourceKind === "youtube") {
             const url = String(form.get("audio_url") ?? "").trim();
-            if (!/^https?:\/\//i.test(url))
-                return jsonResponse({ error: "youtube url required" }, 400);
+            if (!/^https?:\/\//i.test(url)) {
+                log.warn("music cover preprocess rejected", {
+                    sourceKind,
+                    error: "youtube url required",
+                });
+                return jsonResponse({ error: "YouTube URL required" }, 400);
+            }
             source = await coverSourceFromSidecar(url);
         } else {
-            return jsonResponse({ error: "source_kind invalid" }, 400);
+            log.warn("music cover preprocess rejected", {
+                sourceKind,
+                error: "source_kind invalid",
+            });
+            return jsonResponse({ error: "source kind invalid" }, 400);
         }
         return jsonResponse(await musicCoverPreprocess(source, apiKey));
     } catch (err) {
-        return jsonResponse({ error: String(err instanceof Error ? err.message : err) }, 400);
+        const error = String(err instanceof Error ? err.message : err);
+        log.warn("music cover preprocess failed", { sourceKind, error: truncateLogText(error) });
+        return jsonResponse({ error }, 400);
     }
 }
 

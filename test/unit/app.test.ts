@@ -7,7 +7,14 @@ import assert from "node:assert/strict";
 import { writeFileSync, mkdirSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
-import { imageDimensionsForPreset, imageSurpriseCode, renderMarkdown } from "../../public/app.ts";
+import {
+    imageCreateValidationError,
+    imageDimensionsForPreset,
+    imageSeedForSubmit,
+    imageSeedStatusText,
+    imageSurpriseCode,
+    renderMarkdown,
+} from "../../public/app.ts";
 import type { SSEEvent } from "../../public/app.ts";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -259,6 +266,21 @@ describe("Create image control helpers", () => {
             imageSurpriseCode(() => 0.5),
             "1073741824",
         );
+    });
+
+    it("omits surprise code for multi-image submits", () => {
+        assert.equal(imageSeedForSubmit("", "123"), 123);
+        assert.equal(imageSeedForSubmit("2", "123"), null);
+        assert.equal(
+            imageSeedStatusText("2", "123"),
+            "Surprise code is off for multiple pictures so each one is different.",
+        );
+    });
+
+    it("validates image create input before submit", () => {
+        assert.equal(imageCreateValidationError("", ""), "Describe your image first.");
+        assert.equal(imageCreateValidationError("cat", "9"), "Choose 1, 2, or 4 pictures.");
+        assert.equal(imageCreateValidationError("cat", "4"), null);
     });
 });
 
@@ -1131,10 +1153,12 @@ function setupDOM(): { win: any; doc: any; errors: string[] } {
             <select id="img-size"><option value="">Genie picks</option><option value="small">Small</option><option value="medium">Medium</option><option value="large">Large</option></select>
             <input id="img-seed" type="hidden" />
             <button id="img-seed-random" type="button">Roll surprise code 🎲</button>
+            <button id="img-seed-clear" type="button" disabled>Clear surprise code</button>
             <p id="img-seed-status" role="status">Optional: same code can make a similar picture again.</p>
             <input id="img-width" type="hidden" />
             <input id="img-height" type="hidden" />
             <input id="img-prompt-optimizer" type="checkbox" />
+            <button id="img-submit" class="create-submit" type="submit" disabled>Generate image</button>
           </form>
           <form id="create-music-form" class="create-panel" data-panel="music" hidden>
             <div class="form-group">
@@ -1154,7 +1178,7 @@ function setupDOM(): { win: any; doc: any; errors: string[] } {
             <input id="cover-feature-id" type="hidden" />
             <p id="cover-status" role="status"></p>
             <textarea id="cover-lyrics"></textarea>
-            <button id="cover-generate" type="button">Generate cover</button>
+            <button id="cover-generate" type="button" disabled>Prepare source first 🎧</button>
           </form>
           <form id="create-voice-form" class="create-panel" data-panel="voice" hidden>
             <div class="form-group">
@@ -1162,7 +1186,7 @@ function setupDOM(): { win: any; doc: any; errors: string[] } {
             </div>
             <select id="voice-pause-duration"><option value="0.5">0.5 sec</option></select>
             <button id="voice-insert-pause" type="button">Insert pause</button>
-            <button class="voice-interjection" type="button" data-tag="laugh">laugh</button>
+            <button class="voice-interjection" type="button" data-tag="laughs">laughs</button>
             <p id="voice-composer-status" role="status"></p>
             <div class="form-group">
               <select id="voice-speed">
@@ -2593,6 +2617,31 @@ describe("init event binding", () => {
         assert.ok(sendBtn.disabled, "send button should stay disabled for empty input");
     });
 
+    it("Create image surprise code can be cleared", async () => {
+        setupFullDOM();
+        init();
+        await new Promise((resolve) => setTimeout(resolve, 0));
+
+        const prompt = doc.querySelector("#img-prompt");
+        const seed = doc.querySelector("#img-seed");
+        const roll = doc.querySelector("#img-seed-random");
+        const clear = doc.querySelector("#img-seed-clear");
+        const status = doc.querySelector("#img-seed-status");
+        const submit = doc.querySelector("#img-submit");
+
+        prompt.value = "cat";
+        prompt.dispatchEvent(new win.Event("input"));
+        roll.click();
+        assert.ok(seed.value);
+        assert.equal(clear.disabled, false);
+        assert.equal(submit.disabled, false);
+
+        clear.click();
+        assert.equal(seed.value, "");
+        assert.equal(clear.disabled, true);
+        assert.match(status.textContent, /Optional/);
+    });
+
     it("Escape → closes lightbox", () => {
         setupFullDOM();
 
@@ -2692,6 +2741,63 @@ describe("init event binding", () => {
         assert.equal(JSON.stringify(calls).includes("data:image"), false);
     });
 
+    it("lyrics helper edits current lyrics when textarea has text", async () => {
+        setupFullDOM();
+        const calls: Array<{ url: string; body: string }> = [];
+        const chunks = [
+            sseEvent("tool_start", JSON.stringify({ id: "lyrics-edit", name: "generate_lyrics" })),
+            sseEvent(
+                "tool_result",
+                JSON.stringify({
+                    id: "lyrics-edit",
+                    name: "generate_lyrics",
+                    result: { type: "text", content: "better lyrics" },
+                }),
+            ),
+            sseDone(),
+        ];
+        (globalThis as any).fetch = (url: string, init?: RequestInit) => {
+            calls.push({ url: String(url), body: String(init?.body ?? "") });
+            if (url === "/api/create-tool") return Promise.resolve(createSSEResponse(chunks));
+            if (url === "/api/profile") {
+                return Promise.resolve(
+                    new Response(
+                        JSON.stringify({
+                            version: 1,
+                            username: "",
+                            interests: "",
+                            hates: "",
+                            favorites: "",
+                            avatar: { type: "asset", value: "" },
+                            updatedAt: 0,
+                        }),
+                        { status: 200, headers: { "Content-Type": "application/json" } },
+                    ),
+                );
+            }
+            return Promise.resolve(new Response(JSON.stringify({}), { status: 200 }));
+        };
+        init();
+        const prompt = doc.querySelector("#music-prompt");
+        const lyrics = doc.querySelector("#music-lyrics");
+        const button = doc.querySelector("#write-lyrics-btn");
+        prompt.value = "boss fight";
+        lyrics.value = "draft lyrics";
+        lyrics.dispatchEvent(new win.Event("input"));
+        assert.equal(button.textContent, "Improve my lyrics ✨");
+
+        button.dispatchEvent(new win.Event("click"));
+        await new Promise((resolve) => setTimeout(resolve, 30));
+
+        const call = calls.find((item) => item.url === "/api/create-tool");
+        assert.ok(call);
+        assert.deepEqual(JSON.parse(call.body), {
+            tool_name: "generate_lyrics",
+            input: { prompt: "boss fight", mode: "edit", lyrics: "draft lyrics" },
+        });
+        assert.equal(lyrics.value, "better lyrics");
+    });
+
     it("cover prepare prefers selected file over source dropdown", async () => {
         setupFullDOM();
         let body: FormData | null = null;
@@ -2734,6 +2840,9 @@ describe("init event binding", () => {
         assert.ok(body);
         assert.equal(body.get("source_kind"), "upload");
         assert.equal(String(body.get("audio")), "[object Blob]");
+        assert.equal(doc.querySelector("#cover-generate").disabled, false);
+        input.dispatchEvent(new win.Event("change"));
+        assert.equal(doc.querySelector("#cover-generate").disabled, true);
     });
 
     it("voice composer inserts pauses only between words", () => {
@@ -2751,6 +2860,19 @@ describe("init event binding", () => {
         text.selectionEnd = 0;
         doc.querySelector("#voice-insert-pause").dispatchEvent(new win.Event("click"));
         assert.equal(text.value, "edge");
+    });
+
+    it("voice composer inserts MiniMax interjection tags", () => {
+        setupFullDOM();
+        init();
+        const text = doc.querySelector("#voice-text");
+        const button = doc.querySelector('.voice-interjection[data-tag="laughs"]');
+        text.value = "hello";
+        text.selectionStart = 5;
+        text.selectionEnd = 5;
+        button.dispatchEvent(new win.Event("click"));
+        assert.equal(text.value, "hello (laughs) ");
+        assert.equal(text.value.includes("<laugh"), false);
     });
 });
 
@@ -3007,22 +3129,29 @@ describe("renderToolResult", () => {
     });
 
     it("renders sanitized input details and tweak button", () => {
+        const longLyrics = `[Verse]\n${"la ".repeat(260)}`;
         const card = renderToolResult(
             "generate_image",
             { type: "image", content: "/asset/one" },
             {
                 prompt: "neon fox",
+                lyrics: longLyrics,
                 n: 2,
                 prompt_optimizer: true,
                 image: "data:image/png;base64,raw",
+                audio_base64: "raw",
                 api_key: "secret",
             },
         );
         assert.equal(card.querySelector("details.tool-input-details")?.hasAttribute("open"), false);
         assert.ok(card.textContent?.includes("Input details"));
         assert.ok(card.textContent?.includes("neon fox"));
+        assert.ok(card.textContent?.includes(JSON.stringify(longLyrics).slice(1, -1)));
         assert.equal(card.textContent?.includes("data:image"), false);
         assert.equal(card.textContent?.includes("secret"), false);
+        assert.equal(card.textContent?.includes("audio_base64"), false);
+        assert.ok(card.querySelector(".tool-input-json .json-key"));
+        assert.ok(card.querySelector(".tool-input-json .json-string"));
         assert.equal(card.querySelectorAll(".tool-tweak-button").length, 1);
     });
 });

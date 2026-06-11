@@ -1,7 +1,7 @@
 ---
-{ "status": "fixed", "specs": ["HG-SPEC-016", "HG-SPEC-006", "HG-SPEC-008"] }
+{ "status": "fixed", "specs": ["HG-SPEC-016", "HG-SPEC-004", "HG-SPEC-006", "HG-SPEC-008"] }
 ---
 
-Repro: open Create → Voice. Try to add MiniMax TTS pause markers or interjections without memorizing syntax. UI has no mouse-based pause/interjection builder; kid must type `<#x#>` and tags manually.
-Cause: TTS model supports pause markers and interjection tags, but HallucyGenie exposes voice text as plain text plus basic voice/speed/volume/pitch controls. No UI validates marker placement, duration range, model support, or supported interjection vocabulary.
-Fix: Voice tab has pause picker/insert button and interjection palette. Pause insertion rejects edge/consecutive markers. Regression: `test/unit/app.test.ts`, `test/unit/static.test.ts`, `e2e/run-e2e.ts`. Cross-ref HG-ISSUE-054, HG-ISSUE-066, HG-ISSUE-078, HG-ISSUE-116, HG-ISSUE-119.
+Repro: open Create → Voice. Use interjection buttons. UI inserts `<laugh>`, `<sigh>`, `<breath>` into text; MiniMax docs require parenthesized tags such as `(laughs)`, `(sighs)`, `(breath)`. Screenshot `/tmp/pi-clipboard-3100bd33-ee44-4300-bc17-52ed52f38efc.png` shows `hallo <laugh>`, `what up <breath>`, `<sigh> ok not much`, plus oversized stacked buttons. Container DB confirms saved TTS params: `"text":"hallo  <laugh> \nwhat up <breath> \n <sigh> ok not much"`, model `speech-2.8-hd`, asset `asset_7463c8a9-cd10-449b-9d2c-d0d53c00eec6`.
+Cause: implementation uses `insertVoiceText(\` <${button.dataset.tag}> \`)`. UI exposes only 3 interjections while docs list 19 supported tags for `speech-2.8-hd`: `(laughs)`, `(chuckle)`, `(coughs)`, `(clear-throat)`, `(groans)`, `(breath)`, `(pant)`, `(inhale)`, `(exhale)`, `(gasps)`, `(sniffs)`, `(sighs)`, `(snorts)`, `(burps)`, `(lip-smacking)`, `(humming)`, `(hissing)`, `(emm)`, `(sneezes)`. Tests only assert 3 buttons exist and pause insertion works; no test asserts docs-correct interjection syntax or full palette.
+Fix: Voice composer now exposes all 19 tags, inserts `(${tag})`, never angle-bracket interjections, and uses compact buttons. Static/unit tests assert exact tag list, exact insertion text, no angle output, and compact layout. Cross-ref HG-ISSUE-054, HG-ISSUE-066, HG-ISSUE-078, HG-ISSUE-116, HG-ISSUE-119.

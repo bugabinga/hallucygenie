@@ -478,10 +478,10 @@ export function sanitizeToolInput(input?: Record<string, unknown>): Record<strin
     if (!input) return null;
     const clean: Record<string, unknown> = {};
     for (const [key, value] of Object.entries(input)) {
-        if (/api|key|token|secret|password/i.test(key)) continue;
+        if (/api|key|token|secret|password|base64|bytes/i.test(key)) continue;
         if (typeof value === "string") {
             if (/^data:/i.test(value)) continue;
-            clean[key] = value.slice(0, 500);
+            clean[key] = value;
             continue;
         }
         if (typeof value === "number" && Number.isFinite(value)) {
@@ -493,10 +493,36 @@ export function sanitizeToolInput(input?: Record<string, unknown>): Record<strin
     return Object.keys(clean).length ? clean : null;
 }
 
+function appendHighlightedJson(pre: HTMLElement, json: string): void {
+    const tokenPattern =
+        /"(?:\\.|[^"\\])*"(?=\s*:)|"(?:\\.|[^"\\])*"|-?\d+(?:\.\d+)?(?:[eE][+-]?\d+)?|true|false|null|[{}[\],:]/g;
+    let index = 0;
+    for (const match of json.matchAll(tokenPattern)) {
+        if (match.index === undefined) continue;
+        if (match.index > index)
+            pre.appendChild(document.createTextNode(json.slice(index, match.index)));
+        const token = match[0];
+        const className = token.startsWith('"')
+            ? json.slice(match.index + token.length).match(/^\s*:/)
+                ? "json-key"
+                : "json-string"
+            : /^(?:true|false|null)$/.test(token)
+              ? "json-literal"
+              : /^-?\d/.test(token)
+                ? "json-number"
+                : "json-punctuation";
+        pre.appendChild(createElement("span", { class: className }, [token]));
+        index = match.index + token.length;
+    }
+    if (index < json.length) pre.appendChild(document.createTextNode(json.slice(index)));
+}
+
 function renderToolInputDetails(input: Record<string, unknown>): HTMLElement {
     const details = createElement("details", { class: "tool-input-details" });
     details.appendChild(createElement("summary", {}, ["Input details"]));
-    details.appendChild(createElement("pre", {}, [JSON.stringify(input, null, 2)]));
+    const pre = createElement("pre", { class: "tool-input-json" });
+    appendHighlightedJson(pre, JSON.stringify(input, null, 2));
+    details.appendChild(pre);
     return details;
 }
 
@@ -1522,6 +1548,39 @@ export function imageSurpriseCode(random = Math.random): string {
     return String(Math.floor(random() * 2_147_483_647) + 1);
 }
 
+export function imageCountFromValue(value: string): number | null {
+    if (!value.trim()) return 1;
+    const n = Number(value);
+    return n === 2 || n === 4 ? n : null;
+}
+
+export function imageSeedForSubmit(countValue: string, seedValue: string): number | null {
+    const seed = seedValue.trim();
+    if (!seed) return null;
+    const count = imageCountFromValue(countValue);
+    if (count !== 1) return null;
+    const n = Number(seed);
+    return Number.isInteger(n) && n >= 0 ? n : null;
+}
+
+export function imageSeedStatusText(countValue: string, seedValue: string): string {
+    const count = imageCountFromValue(countValue);
+    if (count && count > 1) {
+        return seedValue.trim()
+            ? "Surprise code is off for multiple pictures so each one is different."
+            : "Multiple pictures use fresh surprise codes so they look different.";
+    }
+    return seedValue.trim()
+        ? `Surprise code: ${seedValue.trim()}`
+        : "Optional: same code can make a similar picture again.";
+}
+
+export function imageCreateValidationError(prompt: string, countValue: string): string | null {
+    if (!prompt.trim()) return "Describe your image first.";
+    if (imageCountFromValue(countValue) === null) return "Choose 1, 2, or 4 pictures.";
+    return null;
+}
+
 function sizePresetFromDimensions(width: string, height: string): string {
     const longEdge = Math.max(Number(width), Number(height));
     const match = Object.entries(IMAGE_SIZE_PRESETS).find(([, value]) => value === longEdge);
@@ -1621,9 +1680,10 @@ function applyCreateDraft(draft: CreateDraft): void {
         imageSize.value = sizePresetFromDimensions(draft.image.width, draft.image.height);
     const imageSeedStatus = document.querySelector("#img-seed-status") as HTMLElement | null;
     if (imageSeedStatus) {
-        imageSeedStatus.textContent = draft.image.seed
-            ? `Surprise code: ${draft.image.seed}`
-            : "Optional: same code can make a similar picture again.";
+        imageSeedStatus.textContent = imageSeedStatusText(
+            draft.image.n ?? "",
+            draft.image.seed ?? "",
+        );
     }
     ($("#img-prompt-optimizer") as HTMLInputElement).checked = Boolean(
         draft.image.prompt_optimizer,
@@ -2214,12 +2274,15 @@ export function init(): void {
     const imgSizeInput = $("#img-size") as HTMLSelectElement;
     const imgSeedInput = $("#img-seed") as HTMLInputElement;
     const imgSeedRandom = $("#img-seed-random") as HTMLButtonElement;
+    const imgSeedClear = $("#img-seed-clear") as HTMLButtonElement;
     const imgSeedStatus = $("#img-seed-status") as HTMLElement;
+    const imgSubmit = $("#img-submit") as HTMLButtonElement;
     const imgWidthInput = $("#img-width") as HTMLInputElement;
     const imgHeightInput = $("#img-height") as HTMLInputElement;
     const imgPromptOptimizerInput = $("#img-prompt-optimizer") as HTMLInputElement;
     const musicPromptInput = $("#music-prompt") as HTMLTextAreaElement;
     const musicLyricsInput = $("#music-lyrics") as HTMLTextAreaElement;
+    const writeLyricsBtn = $("#write-lyrics-btn") as HTMLButtonElement;
     const coverSourceKind = $("#cover-source-kind") as HTMLSelectElement;
     const coverAudioUrl = $("#cover-audio-url") as HTMLInputElement;
     const coverAudioFile = $("#cover-audio-file") as HTMLInputElement;
@@ -2268,6 +2331,24 @@ export function init(): void {
         const upload = coverSourceKind.value === "upload";
         if (coverUrlGroup) coverUrlGroup.hidden = upload;
         if (coverFileGroup) coverFileGroup.hidden = !upload;
+    }
+
+    function updateCoverGenerateUi(): void {
+        const ready = Boolean(coverFeatureId.value.trim());
+        coverGenerate.disabled = !ready;
+        coverGenerate.textContent = ready ? "Generate cover 🎧" : "Prepare source first 🎧";
+    }
+
+    function resetCoverPreparedState(message = "Prepare the cover source first."): void {
+        coverFeatureId.value = "";
+        coverStatus.textContent = message;
+        updateCoverGenerateUi();
+    }
+
+    function updateLyricsButton(): void {
+        writeLyricsBtn.textContent = musicLyricsInput.value.trim()
+            ? "Improve my lyrics ✨"
+            : "Write lyrics for me ✨";
     }
 
     function insertVoiceText(snippet: string): void {
@@ -2325,9 +2406,11 @@ export function init(): void {
                 imgWidthInput.value,
                 imgHeightInput.value,
             );
-            imgSeedStatus.textContent = imgSeedInput.value
-                ? `Surprise code: ${imgSeedInput.value}`
-                : "Optional: same code can make a similar picture again.";
+            imgSeedStatus.textContent = imageSeedStatusText(
+                imgCountInput.value,
+                imgSeedInput.value,
+            );
+            updateImageCreateUi();
             imgPromptOptimizerInput.checked = inputData.prompt_optimizer === true;
             setCreateTab("image");
         } else if (kind === "music" || kind === "cover") {
@@ -2352,6 +2435,8 @@ export function init(): void {
             searchQueryInput.value = String(inputData.query ?? inputData.prompt ?? "");
             setCreateTab("search");
         }
+        updateLyricsButton();
+        updateCoverGenerateUi();
         void putDraft("create", createDraftFromDom());
     }
 
@@ -2458,9 +2543,22 @@ export function init(): void {
         imgHeightInput.value = dimensions ? String(dimensions.height) : "";
     }
 
+    function updateImageCreateUi(): void {
+        imgSeedStatus.textContent = imageSeedStatusText(imgCountInput.value, imgSeedInput.value);
+        imgSeedClear.disabled = !imgSeedInput.value.trim();
+        imgSubmit.disabled =
+            imageCreateValidationError(imgPromptInput.value, imgCountInput.value) !== null;
+    }
+
+    function clearImageSeed(): void {
+        imgSeedInput.value = "";
+        updateImageCreateUi();
+        void putDraft("create", createDraftFromDom());
+    }
+
     function rollImageSeed(): void {
         imgSeedInput.value = imageSurpriseCode();
-        imgSeedStatus.textContent = `Surprise code: ${imgSeedInput.value}`;
+        updateImageCreateUi();
         void putDraft("create", createDraftFromDom());
     }
 
@@ -2475,9 +2573,15 @@ export function init(): void {
         const createDraft = await getDraft("create");
         if (isCreateDraft(createDraft)) {
             applyCreateDraft(createDraft);
+            updateImageCreateUi();
+            updateLyricsButton();
+            updateCoverGenerateUi();
             setCreateTab(createDraft.selectedTab || "image");
         } else {
             applyCreateDraft(defaultCreateDraft());
+            updateImageCreateUi();
+            updateLyricsButton();
+            updateCoverGenerateUi();
             setCreateTab("image");
         }
     }
@@ -2491,6 +2595,12 @@ export function init(): void {
         persistCreateDraft();
     });
     imgSeedRandom.addEventListener("click", rollImageSeed);
+    imgSeedClear.addEventListener("click", clearImageSeed);
+    [imgPromptInput, imgCountInput, imgSeedInput].forEach((el) => {
+        el.addEventListener("input", updateImageCreateUi);
+        el.addEventListener("change", updateImageCreateUi);
+    });
+    updateImageCreateUi();
 
     [
         imgPromptInput,
@@ -2539,14 +2649,20 @@ export function init(): void {
     void restoreDrafts().catch(() => undefined);
 
     updateCoverSourceVisibility();
+    updateLyricsButton();
+    updateCoverGenerateUi();
+    musicLyricsInput.addEventListener("input", updateLyricsButton);
+    musicLyricsInput.addEventListener("change", updateLyricsButton);
     coverSourceKind.addEventListener("change", () => {
         updateCoverSourceVisibility();
+        resetCoverPreparedState();
         persistCreateDraft();
     });
     coverAudioFile.addEventListener("change", () => {
         if (coverAudioFile.files?.[0]) {
             coverSourceKind.value = "upload";
             updateCoverSourceVisibility();
+            resetCoverPreparedState("Audio file selected. Prepare it before generating.");
         }
         persistCreateDraft();
     });
@@ -2554,15 +2670,17 @@ export function init(): void {
         if (!coverAudioUrl.value.trim()) return;
         if (coverSourceKind.value === "upload") coverSourceKind.value = "direct";
         updateCoverSourceVisibility();
+        resetCoverPreparedState("URL changed. Prepare it before generating.");
     });
     voiceInsertPause?.addEventListener("click", insertVoicePause);
     document
         .querySelectorAll<HTMLButtonElement>(".voice-interjection[data-tag]")
         .forEach((button) => {
             button.addEventListener("click", () => {
-                insertVoiceText(` <${button.dataset.tag}> `);
-                if (voiceComposerStatus)
-                    voiceComposerStatus.textContent = `Inserted ${button.dataset.tag}.`;
+                const tag = button.dataset.tag;
+                if (!tag) return;
+                insertVoiceText(` (${tag}) `);
+                if (voiceComposerStatus) voiceComposerStatus.textContent = `Inserted (${tag}).`;
             });
         });
 
@@ -2631,8 +2749,17 @@ export function init(): void {
             aspect_ratio: imgRatioInput.value,
             prompt_optimizer: imgPromptOptimizerInput.checked,
         };
-        if (imgCountInput.value.trim()) input.n = Number(imgCountInput.value.trim());
-        if (imgSeedInput.value.trim()) input.seed = Number(imgSeedInput.value.trim());
+        const validationError = imageCreateValidationError(prompt, imgCountInput.value);
+        if (validationError) {
+            updateImageCreateUi();
+            showError(validationError);
+            imgPromptInput.focus();
+            return;
+        }
+        const imageCount = imageCountFromValue(imgCountInput.value);
+        if (imageCount && imageCount > 1) input.n = imageCount;
+        const imageSeed = imageSeedForSubmit(imgCountInput.value, imgSeedInput.value);
+        if (imageSeed !== null) input.seed = imageSeed;
         if (imgWidthInput.value.trim() && imgHeightInput.value.trim()) {
             input.width = Number(imgWidthInput.value.trim());
             input.height = Number(imgHeightInput.value.trim());
@@ -2653,25 +2780,31 @@ export function init(): void {
         }
     });
 
-    // "Write lyrics for me" button — calls generate_lyrics and fills the textarea
-    const writeLyricsBtn = document.querySelector<HTMLButtonElement>("#write-lyrics-btn");
-    writeLyricsBtn?.addEventListener("click", () => {
+    // Lyrics helper — writes from empty field or edits current lyrics.
+    writeLyricsBtn.addEventListener("click", () => {
         const prompt = musicPromptInput.value.trim();
+        const currentLyrics = musicLyricsInput.value.trim();
         if (!prompt) {
             showError("Describe the music first so I can write matching lyrics! ✍️");
             musicPromptInput.focus();
             return;
         }
+        const lyricsInput: Record<string, unknown> = { prompt };
+        if (currentLyrics) {
+            lyricsInput.mode = "edit";
+            lyricsInput.lyrics = currentLyrics;
+        }
         writeLyricsBtn.disabled = true;
-        writeLyricsBtn.textContent = "Writing... ✨";
+        writeLyricsBtn.textContent = currentLyrics ? "Improving... ✨" : "Writing... ✨";
         setLyricsWriteResolve((lyricsText: string) => {
             musicLyricsInput.value = lyricsText;
+            updateLyricsButton();
             void putDraft("create", createDraftFromDom());
         });
-        sendCreateTool("generate_lyrics", { prompt }, `Write lyrics: ${prompt}`, false).finally(
+        sendCreateTool("generate_lyrics", lyricsInput, `Write lyrics: ${prompt}`, false).finally(
             () => {
                 writeLyricsBtn.disabled = false;
-                writeLyricsBtn.textContent = "Write lyrics for me ✨";
+                updateLyricsButton();
                 setLyricsWriteResolve(null);
             },
         );
@@ -2713,10 +2846,12 @@ export function init(): void {
             coverFeatureId.value = data.cover_feature_id ?? "";
             coverLyrics.value = data.lyrics ?? "";
             coverStatus.textContent = "Ready. Edit lyrics/style, then generate.";
+            updateCoverGenerateUi();
             void putDraft("create", createDraftFromDom());
         } catch (err) {
-            coverStatus.textContent = "Prepare failed.";
-            showError(String(err instanceof Error ? err.message : err));
+            const message = String(err instanceof Error ? err.message : err);
+            resetCoverPreparedState(`Prepare failed: ${message}`);
+            showError(message);
         } finally {
             coverPreprocess.disabled = false;
         }

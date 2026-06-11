@@ -341,6 +341,7 @@
                                 <textarea
                                     id="img-prompt"
                                     rows="3"
+                                    required
                                     placeholder="An epic gaming logo with neon lights"
                                 ></textarea>
                             </div>
@@ -385,6 +386,8 @@
                                 <!-- prettier-ignore -->
                                 <button id="img-seed-random" class="btn-secondary" type="button">Roll surprise code 🎲</button>
                                 <!-- prettier-ignore -->
+                                <button id="img-seed-clear" class="btn-secondary" type="button" disabled>Clear surprise code</button>
+                                <!-- prettier-ignore -->
                                 <p id="img-seed-status" class="field-help" role="status">Optional: same code can make a similar picture again.</p>
                             </div>
                             <div class="form-group create-option-group">
@@ -394,7 +397,7 @@
                                 <p class="field-help">Adds clearer details so MiniMax understands your idea better.</p>
                             </div>
                             <!-- prettier-ignore -->
-                            <button type="submit" class="btn-primary create-submit">Generate image 🎨</button>
+                            <button id="img-submit" type="submit" class="btn-primary create-submit" disabled>Generate image 🎨</button>
                         </form>
                         <form
                             id="create-music-form"
@@ -482,7 +485,7 @@
                                 ></textarea>
                             </div>
                             <!-- prettier-ignore -->
-                            <button id="cover-generate" class="btn-primary" type="button">Generate cover 🎵</button>
+                            <button id="cover-generate" class="btn-primary" type="button" disabled>Prepare source first 🎧</button>
                         </form>
                         <form
                             id="create-voice-form"
@@ -512,13 +515,48 @@
                                     <!-- prettier-ignore -->
                                     <button id="voice-insert-pause" class="btn-secondary" type="button">Insert pause</button>
                                 </div>
-                                <div class="tts-composer-row" aria-label="Interjections">
+                                <div
+                                    class="tts-composer-row tts-interjections"
+                                    aria-label="Interjections"
+                                >
                                     <!-- prettier-ignore -->
-                                    <button class="btn-secondary voice-interjection" type="button" data-tag="laugh">laugh</button>
+                                    <button class="btn-secondary voice-interjection" type="button" data-tag="laughs">laughs</button>
                                     <!-- prettier-ignore -->
-                                    <button class="btn-secondary voice-interjection" type="button" data-tag="sigh">sigh</button>
+                                    <button class="btn-secondary voice-interjection" type="button" data-tag="chuckle">chuckle</button>
+                                    <!-- prettier-ignore -->
+                                    <button class="btn-secondary voice-interjection" type="button" data-tag="coughs">coughs</button>
+                                    <!-- prettier-ignore -->
+                                    <button class="btn-secondary voice-interjection" type="button" data-tag="clear-throat">clear throat</button>
+                                    <!-- prettier-ignore -->
+                                    <button class="btn-secondary voice-interjection" type="button" data-tag="groans">groans</button>
                                     <!-- prettier-ignore -->
                                     <button class="btn-secondary voice-interjection" type="button" data-tag="breath">breath</button>
+                                    <!-- prettier-ignore -->
+                                    <button class="btn-secondary voice-interjection" type="button" data-tag="pant">pant</button>
+                                    <!-- prettier-ignore -->
+                                    <button class="btn-secondary voice-interjection" type="button" data-tag="inhale">inhale</button>
+                                    <!-- prettier-ignore -->
+                                    <button class="btn-secondary voice-interjection" type="button" data-tag="exhale">exhale</button>
+                                    <!-- prettier-ignore -->
+                                    <button class="btn-secondary voice-interjection" type="button" data-tag="gasps">gasps</button>
+                                    <!-- prettier-ignore -->
+                                    <button class="btn-secondary voice-interjection" type="button" data-tag="sniffs">sniffs</button>
+                                    <!-- prettier-ignore -->
+                                    <button class="btn-secondary voice-interjection" type="button" data-tag="sighs">sighs</button>
+                                    <!-- prettier-ignore -->
+                                    <button class="btn-secondary voice-interjection" type="button" data-tag="snorts">snorts</button>
+                                    <!-- prettier-ignore -->
+                                    <button class="btn-secondary voice-interjection" type="button" data-tag="burps">burps</button>
+                                    <!-- prettier-ignore -->
+                                    <button class="btn-secondary voice-interjection" type="button" data-tag="lip-smacking">lip smacking</button>
+                                    <!-- prettier-ignore -->
+                                    <button class="btn-secondary voice-interjection" type="button" data-tag="humming">humming</button>
+                                    <!-- prettier-ignore -->
+                                    <button class="btn-secondary voice-interjection" type="button" data-tag="hissing">hissing</button>
+                                    <!-- prettier-ignore -->
+                                    <button class="btn-secondary voice-interjection" type="button" data-tag="emm">emm</button>
+                                    <!-- prettier-ignore -->
+                                    <button class="btn-secondary voice-interjection" type="button" data-tag="sneezes">sneezes</button>
                                 </div>
                                 <!-- prettier-ignore -->
                                 <p id="voice-composer-status" class="field-help" role="status">Pauses go between words. Voice uses speech-2.8-hd.</p>

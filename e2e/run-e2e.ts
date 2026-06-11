@@ -1072,10 +1072,13 @@ async function runE2ETests(): Promise<void> {
                 input.selectionEnd = 5;
             });
             await page.click("#voice-insert-pause");
-            await page.click(".voice-interjection[data-tag='laugh']");
+            await page.click(".voice-interjection[data-tag='laughs']");
             const value = await page.locator("#voice-text").inputValue();
-            if (!value.includes("<#0.5#>") || !value.includes("<laugh>")) {
+            if (!value.includes("<#0.5#>") || !value.includes("(laughs)")) {
                 throw new Error(`Voice composer did not insert tags: ${value}`);
+            }
+            if (value.includes("<laugh")) {
+                throw new Error(`Voice composer inserted old interjection syntax: ${value}`);
             }
 
             await page.close();

@@ -117,6 +117,7 @@ export function safeToolResultForUser(toolName: string, result: ToolResult): Too
     if (result.type !== "error") return result;
 
     log.warn("tool returned error", { toolName, error: truncateLogText(result.content) });
+    if (result.content.startsWith("Invalid ")) return result;
 
     const ERROR_MESSAGES: Record<string, string> = {
         generate_image: "Couldn't generate the image. Try a shorter, clearer prompt.",

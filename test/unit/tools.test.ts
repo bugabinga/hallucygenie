@@ -564,7 +564,6 @@ describe("generateImage", () => {
                 prompt: "custom cat",
                 aspect_ratio: "21:9",
                 n: 12,
-                seed: 123,
                 width: 517,
                 height: 2055,
                 prompt_optimizer: false,
@@ -574,10 +573,24 @@ describe("generateImage", () => {
         const body = JSON.parse(capturedBody);
         assert.equal(body.aspect_ratio, "21:9");
         assert.equal(body.n, 9);
-        assert.equal(body.seed, 123);
+        assert.equal(body.seed, undefined);
         assert.equal(body.width, 512);
         assert.equal(body.height, 2048);
         assert.equal(body.prompt_optimizer, false);
+    });
+
+    it("returns helpful error when seed is used with multiple images", async () => {
+        let called = false;
+        globalThis.fetch = async () => {
+            called = true;
+            return jsonResponse({ data: { image_urls: ["https://example.com/custom.png"] } });
+        };
+
+        const result = await generateImage({ prompt: "cat", n: 4, seed: 123 }, API_KEY);
+
+        assert.equal(called, false);
+        assert.equal(result.type, "error");
+        assert.match(result.content, /omit seed when n is greater than 1/);
     });
 
     it("handles API error response", async () => {

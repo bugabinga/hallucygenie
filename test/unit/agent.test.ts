@@ -258,6 +258,18 @@ describe("parseToolArguments", () => {
 
 // ── Agent loop tests ─────────────────────────────────────────────────
 
+describe("safeToolResultForUser", () => {
+    it("preserves invalid parameter errors so the model can retry", () => {
+        const result = safeToolResultForUser("generate_image", {
+            type: "error",
+            content: "Invalid generate_image parameters: omit seed when n is greater than 1.",
+        });
+
+        assert.equal(result.type, "error");
+        assert.match(result.content, /omit seed/);
+    });
+});
+
 describe("executeToolSafely", () => {
     it("returns error tool result when executor throws", async () => {
         const result = await executeToolSafely(

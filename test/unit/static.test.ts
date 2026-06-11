@@ -203,6 +203,8 @@ describe("index.html health", () => {
             "#img-size",
             "#img-seed",
             "#img-seed-random",
+            "#img-seed-clear",
+            "#img-submit",
             "#img-width",
             "#img-height",
             "#img-prompt-optimizer",
@@ -227,8 +229,9 @@ describe("index.html health", () => {
         ]) {
             assert.equal(doc.querySelector(forbiddenId), null, forbiddenId);
         }
-        assert.match(appTs, /input\.n = Number\(imgCountInput\.value\.trim\(\)\)/);
-        assert.match(appTs, /input\.seed = Number\(imgSeedInput\.value\.trim\(\)\)/);
+        assert.match(appTs, /input\.n = imageCount/);
+        assert.match(appTs, /input\.seed = imageSeed/);
+        assert.match(appTs, /imageSeedForSubmit\(imgCountInput\.value, imgSeedInput\.value\)/);
         assert.match(appTs, /input\.width = Number\(imgWidthInput\.value\.trim\(\)\)/);
         assert.match(appTs, /input\.height = Number\(imgHeightInput\.value\.trim\(\)\)/);
         assert.doesNotMatch(appTs, /response_format|audio_base64|lyrics_optimizer/);
@@ -246,6 +249,8 @@ describe("index.html health", () => {
         assert.equal(doc.querySelector("#voice-pitch")?.getAttribute("type"), "range");
         assert.match(indexHtml, /Let Genie improve my idea before drawing/);
         assert.match(indexHtml, /same code can make a similar picture again/);
+        assert.equal(doc.querySelector("#img-submit")?.hasAttribute("disabled"), true);
+        assert.equal(doc.querySelector("#img-seed-clear")?.hasAttribute("disabled"), true);
         assert.doesNotMatch(
             indexHtml,
             /Optimize prompt|Volume \(optional|Pitch \(optional|<label for="img-seed">Seed/,
@@ -315,15 +320,45 @@ describe("index.html health", () => {
         assert.match(appTs, /\/api\/music-cover\/preprocess/);
         assert.match(appTs, /youtube\.disabled = true/);
         assert.match(appTs, /generate_music_cover: "cover"/);
+        assert.match(appTs, /resetCoverPreparedState/);
+        assert.equal(doc.querySelector("#cover-generate")?.hasAttribute("disabled"), true);
     });
 
     it("has voice pause and interjection composer controls", () => {
         const doc = parseIndex();
         assert.ok(doc.querySelector("#voice-pause-duration"));
         assert.ok(doc.querySelector("#voice-insert-pause"));
-        assert.equal(doc.querySelectorAll(".voice-interjection[data-tag]").length, 3);
+        assert.deepEqual(
+            Array.from(doc.querySelectorAll(".voice-interjection[data-tag]")).map((el) =>
+                el.getAttribute("data-tag"),
+            ),
+            [
+                "laughs",
+                "chuckle",
+                "coughs",
+                "clear-throat",
+                "groans",
+                "breath",
+                "pant",
+                "inhale",
+                "exhale",
+                "gasps",
+                "sniffs",
+                "sighs",
+                "snorts",
+                "burps",
+                "lip-smacking",
+                "humming",
+                "hissing",
+                "emm",
+                "sneezes",
+            ],
+        );
         assert.match(appTs, /insertVoicePause/);
+        assert.match(appTs, /` \(\$\{tag\}\) `/);
+        assert.doesNotMatch(appTs, /` <\$\{button\.dataset\.tag\}> `/);
         assert.match(indexHtml, /speech-2\.8-hd/);
+        assert.match(styleCss, /\.voice-interjection \{[\s\S]*min-height: 32px;/);
     });
 
     it("chat input handles pasted images through asset upload", () => {
@@ -352,6 +387,17 @@ describe("index.html health", () => {
         assert.equal(modal?.getAttribute("role"), "dialog");
         assert.equal(modal?.getAttribute("aria-modal"), "true");
         assert.equal(modal?.getAttribute("aria-labelledby"), "create-title");
+    });
+
+    it("desktop dialogs use full viewport budget before internal scroll", () => {
+        assert.match(styleCss, /\.modal-content \{[\s\S]*max-height: calc\(100dvh - 24px\);/);
+        assert.match(
+            styleCss,
+            /\.profile-modal-content \{[\s\S]*max-height: calc\(100dvh - 24px\);/,
+        );
+        assert.match(styleCss, /@media \(max-height: 700px\) \{[\s\S]*\.create-panels/);
+        assert.doesNotMatch(styleCss, /max-height: 80vh/);
+        assert.doesNotMatch(styleCss, /max-height: min\(86dvh/);
     });
 
     it("has session switcher controls", () => {
@@ -582,8 +628,11 @@ describe("index.html health", () => {
         assert.match(appTs, /class: "tool-tweak-button"/);
         assert.match(appTs, /hallucygenie:tweak-tool/);
         assert.match(appTs, /sanitizeToolInput/);
+        assert.match(appTs, /appendHighlightedJson/);
+        assert.doesNotMatch(appTs, /value\.slice\(0, 500\)/);
         assert.doesNotMatch(appTs, /data:image\/png;base64,raw/);
         assert.match(styleCss, /\.tool-input-details \{[\s\S]*margin-top: var\(--space-sm\);/);
+        assert.match(styleCss, /\.json-key \{/);
         assert.match(styleCss, /\.tool-tweak-button \{[\s\S]*min-height: 32px;/);
     });
 
@@ -664,12 +713,15 @@ describe("index.html health", () => {
         assert.doesNotMatch(styleCss, /\.stream-render-tick/);
     });
 
-    it("create modal has stable shell and scroll region", () => {
+    it("create modal has stable shell and small-height scroll region", () => {
         assert.match(styleCss, /\.create-modal-content \{[^}]*display: flex;/);
-        assert.match(styleCss, /\.create-modal-content \{[^}]*height: min\(86dvh, 720px\);/);
-        assert.match(styleCss, /\.create-panels \{[^}]*flex: 1;/);
+        assert.match(styleCss, /\.create-modal-content \{[^}]*max-height: calc\(100dvh - 24px\);/);
         assert.match(styleCss, /\.create-panels \{[^}]*min-height: 0;/);
-        assert.match(styleCss, /\.create-panels \{[^}]*overflow-y: auto;/);
+        assert.match(styleCss, /\.create-panels \{[^}]*overflow-y: visible;/);
+        assert.match(
+            styleCss,
+            /@media \(max-height: 700px\) \{[\s\S]*\.create-panels \{[\s\S]*overflow-y: auto;/,
+        );
         assert.match(styleCss, /\.modal-content \{[^}]*background: rgba\(20, 20, 26, 0\.94\);/);
         assert.match(styleCss, /backdrop-filter: blur\(10px\)/);
     });
@@ -683,7 +735,7 @@ describe("index.html health", () => {
             assert.match(styleCss, new RegExp(`${escaped}::\\-webkit-scrollbar-thumb`));
         }
         assert.match(styleCss, /\.modal-content \{[^}]*overflow-y: auto;/);
-        assert.match(styleCss, /\.create-panels \{[^}]*overflow-y: auto;/);
+        assert.match(styleCss, /@media \(max-height: 700px\) \{[\s\S]*overflow-y: auto;/);
     });
 
     it("create form controls have visible left borders", () => {

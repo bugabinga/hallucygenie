@@ -1118,6 +1118,29 @@ describe("SSE streaming from Anthropic endpoint", () => {
         }
     });
 
+    it("rejects music cover upload with named validation errors", async () => {
+        const previousApiKey = process.env.MINIMAX_API_KEY;
+        process.env.MINIMAX_API_KEY = "test-key";
+        try {
+            const form = new FormData();
+            form.set("source_kind", "upload");
+            form.set("audio", new File([new Uint8Array([1])], "bad.txt", { type: "text/plain" }));
+            const resp = await handleRequest(
+                new Request("http://localhost/api/music-cover/preprocess", {
+                    method: "POST",
+                    body: form,
+                }),
+            );
+            const body = JSON.parse(await readBody(resp));
+
+            assert.equal(resp.status, 400);
+            assert.equal(body.error, "audio type must be MP3, M4A, MP4, or WAV");
+        } finally {
+            if (previousApiKey === undefined) delete process.env.MINIMAX_API_KEY;
+            else process.env.MINIMAX_API_KEY = previousApiKey;
+        }
+    });
+
     it("executes Create music cover generation and saves asset", async () => {
         const sessionId = "create-tool-cover-session";
         const db = getDb()!;

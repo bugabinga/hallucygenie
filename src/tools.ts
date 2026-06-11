@@ -111,8 +111,18 @@ export function getToolDefinitions(): ToolDefinition[] {
                         enum: ["1:1", "16:9", "4:3", "3:2", "2:3", "3:4", "9:16", "21:9"],
                         description: "Output aspect ratio. Defaults to 16:9 for Create UI.",
                     },
-                    n: { type: "number", minimum: 1, maximum: 9 },
-                    seed: { type: "number" },
+                    n: {
+                        type: "number",
+                        minimum: 1,
+                        maximum: 9,
+                        description:
+                            "Number of images. If n is greater than 1, omit seed so images differ.",
+                    },
+                    seed: {
+                        type: "number",
+                        description:
+                            "Optional reproducibility seed. Use only when generating one image; omit when n is greater than 1.",
+                    },
                     width: { type: "number", minimum: 512, maximum: 2048 },
                     height: { type: "number", minimum: 512, maximum: 2048 },
                     prompt_optimizer: { type: "boolean" },
@@ -430,9 +440,19 @@ export async function generateImage(
         const aspectRatio = validateAspectRatio(options.aspect_ratio);
         if (aspectRatio) payload.aspect_ratio = aspectRatio;
         const n = clampIntegerParam(options.n, 1, 9);
+        const seed =
+            typeof options.seed === "number" && Number.isInteger(options.seed)
+                ? options.seed
+                : undefined;
+        if (n !== undefined && n > 1 && seed !== undefined) {
+            return {
+                type: "error",
+                content:
+                    "Invalid generate_image parameters: omit seed when n is greater than 1, or set n to 1. MiniMax returns duplicate images when one seed is used for multiple images.",
+            };
+        }
         if (n !== undefined) payload.n = n;
-        if (typeof options.seed === "number" && Number.isInteger(options.seed))
-            payload.seed = options.seed;
+        if (seed !== undefined) payload.seed = seed;
         const width = clampIntegerParam(options.width, 512, 2048);
         const height = clampIntegerParam(options.height, 512, 2048);
         if (width !== undefined && height !== undefined) {
