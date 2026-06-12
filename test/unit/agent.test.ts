@@ -397,6 +397,47 @@ describe("runAgentLoop", () => {
         assert.equal(toolMessages[0].tool_call_id, "call_1");
     });
 
+    it("does not render internal media tool-result boilerplate", async () => {
+        const firstResponse = anthropicResponse(
+            toolUseResponse("call_1", "generate_image", "{\"prompt\":\"a cat\"}")
+        );
+        const boilerplate = compactToolResultForModel("generate_image", {
+            type: "image",
+            content: "https://example.com/cat.png"
+        });
+        const secondResponse = anthropicResponse(textResponse([boilerplate]));
+
+        let fetchCallCount = 0;
+        globalThis.fetch = async (url: string | URL | Request, _init?: RequestInit) => {
+            fetchCallCount++;
+            if (url.toString().includes("/anthropic/v1/messages")) {
+                return fetchCallCount === 1 ? firstResponse : secondResponse;
+            }
+            return new Response(
+                JSON.stringify({
+                    data: { image_urls: ["https://example.com/cat.png"] }
+                }),
+                { status: 200, headers: { "Content-Type": "application/json" } }
+            );
+        };
+
+        const { events, onEvent } = collectEvents();
+        const messages = await runAgentLoop(
+            [{ role: "user", content: "draw a cat" }],
+            "test-key",
+            onEvent
+        );
+
+        assert.equal(
+            events.some((e) => e.type === "text" && e.content?.includes("Do not embed")),
+            false
+        );
+        assert.equal(
+            messages.some((m) => m.role === "assistant" && m.content.includes("Do not embed")),
+            false
+        );
+    });
+
     it("handles multiple tool calls in single turn", async () => {
         const firstEvents: string[] = [messageStart()];
         firstEvents.push(

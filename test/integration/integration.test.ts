@@ -284,15 +284,15 @@ describe("GET /api/quota", () => {
                 JSON.stringify({
                     model_remains: [
                         {
-                            model_name: "image-01",
+                            model_name: "general",
                             current_interval_total_count: 100,
                             current_interval_usage_count: 7,
                             remains_time: 1000
                         },
                         {
-                            model_name: "music-2.6",
-                            current_interval_total_count: 100,
-                            current_interval_usage_count: 3,
+                            model_name: "video",
+                            current_interval_total_count: 0,
+                            current_interval_usage_count: 0,
                             remains_time: 1000
                         }
                     ]
@@ -304,14 +304,14 @@ describe("GET /api/quota", () => {
         try {
             const r = await api("GET", "/api/quota");
             assert.equal(r.status, 200);
-            assert.deepEqual(bodyAs<Record<string, unknown>>(r.body).image, {
+            assert.deepEqual(bodyAs<Record<string, unknown>>(r.body).general, {
                 used: 7,
                 total: 100,
                 resetsInMs: 1000
             });
-            assert.deepEqual(bodyAs<Record<string, unknown>>(r.body).music, {
-                used: 3,
-                total: 100,
+            assert.deepEqual(bodyAs<Record<string, unknown>>(r.body).video, {
+                used: 0,
+                total: 0,
                 resetsInMs: 1000
             });
         } finally {

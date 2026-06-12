@@ -370,6 +370,27 @@ export function stripModelControlPlaceholders(text: string): string {
         .join("\n");
 }
 
+function isInternalMediaToolBoilerplate(line: string): boolean {
+    return /^Generated (?:(?:\d+ )?images?|audio|video) with [A-Za-z0-9_]+\. The UI displays (?:the result|it) in a tool card\. Do not embed .+\.?$/
+        .test(line.trim());
+}
+
+function isInternalMediaToolBoilerplatePrefix(line: string): boolean {
+    return /^Generated (?:(?:\d+ )?images?|audio|video) with [A-Za-z0-9_]+\.?(?:$| The UI(?: displays?)?.*)/
+        .test(line.trim());
+}
+
+function stripInternalMediaToolBoilerplate(text: string): string {
+    return text
+        .split("\n")
+        .filter((line) => {
+            const trimmed = line.trim();
+            return !isInternalMediaToolBoilerplate(trimmed)
+                && !isInternalMediaToolBoilerplatePrefix(trimmed);
+        })
+        .join("\n");
+}
+
 export function compactToolResultForModel(toolName: string, result: ToolResult): string {
     if (result.type === "error") return `Error: ${result.content}`;
 
@@ -594,6 +615,7 @@ export async function runAgentLoop(
 
         // Process the Anthropic SSE stream
         let textContent = "";
+        let emittedTextContent = "";
         let thinkingContent = "";
         let thinkingSignature = "";
         let stopReason: string | null = null;
@@ -674,7 +696,12 @@ export async function runAgentLoop(
                         const text = stripModelControlPlaceholders((delta.text as string) || "");
                         if (text) {
                             textContent += text;
-                            await onEvent({ type: "text", content: text });
+                            const visibleText = stripInternalMediaToolBoilerplate(textContent);
+                            const deltaText = visibleText.slice(emittedTextContent.length);
+                            if (deltaText) {
+                                emittedTextContent = visibleText;
+                                await onEvent({ type: "text", content: deltaText });
+                            }
                         }
                     } else if (deltaType === "input_json_delta") {
                         const partialJson = (delta.partial_json as string) || "";
@@ -785,20 +812,25 @@ export async function runAgentLoop(
             continue;
         }
 
+        const visibleTextContent = stripInternalMediaToolBoilerplate(textContent);
+
         // stop_reason is "end_turn" or no more tool calls
-        if (!textContent && thinkingContent.trim()) {
+        if (!visibleTextContent && thinkingContent.trim()) {
             textContent = "I got an empty final answer. Please try again.";
+            emittedTextContent = textContent;
             await onEvent({ type: "text", content: textContent });
         }
+
+        const finalTextContent = stripInternalMediaToolBoilerplate(textContent);
 
         // Check for steer messages at text turn boundary
         if (steerQueue) {
             const steerMessages = drainSteer(steerQueue);
             if (steerMessages.length > 0) {
-                if (textContent) {
+                if (finalTextContent) {
                     localMessages.push({
                         role: "assistant",
-                        content: textContent,
+                        content: finalTextContent,
                         thinking: thinkingContent || undefined,
                         thinking_signature: thinkingSignature || undefined
                     });
@@ -810,10 +842,10 @@ export async function runAgentLoop(
             }
         }
 
-        if (textContent) {
+        if (finalTextContent) {
             localMessages.push({
                 role: "assistant",
-                content: textContent,
+                content: finalTextContent,
                 thinking: thinkingContent || undefined,
                 thinking_signature: thinkingSignature || undefined
             });

@@ -16,7 +16,10 @@ describe("E2E MiniMax fetch mocks", () => {
         const body = (await resp.json()) as { model_remains: Array<{ model_name: string; }>; };
 
         assert.equal(resp.status, 200);
-        assert.ok(body.model_remains.some((model) => model.model_name === "image-01"));
+        assert.deepEqual(
+            body.model_remains.map((model) => model.model_name),
+            ["general", "video"]
+        );
     });
 
     it("restores original fetch on cleanup", () => {

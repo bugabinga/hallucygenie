@@ -118,7 +118,7 @@ describe("index.html health", () => {
             visibleText(doc.querySelector(".message--welcome .message-content")),
             "Hey! 👋 I'm HallucyGenie. Ask me anything — I can chat, make images 🔥, do voices 🎙️, and create music 🎵"
         );
-        assert.match(visibleText(doc.querySelector("#quota-badge")), /🎨\s*—\s*🎙️\s*—\s*🎵\s*—/);
+        assert.match(visibleText(doc.querySelector("#quota-badge")), /🧮\s*—\s*🎬\s*—/);
     });
 
     it("has no formatter-specific ignore comments", () => {
@@ -397,10 +397,14 @@ describe("index.html health", () => {
         assert.match(styleCss, /\.error-toast \{[\s\S]*z-index: 2000;/);
     });
 
-    it("quota badge includes lyrics item", () => {
+    it("quota badge mirrors MiniMax provider quota shape", () => {
         const doc = parseIndex();
-        const lyricsItem = doc.querySelector(".quota-item[data-type=\"lyrics\"]");
-        assert.ok(lyricsItem, "quota badge should have lyrics item");
+        assert.ok(doc.querySelector(".quota-item[data-type=\"general\"]"));
+        assert.ok(doc.querySelector(".quota-item[data-type=\"video\"]"));
+        assert.equal(doc.querySelector(".quota-item[data-type=\"image\"]"), null);
+        assert.equal(doc.querySelector(".quota-item[data-type=\"speech\"]"), null);
+        assert.equal(doc.querySelector(".quota-item[data-type=\"music\"]"), null);
+        assert.equal(doc.querySelector(".quota-item[data-type=\"lyrics\"]"), null);
     });
 
     it("create modal has dialog ARIA", () => {
@@ -680,15 +684,9 @@ describe("index.html health", () => {
         const badge = doc.querySelector("#quota-badge") as HTMLElement | null;
         assert.equal(badge?.tagName.toLowerCase(), "span");
         assert.equal(badge?.getAttribute("role"), "status");
-        assert.equal(
-            badge?.getAttribute("title"),
-            "Images, voice, music, video, and lyrics remaining today"
-        );
-        assert.equal(
-            badge?.getAttribute("aria-label"),
-            "Images, voice, music, video, and lyrics remaining today"
-        );
-        assert.ok(doc.querySelector(".quota-item[data-type=\"speech\"]"));
+        assert.equal(badge?.getAttribute("title"), "MiniMax general and video quota");
+        assert.equal(badge?.getAttribute("aria-label"), "MiniMax general and video quota");
+        assert.ok(doc.querySelector(".quota-item[data-type=\"general\"]"));
         assert.ok(doc.querySelector(".quota-item[data-type=\"video\"]"));
         assert.equal(styleCss.includes(".quota-badge:hover"), false);
         assert.match(styleCss, /\.quota-badge \{[^}]*cursor: default;/);

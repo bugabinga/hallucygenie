@@ -8,8 +8,8 @@
         "HG-SPEC-011",
         "HG-SPEC-012",
         "HG-SPEC-015",
-        "HG-SPEC-016",
-    ],
+        "HG-SPEC-016"
+    ]
 }
 ---
 

@@ -1566,22 +1566,11 @@ export async function handleRequest(req: Request): Promise<Response> {
                     remains_time: number;
                 }>;
             };
-            const find = (prefix: string) =>
-                data.model_remains.find((m) => m.model_name.startsWith(prefix)) ?? null;
-            const general = find("general");
-            const m2 = find("MiniMax-M") ?? general;
-            const speech = find("speech-hd") ?? general;
-            const image = find("image-01") ?? general;
-            const music = find("music-2.6") ?? general;
-            const lyrics = find("lyrics-01") ?? find("lyrics") ?? general;
-            const video = find("video") ?? find("MiniMax-Hailuo");
+            const find = (name: string) =>
+                data.model_remains.find((m) => m.model_name === name) ?? null;
             return jsonResponse({
-                chat: quotaEntry(m2),
-                speech: quotaEntry(speech),
-                image: quotaEntry(image),
-                music: quotaEntry(music),
-                lyrics: quotaEntry(lyrics),
-                video: quotaEntry(video)
+                general: quotaEntry(find("general") ?? data.model_remains[0] ?? null),
+                video: quotaEntry(find("video"))
             });
         } catch (err) {
             log.error("quota api error", { error: String(err) });

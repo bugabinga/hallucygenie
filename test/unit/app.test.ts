@@ -1053,9 +1053,7 @@ function setupDOM(): { win: Window; doc: Document; errors: string[]; } {
       <div class="header-right">
         <span id="connection-status" class="status-dot" title="Connected"></span>
         <button id="quota-badge">
-          <span class="quota-item" data-type="image">🎨 <span class="quota-used">—</span></span>
-          <span class="quota-item" data-type="speech">🎙️ <span class="quota-used">—</span></span>
-          <span class="quota-item" data-type="music">🎵 <span class="quota-used">—</span></span>
+          <span class="quota-item" data-type="general">🧮 <span class="quota-used">—</span></span>
           <span class="quota-item" data-type="video">🎬 <span class="quota-used">—</span></span>
         </button>
         <button id="profile-btn" data-avatar="🎮">🎮 Profile</button>
@@ -3756,15 +3754,13 @@ describe("renderToolResult asset URLs", () => {
 });
 
 describe("updateQuotaBadge", () => {
-    it("fetches /api/quota and updates badge text", async () => {
+    it("fetches /api/quota and updates provider-shaped badge text", async () => {
         const { doc } = setupDOM();
         globalThis.fetch = () =>
             Promise.resolve(
                 new Response(
                     JSON.stringify({
-                        speech: { used: 5, total: 100 },
-                        image: { used: 10, total: 100 },
-                        music: { used: 3, total: 100 },
+                        general: { used: 10, total: 100 },
                         video: { used: 1, total: 5 }
                     }),
                     { headers: { "Content-Type": "application/json" } }
@@ -3773,34 +3769,25 @@ describe("updateQuotaBadge", () => {
 
         await updateQuotaBadge();
 
-        const imageItem = doc.querySelector(".quota-item[data-type=\"image\"]");
-        assert.ok(imageItem, "image quota item exists");
-        const imageUsed = imageItem?.querySelector(".quota-used");
-        assert.equal(imageUsed?.textContent, "90"); // 100 - 10
+        const generalItem = doc.querySelector(".quota-item[data-type=\"general\"]");
+        assert.ok(generalItem, "general quota item exists");
+        assert.equal(generalItem?.querySelector(".quota-used")?.textContent, "90");
 
-        const speechItem = doc.querySelector(".quota-item[data-type=\"speech\"]");
-        assert.ok(speechItem, "speech quota item exists");
-        const speechUsed = speechItem?.querySelector(".quota-used");
-        assert.equal(speechUsed?.textContent, "95"); // 100 - 5
         const label = doc.querySelector("#quota-badge")?.getAttribute("aria-label") ?? "";
         const videoItem = doc.querySelector(".quota-item[data-type=\"video\"]");
         assert.ok(videoItem, "video quota item exists");
-        const videoUsed = videoItem?.querySelector(".quota-used");
-        assert.equal(videoUsed?.textContent, "4");
-        assert.match(label, /Images: 90 of 100 remaining, ok/);
-        assert.match(label, /Voice: 95 of 100 remaining, ok/);
+        assert.equal(videoItem?.querySelector(".quota-used")?.textContent, "4");
+        assert.match(label, /General: 90 of 100 remaining, ok/);
         assert.match(label, /Video: 4 of 5 remaining, ok/);
     });
 
-    it("shows unknown instead of broken dashes when MiniMax only reports general quota", async () => {
+    it("shows unknown for zero-total provider quota", async () => {
         const { doc } = setupDOM();
         globalThis.fetch = () =>
             Promise.resolve(
                 new Response(
                     JSON.stringify({
-                        image: { used: 0, total: 0 },
-                        speech: { used: 0, total: 0 },
-                        music: { used: 0, total: 0 },
+                        general: { used: 0, total: 0 },
                         video: { used: 0, total: 0 }
                     }),
                     { headers: { "Content-Type": "application/json" } }
@@ -3810,7 +3797,7 @@ describe("updateQuotaBadge", () => {
         await updateQuotaBadge();
 
         assert.equal(
-            doc.querySelector(".quota-item[data-type=\"image\"] .quota-used")?.textContent,
+            doc.querySelector(".quota-item[data-type=\"general\"] .quota-used")?.textContent,
             "?"
         );
         assert.equal(
@@ -3818,7 +3805,7 @@ describe("updateQuotaBadge", () => {
             "?"
         );
         const label = doc.querySelector("#quota-badge")?.getAttribute("aria-label") ?? "";
-        assert.match(label, /Images quota exact count unknown/);
+        assert.match(label, /General quota exact count unknown/);
         assert.match(label, /Video quota exact count unknown/);
         assert.equal(label.includes("unavailable"), false);
     });

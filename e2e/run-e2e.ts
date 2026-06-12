@@ -1272,9 +1272,8 @@ async function runE2ETests(): Promise<void> {
             const badge = page.locator("#quota-badge");
             await badge.waitFor({ state: "visible", timeout: 5000 });
 
-            await expectVisible(page, ".quota-item[data-type='image']");
-            await expectVisible(page, ".quota-item[data-type='speech']");
-            await expectVisible(page, ".quota-item[data-type='music']");
+            await expectVisible(page, ".quota-item[data-type='general']");
+            await expectVisible(page, ".quota-item[data-type='video']");
 
             await page.close();
         },

@@ -3980,10 +3980,10 @@ describe("GET /api/quota", () => {
             const resp = await handleRequest(req);
             assert.equal(resp.status, 200);
             const body = (await resp.json()) as Record<string, unknown>;
-            assert.equal((body.chat as Record<string, number>).used, 17);
-            assert.equal((body.chat as Record<string, number>).total, 4500);
-            assert.equal((body.image as Record<string, number>).used, 6);
-            assert.equal((body.image as Record<string, number>).total, 100);
+            assert.deepEqual(Object.keys(body).sort(), ["general", "video"]);
+            assert.equal((body.general as Record<string, number>).used, 17);
+            assert.equal((body.general as Record<string, number>).total, 4500);
+            assert.equal(body.video, null);
             assert.equal(capturedUrl, "https://api.minimax.io/v1/token_plan/remains");
         } finally {
             globalThis.fetch = prevFetch;
@@ -3992,7 +3992,7 @@ describe("GET /api/quota", () => {
         }
     });
 
-    it("maps MiniMax general quota to unknown header quotas", async () => {
+    it("maps MiniMax general and video quota to provider-shaped response", async () => {
         const mockResp: Response = {
             ok: true,
             status: 200,
@@ -4024,11 +4024,11 @@ describe("GET /api/quota", () => {
             const resp = await handleRequest(req);
             assert.equal(resp.status, 200);
             const body = (await resp.json()) as Record<string, Record<string, number>>;
-            assert.equal(body.image.total, 0);
-            assert.equal(body.speech.total, 0);
-            assert.equal(body.music.total, 0);
-            assert.equal(body.lyrics.total, 0);
+            assert.deepEqual(Object.keys(body).sort(), ["general", "video"]);
+            assert.equal(body.general.total, 0);
+            assert.equal(body.general.used, 0);
             assert.equal(body.video.total, 0);
+            assert.equal(body.video.used, 0);
         } finally {
             globalThis.fetch = prevFetch;
             if (prevKey) process.env.MINIMAX_API_KEY = prevKey;

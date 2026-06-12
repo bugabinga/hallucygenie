@@ -39,7 +39,9 @@
     "json": {},
     "markup": {},
     "malva": {},
-    "yaml": {},
+    "yaml": {
+        "trailingComma": false
+    },
     "dockerfile": {
         "associations": ["Containerfile", "**/Containerfile"]
     }

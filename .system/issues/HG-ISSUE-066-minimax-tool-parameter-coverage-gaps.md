@@ -1,7 +1,7 @@
 ---
 {
     "status": "fixed",
-    "specs": ["HG-SPEC-004", "HG-SPEC-006", "HG-SPEC-008", "HG-SPEC-011", "HG-SPEC-012"],
+    "specs": ["HG-SPEC-004", "HG-SPEC-006", "HG-SPEC-008", "HG-SPEC-011", "HG-SPEC-012"]
 }
 ---
 

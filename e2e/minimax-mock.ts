@@ -230,27 +230,15 @@ function minimaxResponse(url: URL, init?: RequestInit): Response | null {
             return jsonResponse({
                 model_remains: [
                     {
-                        model_name: "MiniMax-M3",
+                        model_name: "general",
                         current_interval_total_count: 1000,
                         current_interval_usage_count: 5,
                         remains_time: 86400000
                     },
                     {
-                        model_name: "speech-hd",
-                        current_interval_total_count: 9000,
-                        current_interval_usage_count: 10,
-                        remains_time: 86400000
-                    },
-                    {
-                        model_name: "image-01",
-                        current_interval_total_count: 100,
-                        current_interval_usage_count: 2,
-                        remains_time: 86400000
-                    },
-                    {
-                        model_name: "music-2.6",
-                        current_interval_total_count: 100,
-                        current_interval_usage_count: 1,
+                        model_name: "video",
+                        current_interval_total_count: 0,
+                        current_interval_usage_count: 0,
                         remains_time: 86400000
                     }
                 ]

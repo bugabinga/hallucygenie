@@ -1817,21 +1817,13 @@ function isCreateDraft(value: unknown): value is CreateDraft {
 // ── Quota Badge ──────────────────────────────────────────────────
 
 interface QuotaData {
-    chat: { used: number; total: number; } | null;
-    speech: { used: number; total: number; } | null;
-    image: { used: number; total: number; } | null;
-    music: { used: number; total: number; } | null;
+    general: { used: number; total: number; } | null;
     video: { used: number; total: number; } | null;
-    lyrics: { used: number; total: number; } | null;
 }
 
 const QUOTA_LABELS: Record<keyof QuotaData, string> = {
-    chat: "Chat",
-    speech: "Voice",
-    image: "Images",
-    music: "Music",
-    video: "Video",
-    lyrics: "Lyrics"
+    general: "General",
+    video: "Video"
 };
 
 export async function updateQuotaBadge(): Promise<void> {

@@ -1,5 +1,5 @@
 ---
-{ "status": "open", "specs": ["HG-SPEC-005", "HG-SPEC-019"] }
+{ "status": "fixed", "specs": ["HG-SPEC-005", "HG-SPEC-019"] }
 ---
 
 Repro: real `GET /v1/token_plan/remains` with Subscription Key now returns only:
@@ -31,4 +31,4 @@ Expected:
 
 Cause: MiniMax moved from fixed per-model quotas to unified usage. App still exposes old per-feature quota taxonomy.
 
-Fix: replace feature quota badge with provider-shaped quota badge. Keep video zero-total as unknown. Add a follow-up recheck note for MiniMax quota API behavior. Update tests and docs contract after human spec approval.
+Fix: replaced feature quota badge/API shape with provider-shaped `general` + `video`. Zero totals render as unknown (`?`). Tests cover API shape, static header slots, and badge updater. Follow-up: recheck MiniMax `token_plan/remains` because `video total=0` may still be upstream quota-reporting drift.
