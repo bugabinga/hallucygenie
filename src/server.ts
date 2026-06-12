@@ -103,6 +103,7 @@ import {
     drainSteer,
     estimateTokens,
     executeToolSafely,
+    MINIMAX_MODEL,
     queueSteer,
     runAgentLoop,
     safeToolResultForUser,
@@ -403,10 +404,11 @@ export async function handleChat(
             const userCount = countSessionUserMessages(database, sessionId);
             saveMessage(database, sessionId, "user", lastUserMsg.content);
             if (userCount === 0) {
-                autoNameDefaultSession(
+                void autoNameDefaultSession(
                     database,
                     sessionId,
-                    explicitTool.prompt ?? explicitTool.name
+                    explicitTool.prompt ?? explicitTool.name,
+                    apiKey
                 );
             }
         }
@@ -417,7 +419,9 @@ export async function handleChat(
     if (sessionId) {
         const userCount = countSessionUserMessages(database, sessionId);
         saveMessage(database, sessionId, "user", lastUserMsg.content);
-        if (userCount === 0) autoNameDefaultSession(database, sessionId, lastUserMsg.content);
+        if (userCount === 0) {
+            void autoNameDefaultSession(database, sessionId, lastUserMsg.content, apiKey);
+        }
     }
 
     // Apply context window trimming to avoid blowing the token limit
@@ -1196,7 +1200,12 @@ async function handleCreateTool(
     if (typeof normalized === "string") return jsonResponse({ error: normalized }, 400);
     const sessionId = resolveSessionId(req, database);
     if (countSessionUserMessages(database, sessionId) === 0) {
-        autoNameDefaultSession(database, sessionId, normalized.prompt ?? normalized.name);
+        void autoNameDefaultSession(
+            database,
+            sessionId,
+            normalized.prompt ?? normalized.name,
+            apiKey
+        );
     }
     return handleDirectToolExecution(
         normalized,
@@ -1237,27 +1246,54 @@ function countSessionUserMessages(database: Database, sessionId: string): number
     return row.count;
 }
 
-function sessionNameFromPrompt(prompt: string): string {
-    const words = prompt
-        .replace(/Use\s+\w+\s+with\s+(?:prompt|text):/i, "")
-        .replace(/Tool params:[\s\S]*/i, "")
-        .replace(/[^\p{L}\p{N}\s]/gu, " ")
-        .trim()
-        .split(/\s+/)
-        .filter((word) => word.length > 1)
-        .slice(0, 5);
-    if (words.length === 0) return "New idea";
-    return words
-        .slice(0, Math.max(2, Math.min(5, words.length)))
-        .map((word) => word[0]?.toUpperCase() + word.slice(1).toLowerCase())
-        .join(" ");
+async function generateSessionNameFromPrompt(apiKey: string, prompt: string): Promise<string> {
+    const systemPrompt =
+        "You are a session namer. Given a user prompt, generate a short 2-5 word session name. "
+        + "Return ONLY the name, nothing else. No quotes, no explanation. "
+        + "Examples: 'Dragon Game Art', 'Minecraft Build Tips', 'YouTube Thumbnail Ideas'.";
+
+    const payload = {
+        model: MINIMAX_MODEL,
+        max_tokens: 50,
+        messages: [
+            { role: "system", content: systemPrompt },
+            { role: "user", content: prompt }
+        ]
+    };
+
+    const resp = await fetch(`${MINIMAX_BASE}/anthropic/v1/messages`, {
+        method: "POST",
+        headers: {
+            "Content-Type": "application/json",
+            "X-Api-Key": apiKey
+        },
+        body: JSON.stringify(payload)
+    });
+
+    if (!resp.ok) {
+        throw new Error(`LLM naming failed: ${resp.status}`);
+    }
+
+    const data = (await resp.json()) as { content?: Array<{ type: string; text?: string; }>; };
+    const textBlock = data.content?.find((b) => b.type === "text");
+    if (!textBlock?.text) {
+        throw new Error("LLM returned no text block");
+    }
+
+    return textBlock.text.trim().split(/\s+/).slice(0, 5).join(" ") || "New idea";
 }
 
-function autoNameDefaultSession(database: Database, sessionId: string, prompt: string): void {
+async function autoNameDefaultSession(
+    database: Database,
+    sessionId: string,
+    prompt: string,
+    apiKey: string
+): Promise<void> {
     const session = getSession(database, sessionId);
     if (!session || session.name_source !== "default") return;
     try {
-        autoNameSession(database, sessionId, sessionNameFromPrompt(prompt));
+        const name = await generateSessionNameFromPrompt(apiKey, prompt);
+        autoNameSession(database, sessionId, name);
     } catch (err) {
         log.warn("session auto-name failed", { sessionId, error: String(err) });
     }

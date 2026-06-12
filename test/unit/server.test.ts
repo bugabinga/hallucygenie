@@ -3627,6 +3627,54 @@ describe("Session, draft, and create-history APIs", () => {
         assert.equal(archiveResp.status, 200);
     });
 
+    it("activates session and returns 404 for archived/missing id", async () => {
+        // Create a second session to activate
+        const session2Resp = await handleRequest(
+            new Request("http://localhost/api/sessions", { method: "POST" })
+        );
+        assert.equal(session2Resp.status, 201);
+        const session2 = (await session2Resp.json()) as { session: { id: string; }; };
+
+        // Activate the second session
+        const activateResp = await handleRequest(
+            new Request(`http://localhost/api/sessions/${session2.session.id}/activate`, {
+                method: "POST"
+            })
+        );
+        assert.equal(activateResp.status, 200);
+        const activateData = (await activateResp.json()) as { session: { id: string; }; };
+        assert.equal(activateData.session.id, session2.session.id);
+
+        // Verify active session changed via GET /api/sessions
+        const listResp = await handleRequest(new Request("http://localhost/api/sessions"));
+        const listData = (await listResp.json()) as { activeSessionId: string; };
+        assert.equal(listData.activeSessionId, session2.session.id);
+
+        // Archive the session and try to activate it
+        const archiveResp = await handleRequest(
+            new Request(`http://localhost/api/sessions/${session2.session.id}`, {
+                method: "DELETE"
+            })
+        );
+        assert.equal(archiveResp.status, 200);
+
+        // Activate archived session should return 404
+        const activateArchivedResp = await handleRequest(
+            new Request(`http://localhost/api/sessions/${session2.session.id}/activate`, {
+                method: "POST"
+            })
+        );
+        assert.equal(activateArchivedResp.status, 404);
+
+        // Activate non-existent session should return 404
+        const activateMissingResp = await handleRequest(
+            new Request("http://localhost/api/sessions/nonexistent-id-123/activate", {
+                method: "POST"
+            })
+        );
+        assert.equal(activateMissingResp.status, 404);
+    });
+
     it("uploads profile avatar images into asset storage", async () => {
         const body = new FormData();
         body.set(
