@@ -20,7 +20,9 @@ It needs task creation, polling, download, asset storage, preview, and quota han
 - Generated video bytes are asset storage only.
 - Chat/model context receives compact video summary only.
 - Assets tab shows native video preview and download.
-- Quota UI must not treat `/v1/token_plan/remains` as authoritative for video availability.
+- Quota UI must not treat `/v1/token_plan/remains` video `total=0` as authoritative for video availability.
+- Video `total=0` displays as exact count unknown.
+- Video `total=0` is a suspected upstream quota-reporting bug; recheck later.
 - Provider create/query errors are authoritative for unavailable video quota or spend.
 - Failed/expired tasks show loud user-safe errors.
 
@@ -34,5 +36,5 @@ It needs task creation, polling, download, asset storage, preview, and quota han
 - Asset row records prompt, tool, model, params, mime, size.
 - Chat renders video result card from `/asset/{id}`.
 - No raw video bytes, base64, or provider URLs enter chat history.
-- Quota display may show unknown for video when plan-remains data is absent or zero but provider calls still succeed.
+- Quota display shows unknown for video when plan-remains data is absent or zero but provider calls still succeed.
 - Tests cover task create/query/download, reload persistence, asset preview, quota-unknown state, and failure states.

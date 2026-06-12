@@ -219,12 +219,25 @@ export default function (pi: ExtensionAPI) {
                     reason: `${rel} human approval required, but no UI is available.`,
                 };
             }
-            const ok = await ctx.ui.confirm(
-                "Human approval required",
-                `Allow ${action} to ${rel}?`,
+            const choice = await ctx.ui.select(
+                `Human approval required\n\nAllow ${action} to ${rel}?`,
+                ["Yes", "No", "Custom"],
             );
-            if (!ok) return { block: true, reason: `${rel} blocked by human approval gate.` };
-            return undefined;
+            if (choice === "Yes") return undefined;
+            if (choice === "Custom") {
+                const custom = (
+                    await ctx.ui.input("Steer agent", "Tell agent what to do instead")
+                )?.trim();
+                if (custom) {
+                    pi.sendUserMessage(custom, { deliverAs: "steer" });
+                    return {
+                        block: true,
+                        reason: `${rel} blocked by human approval gate; custom steering queued.`,
+                    };
+                }
+            }
+            ctx.abort();
+            return { block: true, reason: `${rel} blocked by human approval gate.` };
         }
 
         // --- Readonly path protection ---

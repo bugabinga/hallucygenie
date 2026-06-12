@@ -1017,7 +1017,10 @@ describe("system metadata health", () => {
             /const HARD_READONLY_FILES = \["MISSION\.md", "RULES\.md", "SYSTEM\.md"\]/,
         );
         assert.match(systemExtension, /const APPROVAL_DIRS = \["specs"\]/);
-        assert.match(systemExtension, /ctx\.ui\.confirm\(/);
+        assert.match(systemExtension, /ctx\.ui\.select\(/);
+        assert.match(systemExtension, /\["Yes", "No", "Custom"\]/);
+        assert.match(systemExtension, /ctx\.abort\(\)/);
+        assert.match(systemExtension, /sendUserMessage\(custom, \{ deliverAs: "steer" \}\)/);
         assert.match(systemExtension, /human approval required/);
         assert.doesNotMatch(systemExtension, /const READONLY_DIRS = \["specs"\]/);
         assert.doesNotMatch(systemExtension, /Only humans may edit MISSION, RULES, and specs/);
