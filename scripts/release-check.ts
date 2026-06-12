@@ -137,6 +137,7 @@ forbidMatch(
     /Dockerfile|--format docker|image healthcheck/i,
     "use OCI Containerfile and Podman-native healthchecks"
 );
+forbidMatch("justfile", /--push/, "publish with explicit podman push");
 forbidMatch(
     ".github/workflows/release.yml",
     /docker\//,

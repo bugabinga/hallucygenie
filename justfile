@@ -218,7 +218,8 @@ publish-container image:
     case "$image" in ghcr.io/bugabinga/hallucygenie:v[0-9]*.[0-9]*.[0-9]*) ;; *) echo "image must be ghcr.io/bugabinga/hallucygenie:vX.Y.Z"; exit 1 ;; esac; \
     release_tag="${image##*:}"; \
     RELEASE_TAG="$release_tag" bun scripts/release-check.ts; \
-    podman build -f deploy/Containerfile --build-arg VERSION="$release_tag" -t "$image" --push .
+    podman build -f deploy/Containerfile --build-arg VERSION="$release_tag" -t "$image" .; \
+    podman push "$image"
 
 # test MiniMax API endpoints + check quota (real API; consumes TTS/image/music quota)
 [group('pi')]

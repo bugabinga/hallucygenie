@@ -1157,10 +1157,12 @@ describe("justfile health", () => {
         assert.match(justfile, /\npublish-container image:/);
         assert.match(
             justfile,
-            /podman build -f deploy\/Containerfile --build-arg VERSION="\$release_tag" -t "\$image" --push \./
+            /podman build -f deploy\/Containerfile --build-arg VERSION="\$release_tag" -t "\$image" \./
         );
+        assert.match(justfile, /podman push "\$image"/);
+        assert.doesNotMatch(justfile, /--push/);
         assert.doesNotMatch(justfile, /\bdocker (?:build|buildx|volume|run|inspect|rm)\b/);
-        assert.match(readmeMd, /podman pull ghcr\.io\/bugabinga\/hallucygenie:v1\.0\.1/);
+        assert.match(readmeMd, /podman pull ghcr\.io\/bugabinga\/hallucygenie:v1\.0\.2/);
         assert.match(readmeMd, /podman run --rm/);
         assert.match(readmeMd, /--health-cmd/);
         assert.doesNotMatch(readmeMd, /\bdocker (?:pull|run)\b/);
@@ -1284,23 +1286,23 @@ describe("project metadata health", () => {
         assert.match(readmeMd, /License-MIT/);
         assert.match(readmeMd, /Dark little genie/);
         assert.match(readmeMd, /chat, image, voice, and song/);
-        assert.match(readmeMd, /ghcr\.io\/bugabinga\/hallucygenie:v1\.0\.1/);
+        assert.match(readmeMd, /ghcr\.io\/bugabinga\/hallucygenie:v1\.0\.2/);
         assert.match(readmeMd, /MINIMAX_API_KEY/);
         assert.match(readmeMd, /No built-in auth/);
         assert.match(readmeMd, /data\//);
         assert.match(readmeMd, /just release-check/);
-        assert.match(readmeMd, /just release v1\.0\.1/);
+        assert.match(readmeMd, /just release v1\.0\.2/);
         assert.match(readmeMd, /opens the release image in Chrome/);
         assert.match(readmeMd, /Made with love, hand-vibing AI, and bugabinga\./);
     });
 
     it("ships first-release changelog and env example", () => {
-        assert.match(changelogMd, /^## 1\.0\.1 - 2026-06-12$/m);
+        assert.match(changelogMd, /^## 1\.0\.2 - 2026-06-12$/m);
         assert.match(changelogMd, /Kid notes/);
         assert.match(changelogMd, /Parent notes/);
         assert.match(changelogMd, /Database/);
         assert.match(changelogMd, /schema version 14/);
-        assert.match(changelogMd, /ghcr\.io\/bugabinga\/hallucygenie:v1\.0\.1/);
+        assert.match(changelogMd, /ghcr\.io\/bugabinga\/hallucygenie:v1\.0\.2/);
         assert.match(envExample, /^MINIMAX_API_KEY=$/m);
         assert.match(envExample, /^PORT=3000$/m);
         assert.match(envExample, /^COVER_EXTRACTOR_URL=$/m);
@@ -1311,7 +1313,7 @@ describe("project metadata health", () => {
             license: string;
             version: string;
         };
-        assert.equal(pkg.version, "1.0.1");
+        assert.equal(pkg.version, "1.0.2");
         assert.equal(pkg.license, "MIT");
         assert.match(licenseMd, /^MIT License/);
         assert.match(licenseMd, /Copyright \(c\) 2026 bugabinga/);

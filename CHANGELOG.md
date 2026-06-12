@@ -1,6 +1,6 @@
 # Changelog
 
-## 1.0.1 - 2026-06-12
+## 1.0.2 - 2026-06-12
 
 First published release.
 
@@ -29,14 +29,22 @@ First published release.
 
 ### Fixed issues
 
-• Fixed 130 tracked release issues through HG-ISSUE-141, including MiniMax tool drift, media asset persistence, profile/avatar flows, session/draft persistence, accessibility, mobile layout, release automation, POSIX CI smoke testing, Podman smoke testing, video, subject-reference image generation, and async long TTS.
+• Fixed 131 tracked release issues through HG-ISSUE-142, including MiniMax tool drift, media asset persistence, profile/avatar flows, session/draft persistence, accessibility, mobile layout, release automation, POSIX CI smoke testing, Podman publish compatibility, Podman smoke testing, video, subject-reference image generation, and async long TTS.
 • All `.system/issues/` release blockers are fixed or folded into the v1 baseline.
 
 ### Container
 
-• GHCR image: `ghcr.io/bugabinga/hallucygenie:v1.0.1`.
+• GHCR image: `ghcr.io/bugabinga/hallucygenie:v1.0.2`.
 • Runtime uses non-root `bun` user.
 • Image includes OCI labels. Podman run/Quadlet config uses `/api/health` healthcheck.
+
+## 1.0.1 - 2026-06-12
+
+Superseded before publication.
+
+• Tag was cut and local release proof passed.
+• GHCR publish failed before image upload because GitHub Actions Podman does not support `podman build --push`.
+• Use `v1.0.2`.
 
 ## 1.0.0 - 2026-06-12
 
@@ -44,4 +52,4 @@ Superseded before publication.
 
 • Tag was cut and local release proof passed.
 • GHCR publish failed before image upload because the CI shell is POSIX `sh` and the release smoke recipe used Bash-only `$RANDOM`.
-• Use `v1.0.1`.
+• Use `v1.0.2`.
