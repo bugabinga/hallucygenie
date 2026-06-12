@@ -466,6 +466,18 @@ function baseRespError(
     };
 }
 
+// Helper for HTTP API errors with response status and body text
+const apiErrorResult = (label: string, resp: Response, errorText: string): ToolResult => ({
+    type: "error",
+    content: `${label} API error: ${resp.status} — ${errorText}`,
+});
+
+// Helper for catch-block errors during tool execution
+const toolErrorResult = (label: string, err: unknown): ToolResult => ({
+    type: "error",
+    content: `${label} failed: ${String(err)}`,
+});
+
 function isObject(val: unknown): val is Record<string, unknown> {
     return typeof val === "object" && val !== null && !Array.isArray(val);
 }
@@ -578,10 +590,7 @@ export async function generateImage(
 
         if (!resp.ok) {
             const errorText = await resp.text();
-            return {
-                type: "error",
-                content: `Image generation API error: ${resp.status} — ${errorText}`,
-            };
+            return apiErrorResult("Image generation", resp, errorText);
         }
 
         const data = (await resp.json()) as {
@@ -652,10 +661,7 @@ export async function textToSpeech(
 
         if (!resp.ok) {
             const errorText = await resp.text();
-            return {
-                type: "error",
-                content: `TTS API error: ${resp.status} — ${errorText}`,
-            };
+            return apiErrorResult("TTS", resp, errorText);
         }
 
         const data = (await resp.json()) as {
@@ -928,10 +934,7 @@ export async function generateLyrics(
 
         if (!resp.ok) {
             const errorText = await resp.text();
-            return {
-                type: "error",
-                content: `Lyrics generation API error: ${resp.status} — ${errorText}`,
-            };
+            return apiErrorResult("Lyrics generation", resp, errorText);
         }
 
         const data = (await resp.json()) as {
@@ -993,10 +996,7 @@ export async function generateMusic(
 
         if (!resp.ok) {
             const errorText = await resp.text();
-            return {
-                type: "error",
-                content: `Music generation API error: ${resp.status} — ${errorText}`,
-            };
+            return apiErrorResult("Music generation", resp, errorText);
         }
 
         const data = (await resp.json()) as {
@@ -1149,7 +1149,7 @@ export async function generateVideo(
             return { type: "error", content: "Video file retrieve returned no download_url" };
         return { type: "video", content: downloadUrl };
     } catch (err) {
-        return { type: "error", content: `Video generation failed: ${String(err)}` };
+        return toolErrorResult("Video generation", err);
     }
 }
 
@@ -1278,7 +1278,7 @@ export async function webSearch(query: string, apiKey: string): Promise<ToolResu
         }
         return { type: "text", content: lines.join("\n\n") };
     } catch (err) {
-        return { type: "error", content: `Search failed: ${String(err)}` };
+        return toolErrorResult("Search", err);
     }
 }
 
@@ -1324,9 +1324,10 @@ export async function analyzeImage(
 ): Promise<ToolResult> {
     const options = typeof input === "string" ? { image_url: input } : input;
     try {
-        if (/^data:/i.test(options.image_url) && !options.allow_data_url)
+        const isDataUrl = /^data:/i.test(options.image_url);
+        if (isDataUrl && !options.allow_data_url)
             throw new Error("image data URLs are not allowed");
-        const dataUrl = /^data:/i.test(options.image_url)
+        const dataUrl = isDataUrl
             ? validateAnalyzeDataUrl(options.image_url)
             : await imageUrlToDataUrl(options.image_url);
         const resp = await fetch(`${MINIMAX_BASE}/v1/coding_plan/vlm`, {

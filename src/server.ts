@@ -2,6 +2,17 @@
 const draftKind = (path: string): "chat" | "create" | null =>
     path === "/api/draft/chat" ? "chat" : path === "/api/draft/create" ? "create" : null;
 
+// Helper to extract error message safely
+const errMessage = (err: unknown): string => String(err instanceof Error ? err.message : err);
+
+// Helper to write SSE data — factory returns a closure bound to writer/encoder
+const makeWriteSse = (writer: WritableStreamDefaultWriter<Uint8Array>, encoder: TextEncoder) => {
+    return async (event: string | null, data: unknown) => {
+        const prefix = event ? `event: ${event}\n` : "";
+        await writer.write(encoder.encode(`${prefix}data: ${JSON.stringify(data)}\n\n`));
+    };
+};
+
 // Helper to map model remain entry to quota response slice
 const quotaEntry = (
     m: {
@@ -437,6 +448,7 @@ export async function handleChat(
 
     // Run agent loop in background, streaming events to SSE
     (async () => {
+        const writeSse = makeWriteSse(writer, encoder);
         try {
             const finalMessages = await runAgentLoop(
                 contextMessages,
@@ -454,28 +466,23 @@ export async function handleChat(
                             break;
                         }
                         case "thinking": {
-                            const sseData = `event: thinking\ndata: ${JSON.stringify({
-                                content: event.content,
-                            })}\n\n`;
-                            await writer.write(encoder.encode(sseData));
+                            await writeSse("thinking", { content: event.content });
                             break;
                         }
                         case "text": {
-                            const sseData = `data: ${JSON.stringify({
+                            await writeSse(null, {
                                 choices: [
                                     { delta: { content: event.content }, finish_reason: null },
                                 ],
-                            })}\n\n`;
-                            await writer.write(encoder.encode(sseData));
+                            });
                             break;
                         }
                         case "tool_start": {
-                            const sseData = `event: tool_start\ndata: ${JSON.stringify({
+                            await writeSse("tool_start", {
                                 id: event.id,
                                 name: event.name,
                                 input: event.args,
-                            })}\n\n`;
-                            await writer.write(encoder.encode(sseData));
+                            });
                             break;
                         }
                         case "tool_result": {
@@ -517,13 +524,12 @@ export async function handleChat(
                                     log.warn("tool history save failed", { error: String(err) });
                                 }
                             }
-                            const sseData = `event: tool_result\ndata: ${JSON.stringify({
+                            await writeSse("tool_result", {
                                 id: event.id,
                                 name: event.name,
                                 result: saved,
                                 input: event.args,
-                            })}\n\n`;
-                            await writer.write(encoder.encode(sseData));
+                            });
                             break;
                         }
                         case "done": {
@@ -967,10 +973,7 @@ function handleDirectToolExecution(
     const encoder = new TextEncoder();
     const toolCallId = `direct_${randomUUID()}`;
 
-    const writeSse = async (event: string | null, data: unknown) => {
-        const prefix = event ? `event: ${event}\n` : "";
-        await writer.write(encoder.encode(`${prefix}data: ${JSON.stringify(data)}\n\n`));
-    };
+    const writeSse = makeWriteSse(writer, encoder);
 
     (async () => {
         try {
@@ -1301,7 +1304,7 @@ async function handleProfileAvatarUpload(req: Request, database: Database): Prom
         const profile = saveProfileAvatar(database, profileInput, assetId);
         return jsonResponse({ profile, assetUrl: saved.content });
     } catch (err) {
-        return jsonResponse({ error: String(err instanceof Error ? err.message : err) }, 400);
+        return jsonResponse({ error: errMessage(err) }, 400);
     }
 }
 
@@ -1327,7 +1330,7 @@ async function handleAnalyzeImageUpload(req: Request, database: Database): Promi
         if (!assetId) throw new Error("analyze image asset save failed");
         return jsonResponse({ assetId, assetUrl: saved.content });
     } catch (err) {
-        return jsonResponse({ error: String(err instanceof Error ? err.message : err) }, 400);
+        return jsonResponse({ error: errMessage(err) }, 400);
     }
 }
 
@@ -1355,7 +1358,7 @@ async function handleReferenceImageUpload(req: Request, database: Database): Pro
         if (!assetId) throw new Error("reference image asset save failed");
         return jsonResponse({ assetId, assetUrl: saved.content });
     } catch (err) {
-        return jsonResponse({ error: String(err instanceof Error ? err.message : err) }, 400);
+        return jsonResponse({ error: errMessage(err) }, 400);
     }
 }
 
@@ -1435,7 +1438,7 @@ async function handleMusicCoverPreprocess(req: Request, apiKey: string): Promise
         }
         return jsonResponse(await musicCoverPreprocess(source, apiKey));
     } catch (err) {
-        const error = String(err instanceof Error ? err.message : err);
+        const error = errMessage(err);
         log.warn("music cover preprocess failed", { sourceKind, error: truncateLogText(error) });
         return jsonResponse({ error }, 400);
     }
@@ -1466,7 +1469,7 @@ async function handleProfileAvatarGenerate(req: Request, database: Database): Pr
         const savedProfile = saveProfileAvatar(database, profile, assetId);
         return jsonResponse({ profile: savedProfile, assetUrl: saved.content });
     } catch (err) {
-        return jsonResponse({ error: String(err instanceof Error ? err.message : err) }, 400);
+        return jsonResponse({ error: errMessage(err) }, 400);
     }
 }
 
@@ -1590,10 +1593,7 @@ export async function handleRequest(req: Request): Promise<Response> {
                 parsed = await req.json();
                 return jsonResponse(saveUserProfile(database, parsed));
             } catch (err) {
-                return jsonResponse(
-                    { error: String(err instanceof Error ? err.message : err) },
-                    400,
-                );
+                return jsonResponse({ error: errMessage(err) }, 400);
             }
         }
 
@@ -1631,10 +1631,7 @@ export async function handleRequest(req: Request): Promise<Response> {
                     session: renameSession(database, sessionMatch[1]!, obj.name),
                 });
             } catch (err) {
-                return jsonResponse(
-                    { error: String(err instanceof Error ? err.message : err) },
-                    400,
-                );
+                return jsonResponse({ error: errMessage(err) }, 400);
             }
         }
 
@@ -1670,10 +1667,7 @@ export async function handleRequest(req: Request): Promise<Response> {
                     ),
                 });
             } catch (err) {
-                return jsonResponse(
-                    { error: String(err instanceof Error ? err.message : err) },
-                    400,
-                );
+                return jsonResponse({ error: errMessage(err) }, 400);
             }
         }
 
