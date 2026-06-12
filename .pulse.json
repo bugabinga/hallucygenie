@@ -3,6 +3,10 @@
         {
             "path": "AGENTS.md",
             "instruction": "project guidelines and context"
+        },
+        {
+            "path": "CHANGELOG.md",
+            "instruction": "changes to project in normal non-tech human language. only changes relevant to normal users"
         }
     ]
 }
