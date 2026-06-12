@@ -1,8 +1,8 @@
 # Changelog
 
-## 1.0.0 - 2026-06-12
+## 1.0.1 - 2026-06-12
 
-First release.
+First published release.
 
 ### Kid notes
 
@@ -22,18 +22,26 @@ First release.
 
 ### Database
 
-• First release baseline is SQLite schema version 14.
+• First published baseline is SQLite schema version 14.
 • Baseline includes sessions, drafts, create history, assets, video tasks, async TTS tasks, and provider diagnostics.
 • Future schema changes must add numbered migrations and release notes.
 • No destructive migration exists in this release.
 
 ### Fixed issues
 
-• Fixed 129 tracked release issues through HG-ISSUE-140, including MiniMax tool drift, media asset persistence, profile/avatar flows, session/draft persistence, accessibility, mobile layout, release automation, Podman smoke testing, video, subject-reference image generation, and async long TTS.
+• Fixed 130 tracked release issues through HG-ISSUE-141, including MiniMax tool drift, media asset persistence, profile/avatar flows, session/draft persistence, accessibility, mobile layout, release automation, POSIX CI smoke testing, Podman smoke testing, video, subject-reference image generation, and async long TTS.
 • All `.system/issues/` release blockers are fixed or folded into the v1 baseline.
 
 ### Container
 
-• GHCR image: `ghcr.io/bugabinga/hallucygenie:v1.0.0`.
+• GHCR image: `ghcr.io/bugabinga/hallucygenie:v1.0.1`.
 • Runtime uses non-root `bun` user.
 • Image includes OCI labels. Podman run/Quadlet config uses `/api/health` healthcheck.
+
+## 1.0.0 - 2026-06-12
+
+Superseded before publication.
+
+• Tag was cut and local release proof passed.
+• GHCR publish failed before image upload because the CI shell is POSIX `sh` and the release smoke recipe used Bash-only `$RANDOM`.
+• Use `v1.0.1`.

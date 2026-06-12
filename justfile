@@ -138,7 +138,7 @@ container image="hallucygenie:local":
 [group('deploy')]
 container-smoke image="hallucygenie:local":
     set -e; \
-    name="hallucygenie-smoke-$RANDOM"; \
+    name="hallucygenie-smoke-$(date +%s)-$$"; \
     volume="$name-data"; \
     podman volume create "$volume" >/dev/null; \
     cleanup() { podman rm -f "$name" >/dev/null 2>&1 || true; podman volume rm "$volume" >/dev/null 2>&1 || true; }; \
@@ -184,7 +184,7 @@ release tag:
     if git ls-remote --exit-code --tags origin "refs/tags/$tag" >/dev/null 2>&1; then echo "remote tag $tag already exists"; exit 1; fi; \
     if [ -z "${MINIMAX_API_KEY:-}" ]; then echo "MINIMAX_API_KEY required for manual release browser"; exit 1; fi; \
     command -v google-chrome-stable >/dev/null || { echo "google-chrome-stable missing"; exit 1; }; \
-    name="hallucygenie-release-${tag#v}-$RANDOM"; \
+    name="hallucygenie-release-${tag#v}-$(date +%s)-$$"; \
     volume="$name-data"; \
     profile="$(mktemp -d)"; \
     cleanup() { podman rm -f "$name" >/dev/null 2>&1 || true; podman volume rm "$volume" >/dev/null 2>&1 || true; rm -rf "$profile"; }; \
