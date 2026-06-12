@@ -301,18 +301,14 @@ textarea,
     border-radius: var(--radius-full);
     background: linear-gradient(135deg, rgba(255, 255, 255, 0.1), var(--color-bg-card));
     box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08);
-    transition:
-        border-color var(--snap),
-        box-shadow var(--snap);
+    transition: border-color var(--snap), box-shadow var(--snap);
 }
 
 .session-switcher:hover,
 .session-switcher:has(.session-select:focus-visible),
 .session-switcher:has(.session-new:focus-visible) {
     border-color: var(--color-tertiary);
-    box-shadow:
-        inset 0 1px 0 rgba(255, 255, 255, 0.12),
-        0 0 0 3px var(--color-tertiary-glow);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.12), 0 0 0 3px var(--color-tertiary-glow);
 }
 
 .session-select {
@@ -355,9 +351,7 @@ textarea,
     font-weight: 800;
     line-height: 1;
     cursor: pointer;
-    transition:
-        background var(--snap),
-        color var(--snap);
+    transition: background var(--snap), color var(--snap);
 }
 
 .session-new:hover,
@@ -500,9 +494,7 @@ textarea,
     line-height: 1;
     white-space: nowrap;
     cursor: pointer;
-    transition:
-        opacity 0.2s,
-        box-shadow 0.2s;
+    transition: opacity 0.2s, box-shadow 0.2s;
 }
 .create-btn {
     background: var(--color-primary);
@@ -622,7 +614,9 @@ textarea,
     color: white;
     border-bottom-right-radius: var(--space-xs);
     max-width: 80%;
-    box-shadow: var(--shadow-sm), var(--shadow-glow-primary);
+    box-shadow:
+        var(--shadow-sm),
+        var(--shadow-glow-primary);
 }
 
 /* Assistant messages — left aligned, surface with green glow accent */
@@ -776,7 +770,9 @@ textarea,
 .message--welcome .message-bubble {
     background: linear-gradient(135deg, var(--color-surface) 0%, var(--color-surface-raised) 100%);
     border-left: 3px solid var(--color-tertiary);
-    box-shadow: var(--shadow-sm), var(--shadow-glow-tertiary);
+    box-shadow:
+        var(--shadow-sm),
+        var(--shadow-glow-tertiary);
     font-size: 16px;
 }
 
@@ -785,7 +781,9 @@ textarea,
     background: linear-gradient(135deg, var(--color-tertiary-dark), var(--color-tertiary));
     color: var(--color-text-inverse);
     font-style: italic;
-    box-shadow: var(--shadow-sm), var(--shadow-glow-tertiary);
+    box-shadow:
+        var(--shadow-sm),
+        var(--shadow-glow-tertiary);
 }
 
 .message--steer .message-avatar {
@@ -921,15 +919,15 @@ textarea,
     max-width: 100%;
     height: auto;
     cursor: pointer;
-    transition:
-        transform var(--snap),
-        box-shadow var(--snap);
+    transition: transform var(--snap), box-shadow var(--snap);
     display: block;
 }
 
 .tool-result-image:hover {
     transform: scale(1.02);
-    box-shadow: var(--shadow-md), var(--shadow-glow-tertiary);
+    box-shadow:
+        var(--shadow-md),
+        var(--shadow-glow-tertiary);
 }
 
 .tool-result-image:active {
@@ -999,9 +997,7 @@ textarea,
     border: 2px solid rgba(255, 255, 255, 0.06);
     border-radius: var(--radius-lg);
     padding: var(--space-xs) var(--space-xs) var(--space-xs) var(--space-lg);
-    transition:
-        border-color var(--snap),
-        box-shadow var(--snap);
+    transition: border-color var(--snap), box-shadow var(--snap);
 }
 
 .input-wrapper:focus-within {
@@ -1047,11 +1043,10 @@ textarea,
     align-items: center;
     justify-content: center;
     flex-shrink: 0;
-    transition:
-        background var(--snap),
-        transform var(--bounce),
-        box-shadow var(--snap);
-    box-shadow: var(--shadow-sm), var(--shadow-glow-primary);
+    transition: background var(--snap), transform var(--bounce), box-shadow var(--snap);
+    box-shadow:
+        var(--shadow-sm),
+        var(--shadow-glow-primary);
 }
 
 #send-button:hover:not(:disabled) {
@@ -1089,7 +1084,9 @@ textarea,
     border-radius: var(--radius-sm);
     font-size: 13px;
     font-weight: 600;
-    box-shadow: var(--shadow-sm), var(--shadow-glow-tertiary);
+    box-shadow:
+        var(--shadow-sm),
+        var(--shadow-glow-tertiary);
 }
 
 .steer-close {
@@ -1390,17 +1387,6 @@ textarea,
     min-height: 36px;
 }
 
-.tts-interjections {
-    gap: 6px;
-}
-
-.voice-interjection {
-    flex: 0 1 auto;
-    min-height: 32px;
-    padding: 5px 8px;
-    font-size: 0.78rem;
-}
-
 .cover-intro {
     margin-bottom: var(--space-md);
 }
@@ -1570,9 +1556,7 @@ textarea,
     font-size: 0.85rem;
     font-weight: bold;
     cursor: pointer;
-    transition:
-        opacity 0.2s,
-        box-shadow 0.2s;
+    transition: opacity 0.2s, box-shadow 0.2s;
 }
 .btn-primary:hover {
     opacity: 0.9;

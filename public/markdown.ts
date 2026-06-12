@@ -4,7 +4,7 @@ import { marked } from "marked";
 marked.use({
     gfm: true,
     async: false,
-    breaks: false,
+    breaks: false
 });
 
 function escapeHtml(text: string): string {
@@ -26,35 +26,37 @@ function normalizeMarkdownInput(text: string): string {
 // Link: open in new tab, noopener for security
 marked.use({
     renderer: {
-        link({ href, title, text }: { href: string; title?: string | null; text: string }) {
+        link({ href, title, text }: { href: string; title?: string | null; text: string; }) {
             const safeHref = escapeHtml(href);
             const titleAttr = title ? ` title="${escapeHtml(title)}"` : "";
             return `<a href="${safeHref}"${titleAttr} target="_blank" rel="noopener">${text}</a>`;
         },
-        image({ href, title, text }: { href: string; title?: string | null; text: string }) {
+        image({ href, title, text }: { href: string; title?: string | null; text: string; }) {
             const safeHref = escapeHtml(href);
             const safeText = escapeHtml(text || title || "image");
             return `<a href="${safeHref}" target="_blank" rel="noopener nofollow">[image: ${safeText}]</a>`;
         },
-        html({ text }: { text: string }) {
+        html({ text }: { text: string; }) {
             return escapeHtml(text);
         },
         // Code block: use `lang-` class prefix for CSS compatibility
-        code({ text, lang }: { text: string; lang?: string }) {
+        code({ text, lang }: { text: string; lang?: string; }) {
             const cls = lang ? ` class="lang-${lang}"` : "";
             const escaped = escapeHtml(text);
             return `<pre><code${cls}>${escaped}</code></pre>`;
         },
         // Preserve task list checkbox class for CSS styling
-        listitem({ text, task, checked }: { text: string; task?: boolean; checked?: boolean }) {
+        listitem({ text, task, checked }: { text: string; task?: boolean; checked?: boolean; }) {
             const rendered = marked.parseInline(text) as string;
             if (task) {
                 const cls = checked ? "task-checkbox task-checked" : "task-checkbox";
-                return `<li><input type="checkbox" disabled class="${cls}"${checked ? " checked" : ""}> ${rendered}</li>\n`;
+                return `<li><input type="checkbox" disabled class="${cls}"${
+                    checked ? " checked" : ""
+                }> ${rendered}</li>\n`;
             }
             return `<li>${rendered}</li>\n`;
-        },
-    },
+        }
+    }
 });
 
 export function renderMarkdown(text: string): string {

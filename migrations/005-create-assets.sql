@@ -1,4 +1,5 @@
--- Store generated asset metadata (files stored on disk at data/assets/{sessionId}/)
+-- Store generated asset metadata.
+-- Files live at data/assets/{sessionId}/.
 CREATE TABLE IF NOT EXISTS assets (
     id TEXT PRIMARY KEY,
     session_id TEXT NOT NULL,
@@ -11,4 +12,6 @@ CREATE TABLE IF NOT EXISTS assets (
     created_at INTEGER NOT NULL
 );
 
-CREATE INDEX IF NOT EXISTS idx_assets_session ON assets (session_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_assets_session ON assets (
+    session_id, created_at DESC
+);

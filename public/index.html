@@ -1,4 +1,4 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="en">
     <head>
         <meta charset="UTF-8" />
@@ -34,22 +34,70 @@
                             id="session-select"
                             class="session-select"
                             aria-label="Current session"
-                        ></select>
-                        <!-- prettier-ignore -->
-                        <button id="session-new" class="session-new" type="button" aria-label="New chat">＋</button>
+                        >
+                        </select>
+                        <button
+                            id="session-new"
+                            class="session-new"
+                            type="button"
+                            aria-label="New chat"
+                        >
+                            ＋
+                        </button>
                     </div>
-                    <!-- prettier-ignore -->
-                    <button id="profile-btn" class="profile-btn" title="Profile" aria-label="Open profile" data-avatar="🎮">🎮 Profile</button>
-                    <!-- prettier-ignore -->
-                    <button id="create-btn" class="create-btn" title="Create something" aria-label="Create media">✨ Create</button>
-                    <!-- prettier-ignore -->
-                    <span id="quota-badge" class="quota-badge" title="Images, voice, music, video, and lyrics remaining today" role="status" aria-label="Images, voice, music, video, and lyrics remaining today"><span class="quota-item" data-type="image" title="Images">🎨 <span class="quota-used">—</span></span><span class="quota-item" data-type="speech" title="Voice">🎙️ <span class="quota-used">—</span></span><span class="quota-item" data-type="music" title="Music">🎵 <span class="quota-used">—</span></span><span class="quota-item" data-type="video" title="Video">🎬 <span class="quota-used">—</span></span><span class="quota-item" data-type="lyrics" title="Lyrics">📝 <span class="quota-used">—</span></span></span>
+                    <button
+                        id="profile-btn"
+                        class="profile-btn"
+                        title="Profile"
+                        aria-label="Open profile"
+                        data-avatar="🎮"
+                    >
+                        🎮 Profile
+                    </button>
+                    <button
+                        id="create-btn"
+                        class="create-btn"
+                        title="Create something"
+                        aria-label="Create media"
+                    >
+                        ✨ Create
+                    </button>
+                    <span
+                        id="quota-badge"
+                        class="quota-badge"
+                        title="Images, voice, music, video, and lyrics remaining today"
+                        role="status"
+                        aria-label="Images, voice, music, video, and lyrics remaining today"
+                    ><span class="quota-item" data-type="image" title="Images">🎨 <span
+                                class="quota-used"
+                            >—</span></span><span
+                            class="quota-item"
+                            data-type="speech"
+                            title="Voice"
+                        >🎙️ <span class="quota-used">—</span></span><span
+                            class="quota-item"
+                            data-type="music"
+                            title="Music"
+                        >🎵 <span class="quota-used">—</span></span><span
+                            class="quota-item"
+                            data-type="video"
+                            title="Video"
+                        >🎬 <span class="quota-used">—</span></span><span
+                            class="quota-item"
+                            data-type="lyrics"
+                            title="Lyrics"
+                        >📝 <span class="quota-used">—</span></span></span>
                 </div>
             </header>
 
             <div id="onboarding" class="onboarding" hidden>
                 <div class="onboarding-backdrop"></div>
-                <div class="onboarding-card" role="dialog" aria-modal="true" aria-label="Welcome">
+                <div
+                    class="onboarding-card"
+                    role="dialog"
+                    aria-modal="true"
+                    aria-label="Welcome"
+                >
                     <div class="onboarding-slides" id="onboarding-slides">
                         <div class="onboarding-slide active" data-slide="0">
                             <div class="onboarding-emoji" aria-hidden="true">🧞</div>
@@ -61,22 +109,28 @@
                             <div class="onboarding-emoji" aria-hidden="true">💬</div>
                             <h2>Chat with me!</h2>
                             <p>Ask me anything — gaming tips, homework help, story ideas...</p>
-                            <button class="btn-primary" id="onboarding-try-chat">Try it! →</button>
+                            <button class="btn-primary" id="onboarding-try-chat">
+                                Try it! →
+                            </button>
                         </div>
                         <div class="onboarding-slide" data-slide="2">
                             <div class="onboarding-emoji" aria-hidden="true">🎨</div>
                             <h2>Make cool stuff!</h2>
-                            <!-- prettier-ignore -->
-                            <p>Generate images, music, voices, and search the web — all in one place!</p>
-                            <!-- prettier-ignore -->
-                            <button class="btn-primary" id="onboarding-try-create">See what I can do! →</button>
+                            <p>
+                                Generate images, music, voices, and search the web — all in one
+                                place!
+                            </p>
+                            <button class="btn-primary" id="onboarding-try-create">
+                                See what I can do! →
+                            </button>
                         </div>
                         <div class="onboarding-slide" data-slide="3">
                             <div class="onboarding-emoji" aria-hidden="true">🎮</div>
                             <h2>Let's have fun!</h2>
                             <p>I'm here to help, inspire, and make you smile. Let's go! 🚀</p>
-                            <!-- prettier-ignore -->
-                            <button class="btn-primary" id="onboarding-done">Start chatting! 🎉</button>
+                            <button class="btn-primary" id="onboarding-done">
+                                Start chatting! 🎉
+                            </button>
                         </div>
                     </div>
                     <div class="onboarding-dots" aria-label="Onboarding progress">
@@ -88,12 +142,19 @@
                 </div>
             </div>
 
-            <main id="message-list" role="log" aria-live="polite" aria-label="Chat messages">
+            <main
+                id="message-list"
+                role="log"
+                aria-live="polite"
+                aria-label="Chat messages"
+            >
                 <div class="message message--assistant message--welcome">
                     <div class="message-avatar" aria-hidden="true">🧞</div>
                     <div class="message-bubble">
-                        <!-- prettier-ignore -->
-                        <div class="message-content">Hey! 👋 I'm HallucyGenie. Ask me anything — I can chat, make images 🔥, do voices 🎙️, and create music 🎵</div>
+                        <div class="message-content">
+                            Hey! 👋 I'm HallucyGenie. Ask me anything — I can chat, make images
+                            🔥, do voices 🎙️, and create music 🎵
+                        </div>
                     </div>
                 </div>
             </main>
@@ -120,7 +181,12 @@
                             autocomplete="off"
                             aria-label="Type your message"
                         ></textarea>
-                        <button id="send-button" type="submit" aria-label="Send message" disabled>
+                        <button
+                            id="send-button"
+                            type="submit"
+                            aria-label="Send message"
+                            disabled
+                        >
                             <svg
                                 width="24"
                                 height="24"
@@ -140,8 +206,9 @@
                 </form>
                 <div id="steer-hint" class="steer-hint" hidden>
                     <span class="steer-hint-text">💡 Type to steer the response</span>
-                    <!-- prettier-ignore -->
-                    <button id="steer-close" class="steer-close" aria-label="Dismiss steer hint">✕</button>
+                    <button id="steer-close" class="steer-close" aria-label="Dismiss steer hint">
+                        ✕
+                    </button>
                 </div>
             </footer>
 
@@ -177,8 +244,9 @@
                 <div class="modal-content whats-new-modal-content">
                     <div class="modal-header">
                         <h2 id="whats-new-title">✨ What’s new in v1.0</h2>
-                        <!-- prettier-ignore -->
-                        <button id="whats-new-close" class="modal-close" aria-label="Close">✕</button>
+                        <button id="whats-new-close" class="modal-close" aria-label="Close">
+                            ✕
+                        </button>
                     </div>
                     <div class="whats-new-body">
                         <p>
@@ -209,7 +277,9 @@
                 <div class="modal-content profile-modal-content">
                     <div class="modal-header">
                         <h2 id="profile-title">🎮 Profile</h2>
-                        <button id="profile-close" class="modal-close" aria-label="Close">✕</button>
+                        <button id="profile-close" class="modal-close" aria-label="Close">
+                            ✕
+                        </button>
                     </div>
                     <form id="profile-form" class="profile-form">
                         <div class="form-group">
@@ -258,8 +328,7 @@
                                 <span id="profile-avatar-fallback" aria-hidden="true">🎮</span>
                                 <img id="profile-avatar-img" alt="Current avatar" hidden />
                                 <span class="profile-avatar-overlay" aria-hidden="true"
-                                    >Upload</span
-                                >
+                                >Upload</span>
                                 <span class="profile-avatar-spinner" aria-hidden="true"></span>
                             </button>
                             <span
@@ -267,31 +336,33 @@
                                 class="sr-only"
                                 role="status"
                                 aria-live="polite"
-                                >Avatar ready.</span
-                            >
+                            >Avatar ready.</span>
                             <div class="profile-avatar-fields">
                                 <input id="profile-avatar-asset" type="hidden" />
                                 <label for="profile-avatar-upload" class="sr-only"
-                                    >Upload avatar image</label
-                                >
+                                >Upload avatar image</label>
                                 <input
                                     id="profile-avatar-upload"
                                     class="sr-only"
                                     type="file"
-                                    accept="image/png,image/jpeg,image/webp,image/gif"
+                                    accept="image/png, image/jpeg, image/webp, image/gif"
                                 />
-                                <!-- prettier-ignore -->
-                                <p class="profile-avatar-help">Click the avatar to upload an image.</p>
-                                <!-- prettier-ignore -->
-                                <button id="profile-generate" type="button" class="btn-secondary">Generate avatar 🎨</button>
+                                <p class="profile-avatar-help">
+                                    Click the avatar to upload an image.
+                                </p>
+                                <button id="profile-generate" type="button" class="btn-secondary">
+                                    Generate avatar 🎨
+                                </button>
                             </div>
                         </div>
-                        <!-- prettier-ignore -->
-                        <p class="profile-note">Profile details guide Genie. Saved in this app on this device.</p>
+                        <p class="profile-note">
+                            Profile details guide Genie. Saved in this app on this device.
+                        </p>
                         <div class="profile-actions">
                             <button type="submit" class="btn-primary">Save</button>
-                            <!-- prettier-ignore -->
-                            <button id="profile-reset" type="button" class="btn-secondary">Reset</button>
+                            <button id="profile-reset" type="button" class="btn-secondary">
+                                Reset
+                            </button>
                         </div>
                     </form>
                 </div>
@@ -309,27 +380,106 @@
                 <div class="modal-content create-modal-content">
                     <div class="modal-header">
                         <h2 id="create-title">✨ Create</h2>
-                        <button id="create-close" class="modal-close" aria-label="Close">✕</button>
+                        <button id="create-close" class="modal-close" aria-label="Close">
+                            ✕
+                        </button>
                     </div>
                     <div class="create-tabs" role="tablist" aria-label="Create type">
-                        <!-- prettier-ignore -->
-                        <button id="create-tab-image" class="create-tab active" data-tab="image" type="button" role="tab" aria-selected="true" aria-controls="create-image-form">🎨 Image</button>
-                        <!-- prettier-ignore -->
-                        <button id="create-tab-music" class="create-tab" data-tab="music" type="button" role="tab" aria-selected="false" aria-controls="create-music-form" tabindex="-1">🎵 Music</button>
-                        <!-- prettier-ignore -->
-                        <button id="create-tab-video" class="create-tab" data-tab="video" type="button" role="tab" aria-selected="false" aria-controls="create-video-form" tabindex="-1">🎬 Video</button>
-                        <!-- prettier-ignore -->
-                        <button id="create-tab-cover" class="create-tab" data-tab="cover" type="button" role="tab" aria-selected="false" aria-controls="create-cover-form" tabindex="-1">🎧 Cover Song</button>
-                        <!-- prettier-ignore -->
-                        <button id="create-tab-voice" class="create-tab" data-tab="voice" type="button" role="tab" aria-selected="false" aria-controls="create-voice-form" tabindex="-1">🎤 Voice</button>
-                        <!-- prettier-ignore -->
-                        <button id="create-tab-narration" class="create-tab" data-tab="narration" type="button" role="tab" aria-selected="false" aria-controls="create-narration-form" tabindex="-1">📖 Narration</button>
-                        <!-- prettier-ignore -->
-                        <button id="create-tab-analyze" class="create-tab" data-tab="analyze" type="button" role="tab" aria-selected="false" aria-controls="create-analyze-form" tabindex="-1">🔎 Analyze</button>
-                        <!-- prettier-ignore -->
-                        <button id="create-tab-search" class="create-tab" data-tab="search" type="button" role="tab" aria-selected="false" aria-controls="create-search-form" tabindex="-1">🔍 Search</button>
-                        <!-- prettier-ignore -->
-                        <button id="create-tab-assets" class="create-tab" data-tab="assets" type="button" role="tab" aria-selected="false" aria-controls="assets-panel" tabindex="-1">📁 Assets</button>
+                        <button
+                            id="create-tab-image"
+                            class="create-tab active"
+                            data-tab="image"
+                            type="button"
+                            role="tab"
+                            aria-selected="true"
+                            aria-controls="create-image-form"
+                        >
+                            🎨 Image
+                        </button>
+                        <button
+                            id="create-tab-music"
+                            class="create-tab"
+                            data-tab="music"
+                            type="button"
+                            role="tab"
+                            aria-selected="false"
+                            aria-controls="create-music-form"
+                            tabindex="-1"
+                        >
+                            🎵 Music
+                        </button>
+                        <button
+                            id="create-tab-video"
+                            class="create-tab"
+                            data-tab="video"
+                            type="button"
+                            role="tab"
+                            aria-selected="false"
+                            aria-controls="create-video-form"
+                            tabindex="-1"
+                        >
+                            🎬 Video
+                        </button>
+                        <button
+                            id="create-tab-cover"
+                            class="create-tab"
+                            data-tab="cover"
+                            type="button"
+                            role="tab"
+                            aria-selected="false"
+                            aria-controls="create-cover-form"
+                            tabindex="-1"
+                        >
+                            🎧 Cover Song
+                        </button>
+                        <button
+                            id="create-tab-voice"
+                            class="create-tab"
+                            data-tab="voice"
+                            type="button"
+                            role="tab"
+                            aria-selected="false"
+                            aria-controls="create-voice-form"
+                            tabindex="-1"
+                        >
+                            🎤 Voice
+                        </button>
+                        <button
+                            id="create-tab-analyze"
+                            class="create-tab"
+                            data-tab="analyze"
+                            type="button"
+                            role="tab"
+                            aria-selected="false"
+                            aria-controls="create-analyze-form"
+                            tabindex="-1"
+                        >
+                            🔎 Analyze
+                        </button>
+                        <button
+                            id="create-tab-search"
+                            class="create-tab"
+                            data-tab="search"
+                            type="button"
+                            role="tab"
+                            aria-selected="false"
+                            aria-controls="create-search-form"
+                            tabindex="-1"
+                        >
+                            🔍 Search
+                        </button>
+                        <button
+                            id="create-tab-assets"
+                            class="create-tab"
+                            data-tab="assets"
+                            type="button"
+                            role="tab"
+                            aria-selected="false"
+                            aria-controls="assets-panel"
+                            tabindex="-1"
+                        >
+                            📁 Assets
+                        </button>
                     </div>
                     <div class="create-panels">
                         <form
@@ -388,40 +538,64 @@
                             <input id="img-reference-asset" type="hidden" />
                             <div class="form-group">
                                 <label for="img-reference-file"
-                                    >Use my character/photo (optional)</label
-                                >
+                                >Use my character/photo (optional)</label>
                                 <input
                                     id="img-reference-file"
                                     type="file"
-                                    accept="image/png,image/jpeg"
+                                    accept="image/png, image/jpeg"
                                 />
-                                <!-- prettier-ignore -->
-                                <p id="img-reference-status" class="field-help" role="status">PNG or JPG only. Upload one here or pick an image in Assets.</p>
+                                <p id="img-reference-status" class="field-help" role="status">
+                                    PNG or JPG only. Upload one here or pick an image in Assets.
+                                </p>
                                 <div
                                     id="img-reference-preview"
                                     class="analyze-preview"
                                     hidden
-                                ></div>
-                                <!-- prettier-ignore -->
-                                <button id="img-reference-clear" class="btn-secondary" type="button" disabled>Clear reference</button>
+                                >
+                                </div>
+                                <button
+                                    id="img-reference-clear"
+                                    class="btn-secondary"
+                                    type="button"
+                                    disabled
+                                >
+                                    Clear reference
+                                </button>
                             </div>
                             <div class="form-group">
                                 <input id="img-seed" type="hidden" />
-                                <!-- prettier-ignore -->
-                                <button id="img-seed-random" class="btn-secondary" type="button">Roll surprise code 🎲</button>
-                                <!-- prettier-ignore -->
-                                <button id="img-seed-clear" class="btn-secondary" type="button" disabled>Clear surprise code</button>
-                                <!-- prettier-ignore -->
-                                <p id="img-seed-status" class="field-help" role="status">Optional: same code can make a similar picture again.</p>
+                                <button id="img-seed-random" class="btn-secondary" type="button">
+                                    Roll surprise code 🎲
+                                </button>
+                                <button
+                                    id="img-seed-clear"
+                                    class="btn-secondary"
+                                    type="button"
+                                    disabled
+                                >
+                                    Clear surprise code
+                                </button>
+                                <p id="img-seed-status" class="field-help" role="status">
+                                    Optional: same code can make a similar picture again.
+                                </p>
                             </div>
                             <div class="form-group create-option-group">
-                                <!-- prettier-ignore -->
-                                <label class="checkbox-row" for="img-prompt-optimizer"><input id="img-prompt-optimizer" type="checkbox" /> Let Genie improve my idea before drawing</label>
-                                <!-- prettier-ignore -->
-                                <p class="field-help">Adds clearer details so MiniMax understands your idea better.</p>
+                                <label class="checkbox-row" for="img-prompt-optimizer"><input
+                                        id="img-prompt-optimizer"
+                                        type="checkbox"
+                                    />Let Genie improve my idea before drawing</label>
+                                <p class="field-help">
+                                    Adds clearer details so MiniMax understands your idea better.
+                                </p>
                             </div>
-                            <!-- prettier-ignore -->
-                            <button id="img-submit" type="submit" class="btn-primary create-submit" disabled>Generate image 🎨</button>
+                            <button
+                                id="img-submit"
+                                type="submit"
+                                class="btn-primary create-submit"
+                                disabled
+                            >
+                                Generate image 🎨
+                            </button>
                         </form>
                         <form
                             id="create-music-form"
@@ -442,16 +616,16 @@
                             </div>
                             <div class="form-group">
                                 <label for="music-lyrics"
-                                    >Lyrics (optional, empty = instrumental)</label
-                                >
+                                >Lyrics (optional, empty = instrumental)</label>
                                 <textarea
                                     id="music-lyrics"
                                     rows="3"
                                     placeholder="Verse:... Chorus:..."
                                 ></textarea>
                             </div>
-                            <!-- prettier-ignore -->
-                            <button type="button" id="write-lyrics-btn" class="btn-secondary">Write lyrics for me ✨</button>
+                            <button type="button" id="write-lyrics-btn" class="btn-secondary">
+                                Write lyrics for me ✨
+                            </button>
                             <button type="submit" class="btn-primary">Generate music 🎵</button>
                         </form>
                         <form
@@ -500,8 +674,9 @@
                         >
                             <div class="create-recent" data-kind="cover"></div>
                             <h3 id="music-cover-title">Cover a song</h3>
-                            <!-- prettier-ignore -->
-                            <p class="field-help cover-intro">Pick one song source, prepare lyrics, then make a new version.</p>
+                            <p class="field-help cover-intro">
+                                Pick one song source, prepare lyrics, then make a new version.
+                            </p>
                             <div class="form-group">
                                 <label for="cover-source-kind">Source</label>
                                 <select id="cover-source-kind">
@@ -531,11 +706,13 @@
                                     placeholder="Spooky boss battle chiptune"
                                 ></textarea>
                             </div>
-                            <!-- prettier-ignore -->
-                            <button id="cover-preprocess" class="btn-secondary" type="button">Prepare cover lyrics</button>
+                            <button id="cover-preprocess" class="btn-secondary" type="button">
+                                Prepare cover lyrics
+                            </button>
                             <input id="cover-feature-id" type="hidden" />
-                            <!-- prettier-ignore -->
-                            <p id="cover-status" class="field-help" role="status">Prepare a source before generating a cover.</p>
+                            <p id="cover-status" class="field-help" role="status">
+                                Prepare a source before generating a cover.
+                            </p>
                             <div class="form-group">
                                 <label for="cover-lyrics">Cover lyrics</label>
                                 <textarea
@@ -544,8 +721,9 @@
                                     placeholder="Lyrics appear here after prepare"
                                 ></textarea>
                             </div>
-                            <!-- prettier-ignore -->
-                            <button id="cover-generate" class="btn-primary" type="button" disabled>Prepare source first 🎧</button>
+                            <button id="cover-generate" class="btn-primary" type="button" disabled>
+                                Prepare source first 🎧
+                            </button>
                         </form>
                         <form
                             id="create-voice-form"
@@ -561,8 +739,13 @@
                                 <textarea
                                     id="voice-text"
                                     rows="4"
+                                    maxlength="50000"
                                     placeholder="Welcome to HallucyGenie! Your AI creative buddy."
                                 ></textarea>
+                                <p class="field-help">
+                                    Long scripts use background narration automatically. Genie saves
+                                    the finished audio asset when MiniMax is done.
+                                </p>
                             </div>
                             <div class="tts-composer" aria-label="Voice builder">
                                 <div class="tts-composer-row">
@@ -572,54 +755,48 @@
                                         <option value="1">1 sec</option>
                                         <option value="2">2 sec</option>
                                     </select>
-                                    <!-- prettier-ignore -->
-                                    <button id="voice-insert-pause" class="btn-secondary" type="button">Insert pause</button>
+                                    <button
+                                        id="voice-insert-pause"
+                                        class="btn-secondary"
+                                        type="button"
+                                    >
+                                        Insert pause
+                                    </button>
                                 </div>
-                                <div
-                                    class="tts-composer-row tts-interjections"
-                                    aria-label="Interjections"
-                                >
-                                    <!-- prettier-ignore -->
-                                    <button class="btn-secondary voice-interjection" type="button" data-tag="laughs">laughs</button>
-                                    <!-- prettier-ignore -->
-                                    <button class="btn-secondary voice-interjection" type="button" data-tag="chuckle">chuckle</button>
-                                    <!-- prettier-ignore -->
-                                    <button class="btn-secondary voice-interjection" type="button" data-tag="coughs">coughs</button>
-                                    <!-- prettier-ignore -->
-                                    <button class="btn-secondary voice-interjection" type="button" data-tag="clear-throat">clear throat</button>
-                                    <!-- prettier-ignore -->
-                                    <button class="btn-secondary voice-interjection" type="button" data-tag="groans">groans</button>
-                                    <!-- prettier-ignore -->
-                                    <button class="btn-secondary voice-interjection" type="button" data-tag="breath">breath</button>
-                                    <!-- prettier-ignore -->
-                                    <button class="btn-secondary voice-interjection" type="button" data-tag="pant">pant</button>
-                                    <!-- prettier-ignore -->
-                                    <button class="btn-secondary voice-interjection" type="button" data-tag="inhale">inhale</button>
-                                    <!-- prettier-ignore -->
-                                    <button class="btn-secondary voice-interjection" type="button" data-tag="exhale">exhale</button>
-                                    <!-- prettier-ignore -->
-                                    <button class="btn-secondary voice-interjection" type="button" data-tag="gasps">gasps</button>
-                                    <!-- prettier-ignore -->
-                                    <button class="btn-secondary voice-interjection" type="button" data-tag="sniffs">sniffs</button>
-                                    <!-- prettier-ignore -->
-                                    <button class="btn-secondary voice-interjection" type="button" data-tag="sighs">sighs</button>
-                                    <!-- prettier-ignore -->
-                                    <button class="btn-secondary voice-interjection" type="button" data-tag="snorts">snorts</button>
-                                    <!-- prettier-ignore -->
-                                    <button class="btn-secondary voice-interjection" type="button" data-tag="burps">burps</button>
-                                    <!-- prettier-ignore -->
-                                    <button class="btn-secondary voice-interjection" type="button" data-tag="lip-smacking">lip smacking</button>
-                                    <!-- prettier-ignore -->
-                                    <button class="btn-secondary voice-interjection" type="button" data-tag="humming">humming</button>
-                                    <!-- prettier-ignore -->
-                                    <button class="btn-secondary voice-interjection" type="button" data-tag="hissing">hissing</button>
-                                    <!-- prettier-ignore -->
-                                    <button class="btn-secondary voice-interjection" type="button" data-tag="emm">emm</button>
-                                    <!-- prettier-ignore -->
-                                    <button class="btn-secondary voice-interjection" type="button" data-tag="sneezes">sneezes</button>
+                                <div class="tts-composer-row" aria-label="Interjections">
+                                    <label for="voice-interjection">Interjection</label>
+                                    <select id="voice-interjection">
+                                        <option value="laughs">laughs</option>
+                                        <option value="chuckle">chuckle</option>
+                                        <option value="coughs">coughs</option>
+                                        <option value="clear-throat">clear throat</option>
+                                        <option value="groans">groans</option>
+                                        <option value="breath">breath</option>
+                                        <option value="pant">pant</option>
+                                        <option value="inhale">inhale</option>
+                                        <option value="exhale">exhale</option>
+                                        <option value="gasps">gasps</option>
+                                        <option value="sniffs">sniffs</option>
+                                        <option value="sighs">sighs</option>
+                                        <option value="snorts">snorts</option>
+                                        <option value="burps">burps</option>
+                                        <option value="lip-smacking">lip smacking</option>
+                                        <option value="humming">humming</option>
+                                        <option value="hissing">hissing</option>
+                                        <option value="emm">emm</option>
+                                        <option value="sneezes">sneezes</option>
+                                    </select>
+                                    <button
+                                        id="voice-insert-interjection"
+                                        class="btn-secondary"
+                                        type="button"
+                                    >
+                                        Insert interjection
+                                    </button>
                                 </div>
-                                <!-- prettier-ignore -->
-                                <p id="voice-composer-status" class="field-help" role="status">Pauses go between words. Voice uses speech-2.8-hd.</p>
+                                <p id="voice-composer-status" class="field-help" role="status">
+                                    Pauses go between words. Voice uses speech-2.8-hd.
+                                </p>
                             </div>
                             <div class="form-group">
                                 <label for="voice-speed">Speed</label>
@@ -697,72 +874,6 @@
                             <button type="submit" class="btn-primary">Read it to me 🎤</button>
                         </form>
                         <form
-                            id="create-narration-form"
-                            class="create-panel"
-                            data-panel="narration"
-                            role="tabpanel"
-                            aria-labelledby="create-tab-narration"
-                            hidden
-                        >
-                            <div class="create-recent" data-kind="narration"></div>
-                            <div class="form-group">
-                                <label for="narration-text">Long narration script</label>
-                                <textarea
-                                    id="narration-text"
-                                    rows="8"
-                                    maxlength="50000"
-                                    placeholder="Paste a long story, intro, or YouTube narration script"
-                                ></textarea>
-                                <!-- prettier-ignore -->
-                                <p class="field-help">Async voice. Genie saves the finished audio asset when MiniMax is done.</p>
-                            </div>
-                            <div class="form-group">
-                                <label for="narration-speed">Speed</label>
-                                <select id="narration-speed">
-                                    <option value="0.8">0.8x (slower)</option>
-                                    <option value="1.0" selected>1.0x (normal)</option>
-                                    <option value="1.2">1.2x (faster)</option>
-                                </select>
-                            </div>
-                            <div class="form-group">
-                                <label for="narration-voice-id">Voice</label>
-                                <select id="narration-voice-id">
-                                    <option value="English_expressive_narrator" selected>
-                                        Expressive Narrator
-                                    </option>
-                                    <option value="English_CaptivatingStoryteller">
-                                        Storyteller
-                                    </option>
-                                    <option value="English_PlayfulGirl">Playful Girl</option>
-                                    <option value="English_FriendlyPerson">Friendly Guy</option>
-                                </select>
-                            </div>
-                            <div class="form-group range-group">
-                                <label for="narration-volume">Volume</label>
-                                <input
-                                    id="narration-volume"
-                                    type="range"
-                                    min="0.5"
-                                    max="2"
-                                    step="0.1"
-                                    value="1"
-                                />
-                            </div>
-                            <div class="form-group range-group">
-                                <label for="narration-pitch">Pitch</label>
-                                <input
-                                    id="narration-pitch"
-                                    type="range"
-                                    min="-6"
-                                    max="6"
-                                    step="1"
-                                    value="0"
-                                />
-                            </div>
-                            <!-- prettier-ignore -->
-                            <button type="submit" class="btn-primary">Make long narration 📖</button>
-                        </form>
-                        <form
                             id="create-analyze-form"
                             class="create-panel"
                             data-panel="analyze"
@@ -777,15 +888,28 @@
                                     id="analyze-file"
                                     class="sr-only"
                                     type="file"
-                                    accept="image/png,image/jpeg,image/webp,image/gif"
+                                    accept="image/png, image/jpeg, image/webp, image/gif"
                                 />
-                                <!-- prettier-ignore -->
-                                <button id="analyze-dropzone" class="analyze-dropzone" type="button" aria-describedby="analyze-file-help analyze-file-status">Drop a PNG, JPG, GIF, or WebP here — or choose a file 🖼️</button>
-                                <!-- prettier-ignore -->
-                                <p id="analyze-file-help" class="field-help">Genie stores the image safely, then analyzes the saved asset.</p>
-                                <!-- prettier-ignore -->
-                                <p id="analyze-file-status" class="field-help" role="status">No file selected.</p>
-                                <div id="analyze-file-preview" class="analyze-preview" hidden></div>
+                                <button
+                                    id="analyze-dropzone"
+                                    class="analyze-dropzone"
+                                    type="button"
+                                    aria-describedby="analyze-file-help analyze-file-status"
+                                >
+                                    Drop a PNG, JPG, GIF, or WebP here — or choose a file 🖼️
+                                </button>
+                                <p id="analyze-file-help" class="field-help">
+                                    Genie stores the image safely, then analyzes the saved asset.
+                                </p>
+                                <p id="analyze-file-status" class="field-help" role="status">
+                                    No file selected.
+                                </p>
+                                <div
+                                    id="analyze-file-preview"
+                                    class="analyze-preview"
+                                    hidden
+                                >
+                                </div>
                             </div>
                             <div class="form-group">
                                 <label for="analyze-url">Image URL fallback</label>
@@ -834,8 +958,9 @@
                             hidden
                         >
                             <div id="assets-grid"></div>
-                            <!-- prettier-ignore -->
-                            <p id="assets-empty" class="assets-empty" hidden>No assets yet — generate something! ✨</p>
+                            <p id="assets-empty" class="assets-empty" hidden>
+                                No assets yet — generate something! ✨
+                            </p>
                         </div>
                     </div>
                 </div>

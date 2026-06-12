@@ -21,7 +21,9 @@ CREATE TABLE IF NOT EXISTS video_tasks (
     updated_at INTEGER NOT NULL
 );
 
-CREATE INDEX IF NOT EXISTS idx_video_tasks_session ON video_tasks (session_id, updated_at DESC);
+CREATE INDEX IF NOT EXISTS idx_video_tasks_session ON video_tasks (
+    session_id, updated_at DESC
+);
 
 ALTER TABLE assets
 RENAME TO assets_old;
@@ -40,18 +42,18 @@ CREATE TABLE assets (
 );
 
 INSERT INTO
-    assets (
-        id,
-        session_id,
-        type,
-        filename,
-        mime_type,
-        prompt,
-        tool_name,
-        size_bytes,
-        created_at,
-        params_json
-    )
+assets (
+    id,
+    session_id,
+    type,
+    filename,
+    mime_type,
+    prompt,
+    tool_name,
+    size_bytes,
+    created_at,
+    params_json
+)
 SELECT
     id,
     session_id,
@@ -68,4 +70,6 @@ FROM
 
 DROP TABLE assets_old;
 
-CREATE INDEX IF NOT EXISTS idx_assets_session ON assets (session_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_assets_session ON assets (
+    session_id, created_at DESC
+);

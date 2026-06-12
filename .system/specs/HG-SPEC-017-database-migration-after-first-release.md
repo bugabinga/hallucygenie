@@ -10,8 +10,8 @@ Rules:
 - Missing/failed migration fails startup loud.
 - No destructive migration without explicit backup note in release notes.
 - Tests cover:
-    - fresh DB reaches latest schema
-    - old released DB migrates to latest schema
-    - failed migration does not mark version applied
-    - app refuses unknown future schema if detected
+  - fresh DB reaches latest schema
+  - old released DB migrates to latest schema
+  - failed migration does not mark version applied
+  - app refuses unknown future schema if detected
 - Release notes name DB changes in parent-friendly language.

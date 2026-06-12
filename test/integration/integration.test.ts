@@ -2,15 +2,15 @@
 // HallucyGenie — Integration tests
 // Real HTTP server (random port) + real SQLite (temp file)
 
-import { describe, it, after, before } from "node:test";
-import assert from "node:assert/strict";
-import { createServer } from "node:http";
-import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { Window } from "happy-dom";
-import { connect } from "node:net";
-import { initDatabase, resetStateForTesting, handleNodeRequest, getDb } from "../../src/server.ts";
+import assert from "node:assert/strict";
+import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { createServer } from "node:http";
 import type { IncomingMessage, ServerResponse } from "node:http";
+import { connect } from "node:net";
+import { after, before, describe, it } from "node:test";
 import { createSession, getMessages, getOrCreateActiveSessionId, saveAsset } from "../../src/db.ts";
+import { getDb, handleNodeRequest, initDatabase, resetStateForTesting } from "../../src/server.ts";
 
 let server: ReturnType<typeof createServer>;
 let baseUrl: string;
@@ -29,10 +29,10 @@ before(async () => {
 
     await new Promise<void>((resolve) =>
         server.listen(0, "127.0.0.1", () => {
-            const addr = server.address() as { port: number };
+            const addr = server.address() as { port: number; };
             baseUrl = `http://127.0.0.1:${addr.port}`;
             resolve();
-        }),
+        })
     );
 });
 
@@ -42,19 +42,19 @@ after(() => {
 });
 
 type FontManifest = {
-    fonts: Array<{ id: string; file: string; sha256: string }>;
+    fonts: Array<{ id: string; file: string; sha256: string; }>;
 };
 
 async function api(
     method: string,
     path: string,
     body?: string,
-    extraHeaders: Record<string, string> = {},
-): Promise<{ status: number; body: unknown }> {
+    extraHeaders: Record<string, string> = {}
+): Promise<{ status: number; body: unknown; }> {
     const r = await fetch(`${baseUrl}${path}`, {
         method,
         body,
-        headers: { "Content-Type": "application/json", ...extraHeaders },
+        headers: { "Content-Type": "application/json", ...extraHeaders }
     });
     let j: unknown;
     try {
@@ -76,18 +76,24 @@ async function httpHead(path: string): Promise<Response> {
 function anthropicTextStream(text: string): ReadableStream<Uint8Array> {
     const encoder = new TextEncoder();
     const chunks = [
-        'event: message_start\ndata: {"type":"message_start","message":{}}\n\n',
-        'event: content_block_start\ndata: {"type":"content_block_start","index":0,"content_block":{"type":"text","text":""}}\n\n',
-        `event: content_block_delta\ndata: ${JSON.stringify({ type: "content_block_delta", index: 0, delta: { type: "text_delta", text } })}\n\n`,
-        'event: content_block_stop\ndata: {"type":"content_block_stop","index":0}\n\n',
-        'event: message_delta\ndata: {"type":"message_delta","delta":{"stop_reason":"end_turn"}}\n\n',
-        'event: message_stop\ndata: {"type":"message_stop"}\n\n',
+        "event: message_start\ndata: {\"type\":\"message_start\",\"message\":{}}\n\n",
+        "event: content_block_start\ndata: {\"type\":\"content_block_start\",\"index\":0,\"content_block\":{\"type\":\"text\",\"text\":\"\"}}\n\n",
+        `event: content_block_delta\ndata: ${
+            JSON.stringify({
+                type: "content_block_delta",
+                index: 0,
+                delta: { type: "text_delta", text }
+            })
+        }\n\n`,
+        "event: content_block_stop\ndata: {\"type\":\"content_block_stop\",\"index\":0}\n\n",
+        "event: message_delta\ndata: {\"type\":\"message_delta\",\"delta\":{\"stop_reason\":\"end_turn\"}}\n\n",
+        "event: message_stop\ndata: {\"type\":\"message_stop\"}\n\n"
     ];
     return new ReadableStream({
         start(controller) {
             for (const chunk of chunks) controller.enqueue(encoder.encode(chunk));
             controller.close();
-        },
+        }
     });
 }
 
@@ -135,7 +141,7 @@ function seedActiveAsset(id: string, bytes?: Uint8Array, params?: Record<string,
         tool_name: "generate_image",
         size_bytes: bytes?.byteLength ?? 0,
         created_at: Date.now(),
-        params_json: params ? JSON.stringify(params) : null,
+        params_json: params ? JSON.stringify(params) : null
     });
 }
 
@@ -154,7 +160,7 @@ describe("GET /", () => {
         const r = await httpGet("/");
         assert.equal(r.status, 200);
         const win = new Window();
-        (win as unknown as { SyntaxError: typeof SyntaxError }).SyntaxError = SyntaxError;
+        (win as unknown as { SyntaxError: typeof SyntaxError; }).SyntaxError = SyntaxError;
         win.document.write(await r.text());
         const offenders = Array.from(win.document.querySelectorAll("input, textarea, select"))
             .filter((el: any) => el.type !== "hidden")
@@ -167,7 +173,7 @@ describe("GET /", () => {
         const r = await httpGet("/");
         assert.equal(r.status, 200);
         const win = new Window();
-        (win as unknown as { SyntaxError: typeof SyntaxError }).SyntaxError = SyntaxError;
+        (win as unknown as { SyntaxError: typeof SyntaxError; }).SyntaxError = SyntaxError;
         win.document.write(await r.text());
         const editor = win.document.querySelector(".profile-avatar-editor");
         const generate = win.document.querySelector("#profile-generate");
@@ -275,17 +281,17 @@ describe("GET /api/quota", () => {
                             model_name: "image-01",
                             current_interval_total_count: 100,
                             current_interval_usage_count: 7,
-                            remains_time: 1000,
+                            remains_time: 1000
                         },
                         {
                             model_name: "music-2.6",
                             current_interval_total_count: 100,
                             current_interval_usage_count: 3,
-                            remains_time: 1000,
-                        },
-                    ],
+                            remains_time: 1000
+                        }
+                    ]
                 }),
-                { status: 200, headers: { "Content-Type": "application/json" } },
+                { status: 200, headers: { "Content-Type": "application/json" } }
             );
         };
 
@@ -348,11 +354,11 @@ describe("Music cover HTTP flow", () => {
                 JSON.stringify({
                     data: {
                         cover_feature_id: "cover-integration",
-                        formatted_lyrics: "[Verse]\nhi",
+                        formatted_lyrics: "[Verse]\nhi"
                     },
-                    base_resp: { status_code: 0 },
+                    base_resp: { status_code: 0 }
                 }),
-                { status: 200, headers: { "Content-Type": "application/json" } },
+                { status: 200, headers: { "Content-Type": "application/json" } }
             );
         };
 
@@ -362,14 +368,14 @@ describe("Music cover HTTP flow", () => {
             form.set("audio_url", "https://example.com/source.mp3");
             const resp = await oldFetch(`${baseUrl}/api/music-cover/preprocess`, {
                 method: "POST",
-                body: form,
+                body: form
             });
             const body = await resp.json();
 
             assert.equal(resp.status, 200);
             assert.deepEqual(providerBody, {
                 model: "music-cover",
-                audio_url: "https://example.com/source.mp3",
+                audio_url: "https://example.com/source.mp3"
             });
             assert.equal(body.cover_feature_id, "cover-integration");
             assert.equal(body.lyrics, "[Verse]\nhi");
@@ -394,7 +400,7 @@ describe("Music cover HTTP flow", () => {
             providerBody = JSON.parse(String(init?.body));
             return new Response(
                 JSON.stringify({ data: { audio: "ff" }, base_resp: { status_code: 0 } }),
-                { status: 200, headers: { "Content-Type": "application/json" } },
+                { status: 200, headers: { "Content-Type": "application/json" } }
             );
         };
 
@@ -407,10 +413,10 @@ describe("Music cover HTTP flow", () => {
                     input: {
                         prompt: "spooky boss battle",
                         lyrics: "[Verse]\nhi",
-                        cover_feature_id: "cover-integration",
-                    },
+                        cover_feature_id: "cover-integration"
+                    }
                 }),
-                { "X-Session-Id": sessionId },
+                { "X-Session-Id": sessionId }
             );
             assert.equal(r.status, 200);
             assert.equal(providerBody?.model, "music-cover");
@@ -419,7 +425,7 @@ describe("Music cover HTTP flow", () => {
             const assets = await api("GET", "/assets", undefined, { "X-Session-Id": sessionId });
             assert.equal(assets.status, 200);
             const cover = (assets.body as any).assets.find(
-                (asset: { tool_name: string }) => asset.tool_name === "generate_music_cover",
+                (asset: { tool_name: string; }) => asset.tool_name === "generate_music_cover"
             );
             assert.ok(cover);
             assert.equal(cover.type, "music");
@@ -452,7 +458,7 @@ describe("POST /api/create-tool web_search", () => {
                 assert.equal(JSON.parse(String(init?.body)).q, "https://youtu.be/dQw4w9WgXcQ");
                 return new Response(JSON.stringify({ organic: [] }), {
                     status: 200,
-                    headers: { "Content-Type": "application/json" },
+                    headers: { "Content-Type": "application/json" }
                 });
             }
             if (url.startsWith("https://www.youtube.com/oembed?")) {
@@ -460,9 +466,9 @@ describe("POST /api/create-tool web_search", () => {
                     JSON.stringify({
                         title: "Never Gonna Give You Up",
                         author_name: "Rick Astley",
-                        thumbnail_url: "https://i.ytimg.com/vi/dQw4w9WgXcQ/hqdefault.jpg",
+                        thumbnail_url: "https://i.ytimg.com/vi/dQw4w9WgXcQ/hqdefault.jpg"
                     }),
-                    { status: 200, headers: { "Content-Type": "application/json" } },
+                    { status: 200, headers: { "Content-Type": "application/json" } }
                 );
             }
             throw new Error(`Unexpected fetch ${url}`);
@@ -474,8 +480,8 @@ describe("POST /api/create-tool web_search", () => {
                 headers: { "Content-Type": "application/json", "X-Session-Id": sessionId },
                 body: JSON.stringify({
                     tool_name: "web_search",
-                    input: { query: "https://youtu.be/dQw4w9WgXcQ" },
-                }),
+                    input: { query: "https://youtu.be/dQw4w9WgXcQ" }
+                })
             });
             assert.equal(resp.status, 200);
             const body = await resp.text();
@@ -486,7 +492,7 @@ describe("POST /api/create-tool web_search", () => {
             assert.ok(fetched.some((url) => url.startsWith("https://www.youtube.com/oembed?")));
 
             const history = await api("GET", "/api/create-history?kind=search", undefined, {
-                "X-Session-Id": sessionId,
+                "X-Session-Id": sessionId
             });
             assert.equal(history.status, 200);
             assert.equal((history.body as any).items[0].tool_name, "web_search");
@@ -518,21 +524,21 @@ describe("GET /assets (no session)", () => {
         assert.equal(r.status, 200);
         assert.ok(
             (r.body as any).assets.some(
-                (asset: { id: string }) => asset.id === "integration-active-list",
-            ),
+                (asset: { id: string; }) => asset.id === "integration-active-list"
+            )
         );
     });
 
     it("returns parsed params and stable asset URLs without DB internals", async () => {
         seedActiveAsset("integration-active-details", undefined, {
             model: "image-01",
-            aspect_ratio: "16:9",
+            aspect_ratio: "16:9"
         });
 
         const r = await api("GET", "/assets");
         assert.equal(r.status, 200);
         const asset = (r.body as any).assets.find(
-            (item: { id: string }) => item.id === "integration-active-details",
+            (item: { id: string; }) => item.id === "integration-active-details"
         );
 
         assert.deepEqual(asset.params, { model: "image-01", aspect_ratio: "16:9" });
@@ -571,7 +577,7 @@ describe("GET /asset (active session)", () => {
         seedActiveAsset("integration-wrong-session-file", new Uint8Array([4, 5, 6]));
 
         const r = await api("GET", "/asset/integration-wrong-session-file", undefined, {
-            "X-Session-Id": "wrong-session",
+            "X-Session-Id": "wrong-session"
         });
         assert.equal(r.status, 404);
     });
@@ -603,7 +609,7 @@ describe("POST /api/chat (no session)", () => {
             const resp = await oldFetch(`${baseUrl}/api/chat`, {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ messages: [{ role: "user", content: "active chat" }] }),
+                body: JSON.stringify({ messages: [{ role: "user", content: "active chat" }] })
             });
             assert.equal(resp.status, 200);
             assert.match(await resp.text(), /active reply/);
@@ -612,7 +618,7 @@ describe("POST /api/chat (no session)", () => {
             const rows = getMessages(db, getOrCreateActiveSessionId(db));
             assert.ok(rows.some((row) => row.role === "user" && row.content === "active chat"));
             assert.ok(
-                rows.some((row) => row.role === "assistant" && row.content === "active reply"),
+                rows.some((row) => row.role === "assistant" && row.content === "active reply")
             );
         } finally {
             globalThis.fetch = oldFetch;

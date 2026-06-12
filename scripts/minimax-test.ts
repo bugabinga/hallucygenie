@@ -42,7 +42,7 @@ export function textSummary(value: unknown): string {
 export function vlmPayload(imageUrl: string): JsonObject {
     return {
         prompt: "Describe this image in one short sentence.",
-        image_url: imageUrl,
+        image_url: imageUrl
     };
 }
 
@@ -64,25 +64,25 @@ async function readJson(resp: Response): Promise<JsonObject> {
 
 async function postJson(
     path: string,
-    body: JsonObject,
-): Promise<{ http: number; data: JsonObject }> {
+    body: JsonObject
+): Promise<{ http: number; data: JsonObject; }> {
     const resp = await fetch(`${MINIMAX_BASE}${path}`, {
         method: "POST",
         headers: {
             "Content-Type": "application/json",
-            Authorization: `Bearer ${apiKey()}`,
+            Authorization: `Bearer ${apiKey()}`
         },
-        body: JSON.stringify(body),
+        body: JSON.stringify(body)
     });
     return { http: resp.status, data: await readJson(resp) };
 }
 
-async function getJson(path: string): Promise<{ http: number; data: JsonObject }> {
+async function getJson(path: string): Promise<{ http: number; data: JsonObject; }> {
     const resp = await fetch(`${MINIMAX_BASE}${path}`, {
         headers: {
             Authorization: `Bearer ${apiKey()}`,
-            "User-Agent": "hallucygenie/1.0",
-        },
+            "User-Agent": "hallucygenie/1.0"
+        }
     });
     return { http: resp.status, data: await readJson(resp) };
 }
@@ -120,7 +120,7 @@ function printSection(title: string): void {
     console.log("-".repeat(title.length));
 }
 
-function printResult(result: { http: number; data: JsonObject }): void {
+function printResult(result: { http: number; data: JsonObject; }): void {
     console.log(`HTTP: ${result.http}`);
     console.log(statusLine(result.data));
 }
@@ -136,7 +136,9 @@ async function testQuota(): Promise<void> {
         return;
     }
     for (const item of remains as JsonObject[]) {
-        console.log(`- ${String(item.model_name)}: ${String(item.current_interval_total_count)}`);
+        console.log(
+            `- ${String(item.model_name)}: ${String(item.current_interval_total_count)}`
+        );
     }
 }
 
@@ -145,7 +147,7 @@ async function testTts(): Promise<void> {
     const result = await postJson("/v1/t2a_v2", {
         model: "speech-2.8-hd",
         text: "test",
-        voice_setting: { voice_id: "English_expressive_narrator" },
+        voice_setting: { voice_id: "English_expressive_narrator" }
     });
     printResult(result);
     const data = result.data.data as JsonObject | undefined;
@@ -156,7 +158,7 @@ async function testImage(): Promise<void> {
     printSection("Image /v1/image_generation");
     const result = await postJson("/v1/image_generation", {
         model: "image-01",
-        prompt: "test image, simple icon",
+        prompt: "test image, simple icon"
     });
     printResult(result);
     const data = result.data.data as JsonObject | undefined;
@@ -168,7 +170,7 @@ export function musicInstrumentalPayload(): JsonObject {
         model: "music-2.6",
         prompt: "short upbeat chiptune game loop",
         is_instrumental: true,
-        output_format: "hex",
+        output_format: "hex"
     };
 }
 

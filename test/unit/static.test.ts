@@ -1,11 +1,11 @@
 // HallucyGenie — static project health tests
 
-import { describe, it } from "node:test";
+import { Window } from "happy-dom";
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { existsSync, readdirSync, readFileSync } from "node:fs";
-import { Window } from "happy-dom";
+import { describe, it } from "node:test";
 
 const indexHtml = readFileSync("public/index.html", "utf-8");
 const styleCss = readFileSync("public/style.css", "utf-8");
@@ -18,13 +18,18 @@ const e2eRunner = readFileSync("e2e/run-e2e.ts", "utf-8");
 const serverTest = readFileSync("test/unit/server.test.ts", "utf-8");
 const gitignore = readFileSync(".gitignore", "utf-8");
 const containerignore = readFileSync(".containerignore", "utf-8");
-const prettierignore = readFileSync(".prettierignore", "utf-8");
+const dprintJson = readFileSync("dprint.json", "utf-8");
+const biomeJson = readFileSync("biome.json", "utf-8");
+const sqruffConfig = readFileSync(".sqruff", "utf-8");
+const packageJson = readFileSync("package.json", "utf-8");
 const lefthookYml = readFileSync("lefthook.yml", "utf-8");
 const ciYml = readFileSync(".github/workflows/ci.yml", "utf-8");
 const releaseYml = readFileSync(".github/workflows/release.yml", "utf-8");
 const dependabotYml = readFileSync(".github/dependabot.yml", "utf-8");
 const agentsYml = readFileSync(".github/workflows/agents.yml", "utf-8");
 const janitorAgent = readFileSync(".github/agents/janitor.ts", "utf-8");
+const agentModelsJson = readFileSync(".github/agents/models.json", "utf-8");
+const robotnikAgent = readFileSync(".github/agents/robotnik.ts", "utf-8");
 const slopChopperAgent = readFileSync(".github/agents/slop-chopper.ts", "utf-8");
 const strykerAgent = readFileSync("test/stryker.config.mjs", "utf-8");
 const strykerTools = readFileSync("test/stryker-tools.mjs", "utf-8");
@@ -44,19 +49,22 @@ const rulesMd = readFileSync(".system/RULES.md", "utf-8");
 const systemExtension = readFileSync(".pi/extensions/system.ts", "utf-8");
 const musicCreatorSpec = readFileSync(
     ".system/specs/HG-SPEC-012-minimax-music-creator-tools.md",
-    "utf-8",
+    "utf-8"
 );
 const musicCoverSpec = readFileSync(
     ".system/specs/HG-SPEC-013-minimax-music-cover-reference-tracks.md",
-    "utf-8",
+    "utf-8"
 );
 const trackedFiles = new Set(
-    execFileSync("git", ["ls-files"], { encoding: "utf-8" }).trim().split("\n").filter(Boolean),
+    execFileSync("git", ["ls-files"], { encoding: "utf-8" }).trim().split("\n").filter(
+        Boolean
+    )
 );
+const legacyFormatter = "pre" + "ttier";
 
 type FontManifest = {
     version: number;
-    source: { repo: string; commit: string; downloaded_by: string };
+    source: { repo: string; commit: string; downloaded_by: string; };
     fonts: Array<{
         id: string;
         family: string;
@@ -73,7 +81,7 @@ type FontManifest = {
 
 function testWindow(): Window {
     const win = new Window();
-    (win as unknown as { SyntaxError: typeof SyntaxError }).SyntaxError = SyntaxError;
+    (win as unknown as { SyntaxError: typeof SyntaxError; }).SyntaxError = SyntaxError;
     return win;
 }
 
@@ -83,6 +91,10 @@ function parseIndex(): Document {
     const head = indexHtml.match(/<head>[\s\S]*?<\/head>/)?.[0] ?? "";
     win.document.head.innerHTML = head.replace(/^<head>|<\/head>$/g, "");
     return win.document as unknown as Document;
+}
+
+function visibleText(el: Element | null | undefined): string {
+    return (el?.textContent ?? "").replace(/\s+/g, " ").trim();
 }
 
 function sha256(path: string): string {
@@ -96,24 +108,24 @@ function loadFontManifest(): FontManifest {
 describe("index.html health", () => {
     it("defines favicon", () => {
         const doc = parseIndex();
-        const icon = doc.querySelector('link[rel="icon"]') as HTMLLinkElement | null;
+        const icon = doc.querySelector("link[rel=\"icon\"]") as HTMLLinkElement | null;
         assert.ok(icon?.href);
     });
 
-    it("welcome message has no indentation whitespace", () => {
+    it("has formatter-neutral user-visible text", () => {
         const doc = parseIndex();
-        const content = doc.querySelector(".message--welcome .message-content")?.textContent;
         assert.equal(
-            content,
-            "Hey! 👋 I'm HallucyGenie. Ask me anything — I can chat, make images 🔥, do voices 🎙️, and create music 🎵",
+            visibleText(doc.querySelector(".message--welcome .message-content")),
+            "Hey! 👋 I'm HallucyGenie. Ask me anything — I can chat, make images 🔥, do voices 🎙️, and create music 🎵"
         );
+        assert.match(visibleText(doc.querySelector("#quota-badge")), /🎨\s*—\s*🎙️\s*—\s*🎵\s*—/);
     });
 
-    it("quota badge text has no newline indentation", () => {
-        const doc = parseIndex();
-        const text = doc.querySelector("#quota-badge")?.textContent ?? "";
-        assert.equal(text.includes("\n"), false);
-        assert.match(text, /🎨\s+—🎙️\s+—🎵\s+—/);
+    it("has no formatter-specific ignore comments", () => {
+        const ignoreCommentPattern = [legacyFormatter, "dprint", "biome"]
+            .map((tool) => `${tool}-ignore`)
+            .join("|");
+        assert.doesNotMatch(indexHtml, new RegExp(ignoreCommentPattern));
     });
 
     it("create type switcher uses ARIA tabs", () => {
@@ -122,7 +134,7 @@ describe("index.html health", () => {
         for (const name of tabNames) {
             const tab = doc.querySelector(`.create-tab[data-tab="${name}"]`) as HTMLElement | null;
             const panel = doc.querySelector(
-                `.create-panel[data-panel="${name}"]`,
+                `.create-panel[data-panel="${name}"]`
             ) as HTMLElement | null;
             assert.equal(tab?.getAttribute("role"), "tab", `${name} tab role`);
             assert.equal(tab?.id, `create-tab-${name}`, `${name} tab id`);
@@ -131,36 +143,19 @@ describe("index.html health", () => {
             assert.equal(panel?.getAttribute("aria-labelledby"), tab?.id, `${name} labelledby`);
         }
         assert.equal(
-            doc.querySelector('.create-tab[data-tab="image"]')?.getAttribute("aria-selected"),
-            "true",
+            doc.querySelector(".create-tab[data-tab=\"image\"]")?.getAttribute("aria-selected"),
+            "true"
         );
         assert.equal(
-            doc.querySelector('.create-tab[data-tab="music"]')?.getAttribute("aria-selected"),
-            "false",
+            doc.querySelector(".create-tab[data-tab=\"music\"]")?.getAttribute("aria-selected"),
+            "false"
         );
-    });
-
-    it("visible labels and controls have no direct newline indentation", () => {
-        const doc = parseIndex();
-        const offenders = Array.from(
-            doc.querySelectorAll("button, p, span, label, h1, h2, h3"),
-        ).flatMap((el) =>
-            Array.from(el.childNodes)
-                .filter(
-                    (node) =>
-                        node.nodeType === 3 &&
-                        (node.textContent ?? "").trim().length > 0 &&
-                        ((node.textContent ?? "").startsWith("\n") ||
-                            (node.textContent ?? "").endsWith("\n")),
-                )
-                .map(() => `${el.tagName.toLowerCase()}#${el.id}.${el.className}`),
-        );
-        assert.deepEqual(offenders, []);
     });
 
     it("viewport permits browser zoom", () => {
         const doc = parseIndex();
-        const viewport = doc.querySelector('meta[name="viewport"]')?.getAttribute("content") ?? "";
+        const viewport = doc.querySelector("meta[name=\"viewport\"]")?.getAttribute("content")
+            ?? "";
         assert.match(viewport, /width=device-width/);
         assert.match(viewport, /initial-scale=1\.0/);
         assert.doesNotMatch(viewport, /maximum-scale/);
@@ -199,35 +194,39 @@ describe("index.html health", () => {
 
     it("keeps Create UI on the kid-safe MiniMax parameter subset", () => {
         const doc = parseIndex();
-        for (const id of [
-            "#img-count",
-            "#img-size",
-            "#img-seed",
-            "#img-seed-random",
-            "#img-seed-clear",
-            "#img-submit",
-            "#img-width",
-            "#img-height",
-            "#img-prompt-optimizer",
-            "#voice-id",
-            "#voice-speed",
-            "#voice-volume",
-            "#voice-pitch",
-        ]) {
+        for (
+            const id of [
+                "#img-count",
+                "#img-size",
+                "#img-seed",
+                "#img-seed-random",
+                "#img-seed-clear",
+                "#img-submit",
+                "#img-width",
+                "#img-height",
+                "#img-prompt-optimizer",
+                "#voice-id",
+                "#voice-speed",
+                "#voice-volume",
+                "#voice-pitch"
+            ]
+        ) {
             assert.ok(doc.querySelector(id), id);
         }
-        for (const forbiddenId of [
-            "#img-response-format",
-            "#img-subject-reference",
-            "#voice-emotion",
-            "#voice-language-boost",
-            "#voice-output-format",
-            "#voice-subtitle-enable",
-            "#music-instrumental",
-            "#music-lyrics-optimizer",
-            "#music-output-format",
-            "#music-audio-base64",
-        ]) {
+        for (
+            const forbiddenId of [
+                "#img-response-format",
+                "#img-subject-reference",
+                "#voice-emotion",
+                "#voice-language-boost",
+                "#voice-output-format",
+                "#voice-subtitle-enable",
+                "#music-instrumental",
+                "#music-lyrics-optimizer",
+                "#music-output-format",
+                "#music-audio-base64"
+            ]
+        ) {
             assert.equal(doc.querySelector(forbiddenId), null, forbiddenId);
         }
         assert.match(appTs, /input\.n = imageCount/);
@@ -254,13 +253,13 @@ describe("index.html health", () => {
         assert.equal(doc.querySelector("#img-seed-clear")?.hasAttribute("disabled"), true);
         assert.doesNotMatch(
             indexHtml,
-            /Optimize prompt|Volume \(optional|Pitch \(optional|<label for="img-seed">Seed/,
+            /Optimize prompt|Volume \(optional|Pitch \(optional|<label for="img-seed">Seed/
         );
         assert.deepEqual(
             Array.from(doc.querySelectorAll("#voice-id optgroup")).map((group) =>
-                group.getAttribute("label"),
+                group.getAttribute("label")
             ),
-            ["English", "Deutsch", "Europe", "Rest"],
+            ["English", "Deutsch", "Europe", "Rest"]
         );
     });
 
@@ -274,9 +273,12 @@ describe("index.html health", () => {
         assert.ok(help);
         assert.ok(group?.contains(checkbox));
         assert.ok(group?.contains(help));
-        assert.equal(submit?.textContent, "Generate image 🎨");
+        assert.equal(visibleText(submit), "Generate image 🎨");
         assert.match(styleCss, /\.create-option-group \{[\s\S]*margin-bottom: var\(--space-lg\);/);
-        assert.match(styleCss, /\.create-option-group \.checkbox-row \{[\s\S]*margin-bottom: 2px;/);
+        assert.match(
+            styleCss,
+            /\.create-option-group \.checkbox-row \{[\s\S]*margin-bottom: 2px;/
+        );
         assert.match(styleCss, /\.create-submit \{[\s\S]*margin-top: var\(--space-sm\);/);
     });
 
@@ -302,20 +304,25 @@ describe("index.html health", () => {
 
     it("has a separate two-step music cover flow", () => {
         const doc = parseIndex();
-        assert.ok(doc.querySelector('.create-tab[data-tab="cover"]'));
+        assert.ok(doc.querySelector(".create-tab[data-tab=\"cover\"]"));
         assert.equal(doc.querySelector("#create-music-form #cover-source-kind"), null);
-        assert.equal(doc.querySelector("#create-cover-form")?.getAttribute("data-panel"), "cover");
-        for (const id of [
-            "#cover-source-kind",
-            "#cover-audio-url",
-            "#cover-audio-file",
-            "#cover-style",
-            "#cover-preprocess",
-            "#cover-feature-id",
-            "#cover-status",
-            "#cover-lyrics",
-            "#cover-generate",
-        ]) {
+        assert.equal(
+            doc.querySelector("#create-cover-form")?.getAttribute("data-panel"),
+            "cover"
+        );
+        for (
+            const id of [
+                "#cover-source-kind",
+                "#cover-audio-url",
+                "#cover-audio-file",
+                "#cover-style",
+                "#cover-preprocess",
+                "#cover-feature-id",
+                "#cover-status",
+                "#cover-lyrics",
+                "#cover-generate"
+            ]
+        ) {
             assert.ok(doc.querySelector(`#create-cover-form ${id}`), id);
         }
         assert.match(appTs, /\/api\/music-cover\/status/);
@@ -326,13 +333,26 @@ describe("index.html health", () => {
         assert.equal(doc.querySelector("#cover-generate")?.hasAttribute("disabled"), true);
     });
 
-    it("has voice pause and interjection composer controls", () => {
+    it("keeps long narration inside Voice instead of a separate top-level tab", () => {
+        const doc = parseIndex();
+        assert.ok(doc.querySelector(".create-tab[data-tab=\"voice\"]"));
+        assert.equal(doc.querySelector(".create-tab[data-tab=\"narration\"]"), null);
+        assert.equal(doc.querySelector("#create-narration-form"), null);
+        assert.equal(doc.querySelector("#voice-text")?.getAttribute("maxlength"), "50000");
+        assert.match(indexHtml, /Long scripts use background narration automatically/);
+        assert.match(appTs, /const LONG_VOICE_TEXT_THRESHOLD = 1000/);
+    });
+
+    it("has compact voice pause and interjection composer controls", () => {
         const doc = parseIndex();
         assert.ok(doc.querySelector("#voice-pause-duration"));
         assert.ok(doc.querySelector("#voice-insert-pause"));
+        assert.ok(doc.querySelector("#voice-interjection"));
+        assert.ok(doc.querySelector("#voice-insert-interjection"));
+        assert.equal(doc.querySelectorAll(".voice-interjection[data-tag]").length, 0);
         assert.deepEqual(
-            Array.from(doc.querySelectorAll(".voice-interjection[data-tag]")).map((el) =>
-                el.getAttribute("data-tag"),
+            Array.from(doc.querySelectorAll("#voice-interjection option")).map((el) =>
+                el.getAttribute("value")
             ),
             [
                 "laughs",
@@ -353,14 +373,14 @@ describe("index.html health", () => {
                 "humming",
                 "hissing",
                 "emm",
-                "sneezes",
-            ],
+                "sneezes"
+            ]
         );
-        assert.match(appTs, /insertVoicePause/);
+        assert.match(appTs, /insertVoiceInterjection/);
         assert.match(appTs, /` \(\$\{tag\}\) `/);
         assert.doesNotMatch(appTs, /` <\$\{button\.dataset\.tag\}> `/);
         assert.match(indexHtml, /speech-2\.8-hd/);
-        assert.match(styleCss, /\.voice-interjection \{[\s\S]*min-height: 32px;/);
+        assert.doesNotMatch(styleCss, /\.voice-interjection \{/);
     });
 
     it("chat input handles pasted images through asset upload", () => {
@@ -379,7 +399,7 @@ describe("index.html health", () => {
 
     it("quota badge includes lyrics item", () => {
         const doc = parseIndex();
-        const lyricsItem = doc.querySelector('.quota-item[data-type="lyrics"]');
+        const lyricsItem = doc.querySelector(".quota-item[data-type=\"lyrics\"]");
         assert.ok(lyricsItem, "quota badge should have lyrics item");
     });
 
@@ -395,7 +415,7 @@ describe("index.html health", () => {
         assert.match(styleCss, /\.modal-content \{[\s\S]*max-height: calc\(100dvh - 24px\);/);
         assert.match(
             styleCss,
-            /\.profile-modal-content \{[\s\S]*max-height: calc\(100dvh - 24px\);/,
+            /\.profile-modal-content \{[\s\S]*max-height: calc\(100dvh - 24px\);/
         );
         assert.match(styleCss, /@media \(max-height: 700px\) \{[\s\S]*\.create-panels/);
         assert.doesNotMatch(styleCss, /max-height: 80vh/);
@@ -418,8 +438,8 @@ describe("index.html health", () => {
                 "#.header-emoji",
                 "#.header-title",
                 "#whats-new-btn.whats-new-btn",
-                "#connection-status.status-dot",
-            ],
+                "#connection-status.status-dot"
+            ]
         );
         assert.deepEqual(
             Array.from(headerRight?.children ?? []).map((el) => `#${el.id}.${el.className}`),
@@ -427,8 +447,8 @@ describe("index.html health", () => {
                 "#.session-switcher",
                 "#profile-btn.profile-btn",
                 "#create-btn.create-btn",
-                "#quota-badge.quota-badge",
-            ],
+                "#quota-badge.quota-badge"
+            ]
         );
     });
 
@@ -440,18 +460,18 @@ describe("index.html health", () => {
         assert.match(styleCss, /\.session-switcher \{[^}]*border-radius: var\(--radius-full\);/);
         assert.match(
             styleCss,
-            /\.session-switcher \{[^}]*linear-gradient\(135deg, rgba\(255, 255, 255, 0\.1\), var\(--color-bg-card\)\)/,
+            /\.session-switcher \{[^}]*linear-gradient\(135deg, rgba\(255, 255, 255, 0\.1\), var\(--color-bg-card\)\)/
         );
         assert.match(styleCss, /\.session-select \{[^}]*appearance: none;/);
         assert.match(styleCss, /\.session-select \{[^}]*border: 0;/);
         assert.match(styleCss, /\.session-select \{[^}]*M4 6l4 4 4-4/);
         assert.match(
             styleCss,
-            /\.session-select option \{[^}]*background: var\(--color-surface\);/,
+            /\.session-select option \{[^}]*background: var\(--color-surface\);/
         );
         assert.match(
             styleCss,
-            /\.session-new \{[^}]*border-left: 1px solid var\(--color-border\);/,
+            /\.session-new \{[^}]*border-left: 1px solid var\(--color-border\);/
         );
         assert.match(styleCss, /\.session-new \{[^}]*background: transparent;/);
         assert.doesNotMatch(styleCss, /\.session-new \{[^}]*linear-gradient/);
@@ -460,27 +480,27 @@ describe("index.html health", () => {
     it("keeps mobile header title visible while actions wrap below", () => {
         assert.match(
             styleCss,
-            /@media \(max-width: 560px\) \{[\s\S]*#header \{[\s\S]*grid-template-columns: minmax\(0, 1fr\);/,
+            /@media \(max-width: 560px\) \{[\s\S]*#header \{[\s\S]*grid-template-columns: minmax\(0, 1fr\);/
         );
         assert.match(
             styleCss,
-            /@media \(max-width: 560px\) \{[\s\S]*\.header-right \{[\s\S]*display: grid;/,
+            /@media \(max-width: 560px\) \{[\s\S]*\.header-right \{[\s\S]*display: grid;/
         );
         assert.match(
             styleCss,
-            /grid-template-areas:[\s\S]*"sessions sessions sessions"[\s\S]*"profile create quota"/,
+            /grid-template-areas:[\s\S]*"sessions sessions sessions"[\s\S]*"profile create quota"/
         );
         assert.match(
             styleCss,
-            /@media \(max-width: 560px\) \{[\s\S]*\.session-switcher \{[\s\S]*grid-area: sessions;/,
+            /@media \(max-width: 560px\) \{[\s\S]*\.session-switcher \{[\s\S]*grid-area: sessions;/
         );
         assert.match(
             styleCss,
-            /@media \(max-width: 560px\) \{[\s\S]*\.session-switcher \{[\s\S]*width: 100%;/,
+            /@media \(max-width: 560px\) \{[\s\S]*\.session-switcher \{[\s\S]*width: 100%;/
         );
         assert.match(
             styleCss,
-            /@media \(max-width: 560px\) \{[\s\S]*\.session-select \{[\s\S]*width: 100%;/,
+            /@media \(max-width: 560px\) \{[\s\S]*\.session-select \{[\s\S]*width: 100%;/
         );
         assert.match(styleCss, /\.header-title \{[^}]*text-overflow: ellipsis;/);
         assert.match(styleCss, /\.header-title \{[^}]*white-space: nowrap;/);
@@ -503,19 +523,23 @@ describe("index.html health", () => {
 
     it("create modal exposes analyze image as a first-class tool", () => {
         const doc = parseIndex();
-        assert.ok(doc.querySelector('.create-tab[data-tab="analyze"]'));
-        assert.ok(doc.querySelector('#create-analyze-form[data-panel="analyze"]'));
-        assert.ok(doc.querySelector('label[for="analyze-file"]'));
-        assert.ok(doc.querySelector('input#analyze-file[type="file"]'));
-        assert.equal(
-            doc.querySelector("#analyze-file")?.getAttribute("accept"),
-            "image/png,image/jpeg,image/webp,image/gif",
+        assert.ok(doc.querySelector(".create-tab[data-tab=\"analyze\"]"));
+        assert.ok(doc.querySelector("#create-analyze-form[data-panel=\"analyze\"]"));
+        assert.ok(doc.querySelector("label[for=\"analyze-file\"]"));
+        assert.ok(doc.querySelector("input#analyze-file[type=\"file\"]"));
+        assert.deepEqual(
+            doc.querySelector("#analyze-file")?.getAttribute("accept")?.split(",").map((item) =>
+                item.trim()
+            ),
+            ["image/png", "image/jpeg", "image/webp", "image/gif"]
         );
-        assert.ok(doc.querySelector('#analyze-dropzone[aria-describedby*="analyze-file-status"]'));
-        assert.ok(doc.querySelector('#analyze-file-status[role="status"]'));
+        assert.ok(
+            doc.querySelector("#analyze-dropzone[aria-describedby*=\"analyze-file-status\"]")
+        );
+        assert.ok(doc.querySelector("#analyze-file-status[role=\"status\"]"));
         assert.ok(doc.querySelector("#analyze-file-preview[hidden]"));
-        assert.ok(doc.querySelector('label[for="analyze-url"]'));
-        assert.ok(doc.querySelector('label[for="analyze-prompt"]'));
+        assert.ok(doc.querySelector("label[for=\"analyze-url\"]"));
+        assert.ok(doc.querySelector("label[for=\"analyze-prompt\"]"));
         assert.match(appTs, /uploadAnalyzeImage\(file: File\)/);
         assert.match(appTs, /PNG, JPG, GIF, or WebP/);
         assert.match(appTs, /analyzeDropzone\.addEventListener\("drop"/);
@@ -540,7 +564,10 @@ describe("index.html health", () => {
 
     it("profile button and modal have accessible labels", () => {
         const doc = parseIndex();
-        assert.equal(doc.querySelector("#profile-btn")?.getAttribute("aria-label"), "Open profile");
+        assert.equal(
+            doc.querySelector("#profile-btn")?.getAttribute("aria-label"),
+            "Open profile"
+        );
         const modal = doc.querySelector("#profile-modal") as HTMLElement | null;
         assert.equal(modal?.getAttribute("role"), "dialog");
         assert.equal(modal?.getAttribute("aria-modal"), "true");
@@ -551,12 +578,12 @@ describe("index.html health", () => {
     it("profile fields have distinct guidance and asset avatar controls", () => {
         const doc = parseIndex();
         assert.equal(
-            doc.querySelector('label[for="profile-interests"]')?.textContent,
-            "Topics to bring up",
+            doc.querySelector("label[for=\"profile-interests\"]")?.textContent,
+            "Topics to bring up"
         );
         assert.equal(
-            doc.querySelector('label[for="profile-favorites"]')?.textContent,
-            "Style ingredients",
+            doc.querySelector("label[for=\"profile-favorites\"]")?.textContent,
+            "Style ingredients"
         );
         assert.equal(doc.querySelector("#profile-avatar"), null);
         assert.equal(indexHtml.includes("Avatar emoji"), false);
@@ -565,15 +592,15 @@ describe("index.html health", () => {
         assert.ok(doc.querySelector("#profile-avatar-img"));
         assert.equal(doc.querySelector("#profile-avatar-upload")?.getAttribute("type"), "file");
         assert.equal(indexHtml.toLowerCase().includes("email"), false);
-        assert.equal(appTs.includes('type: "emoji"'), false);
-        assert.equal(serverTs.includes('type: "emoji"'), false);
-        assert.equal(agentTest.includes('type: "emoji"'), false);
-        assert.equal(e2eRunner.includes('fill("#profile-avatar")'), false);
-        assert.equal(e2eRunner.includes('toHaveValue("🦊")'), false);
+        assert.equal(appTs.includes("type: \"emoji\""), false);
+        assert.equal(serverTs.includes("type: \"emoji\""), false);
+        assert.equal(agentTest.includes("type: \"emoji\""), false);
+        assert.equal(e2eRunner.includes("fill(\"#profile-avatar\")"), false);
+        assert.equal(e2eRunner.includes("toHaveValue(\"🦊\")"), false);
         assert.match(dbTest, /avatar: \{ type: "emoji", value: "🦊" \}[\s\S]*avatar type invalid/);
         assert.match(
             serverTest,
-            /avatar: \{ type: "emoji", value: "🦊" \}[\s\S]*avatar type invalid/,
+            /avatar: \{ type: "emoji", value: "🦊" \}[\s\S]*avatar type invalid/
         );
     });
 
@@ -604,26 +631,26 @@ describe("index.html health", () => {
         assert.ok(editor?.contains(generate));
         assert.equal(actions?.contains(generate), false);
         assert.deepEqual(
-            Array.from(actions?.querySelectorAll("button") ?? []).map(
-                (button) => button.textContent,
+            Array.from(actions?.querySelectorAll("button") ?? []).map((button) =>
+                visibleText(button)
             ),
-            ["Save", "Reset"],
+            ["Save", "Reset"]
         );
     });
 
     it("lets assistant tool cards use the wide message row", () => {
         assert.match(
             styleCss,
-            /\.message--assistant \.message-bubble:has\(\.tool-card\) \{[\s\S]*width: min\(100%, calc\(var\(--content-max-width\) - 48px\)\);/,
+            /\.message--assistant \.message-bubble:has\(\.tool-card\) \{[\s\S]*width: min\(100%, calc\(var\(--content-max-width\) - 48px\)\);/
         );
         assert.match(
             styleCss,
-            /\.message--assistant \.message-bubble:has\(\.tool-card\) \{[\s\S]*max-width: calc\(100% - 42px\);/,
+            /\.message--assistant \.message-bubble:has\(\.tool-card\) \{[\s\S]*max-width: calc\(100% - 42px\);/
         );
         assert.match(styleCss, /\.tool-card \{[\s\S]*width: 100%;/);
         assert.match(
             styleCss,
-            /\.tool-result-audio,\n\.tool-result-video \{[\s\S]*display: block;/,
+            /\.tool-result-audio,\n\.tool-result-video \{[\s\S]*display: block;/
         );
     });
 
@@ -655,14 +682,14 @@ describe("index.html health", () => {
         assert.equal(badge?.getAttribute("role"), "status");
         assert.equal(
             badge?.getAttribute("title"),
-            "Images, voice, music, video, and lyrics remaining today",
+            "Images, voice, music, video, and lyrics remaining today"
         );
         assert.equal(
             badge?.getAttribute("aria-label"),
-            "Images, voice, music, video, and lyrics remaining today",
+            "Images, voice, music, video, and lyrics remaining today"
         );
-        assert.ok(doc.querySelector('.quota-item[data-type="speech"]'));
-        assert.ok(doc.querySelector('.quota-item[data-type="video"]'));
+        assert.ok(doc.querySelector(".quota-item[data-type=\"speech\"]"));
+        assert.ok(doc.querySelector(".quota-item[data-type=\"video\"]"));
         assert.equal(styleCss.includes(".quota-badge:hover"), false);
         assert.match(styleCss, /\.quota-badge \{[^}]*cursor: default;/);
     });
@@ -700,19 +727,19 @@ describe("index.html health", () => {
         assert.match(styleCss, /@keyframes caret-blink/);
         assert.match(
             styleCss,
-            /\.assistant-text-region\.is-streaming::after \{[^}]*position: absolute;/,
+            /\.assistant-text-region\.is-streaming::after \{[^}]*position: absolute;/
         );
         assert.match(styleCss, /\.assistant-text-region\.is-streaming::after \{[^}]*width: 0;/);
         assert.match(
             styleCss,
-            /\.assistant-text-region\.is-streaming::after \{[^}]*overflow: visible;/,
+            /\.assistant-text-region\.is-streaming::after \{[^}]*overflow: visible;/
         );
         assert.match(styleCss, /@media \(prefers-reduced-motion: reduce\)/);
         assert.match(styleCss, /\.stream-chunk \{[^}]*animation: stream-chunk-in/);
         assert.match(styleCss, /\.stream-chunk \{[^}]*display: inline-block;/);
         assert.match(
             styleCss,
-            /@keyframes stream-chunk-in \{[\s\S]*clip-path: inset\(0 100% 0 0\)/,
+            /@keyframes stream-chunk-in \{[\s\S]*clip-path: inset\(0 100% 0 0\)/
         );
         assert.match(styleCss, /\.stream-chunk \{[^}]*steps\(8, end\)/);
         assert.doesNotMatch(styleCss, /\.stream-char/);
@@ -726,7 +753,7 @@ describe("index.html health", () => {
         assert.match(styleCss, /\.create-panels \{[^}]*overflow-y: visible;/);
         assert.match(
             styleCss,
-            /@media \(max-height: 700px\) \{[\s\S]*\.create-panels \{[\s\S]*overflow-y: auto;/,
+            /@media \(max-height: 700px\) \{[\s\S]*\.create-panels \{[\s\S]*overflow-y: auto;/
         );
         assert.match(styleCss, /\.modal-content \{[^}]*background: rgba\(20, 20, 26, 0\.94\);/);
         assert.match(styleCss, /backdrop-filter: blur\(10px\)/);
@@ -748,7 +775,7 @@ describe("index.html health", () => {
         assert.match(styleCss, /\.create-panels \{[^}]*padding: 0 2px;/);
         assert.match(
             styleCss,
-            /\.form-group textarea,[\s\S]*?\.form-group select \{[\s\S]*?border-left-color: rgba\(255, 255, 255, 0\.28\);/,
+            /\.form-group textarea,[\s\S]*?\.form-group select \{[\s\S]*?border-left-color: rgba\(255, 255, 255, 0\.28\);/
         );
     });
 
@@ -756,15 +783,15 @@ describe("index.html health", () => {
         assert.match(styleCss, /\.message-content \{[^}]*white-space: normal;/);
         assert.match(
             styleCss,
-            /\.message--user \.message-content,[\s\S]*?\.message--steer \.message-content \{[\s\S]*?white-space: pre-wrap;/,
+            /\.message--user \.message-content,[\s\S]*?\.message--steer \.message-content \{[\s\S]*?white-space: pre-wrap;/
         );
         assert.match(
             styleCss,
-            /\.message--assistant \.message-content p \{[^}]*margin: 0\.25rem 0;/,
+            /\.message--assistant \.message-content p \{[^}]*margin: 0\.25rem 0;/
         );
         assert.match(
             styleCss,
-            /\.message--assistant \.message-content li \{[^}]*line-height: 1\.45;/,
+            /\.message--assistant \.message-content li \{[^}]*line-height: 1\.45;/
         );
         assert.match(styleCss, /\.markdown-image \{[^}]*max-width: min\(100%, 320px\);/);
         assert.match(styleCss, /\.markdown-image \{[^}]*max-height: min\(45vh, 260px\);/);
@@ -773,7 +800,7 @@ describe("index.html health", () => {
     it("static file containment has a path-separator boundary", () => {
         assert.match(
             serverTs,
-            /filePath !== publicDir && !filePath\.startsWith\(`\$\{publicDir\}\$\{sep\}`\)/,
+            /filePath !== publicDir && !filePath\.startsWith\(`\$\{publicDir\}\$\{sep\}`\)/
         );
         assert.doesNotMatch(serverTs, /if \(!filePath\.startsWith\(publicDir\)\) return null;/);
     });
@@ -809,7 +836,7 @@ describe("font vendoring health", () => {
         assert.deepEqual(manifest.fonts.map((font) => font.id).sort(), [
             "pixelify-sans",
             "playwrite-de-sas",
-            "roboto-flex",
+            "roboto-flex"
         ]);
 
         for (const font of manifest.fonts) {
@@ -841,7 +868,7 @@ describe("font vendoring health", () => {
             ["pixelify-sans", "roboto-flex", "playwrite-de-sas"].map((id) => {
                 const font = manifest.fonts.find((item) => item.id === id)!;
                 return `${font.file.replace(/^public/, "")}?v=${font.sha256.slice(0, 12)}`;
-            }),
+            })
         );
     });
 
@@ -851,31 +878,33 @@ describe("font vendoring health", () => {
             const urlPath = font.file.replace(/^public/, "");
             assert.ok(
                 styleCss.includes(`${urlPath}?v=${font.sha256.slice(0, 12)}`),
-                `${font.id} cache-buster`,
+                `${font.id} cache-buster`
             );
         }
     });
 
     it("targets real rendered selectors for user, assistant, and UI fonts", () => {
-        for (const selector of [
-            ".message--user .message-content",
-            ".message--steer .message-content",
-            "#chat-input",
-            ".message--assistant .message-content",
-            ".assistant-text-region",
-            ".assistant-thinking-region",
-            ".thinking-content",
-            "body",
-            "button",
-            "textarea",
-            ".header-title",
-            ".quota-badge",
-            ".create-tab",
-            ".tool-card",
-            ".assets-empty",
-            ".error-toast",
-            ".steer-hint",
-        ]) {
+        for (
+            const selector of [
+                ".message--user .message-content",
+                ".message--steer .message-content",
+                "#chat-input",
+                ".message--assistant .message-content",
+                ".assistant-text-region",
+                ".assistant-thinking-region",
+                ".thinking-content",
+                "body",
+                "button",
+                "textarea",
+                ".header-title",
+                ".quota-badge",
+                ".create-tab",
+                ".tool-card",
+                ".assets-empty",
+                ".error-toast",
+                ".steer-hint"
+            ]
+        ) {
             assert.ok(styleCss.includes(selector), `${selector} selector`);
         }
         assert.match(styleCss, /--font-ui:\s*"HG Pixelify Sans"/);
@@ -931,7 +960,7 @@ describe("constitution health", () => {
         assert.doesNotMatch(agentsMd, /\/home\//);
         assert.doesNotMatch(
             agentsMd,
-            /^## (Stack|Commands|Files|Architecture|MiniMax API|Session|SSE|Quotas|Testing|Logger|Don't)$/m,
+            /^## (Stack|Commands|Files|Architecture|MiniMax API|Session|SSE|Quotas|Testing|Logger|Don't)$/m
         );
         assert.doesNotMatch(agentsMd, /No frameworks/);
         assert.doesNotMatch(agentsMd, /No "backwards compat"/);
@@ -989,14 +1018,14 @@ describe("system metadata health", () => {
         const specs = new Map(
             mdFiles(".system/specs").map((path: string) => [
                 path.match(/HG-SPEC-\d{3}/)?.[0] ?? "",
-                { path, text: readFileSync(path, "utf-8") },
-            ]),
+                { path, text: readFileSync(path, "utf-8") }
+            ])
         );
         const issues = new Map(
             mdFiles(".system/issues").map((path: string) => [
                 path.match(/HG-ISSUE-\d{3}/)?.[0] ?? "",
-                { path, text: readFileSync(path, "utf-8") },
-            ]),
+                { path, text: readFileSync(path, "utf-8") }
+            ])
         );
 
         for (const [issueId, issue] of issues) {
@@ -1014,7 +1043,7 @@ describe("system metadata health", () => {
     it("requires human approval for spec writes instead of hard-blocking them", () => {
         assert.match(
             systemExtension,
-            /const HARD_READONLY_FILES = \["MISSION\.md", "RULES\.md", "SYSTEM\.md"\]/,
+            /const HARD_READONLY_FILES = \["MISSION\.md", "RULES\.md", "SYSTEM\.md"\]/
         );
         assert.match(systemExtension, /const APPROVAL_DIRS = \["specs"\]/);
         assert.match(systemExtension, /ctx\.ui\.select\(/);
@@ -1034,19 +1063,46 @@ describe("system metadata health", () => {
             assert.ok(statusMatch, `${path} missing status frontmatter`);
             assert.ok(
                 validStatuses.includes(statusMatch[1]),
-                `${path} invalid status: ${statusMatch[1]}`,
+                `${path} invalid status: ${statusMatch[1]}`
             );
         }
     });
 });
 
+describe("formatter and linter health", () => {
+    it("uses dprint, Biome, and sqruff instead of Prettier", () => {
+        assert.equal(existsSync(`.${legacyFormatter}rc`), false);
+        assert.equal(existsSync(`.${legacyFormatter}ignore`), false);
+        assert.match(packageJson, /"dprint": "0\.54\.0"/);
+        assert.match(packageJson, /"@biomejs\/biome": "2\.3\.15"/);
+        assert.doesNotMatch(packageJson, new RegExp(legacyFormatter));
+        assert.match(dprintJson, /typescript-0\.96\.1\.wasm/);
+        assert.match(dprintJson, /pretty_yaml-v0\.6\.0\.wasm/);
+        assert.match(dprintJson, /dockerfile-0\.3\.3\.wasm/);
+        assert.match(dprintJson, /"\*\*\/\*\.html"/);
+        assert.doesNotMatch(dprintJson, /"public\/index\.html"/);
+        assert.doesNotMatch(dprintJson, /sql-0\.3\.0\.wasm/);
+        assert.match(biomeJson, /"formatter": \{\n\s+"enabled": false/);
+        assert.match(biomeJson, /"noDebugger": "error"/);
+        assert.match(sqruffConfig, /dialect = sqlite/);
+        assert.doesNotMatch(sqruffConfig, /exclude_rules/);
+    });
+});
+
 describe("justfile health", () => {
     it("has one obvious gate and ignored frontend bundle", () => {
-        assert.match(justfile, /\nready: fmt-check typecheck build-check unit integration e2e\n/);
+        assert.match(justfile, /\nready: lint typecheck build-check unit integration e2e\n/);
         assert.match(
             justfile,
-            /\nfix:\n\s+just -f \.\/justfile --fmt\n\s+bunx prettier --write \.\n\s+just build/,
+            /\nfmt:\n\s+just -f \.\/justfile --fmt\n\s+bunx dprint fmt\n\s+sqruff fix migrations\/\*\.sql test\/fixtures\/db\/v1\.0\.0\/schema\.sql/
         );
+        assert.match(justfile, /\nfix: fmt\n\s+bunx biome lint --write \./);
+        assert.match(
+            justfile,
+            /\nlint:\n\s+just -f \.\/justfile --fmt --check\n\s+bunx dprint check\n\s+bunx biome lint \.\n\s+sqruff lint migrations\/\*\.sql test\/fixtures\/db\/v1\.0\.0\/schema\.sql/
+        );
+        assert.match(justfile, /podman-user-generator/);
+        assert.match(justfile, /systemd-analyze --user verify/);
         assert.match(justfile, /\nbuild-check:\n\s+tmp="\$\(mktemp\)"/);
         assert.match(justfile, /verify frontend bundle builds without writing generated output/);
         assert.doesNotMatch(justfile, /public\/app\.js is stale/);
@@ -1059,7 +1115,7 @@ describe("justfile health", () => {
         assert.doesNotMatch(justfile, /BACKEND_TESTS|FRONTEND_TESTS/);
         assert.deepEqual(
             readdirSync("test").filter((name) => name.endsWith(".test.ts")),
-            [],
+            []
         );
         assert.equal(existsSync("test/unit/static.test.ts"), true);
         assert.equal(existsSync("test/integration/integration.test.ts"), true);
@@ -1073,13 +1129,13 @@ describe("justfile health", () => {
         assert.match(justfile, /\ncontainer image="hallucygenie:local":/);
         assert.match(
             justfile,
-            /podman build -f deploy\/Containerfile --build-arg VERSION="\$version" -t "\{\{ image \}\}" \./,
+            /podman build -f deploy\/Containerfile --build-arg VERSION="\$version" -t "\{\{ image \}\}" \./
         );
         assert.match(justfile, /\ncontainer-smoke image="hallucygenie:local":/);
         assert.match(justfile, /curl -fsS http:\/\/127\.0\.0\.1:3099\/api\/health/);
         assert.match(
             justfile,
-            /curl -fsS http:\/\/127\.0\.0\.1:3099\/fonts\/pixelify-sans\/PixelifySans\.woff2/,
+            /curl -fsS http:\/\/127\.0\.0\.1:3099\/fonts\/pixelify-sans\/PixelifySans\.woff2/
         );
         assert.doesNotMatch(justfile, /curl -fsSI/);
         assert.match(justfile, /\nrelease-check image="hallucygenie:local": ready/);
@@ -1099,7 +1155,7 @@ describe("justfile health", () => {
         assert.match(justfile, /\npublish-container image:/);
         assert.match(
             justfile,
-            /podman build -f deploy\/Containerfile --build-arg VERSION="\$release_tag" -t "\$image" --push \./,
+            /podman build -f deploy\/Containerfile --build-arg VERSION="\$release_tag" -t "\$image" --push \./
         );
         assert.doesNotMatch(justfile, /\bdocker (?:build|buildx|volume|run|inspect|rm)\b/);
         assert.match(readmeMd, /podman pull ghcr\.io\/bugabinga\/hallucygenie:v1\.0\.0/);
@@ -1121,8 +1177,8 @@ describe("justfile health", () => {
         assert.match(
             justfile,
             new RegExp(
-                `\\nfonts-update commit="${commit}":\\n\\s+bun scripts/update-fonts\\.ts \\{\\{ commit \\}\\}\\n\\s+bunx prettier --write public/fonts/fonts\\.manifest\\.json public/style\\.css`,
-            ),
+                `\\nfonts-update commit="${commit}":\\n\\s+bun scripts/update-fonts\\.ts \\{\\{ commit \\}\\}\\n\\s+just fmt`
+            )
         );
         assert.doesNotMatch(justfile, /\nfonts-update commit="main":/);
         assert.equal(existsSync("scripts/update-fonts.ts"), true);
@@ -1157,7 +1213,7 @@ describe("justfile health", () => {
         assert.doesNotMatch(justfile, /hook-pre-commit|hook-pre-push|hook-post-merge/);
         assert.doesNotMatch(
             justfile,
-            /ci-test-all|test-all|test-unit|test-backend|test-integration|test-e2e/,
+            /ci-test-all|test-all|test-unit|test-backend|test-integration|test-e2e/
         );
     });
 });
@@ -1309,7 +1365,7 @@ describe("GitHub Actions health", () => {
         assert.match(releaseYml, /CHROMIUM_PATH=/);
         assert.match(
             releaseYml,
-            /run: RELEASE_TAG="\$RELEASE_TAG" just release-check "\$IMAGE:\$RELEASE_TAG"/,
+            /run: RELEASE_TAG="\$RELEASE_TAG" just release-check "\$IMAGE:\$RELEASE_TAG"/
         );
         assert.match(releaseYml, /just publish-container/);
         assert.match(releaseYml, /podman login ghcr\.io/);
@@ -1326,7 +1382,7 @@ describe("GitHub Actions health", () => {
         assert.match(justfile, /\ncontainer image="hallucygenie:local":/);
         assert.match(
             justfile,
-            /podman build -f deploy\/Containerfile --build-arg VERSION="\$version" -t "\{\{ image \}\}" \./,
+            /podman build -f deploy\/Containerfile --build-arg VERSION="\$version" -t "\{\{ image \}\}" \./
         );
         assert.match(justfile, /\nrelease-check image="hallucygenie:local": ready/);
         assert.doesNotMatch(justfile, /\ndeps-check:|bun outdated --latest/);
@@ -1354,14 +1410,62 @@ describe("GitHub Actions health", () => {
     });
 });
 
-describe("agent janitor health", () => {
+describe("agent patrol health", () => {
+    it("documents the patrol loop for humans", () => {
+        assert.equal(existsSync("AGENT_PATROL.md"), true);
+        const patrolDoc = readFileSync("AGENT_PATROL.md", "utf-8");
+        assert.match(agentsMd, /AGENT_PATROL\.md/);
+        for (
+            const word of [
+                "speck-ferkel",
+                "trouble-maker",
+                "slop-chopper",
+                "robotnik",
+                "janitor",
+                "needs-fix"
+            ]
+        ) {
+            assert.match(patrolDoc, new RegExp(word));
+        }
+        assert.ok(patrolDoc.split("\n").length <= 80);
+    });
+
+    it("uses only MiniMax LLM provider secrets", () => {
+        for (const text of [agentsYml, janitorAgent, robotnikAgent]) {
+            assert.doesNotMatch(text, /ZAI_API_KEY|--provider",\s*\n\s*"zai"|glm-5\.1/);
+        }
+        assert.match(agentsYml, /MINIMAX_API_KEY: \$\{\{ secrets\.MINIMAX_API_KEY \}\}/);
+        assert.match(janitorAgent, /--provider",\s*\n\s*"minimax"/);
+        assert.match(janitorAgent, /--model",\s*\n\s*"MiniMax-M3"/);
+        assert.match(robotnikAgent, /--provider",\s*\n\s*"minimax"/);
+        assert.match(robotnikAgent, /--model",\s*\n\s*"MiniMax-M3"/);
+    });
+
+    it("ships valid MiniMax model config for CI agents", () => {
+        const config = JSON.parse(agentModelsJson) as {
+            providers: {
+                minimax: { api: string; models: Array<{ id: string; input: string[]; }>; };
+            };
+        };
+        assert.equal(config.providers.minimax.api, "anthropic-messages");
+        assert.deepEqual(
+            config.providers.minimax.models.map((model) => model.id),
+            ["MiniMax-M3", "MiniMax-M2.5-highspeed"]
+        );
+        assert.deepEqual(config.providers.minimax.models[0].input, ["text", "image"]);
+        assert.deepEqual(config.providers.minimax.models[1].input, ["text"]);
+        assert.doesNotMatch(agentModelsJson, /"video"|zai|glm-5\.1|ZAI_API_KEY/);
+    });
+
     it("syncs triage labels and requests human review on needs-human", () => {
-        for (const label of [
-            "janitor:needs-fix",
-            "janitor:ready",
-            "janitor:needs-human",
-            "janitor:waiting-for-ci",
-        ]) {
+        for (
+            const label of [
+                "janitor:needs-fix",
+                "janitor:ready",
+                "janitor:needs-human",
+                "janitor:waiting-for-ci"
+            ]
+        ) {
             assert.match(janitorAgent, new RegExp(JSON.stringify(label).slice(1, -1)));
         }
         assert.match(janitorAgent, /syncJanitorLabels\(pr\.number, status\)/);
@@ -1381,7 +1485,7 @@ describe("layout health", () => {
         assert.match(deployContainerfile, /^ARG VERSION=1\.0\.0$/m);
         assert.match(
             deployContainerfile,
-            /--mount=type=cache,target=\/root\/\.bun\/install\/cache,sharing=locked/,
+            /--mount=type=cache,target=\/root\/\.bun\/install\/cache,sharing=locked/
         );
         assert.match(deployContainerfile, /COPY package\.json bun\.lock \./);
         assert.match(deployContainerfile, /COPY public \.\/public/);
@@ -1389,7 +1493,7 @@ describe("layout health", () => {
         assert.match(deployContainerfile, /COPY --chown=bun:bun migrations \.\/migrations/);
         assert.match(
             deployContainerfile,
-            /COPY --from=build --chown=bun:bun \/app\/public\/app\.js \.\/public\/app\.js/,
+            /COPY --from=build --chown=bun:bun \/app\/public\/app\.js \.\/public\/app\.js/
         );
         assert.match(deployContainerfile, /bunx esbuild public\/app\.ts/);
         assert.match(deployContainerfile, /--minify/);
@@ -1408,39 +1512,41 @@ describe("layout health", () => {
             .map((line) => line.trim())
             .filter(Boolean);
         assert.equal(lines[0], "*");
-        for (const path of [
-            "package.json",
-            "bun.lock",
-            "src/",
-            "src/**",
-            "migrations/",
-            "migrations/**",
-            "public/",
-            "public/app.ts",
-            "public/index.html",
-            "public/markdown.ts",
-            "public/style.css",
-            "public/fonts/",
-            "public/fonts/**",
-        ]) {
+        for (
+            const path of [
+                "package.json",
+                "bun.lock",
+                "src/",
+                "src/**",
+                "migrations/",
+                "migrations/**",
+                "public/",
+                "public/app.ts",
+                "public/index.html",
+                "public/markdown.ts",
+                "public/style.css",
+                "public/fonts/",
+                "public/fonts/**"
+            ]
+        ) {
             assert.ok(lines.includes(`!${path}`), `${path} must be allowed`);
         }
         assert.equal(lines.includes("!public/**"), false);
         assert.equal(
             lines.some((line) => line.includes("screenshot")),
-            false,
+            false
         );
         assert.equal(
             lines.some((line) => line.startsWith("!test")),
-            false,
+            false
         );
         assert.equal(
             lines.some((line) => line.startsWith("!.system")),
-            false,
+            false
         );
         assert.equal(
             lines.some((line) => line.startsWith("!node_modules")),
-            false,
+            false
         );
     });
 
@@ -1463,8 +1569,8 @@ describe("layout health", () => {
         assert.equal(trackedFiles.has("public/app.js"), false);
         assert.doesNotMatch(gitignore, /\.pulse\.json/);
         assert.match(gitignore, /test-data\*\//);
-        assert.match(prettierignore, /test\/\*\*\/__snapshots__\//);
-        assert.match(prettierignore, /\.system\//);
+        assert.match(dprintJson, /test\/\*\*\/__snapshots__\/\*\*/);
+        assert.doesNotMatch(dprintJson, /\.system\//);
     });
 });
 

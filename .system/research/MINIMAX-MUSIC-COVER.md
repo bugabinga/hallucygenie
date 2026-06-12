@@ -1,7 +1,7 @@
 # MiniMax music-cover research
 
-**Ticket:** `HG-TICKET-051-music-cover-minimax-research.md`  
-**Spec:** `.system/specs/HG-SPEC-013-minimax-music-cover-reference-tracks.md`  
+**Ticket:** `HG-TICKET-051-music-cover-minimax-research.md`\
+**Spec:** `.system/specs/HG-SPEC-013-minimax-music-cover-reference-tracks.md`\
 **Status:** docs research; no live quota spent
 
 ## Known docs facts

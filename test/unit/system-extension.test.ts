@@ -4,7 +4,7 @@ import systemExtension from "../../.pi/extensions/system.ts";
 
 function captureToolCallHandler() {
     let handler: ((event: any, ctx: any) => Promise<any>) | null = null;
-    const sent: Array<{ content: string; options?: Record<string, unknown> }> = [];
+    const sent: Array<{ content: string; options?: Record<string, unknown>; }> = [];
     systemExtension({
         on(name: string, fn: (event: any, ctx: any) => Promise<any>) {
             if (name === "tool_call") handler = fn;
@@ -12,7 +12,7 @@ function captureToolCallHandler() {
         registerCommand() {},
         sendUserMessage(content: string, options?: Record<string, unknown>) {
             sent.push({ content, options });
-        },
+        }
     } as any);
     assert.ok(handler, "tool_call handler registered");
     return { handler: handler!, sent };
@@ -31,9 +31,9 @@ describe("system extension approval gate", () => {
                     aborted = true;
                 },
                 ui: {
-                    select: async () => "No",
-                },
-            },
+                    select: async () => "No"
+                }
+            }
         );
 
         assert.equal(aborted, true);
@@ -50,17 +50,17 @@ describe("system extension approval gate", () => {
                 hasUI: true,
                 ui: {
                     select: async () => "Custom",
-                    input: async () => "Do not edit specs; create an issue instead.",
-                },
-            },
+                    input: async () => "Do not edit specs; create an issue instead."
+                }
+            }
         );
 
         assert.equal(result.block, true);
         assert.deepEqual(sent, [
             {
                 content: "Do not edit specs; create an issue instead.",
-                options: { deliverAs: "steer" },
-            },
+                options: { deliverAs: "steer" }
+            }
         ]);
     });
 });

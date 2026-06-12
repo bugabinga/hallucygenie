@@ -1,59 +1,59 @@
 // HallucyGenie — Database tests (migrations, CRUD, quotas)
 
-import { describe, it, beforeEach } from "node:test";
-import assert from "node:assert/strict";
 import { Database } from "bun:sqlite";
+import assert from "node:assert/strict";
 import {
-    mkdtempSync,
-    mkdirSync,
-    writeFileSync,
-    rmSync,
     copyFileSync,
+    mkdirSync,
+    mkdtempSync,
     readdirSync,
     readFileSync,
+    rmSync,
+    writeFileSync
 } from "node:fs";
-import { join } from "node:path";
 import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { beforeEach, describe, it } from "node:test";
 
 import {
-    runMigrations,
-    initDb,
-    getActiveSessionId,
-    getOrCreateActiveSessionId,
-    getOrCreateActiveSession,
-    getSession,
-    createSession,
-    listSessions,
-    renameSession,
     archiveSession,
-    autoNameSession,
-    setActiveSessionId,
-    getUserProfile,
-    saveUserProfile,
-    deleteUserProfile,
-    saveMessage,
     assertNoRawAssetDataInMessage,
-    getMessages,
-    savePreference,
-    getPreferences,
-    trackUsage,
-    getUsageToday,
+    autoNameSession,
     checkQuota,
     consumeQuota,
-    releaseQuota,
-    saveAsset,
-    getAssets,
-    getAsset,
-    saveDraft,
-    getDraft,
+    createSession,
     deleteDraft,
-    recordToolInputHistory,
-    listToolInputHistory,
+    deleteUserProfile,
+    getActiveSessionId,
+    getAsset,
+    getAssets,
+    getDraft,
+    getMessages,
+    getOrCreateActiveSession,
+    getOrCreateActiveSessionId,
+    getPreferences,
+    getSession,
+    getUsageToday,
+    getUserProfile,
     hideToolInputHistory,
-    saveAsyncTtsTask,
-    updateAsyncTtsTask,
+    initDb,
     listAsyncTtsTasks,
+    listSessions,
+    listToolInputHistory,
     QUOTAS,
+    recordToolInputHistory,
+    releaseQuota,
+    renameSession,
+    runMigrations,
+    saveAsset,
+    saveAsyncTtsTask,
+    saveDraft,
+    saveMessage,
+    savePreference,
+    saveUserProfile,
+    setActiveSessionId,
+    trackUsage,
+    updateAsyncTtsTask
 } from "../../src/db.ts";
 
 // Helper: create a fresh in-memory DB with migrations applied
@@ -92,6 +92,18 @@ describe("runMigrations", () => {
         assert.ok(tables.includes("sessions"));
         assert.ok(tables.includes("async_tts_tasks"));
 
+        const videoTaskColumns = db
+            .prepare("PRAGMA table_info(video_tasks)")
+            .all()
+            .map((r: any) => r.name);
+        assert.ok(videoTaskColumns.includes("provider_status_msg"));
+
+        const toolHistoryColumns = db
+            .prepare("PRAGMA table_info(tool_input_history)")
+            .all()
+            .map((r: any) => r.name);
+        assert.ok(toolHistoryColumns.includes("provider_status_msg"));
+
         const assetColumns = db
             .prepare("PRAGMA table_info(assets)")
             .all()
@@ -103,7 +115,7 @@ describe("runMigrations", () => {
             .prepare("SELECT version FROM schema_migrations ORDER BY version")
             .all()
             .map((r: any) => r.version);
-        assert.deepEqual(versions, [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13]);
+        assert.deepEqual(versions, [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14]);
 
         db.close();
     });
@@ -111,7 +123,7 @@ describe("runMigrations", () => {
     it("only runs pending migrations on a partially migrated database", () => {
         const dir = tempMigrationsDir({
             "001-first.sql": "CREATE TABLE t1 (id INTEGER PRIMARY KEY);",
-            "002-second.sql": "CREATE TABLE t2 (id INTEGER PRIMARY KEY);",
+            "002-second.sql": "CREATE TABLE t2 (id INTEGER PRIMARY KEY);"
         });
 
         const db = new Database(":memory:");
@@ -148,7 +160,7 @@ describe("runMigrations", () => {
     it("rolls back and throws on failed migration", () => {
         const dir = tempMigrationsDir({
             "001-good.sql": "CREATE TABLE good (id INTEGER PRIMARY KEY);",
-            "002-bad.sql": "THIS IS NOT VALID SQL AT ALL;",
+            "002-bad.sql": "THIS IS NOT VALID SQL AT ALL;"
         });
 
         const db = new Database(":memory:");
@@ -187,7 +199,7 @@ describe("runMigrations", () => {
 
     it("refuses unknown future schema versions", () => {
         const dir = tempMigrationsDir({
-            "001-first.sql": "CREATE TABLE t1 (id INTEGER PRIMARY KEY);",
+            "001-first.sql": "CREATE TABLE t1 (id INTEGER PRIMARY KEY);"
         });
         const db = new Database(":memory:");
         db.exec(`
@@ -197,7 +209,7 @@ describe("runMigrations", () => {
             );
         `);
         db.exec(
-            "INSERT INTO schema_migrations (version, applied_at) VALUES (999, datetime('now'))",
+            "INSERT INTO schema_migrations (version, applied_at) VALUES (999, datetime('now'))"
         );
         assert.throws(() => runMigrations(db, dir), /newer than code/);
         db.close();
@@ -212,7 +224,7 @@ describe("runMigrations", () => {
             .prepare("SELECT version FROM schema_migrations ORDER BY version")
             .all()
             .map((r: any) => r.version);
-        assert.deepEqual(versions, [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13]);
+        assert.deepEqual(versions, [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14]);
         assert.ok(getOrCreateActiveSession(db));
         db.close();
     });
@@ -234,7 +246,7 @@ describe("initDb", () => {
                 created_at TEXT NOT NULL DEFAULT (datetime('now')),
                 updated_at TEXT NOT NULL DEFAULT (datetime('now')),
                 archived_at TEXT
-            );`,
+            );`
         });
 
         const db = initDb(":memory:", dir);
@@ -291,7 +303,7 @@ describe("initDb", () => {
             if (file === "008-create-sessions.sql") continue; // Skip sessions migration
             copyFileSync(
                 join(import.meta.dirname, "..", "..", "migrations", file),
-                join(migrationsDir, file),
+                join(migrationsDir, file)
             );
         }
 
@@ -378,7 +390,7 @@ describe("User profile state", () => {
             interests: " Minecraft ",
             hates: " spam ",
             favorites: "redstone",
-            avatar: { type: "asset", value: "asset_123abc" },
+            avatar: { type: "asset", value: "asset_123abc" }
         });
 
         assert.equal(saved.username, "GamerKid");
@@ -392,7 +404,7 @@ describe("User profile state", () => {
             interests: "i".repeat(350),
             hates: "h".repeat(350),
             favorites: "f".repeat(350),
-            avatar: { type: "asset", value: "" },
+            avatar: { type: "asset", value: "" }
         });
 
         assert.equal(saved.username.length, 40);
@@ -407,32 +419,32 @@ describe("User profile state", () => {
             () =>
                 saveUserProfile(db, {
                     username: "x",
-                    avatar: { type: "asset", value: "data:image/png;base64,abc" },
+                    avatar: { type: "asset", value: "data:image/png;base64,abc" }
                 }),
-            /data URL not allowed/,
+            /data URL not allowed/
         );
         assert.throws(
             () =>
                 saveUserProfile(db, {
                     username: "x",
-                    avatar: { type: "asset", value: "/asset/123" },
+                    avatar: { type: "asset", value: "/asset/123" }
                 }),
-            /avatar asset id invalid/,
+            /avatar asset id invalid/
         );
         assert.throws(
             () =>
                 saveUserProfile(db, {
                     username: "x",
-                    avatar: { type: "emoji", value: "🦊" },
+                    avatar: { type: "emoji", value: "🦊" }
                 }),
-            /avatar type invalid/,
+            /avatar type invalid/
         );
     });
 
     it("delete resets profile to default", () => {
         saveUserProfile(db, {
             username: "GamerKid",
-            avatar: { type: "asset", value: "asset_123abc" },
+            avatar: { type: "asset", value: "asset_123abc" }
         });
         const reset = deleteUserProfile(db);
         assert.deepEqual(reset.avatar, { type: "asset", value: "" });
@@ -474,7 +486,7 @@ describe("Sessions", () => {
         archiveSession(db, "session-archive");
         assert.equal(
             listSessions(db).some((row) => row.id === "session-archive"),
-            false,
+            false
         );
     });
 });
@@ -491,7 +503,7 @@ describe("Draft CRUD", () => {
         const session = createSession(db);
         saveDraft(db, session.id, "chat", { text: "unfinished prompt" });
         assert.deepEqual(JSON.parse(getDraft(db, session.id, "chat")!.value_json), {
-            text: "unfinished prompt",
+            text: "unfinished prompt"
         });
         deleteDraft(db, session.id, "chat");
         assert.equal(getDraft(db, session.id, "chat"), null);
@@ -500,7 +512,7 @@ describe("Draft CRUD", () => {
     it("rejects raw asset data in drafts", () => {
         const session = createSession(db);
         assert.throws(() =>
-            saveDraft(db, session.id, "create", { image: "data:image/png;base64,aaaa" }),
+            saveDraft(db, session.id, "create", { image: "data:image/png;base64,aaaa" })
         );
     });
 });
@@ -522,11 +534,19 @@ describe("Tool input history", () => {
             input: { prompt: "cat", aspect_ratio: "16:9" },
             status: "succeeded",
             asset_id: "asset_123",
+            provider: { stage: "query", status_msg: "ok", task_id: "task-1", file_id: "file-1" }
         });
         const items = listToolInputHistory(db, session.id, { kind: "image" });
         assert.equal(items.length, 1);
         assert.equal(items[0].id, row.id);
-        assert.deepEqual(JSON.parse(items[0].input_json), { prompt: "cat", aspect_ratio: "16:9" });
+        assert.deepEqual(JSON.parse(items[0].input_json), {
+            prompt: "cat",
+            aspect_ratio: "16:9"
+        });
+        assert.equal(items[0].provider_stage, "query");
+        assert.equal(items[0].provider_status_msg, "ok");
+        assert.equal(items[0].provider_task_id, "task-1");
+        assert.equal(items[0].provider_file_id, "file-1");
         hideToolInputHistory(db, session.id, row.id);
         assert.equal(listToolInputHistory(db, session.id, { kind: "image" }).length, 0);
     });
@@ -606,11 +626,11 @@ describe("Message CRUD", () => {
     it("rejects raw asset data in messages", () => {
         assert.throws(
             () => saveMessage(db, "session-1", "tool", "data:audio/mp3;base64,aaaa"),
-            /raw asset data/,
+            /raw asset data/
         );
         assert.throws(
             () => assertNoRawAssetDataInMessage(`x;base64,${"a".repeat(4096)}`),
-            /raw base64 asset data/,
+            /raw base64 asset data/
         );
     });
 
@@ -635,12 +655,12 @@ describe("Message CRUD", () => {
         const snapshot = msgs.map((m) => ({
             session_id: m.session_id,
             role: m.role,
-            content: m.content,
+            content: m.content
         }));
         assert.deepEqual(snapshot, [
             { session_id: "snap-session", role: "user", content: "What's 2+2?" },
             { session_id: "snap-session", role: "assistant", content: "4" },
-            { session_id: "snap-session", role: "user", content: "Thanks!" },
+            { session_id: "snap-session", role: "user", content: "Thanks!" }
         ]);
     });
 });
@@ -745,7 +765,7 @@ describe("Quota Enforcement", () => {
         // Speech limit is 9000, 80% = 7200
         // Insert directly to set exact count
         db.prepare(
-            "INSERT INTO daily_usage (date, feature, count) VALUES (date('now'), 'speech', 7200)",
+            "INSERT INTO daily_usage (date, feature, count) VALUES (date('now'), 'speech', 7200)"
         ).run();
 
         const status = checkQuota(db, "speech");
@@ -756,7 +776,7 @@ describe("Quota Enforcement", () => {
 
     it("blocks at 100% limit", () => {
         db.prepare(
-            "INSERT INTO daily_usage (date, feature, count) VALUES (date('now'), 'speech', 9000)",
+            "INSERT INTO daily_usage (date, feature, count) VALUES (date('now'), 'speech', 9000)"
         ).run();
 
         const status = checkQuota(db, "speech");
@@ -767,7 +787,7 @@ describe("Quota Enforcement", () => {
 
     it("blocks when over limit", () => {
         db.prepare(
-            "INSERT INTO daily_usage (date, feature, count) VALUES (date('now'), 'speech', 9999)",
+            "INSERT INTO daily_usage (date, feature, count) VALUES (date('now'), 'speech', 9999)"
         ).run();
 
         const status = checkQuota(db, "speech");
@@ -779,7 +799,7 @@ describe("Quota Enforcement", () => {
     it("resets for a different date (daily reset)", () => {
         // Insert usage for yesterday
         db.prepare(
-            "INSERT INTO daily_usage (date, feature, count) VALUES (date('now', '-1 day'), 'speech', 9000)",
+            "INSERT INTO daily_usage (date, feature, count) VALUES (date('now', '-1 day'), 'speech', 9000)"
         ).run();
 
         const status = checkQuota(db, "speech");
@@ -789,7 +809,7 @@ describe("Quota Enforcement", () => {
 
     it("tracks multiple features independently for quotas", () => {
         db.prepare(
-            "INSERT INTO daily_usage (date, feature, count) VALUES (date('now'), 'image', 100)",
+            "INSERT INTO daily_usage (date, feature, count) VALUES (date('now'), 'image', 100)"
         ).run();
 
         const imageStatus = checkQuota(db, "image");
@@ -820,16 +840,16 @@ describe("Quota Enforcement", () => {
                 limit: status.limit,
                 remaining: status.remaining,
                 warning: status.warning,
-                blocked: status.blocked,
+                blocked: status.blocked
             },
-            { used: 2, limit: 100, remaining: 98, warning: false, blocked: false },
+            { used: 2, limit: 100, remaining: 98, warning: false, blocked: false }
         );
     });
 
     it("snapshot: quota status at warning threshold", () => {
         // Image limit = 100, 80% = 80
         db.prepare(
-            "INSERT INTO daily_usage (date, feature, count) VALUES (date('now'), 'image', 80)",
+            "INSERT INTO daily_usage (date, feature, count) VALUES (date('now'), 'image', 80)"
         ).run();
 
         const status = checkQuota(db, "image");
@@ -839,15 +859,15 @@ describe("Quota Enforcement", () => {
                 limit: status.limit,
                 remaining: status.remaining,
                 warning: status.warning,
-                blocked: status.blocked,
+                blocked: status.blocked
             },
-            { used: 80, limit: 100, remaining: 20, warning: true, blocked: false },
+            { used: 80, limit: 100, remaining: 20, warning: true, blocked: false }
         );
     });
 
     it("snapshot: quota status at blocked threshold", () => {
         db.prepare(
-            "INSERT INTO daily_usage (date, feature, count) VALUES (date('now'), 'music', 100)",
+            "INSERT INTO daily_usage (date, feature, count) VALUES (date('now'), 'music', 100)"
         ).run();
 
         const status = checkQuota(db, "music");
@@ -857,9 +877,9 @@ describe("Quota Enforcement", () => {
                 limit: status.limit,
                 remaining: status.remaining,
                 warning: status.warning,
-                blocked: status.blocked,
+                blocked: status.blocked
             },
-            { used: 100, limit: 100, remaining: 0, warning: true, blocked: true },
+            { used: 100, limit: 100, remaining: 0, warning: true, blocked: true }
         );
     });
 });
@@ -899,7 +919,7 @@ describe("consumeQuota", () => {
 
     it("does not increment count beyond limit", () => {
         db.prepare(
-            "INSERT INTO daily_usage (date, feature, count) VALUES (date('now'), 'image', 99)",
+            "INSERT INTO daily_usage (date, feature, count) VALUES (date('now'), 'image', 99)"
         ).run();
 
         assert.equal(consumeQuota(db, "image"), 100);
@@ -911,7 +931,7 @@ describe("consumeQuota", () => {
     it("does not increment any quota feature beyond its limit", () => {
         for (const [feature, limit] of Object.entries(QUOTAS)) {
             db.prepare(
-                "INSERT INTO daily_usage (date, feature, count) VALUES (date('now'), ?, ?)",
+                "INSERT INTO daily_usage (date, feature, count) VALUES (date('now'), ?, ?)"
             ).run(feature, limit);
 
             assert.equal(consumeQuota(db, feature), null, feature);
@@ -959,7 +979,7 @@ describe("consumeQuota", () => {
     it("rejects consumption when remaining quota is insufficient", () => {
         // Simulate existing usage: 97 used out of 100 limit (3 remaining)
         db.prepare(
-            "INSERT INTO daily_usage (date, feature, count) VALUES (date('now'), 'image', 97)",
+            "INSERT INTO daily_usage (date, feature, count) VALUES (date('now'), 'image', 97)"
         ).run();
         assert.equal(checkQuota(db, "image").used, 97);
 
@@ -998,7 +1018,7 @@ describe("saveAsset + getAssets + getAsset", () => {
             mime_type: "image/png",
             prompt: "a cute cat",
             tool_name: "generate_image",
-            size_bytes: 12345,
+            size_bytes: 12345
         });
         const assets = getAssets(db, "session-1");
         assert.equal(assets.length, 1);
@@ -1023,8 +1043,8 @@ describe("saveAsset + getAssets + getAsset", () => {
                 model: "music-2.6",
                 prompt: "boss fight",
                 lyrics_present: false,
-                is_instrumental: true,
-            }),
+                is_instrumental: true
+            })
         });
         const asset = getAsset(db, id)!;
         assert.equal(JSON.parse(asset.params_json!).model, "music-2.6");
@@ -1042,9 +1062,9 @@ describe("saveAsset + getAssets + getAsset", () => {
                     prompt: "hello",
                     tool_name: "text_to_speech",
                     size_bytes: 999,
-                    params_json: JSON.stringify({ raw: "data:audio/mp3;base64,aaaa" }),
+                    params_json: JSON.stringify({ raw: "data:audio/mp3;base64,aaaa" })
                 }),
-            /raw asset data/,
+            /raw asset data/
         );
     });
 
@@ -1058,7 +1078,7 @@ describe("saveAsset + getAssets + getAsset", () => {
             mime_type: "audio/mpeg",
             prompt: "upbeat tune",
             tool_name: "generate_music",
-            size_bytes: 98765,
+            size_bytes: 98765
         });
         const asset = getAsset(db, id);
         assert.notEqual(asset, undefined);
@@ -1077,7 +1097,7 @@ describe("saveAsset + getAssets + getAsset", () => {
             mime_type: "image/png",
             prompt: null,
             tool_name: "img",
-            size_bytes: 100,
+            size_bytes: 100
         });
         saveAsset(db, {
             id: id2,
@@ -1087,7 +1107,7 @@ describe("saveAsset + getAssets + getAsset", () => {
             mime_type: "image/png",
             prompt: null,
             tool_name: "img",
-            size_bytes: 200,
+            size_bytes: 200
         });
         const assetsA = getAssets(db, "A");
         const assetsB = getAssets(db, "B");
@@ -1111,7 +1131,7 @@ describe("saveAsset + getAssets + getAsset", () => {
             prompt: null,
             tool_name: "tts",
             size_bytes: 50,
-            created_at: now - 10,
+            created_at: now - 10
         });
         saveAsset(db, {
             id: id2,
@@ -1122,7 +1142,7 @@ describe("saveAsset + getAssets + getAsset", () => {
             prompt: null,
             tool_name: "tts",
             size_bytes: 60,
-            created_at: now,
+            created_at: now
         });
         const assets = getAssets(db, "order-test");
         assert.equal(assets.length, 2);
@@ -1139,7 +1159,7 @@ describe("Mutation-strength DB invariants", () => {
         renameSession(db, session.id, "Manual Name");
         assert.throws(
             () => autoNameSession(db, session.id, "Auto Name"),
-            /session not auto-nameable/,
+            /session not auto-nameable/
         );
         db.close();
     });
@@ -1147,7 +1167,10 @@ describe("Mutation-strength DB invariants", () => {
     it("rejects invalid draft kinds", () => {
         const db = freshDb();
         const session = createSession(db);
-        assert.throws(() => saveDraft(db, session.id, "bad", { text: "x" }), /invalid draft kind/);
+        assert.throws(
+            () => saveDraft(db, session.id, "bad", { text: "x" }),
+            /invalid draft kind/
+        );
         db.close();
     });
 
@@ -1159,9 +1182,9 @@ describe("Mutation-strength DB invariants", () => {
             ["generate_lyrics", "lyrics"],
             ["generate_music_cover", "cover"],
             ["text_to_speech", "voice"],
-            ["generate_long_speech", "narration"],
+            ["generate_long_speech", "voice"],
             ["web_search", "search"],
-            ["unknown", "other"],
+            ["unknown", "other"]
         ] as const;
         for (const [tool_name, kind] of cases) {
             const db = freshDb();
@@ -1171,11 +1194,11 @@ describe("Mutation-strength DB invariants", () => {
                 origin: "agent",
                 tool_name,
                 input: { prompt: tool_name },
-                status: "succeeded",
+                status: "succeeded"
             });
             assert.equal(
                 listToolInputHistory(db, session.id, { kind }).at(0)?.tool_name,
-                tool_name,
+                tool_name
             );
             db.close();
         }
@@ -1188,9 +1211,9 @@ describe("Mutation-strength DB invariants", () => {
                     origin: "agent",
                     tool_name: "generate_image",
                     input: {},
-                    status: "done",
+                    status: "done"
                 }),
-            /invalid history status/,
+            /invalid history status/
         );
         db.close();
     });
@@ -1204,7 +1227,7 @@ describe("Mutation-strength DB invariants", () => {
                 origin: "agent",
                 tool_name: "web_search",
                 input: { query: String(i) },
-                status: "succeeded",
+                status: "succeeded"
             });
         }
         assert.equal(listToolInputHistory(db, session.id, { limit: 999 }).length, 50);
@@ -1225,7 +1248,7 @@ describe("Mutation-strength DB invariants", () => {
     it("raw asset guard catches compact base64 payloads", () => {
         assert.throws(
             () => assertNoRawAssetDataInMessage(`data:image/png;base64,${"A".repeat(4096)}`),
-            /raw asset data/,
+            /raw asset data/
         );
     });
 
@@ -1243,12 +1266,12 @@ describe("Mutation-strength DB invariants", () => {
             asset_id: null,
             error: null,
             created_at: now,
-            updated_at: now,
+            updated_at: now
         });
         updateAsyncTtsTask(db, "tts_1", {
             status: "succeeded",
             file_id: "file-1",
-            asset_id: "asset_1",
+            asset_id: "asset_1"
         });
         const tasks = listAsyncTtsTasks(db, "session-1");
         assert.equal(tasks.length, 1);

@@ -1,19 +1,24 @@
 /**
+ *                 ✝
+ *               ╭─┴─╮
+ *             ╭─╯ ☣ ╰─╮
+ *             │   🐛  │
+ *         ╭───╯       ╰───╮
+ *         │    🙏   🙏    │
+ *         ╰──────╥─╥──────╯
+ *                ║ ║
+ *              ! ║ ║ !
  *
- *      .  *  .
- *    *   \|/   *   trouble maker
- *  .  ----+----  .  hunts bugs that lurk in code
- *    *   /|\   *   null derefs, races, wrong logic
- *      .  *  .
+ *      sparks fly where assumptions sleep
  *
- * ╔═════════════════════════════════════════╗
- * ║ Pass 1: minimax/M2.7 -> analyze (smart) ║
- * ║ Pass 2: minimax/M2.5 -> fix (coder)     ║
- * ╚═════════════════════════════════════════╝
+ * ╔════════════════════════════════════════════╗
+ * ║ Pass 1: minimax/M3 -> accuse               ║
+ * ║ Pass 2: minimax/M2.5 -> repair             ║
+ * ╚════════════════════════════════════════════╝
  */
 import { readdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { prepareExistingPr, runPi, readFindings } from "./lib.ts";
+import { prepareExistingPr, readFindings, runPi } from "./lib.ts";
 
 const root = join(import.meta.dirname, "../..");
 
@@ -34,7 +39,7 @@ const existingPr = prepareExistingPr("trouble-maker", "agent/trouble-maker-");
 
 if (existingPr) {
     console.log(
-        `\n=== Repair existing PR #${existingPr.number} (minimax/MiniMax-M2.5-highspeed) ===\n`,
+        `\n=== Repair existing PR #${existingPr.number} (minimax/MiniMax-M2.5-highspeed) ===\n`
     );
     runPi(
         "code",
@@ -59,15 +64,15 @@ Run relevant tests. Write repair summary/update notes to /tmp/pi-agent-pr-body.m
 If janitor asks for PR body/metadata changes, write the complete replacement PR body to /tmp/pi-agent-pr-update-body.md.
 Use /tmp/pi-agent-pr-body.md only for run summary/update notes.
 
-No talk. Repair. Test. Write notes. Done.`,
+No talk. Repair. Test. Write notes. Done.`
         ],
-        0,
+        0
     );
     try {
         writeFileSync(
             "/tmp/pi-agent-pr-body.md",
             `trouble-maker: addressed janitor feedback for PR #${existingPr.number}.`,
-            { flag: "wx" },
+            { flag: "wx" }
         );
     } catch {
         /* already written */
@@ -100,9 +105,9 @@ Write /tmp/pi-agent-findings.md NOW using the write tool.
 If no bugs: write exactly "NO_ISSUES_FOUND" and nothing else.
 If bugs: write one line per bug: "FILE:LINE — DESCRIPTION — FIX"
 
-Do not explain. Do not summarize. Just write the file.`,
+Do not explain. Do not summarize. Just write the file.`
     ],
-    0,
+    0
 );
 
 const findings = readFindings("trouble-maker");
@@ -134,13 +139,15 @@ runPi(
 ${findings}
 
 Fix each one. Add tests. Only touch src/ and test/. Never touch .system/.
-Write PR body to /tmp/pi-agent-pr-body.md.`,
+Write PR body to /tmp/pi-agent-pr-body.md.`
     ],
-    0,
+    0
 );
 
 try {
-    writeFileSync("/tmp/pi-agent-pr-body.md", "trouble-maker: see commit.", { flag: "wx" });
+    writeFileSync("/tmp/pi-agent-pr-body.md", "trouble-maker: see commit.", {
+        flag: "wx"
+    });
 } catch {
     /* already written */
 }

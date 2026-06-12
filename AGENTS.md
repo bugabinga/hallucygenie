@@ -8,6 +8,7 @@ Agent instructions only. Do not mirror project state here.
 - Use `/skill:tiger` for style.
 - Use `/skill:minimax` when touching MiniMax APIs.
 - Use `just --list`; `justfile` is command source of truth.
+- Agent Patrol docs: `AGENT_PATROL.md`.
 - Release work must use `.pi/prompts/release.md`; final tag push goes through `just release`.
 
 ## Rules
@@ -36,4 +37,5 @@ Agent instructions only. Do not mirror project state here.
 - Specs: `.system/specs/`.
 - Issues: `.system/issues/`.
 - Commands: `justfile`.
+- Agent Patrol: `AGENT_PATROL.md`.
 - Tests: `test/`, `e2e/`.

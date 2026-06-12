@@ -1,21 +1,24 @@
 /**
+ *                🪓
+ *            ━━━━━╋━━━━━
+ *                 ┃
+ *             ╭───┻───╮
+ *          ✹╭─╯ 𝙎𝙇𝙊𝙋! ╰─╮✹
+ *          ✸│   𝙋𝙊𝙒!!   │✸
+ *          ✹╰─╮  ▛▜▟  ╭─╯✹
+ *             ╰───┬───╯
+ *                 ✂
  *
- *       /|
- *      / |        slop chopper
- *     /  | <-axe  chops dead code, waste, cruft
- *    /___|        leaves only what earns its keep
- *     !  !        no mercy for slop
- *     !  !
- *     L_!
+ *      lean branches drink the morning light
  *
- * ╔═════════════════════════════════════════╗
- * ║ Pass 1: minimax/M2.7 -> analyze (smart) ║
- * ║ Pass 2: minimax/M2.5 -> chop (coder)    ║
- * ╚═════════════════════════════════════════╝
+ * ╔════════════════════════════════════════════╗
+ * ║ Pass 1: minimax/M3 -> mark                 ║
+ * ║ Pass 2: minimax/M2.5 -> chop               ║
+ * ╚════════════════════════════════════════════╝
  */
 import { writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { prepareExistingPr, runPi, readFindings } from "./lib.ts";
+import { prepareExistingPr, readFindings, runPi } from "./lib.ts";
 
 const root = join(import.meta.dirname, "../..");
 
@@ -25,7 +28,7 @@ const existingPr = prepareExistingPr("slop-chopper", "agent/slop-chopper-");
 
 if (existingPr) {
     console.log(
-        `\n=== Repair existing PR #${existingPr.number} (minimax/MiniMax-M2.5-highspeed) ===\n`,
+        `\n=== Repair existing PR #${existingPr.number} (minimax/MiniMax-M2.5-highspeed) ===\n`
     );
     runPi(
         "code",
@@ -50,15 +53,15 @@ Run relevant tests. Write repair summary/update notes to /tmp/pi-agent-pr-body.m
 If janitor asks for PR body/metadata changes, write the complete replacement PR body to /tmp/pi-agent-pr-update-body.md.
 Use /tmp/pi-agent-pr-body.md only for run summary/update notes.
 
-No talk. Repair. Test. Write notes. Done.`,
+No talk. Repair. Test. Write notes. Done.`
         ],
-        timeout,
+        timeout
     );
     try {
         writeFileSync(
             "/tmp/pi-agent-pr-body.md",
             `slop-chopper: addressed janitor feedback for PR #${existingPr.number}.`,
-            { flag: "wx" },
+            { flag: "wx" }
         );
     } catch {
         /* already written */
@@ -105,9 +108,9 @@ Write findings to /tmp/pi-agent-findings.md.
 NO SLOP -> one word: NO_SLOP_FOUND
 SLOP -> per hit: file, line-range, kind, action. No intro. No summary.
 
-No talk. No modify. Read. Write file. Done.`,
+No talk. No modify. Read. Write file. Done.`
     ],
-    timeout,
+    timeout
 );
 
 const findings = readFindings("slop-chopper");
@@ -144,13 +147,15 @@ Remove every slop listed. Run "just fix" && "just ready" after.
 Only touch src/. Never touch .system/, test/, config.
 Write PR body to /tmp/pi-agent-pr-body.md.
 
-No talk. Read slop. Remove. Build. Test. Write PR body. Done.`,
+No talk. Read slop. Remove. Build. Test. Write PR body. Done.`
     ],
-    timeout,
+    timeout
 );
 
 try {
-    writeFileSync("/tmp/pi-agent-pr-body.md", "slop-chopper: see commit.", { flag: "wx" });
+    writeFileSync("/tmp/pi-agent-pr-body.md", "slop-chopper: see commit.", {
+        flag: "wx"
+    });
 } catch {
     /* already written */
 }

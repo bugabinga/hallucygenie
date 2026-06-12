@@ -1,43 +1,43 @@
 // HallucyGenie -- Server tests
 
-import { describe, it, after, before, beforeEach } from "node:test";
 import assert from "node:assert/strict";
-import {
-    handleRequest,
-    handleChat,
-    shutdown,
-    initDatabase,
-    getDb,
-    isShuttingDown,
-    resetStateForTesting,
-    validateSessionId,
-    resolveSessionId,
-    parseExplicitToolDirective,
-    sanitizeAssistantMediaMarkup,
-    parseLimitOffset,
-} from "../../src/server.ts";
-import { MINIMAX_MODEL } from "../../src/agent.ts";
-import { existsSync, rmSync, mkdirSync } from "node:fs";
-import { join } from "node:path";
+import { existsSync, mkdirSync, rmSync } from "node:fs";
 import http from "node:http";
+import { join } from "node:path";
+import { after, before, beforeEach, describe, it } from "node:test";
+import { MINIMAX_MODEL } from "../../src/agent.ts";
 import {
-    getMessages,
-    getAssets,
-    getUsageToday,
-    saveDraft,
-    getDraft,
     createSession,
+    getAssets,
+    getDraft,
+    getMessages,
+    getUsageToday,
+    listAsyncTtsTasks,
     listToolInputHistory,
     listVideoTasks,
-    listAsyncTtsTasks,
+    saveDraft
 } from "../../src/db.ts";
 import {
-    trackUsage,
-    saveMessage,
     saveAsset,
-    setActiveSessionId,
+    saveMessage,
     saveUserProfile,
+    setActiveSessionId,
+    trackUsage
 } from "../../src/db.ts";
+import {
+    getDb,
+    handleChat,
+    handleRequest,
+    initDatabase,
+    isShuttingDown,
+    parseExplicitToolDirective,
+    parseLimitOffset,
+    resetStateForTesting,
+    resolveSessionId,
+    sanitizeAssistantMediaMarkup,
+    shutdown,
+    validateSessionId
+} from "../../src/server.ts";
 
 // Capture the real (native) fetch at module load. Use getOwnPropertyDescriptor
 // so we reliably get the native fetch even if this file is loaded in a worker
@@ -53,11 +53,11 @@ function makeRequest(
     method: string,
     path: string,
     body?: unknown,
-    extraHeaders?: Record<string, string>,
+    extraHeaders?: Record<string, string>
 ): Request {
     const init: RequestInit = {
         method,
-        headers: {} as Record<string, string>,
+        headers: {} as Record<string, string>
     };
     if (body !== undefined) {
         init.body = JSON.stringify(body);
@@ -65,8 +65,8 @@ function makeRequest(
     }
     // Add X-Session-Id for /api/* routes (except health)
     if (path.startsWith("/api/") && path !== "/api/health") {
-        (init.headers as Record<string, string>)["X-Session-Id"] =
-            extraHeaders?.["X-Session-Id"] ?? "test-session-123";
+        (init.headers as Record<string, string>)["X-Session-Id"] = extraHeaders?.["X-Session-Id"]
+            ?? "test-session-123";
     }
     // Add any extra headers
     if (extraHeaders) {
@@ -143,42 +143,44 @@ after(() => {
 
 function anthropicTextSse(textChunks: string[]): string[] {
     const events: string[] = [
-        'event: message_start\ndata: {"type":"message_start","message":{}}\n\n',
+        "event: message_start\ndata: {\"type\":\"message_start\",\"message\":{}}\n\n"
     ];
     for (let i = 0; i < textChunks.length; i++) {
         events.push(
-            'event: content_block_start\ndata: {"type":"content_block_start","index":' +
-                String(i) +
-                ',"content_block":{"type":"text","text":""}}\n\n',
+            "event: content_block_start\ndata: {\"type\":\"content_block_start\",\"index\":"
+                + String(i)
+                + ",\"content_block\":{\"type\":\"text\",\"text\":\"\"}}\n\n"
         );
         events.push(
-            'event: content_block_delta\ndata: {"type":"content_block_delta","index":' +
-                String(i) +
-                ',"delta":{"type":"text_delta","text":' +
-                JSON.stringify(textChunks[i]) +
-                "}}\n\n",
+            "event: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":"
+                + String(i)
+                + ",\"delta\":{\"type\":\"text_delta\",\"text\":"
+                + JSON.stringify(textChunks[i])
+                + "}}\n\n"
         );
         events.push(
-            'event: content_block_stop\ndata: {"type":"content_block_stop","index":' +
-                String(i) +
-                "}\n\n",
+            "event: content_block_stop\ndata: {\"type\":\"content_block_stop\",\"index\":"
+                + String(i)
+                + "}\n\n"
         );
     }
     events.push(
-        'event: message_delta\ndata: {"type":"message_delta","delta":{"stop_reason":"end_turn"},"usage":{}}\n\n',
+        "event: message_delta\ndata: {\"type\":\"message_delta\",\"delta\":{\"stop_reason\":\"end_turn\"},\"usage\":{}}\n\n"
     );
-    events.push('event: message_stop\ndata: {"type":"message_stop"}\n\n');
+    events.push("event: message_stop\ndata: {\"type\":\"message_stop\"}\n\n");
     return events;
 }
 
 function anthropicToolUseSse(toolId: string, toolName: string, inputJson: string): string[] {
     return [
-        'event: message_start\ndata: {"type":"message_start","message":{}}\n\n',
+        "event: message_start\ndata: {\"type\":\"message_start\",\"message\":{}}\n\n",
         `event: content_block_start\ndata: {"type":"content_block_start","index":0,"content_block":{"type":"tool_use","id":"${toolId}","name":"${toolName}","input":{}}}\n\n`,
-        `event: content_block_delta\ndata: {"type":"content_block_delta","index":0,"delta":{"type":"input_json_delta","partial_json":${JSON.stringify(inputJson)}}}\n\n`,
-        'event: content_block_stop\ndata: {"type":"content_block_stop","index":0}\n\n',
-        'event: message_delta\ndata: {"type":"message_delta","delta":{"stop_reason":"tool_use"},"usage":{}}\n\n',
-        'event: message_stop\ndata: {"type":"message_stop"}\n\n',
+        `event: content_block_delta\ndata: {"type":"content_block_delta","index":0,"delta":{"type":"input_json_delta","partial_json":${
+            JSON.stringify(inputJson)
+        }}}\n\n`,
+        "event: content_block_stop\ndata: {\"type\":\"content_block_stop\",\"index\":0}\n\n",
+        "event: message_delta\ndata: {\"type\":\"message_delta\",\"delta\":{\"stop_reason\":\"tool_use\"},\"usage\":{}}\n\n",
+        "event: message_stop\ndata: {\"type\":\"message_stop\"}\n\n"
     ];
 }
 
@@ -190,14 +192,14 @@ function makeAnthropicStream(events: string[]): ReadableStream<Uint8Array> {
                 controller.enqueue(enc.encode(e));
             }
             controller.close();
-        },
+        }
     });
 }
 
 function anthropicResponse(events: string[]): Response {
     return new Response(makeAnthropicStream(events), {
         status: 200,
-        headers: { "Content-Type": "text/event-stream" },
+        headers: { "Content-Type": "text/event-stream" }
     });
 }
 
@@ -206,62 +208,62 @@ function anthropicResponse(events: string[]): Response {
 describe("Explicit Create directives", () => {
     it("parses image directive with tool params", () => {
         const directive = parseExplicitToolDirective(
-            "Use generate_image with prompt: coder with big muscles coding a girly app\nTool params: aspect_ratio=16:9",
+            "Use generate_image with prompt: coder with big muscles coding a girly app\nTool params: aspect_ratio=16:9"
         );
         assert.deepEqual(directive, {
             name: "generate_image",
             args: { aspect_ratio: "16:9", prompt: "coder with big muscles coding a girly app" },
-            prompt: "coder with big muscles coding a girly app",
+            prompt: "coder with big muscles coding a girly app"
         });
     });
 
     it("parses TTS directive text and numeric params", () => {
         const directive = parseExplicitToolDirective(
-            "Use text_to_speech with text: hello gamer\nTool params: speed=1.2, pitch=-2",
+            "Use text_to_speech with text: hello gamer\nTool params: speed=1.2, pitch=-2"
         );
         assert.deepEqual(directive, {
             name: "text_to_speech",
             args: { speed: 1.2, pitch: -2, text: "hello gamer" },
-            prompt: "hello gamer",
+            prompt: "hello gamer"
         });
     });
 
     it("parses music lyrics but ignores stale instrumental param", () => {
         const directive = parseExplicitToolDirective(
-            "Use generate_music with prompt: boss fight\nTool params: lyrics=boom boom, instrumental=true",
+            "Use generate_music with prompt: boss fight\nTool params: lyrics=boom boom, instrumental=true"
         );
         assert.deepEqual(directive, {
             name: "generate_music",
             args: { lyrics: "boom boom", prompt: "boss fight" },
-            prompt: "boss fight",
+            prompt: "boss fight"
         });
     });
 
     it("parses generate_lyrics directive with lyrics field as prompt alias", () => {
         const directive = parseExplicitToolDirective(
-            "Use generate_lyrics with lyrics: write me a song about cats",
+            "Use generate_lyrics with lyrics: write me a song about cats"
         );
         assert.deepEqual(directive, {
             name: "generate_lyrics",
             args: { prompt: "write me a song about cats" },
-            prompt: "write me a song about cats",
+            prompt: "write me a song about cats"
         });
     });
 
     it("parses generate_lyrics directive with prompt field", () => {
         const directive = parseExplicitToolDirective(
-            "Use generate_lyrics with prompt: write me a song about cats",
+            "Use generate_lyrics with prompt: write me a song about cats"
         );
         assert.deepEqual(directive, {
             name: "generate_lyrics",
             args: { prompt: "write me a song about cats" },
-            prompt: "write me a song about cats",
+            prompt: "write me a song about cats"
         });
     });
 
     it("parses generate_lyrics directive with title, mode, and edit lyrics", () => {
         const directive = parseExplicitToolDirective(
-            "Use generate_lyrics with lyrics: sing a happy song\nTool params: title=Joy,title=Happy Day,mode=edit,lyrics=old words",
+            "Use generate_lyrics with lyrics: sing a happy song\nTool params: title=Joy,title=Happy Day,mode=edit,lyrics=old words"
         );
         assert.deepEqual(directive, {
             name: "generate_lyrics",
@@ -269,23 +271,23 @@ describe("Explicit Create directives", () => {
                 title: "Happy Day",
                 mode: "edit",
                 lyrics: "old words",
-                prompt: "sing a happy song",
+                prompt: "sing a happy song"
             },
-            prompt: "sing a happy song",
+            prompt: "sing a happy song"
         });
     });
 
     it("parses analyze image directive with prompt param", () => {
         const directive = parseExplicitToolDirective(
-            "Use analyze_image with image_url: https://example.com/cat.png\nTool params: prompt=Tell me one thing you see",
+            "Use analyze_image with image_url: https://example.com/cat.png\nTool params: prompt=Tell me one thing you see"
         );
         assert.deepEqual(directive, {
             name: "analyze_image",
             args: {
                 image_url: "https://example.com/cat.png",
-                prompt: "Tell me one thing you see",
+                prompt: "Tell me one thing you see"
             },
-            prompt: "Tell me one thing you see",
+            prompt: "Tell me one thing you see"
         });
     });
 
@@ -296,13 +298,13 @@ describe("Explicit Create directives", () => {
         const body = new FormData();
         body.set(
             "image",
-            new File([new Uint8Array([137, 80, 78, 71])], "tiny.png", { type: "image/png" }),
+            new File([new Uint8Array([137, 80, 78, 71])], "tiny.png", { type: "image/png" })
         );
         const resp = await handleRequest(
-            new Request("http://localhost/api/analyze-image", { method: "POST", body }),
+            new Request("http://localhost/api/analyze-image", { method: "POST", body })
         );
         assert.equal(resp.status, 200);
-        const json = (await readJson(resp)) as { assetId: string; assetUrl: string };
+        const json = (await readJson(resp)) as { assetId: string; assetUrl: string; };
         assert.match(json.assetId, /^asset_[0-9a-f-]+$/i);
         assert.equal(json.assetUrl, `/asset/${json.assetId}`);
         const asset = getAssets(db, session.id).find((item) => item.id === json.assetId);
@@ -317,13 +319,13 @@ describe("Explicit Create directives", () => {
         const body = new FormData();
         body.set(
             "image",
-            new File([new Uint8Array([71, 73, 70, 56])], "anim.gif", { type: "image/gif" }),
+            new File([new Uint8Array([71, 73, 70, 56])], "anim.gif", { type: "image/gif" })
         );
         const resp = await handleRequest(
-            new Request("http://localhost/api/analyze-image", { method: "POST", body }),
+            new Request("http://localhost/api/analyze-image", { method: "POST", body })
         );
         assert.equal(resp.status, 200);
-        const json = (await readJson(resp)) as { assetId: string; assetUrl: string };
+        const json = (await readJson(resp)) as { assetId: string; assetUrl: string; };
         assert.match(json.assetId, /^asset_[0-9a-f-]+$/i);
         const asset = getAssets(db, session.id).find((item) => item.id === json.assetId);
         assert.equal(asset?.tool_name, "analyze_image");
@@ -332,12 +334,15 @@ describe("Explicit Create directives", () => {
 
     it("rejects unsupported local analyze image files", async () => {
         const body = new FormData();
-        body.set("image", new File([new Uint8Array([1, 2, 3])], "bad.bmp", { type: "image/bmp" }));
+        body.set(
+            "image",
+            new File([new Uint8Array([1, 2, 3])], "bad.bmp", { type: "image/bmp" })
+        );
         const resp = await handleRequest(
-            new Request("http://localhost/api/analyze-image", { method: "POST", body }),
+            new Request("http://localhost/api/analyze-image", { method: "POST", body })
         );
         assert.equal(resp.status, 400);
-        const json = (await readJson(resp)) as { error: string };
+        const json = (await readJson(resp)) as { error: string; };
         assert.match(json.error, /PNG, JPG, GIF, or WebP/);
     });
 
@@ -350,18 +355,18 @@ describe("Explicit Create directives", () => {
         const body = new FormData();
         body.set(
             "image",
-            new File([new Uint8Array([137, 80, 78, 71])], "tiny.png", { type: "image/png" }),
+            new File([new Uint8Array([137, 80, 78, 71])], "tiny.png", { type: "image/png" })
         );
         const uploadResp = await handleRequest(
-            new Request("http://localhost/api/analyze-image", { method: "POST", body }),
+            new Request("http://localhost/api/analyze-image", { method: "POST", body })
         );
-        const upload = (await readJson(uploadResp)) as { assetUrl: string };
+        const upload = (await readJson(uploadResp)) as { assetUrl: string; };
         let vlmPayload = "";
         globalThis.fetch = async (_url: string | URL | Request, init?: RequestInit) => {
             vlmPayload = String(init?.body ?? "");
             return new Response(JSON.stringify({ content: "local image looks safe" }), {
                 status: 200,
-                headers: { "Content-Type": "application/json" },
+                headers: { "Content-Type": "application/json" }
             });
         };
 
@@ -374,11 +379,12 @@ describe("Explicit Create directives", () => {
                         messages: [
                             {
                                 role: "user",
-                                content: `Use analyze_image with image_url: ${upload.assetUrl}\nTool params: prompt=What is this?`,
-                            },
-                        ],
-                    }),
-                }),
+                                content:
+                                    `Use analyze_image with image_url: ${upload.assetUrl}\nTool params: prompt=What is this?`
+                            }
+                        ]
+                    })
+                })
             );
             const sse = await readBody(chatResp);
             assert.match(vlmPayload, /data:image\/png;base64,/);
@@ -397,7 +403,7 @@ describe("Explicit Create directives", () => {
 
     it("ignores MiniMax params outside the explicit kid-safe allowlist", () => {
         const image = parseExplicitToolDirective(
-            "Use generate_image with prompt: cat\nTool params: aspect_ratio=1:1, n=2, seed=7, width=1024, height=1024, prompt_optimizer=true, response_format=base64, subject_reference=https://example.com/cat.png",
+            "Use generate_image with prompt: cat\nTool params: aspect_ratio=1:1, n=2, seed=7, width=1024, height=1024, prompt_optimizer=true, response_format=base64, subject_reference=https://example.com/cat.png"
         );
         assert.deepEqual(image?.args, {
             prompt: "cat",
@@ -406,22 +412,22 @@ describe("Explicit Create directives", () => {
             seed: 7,
             width: 1024,
             height: 1024,
-            prompt_optimizer: true,
+            prompt_optimizer: true
         });
 
         const tts = parseExplicitToolDirective(
-            "Use text_to_speech with text: hello\nTool params: voice_id=English_expressive_narrator, speed=1.1, volume=2, pitch=1, emotion=happy, language_boost=English, subtitle_enable=true, output_format=wav, stream=true",
+            "Use text_to_speech with text: hello\nTool params: voice_id=English_expressive_narrator, speed=1.1, volume=2, pitch=1, emotion=happy, language_boost=English, subtitle_enable=true, output_format=wav, stream=true"
         );
         assert.deepEqual(tts?.args, {
             text: "hello",
             voice_id: "English_expressive_narrator",
             speed: 1.1,
             volume: 2,
-            pitch: 1,
+            pitch: 1
         });
 
         const music = parseExplicitToolDirective(
-            "Use generate_music with prompt: boss fight\nTool params: lyrics=boom boom, is_instrumental=false, lyrics_optimizer=true, audio_base64=AAAA, output_format=wav, stream=true",
+            "Use generate_music with prompt: boss fight\nTool params: lyrics=boom boom, is_instrumental=false, lyrics_optimizer=true, audio_base64=AAAA, output_format=wav, stream=true"
         );
         assert.deepEqual(music?.args, { prompt: "boss fight", lyrics: "boom boom" });
     });
@@ -429,13 +435,13 @@ describe("Explicit Create directives", () => {
     it("sanitizes assistant media markup before history replay", () => {
         assert.equal(
             sanitizeAssistantMediaMarkup(
-                "Here's your image:\n\n![cat](https://hailuo-image.example/image_inference_output/cat.jpeg)",
+                "Here's your image:\n\n![cat](https://hailuo-image.example/image_inference_output/cat.jpeg)"
             ),
-            "Generated media is shown in the tool card.",
+            "Generated media is shown in the tool card."
         );
         assert.equal(
-            sanitizeAssistantMediaMarkup('Look <img src="https://example.com/cat.png"> cool'),
-            "Look  cool",
+            sanitizeAssistantMediaMarkup("Look <img src=\"https://example.com/cat.png\"> cool"),
+            "Look  cool"
         );
     });
 });
@@ -463,110 +469,110 @@ describe("POST /api/chat validation", () => {
         const req = new Request("http://localhost/api/chat", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: "not json{{{",
+            body: "not json{{{"
         });
         const resp = await handleChat(req, "test-key");
         assert.equal(resp.status, 400);
-        const body = (await readJson(resp)) as { error: string };
+        const body = (await readJson(resp)) as { error: string; };
         assert.ok(body.error.includes("Invalid JSON"));
     });
 
     it("rejects missing messages field", async () => {
         const resp = await handleChat(makeRequest("POST", "/api/chat", {}), "test-key");
         assert.equal(resp.status, 400);
-        const body = (await readJson(resp)) as { error: string };
+        const body = (await readJson(resp)) as { error: string; };
         assert.ok(body.error.includes("messages"));
     });
 
     it("rejects non-array messages", async () => {
         const resp = await handleChat(
             makeRequest("POST", "/api/chat", { messages: "not array" }),
-            "test-key",
+            "test-key"
         );
         assert.equal(resp.status, 400);
-        const body = (await readJson(resp)) as { error: string };
+        const body = (await readJson(resp)) as { error: string; };
         assert.ok(body.error.includes("array"));
     });
 
     it("rejects empty messages array", async () => {
         const resp = await handleChat(
             makeRequest("POST", "/api/chat", { messages: [] }),
-            "test-key",
+            "test-key"
         );
         assert.equal(resp.status, 400);
-        const body = (await readJson(resp)) as { error: string };
+        const body = (await readJson(resp)) as { error: string; };
         assert.ok(body.error.includes("empty"));
     });
 
     it("rejects message with missing role", async () => {
         const resp = await handleChat(
             makeRequest("POST", "/api/chat", {
-                messages: [{ content: "hi" }],
+                messages: [{ content: "hi" }]
             }),
-            "test-key",
+            "test-key"
         );
         assert.equal(resp.status, 400);
-        const body = (await readJson(resp)) as { error: string };
+        const body = (await readJson(resp)) as { error: string; };
         assert.ok(body.error.includes("role"));
     });
 
     it("rejects message with missing content", async () => {
         const resp = await handleChat(
             makeRequest("POST", "/api/chat", {
-                messages: [{ role: "user" }],
+                messages: [{ role: "user" }]
             }),
-            "test-key",
+            "test-key"
         );
         assert.equal(resp.status, 400);
-        const body = (await readJson(resp)) as { error: string };
+        const body = (await readJson(resp)) as { error: string; };
         assert.ok(body.error.includes("content"));
     });
 
     it("rejects message with wrong role type", async () => {
         const resp = await handleChat(
             makeRequest("POST", "/api/chat", {
-                messages: [{ role: 42, content: "hi" }],
+                messages: [{ role: 42, content: "hi" }]
             }),
-            "test-key",
+            "test-key"
         );
         assert.equal(resp.status, 400);
-        const body = (await readJson(resp)) as { error: string };
+        const body = (await readJson(resp)) as { error: string; };
         assert.ok(body.error.includes("role"));
     });
 
     it("rejects message with wrong content type", async () => {
         const resp = await handleChat(
             makeRequest("POST", "/api/chat", {
-                messages: [{ role: "user", content: 42 }],
+                messages: [{ role: "user", content: 42 }]
             }),
-            "test-key",
+            "test-key"
         );
         assert.equal(resp.status, 400);
-        const body = (await readJson(resp)) as { error: string };
+        const body = (await readJson(resp)) as { error: string; };
         assert.ok(body.error.includes("content"));
     });
 
     it("rejects message that is null", async () => {
         const resp = await handleChat(
             makeRequest("POST", "/api/chat", {
-                messages: [null],
+                messages: [null]
             }),
-            "test-key",
+            "test-key"
         );
         assert.equal(resp.status, 400);
-        const body = (await readJson(resp)) as { error: string };
+        const body = (await readJson(resp)) as { error: string; };
         assert.ok(body.error.includes("must be an object"));
     });
 
     it("rejects message that is a string", async () => {
         const resp = await handleChat(
             makeRequest("POST", "/api/chat", {
-                messages: ["not an object"],
+                messages: ["not an object"]
             }),
-            "test-key",
+            "test-key"
         );
         assert.equal(resp.status, 400);
-        const body = (await readJson(resp)) as { error: string };
+        const body = (await readJson(resp)) as { error: string; };
         assert.ok(body.error.includes("must be an object"));
     });
 
@@ -574,11 +580,11 @@ describe("POST /api/chat validation", () => {
         const req = new Request("http://localhost/api/chat", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: "null",
+            body: "null"
         });
         const resp = await handleChat(req, "test-key");
         assert.equal(resp.status, 400);
-        const body = (await readJson(resp)) as { error: string };
+        const body = (await readJson(resp)) as { error: string; };
         assert.ok(body.error.includes("JSON object"));
     });
 });
@@ -589,7 +595,7 @@ describe("404 handling", () => {
     it("returns 404 for unknown routes", async () => {
         const resp = await handleRequest(makeRequest("GET", "/unknown/route"));
         assert.equal(resp.status, 404);
-        const body = (await readJson(resp)) as { error: string };
+        const body = (await readJson(resp)) as { error: string; };
         assert.equal(body.error, "Not found");
     });
 
@@ -609,10 +615,10 @@ describe("404 handling", () => {
 describe("POST /api/steer", () => {
     it("returns ok response with valid message", async () => {
         const resp = await handleRequest(
-            makeRequest("POST", "/api/steer", { message: "test steer" }),
+            makeRequest("POST", "/api/steer", { message: "test steer" })
         );
         assert.equal(resp.status, 200);
-        const body = (await readJson(resp)) as { ok: boolean };
+        const body = (await readJson(resp)) as { ok: boolean; };
         assert.ok(body.ok);
     });
 
@@ -628,13 +634,13 @@ describe("SSE streaming from Anthropic endpoint", () => {
     it("streams text content", async () => {
         // Build a mock Anthropic SSE stream
         const sseChunks = [
-            'event: message_start\ndata: {"type":"message_start","message":{"id":"msg_1","type":"message","role":"assistant","content":[]}}\n\n',
-            'event: content_block_start\ndata: {"type":"content_block_start","index":0,"content_block":{"type":"text","text":""}}\n\n',
-            'event: content_block_delta\ndata: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"Hello "}}\n\n',
-            'event: content_block_delta\ndata: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"World"}}\n\n',
-            'event: content_block_stop\ndata: {"type":"content_block_stop","index":0}\n\n',
-            'event: message_delta\ndata: {"type":"message_delta","delta":{"stop_reason":"end_turn"},"usage":{}}\n\n',
-            'event: message_stop\ndata: {"type":"message_stop"}\n\n',
+            "event: message_start\ndata: {\"type\":\"message_start\",\"message\":{\"id\":\"msg_1\",\"type\":\"message\",\"role\":\"assistant\",\"content\":[]}}\n\n",
+            "event: content_block_start\ndata: {\"type\":\"content_block_start\",\"index\":0,\"content_block\":{\"type\":\"text\",\"text\":\"\"}}\n\n",
+            "event: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"text_delta\",\"text\":\"Hello \"}}\n\n",
+            "event: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"text_delta\",\"text\":\"World\"}}\n\n",
+            "event: content_block_stop\ndata: {\"type\":\"content_block_stop\",\"index\":0}\n\n",
+            "event: message_delta\ndata: {\"type\":\"message_delta\",\"delta\":{\"stop_reason\":\"end_turn\"},\"usage\":{}}\n\n",
+            "event: message_stop\ndata: {\"type\":\"message_stop\"}\n\n"
         ];
 
         const encoder = new TextEncoder();
@@ -644,19 +650,19 @@ describe("SSE streaming from Anthropic endpoint", () => {
                     controller.enqueue(encoder.encode(chunk));
                 }
                 controller.close();
-            },
+            }
         });
 
         // Mock fetch
         globalThis.fetch = async () =>
             new Response(stream, {
                 status: 200,
-                headers: { "Content-Type": "text/event-stream" },
+                headers: { "Content-Type": "text/event-stream" }
             });
 
         try {
             const req = makeRequest("POST", "/api/chat", {
-                messages: [{ role: "user", content: "hi" }],
+                messages: [{ role: "user", content: "hi" }]
             });
             const resp = await handleChat(req, "test-key");
 
@@ -675,15 +681,15 @@ describe("SSE streaming from Anthropic endpoint", () => {
 
     it("emits thinking events from Anthropic thinking blocks", async () => {
         const sseChunks = [
-            'event: message_start\ndata: {"type":"message_start","message":{"id":"msg_1","type":"message","role":"assistant","content":[]}}\n\n',
-            'event: content_block_start\ndata: {"type":"content_block_start","index":0,"content_block":{"type":"thinking","thinking":""}}\n\n',
-            'event: content_block_delta\ndata: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":"hidden thought"}}\n\n',
-            'event: content_block_stop\ndata: {"type":"content_block_stop","index":0}\n\n',
-            'event: content_block_start\ndata: {"type":"content_block_start","index":1,"content_block":{"type":"text","text":""}}\n\n',
-            'event: content_block_delta\ndata: {"type":"content_block_delta","index":1,"delta":{"type":"text_delta","text":"Hello"}}\n\n',
-            'event: content_block_stop\ndata: {"type":"content_block_stop","index":1}\n\n',
-            'event: message_delta\ndata: {"type":"message_delta","delta":{"stop_reason":"end_turn"},"usage":{}}\n\n',
-            'event: message_stop\ndata: {"type":"message_stop"}\n\n',
+            "event: message_start\ndata: {\"type\":\"message_start\",\"message\":{\"id\":\"msg_1\",\"type\":\"message\",\"role\":\"assistant\",\"content\":[]}}\n\n",
+            "event: content_block_start\ndata: {\"type\":\"content_block_start\",\"index\":0,\"content_block\":{\"type\":\"thinking\",\"thinking\":\"\"}}\n\n",
+            "event: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"thinking_delta\",\"thinking\":\"hidden thought\"}}\n\n",
+            "event: content_block_stop\ndata: {\"type\":\"content_block_stop\",\"index\":0}\n\n",
+            "event: content_block_start\ndata: {\"type\":\"content_block_start\",\"index\":1,\"content_block\":{\"type\":\"text\",\"text\":\"\"}}\n\n",
+            "event: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":1,\"delta\":{\"type\":\"text_delta\",\"text\":\"Hello\"}}\n\n",
+            "event: content_block_stop\ndata: {\"type\":\"content_block_stop\",\"index\":1}\n\n",
+            "event: message_delta\ndata: {\"type\":\"message_delta\",\"delta\":{\"stop_reason\":\"end_turn\"},\"usage\":{}}\n\n",
+            "event: message_stop\ndata: {\"type\":\"message_stop\"}\n\n"
         ];
 
         const encoder = new TextEncoder();
@@ -693,18 +699,18 @@ describe("SSE streaming from Anthropic endpoint", () => {
                     controller.enqueue(encoder.encode(chunk));
                 }
                 controller.close();
-            },
+            }
         });
 
         globalThis.fetch = async () =>
             new Response(stream, {
                 status: 200,
-                headers: { "Content-Type": "text/event-stream" },
+                headers: { "Content-Type": "text/event-stream" }
             });
 
         try {
             const req = makeRequest("POST", "/api/chat", {
-                messages: [{ role: "user", content: "test" }],
+                messages: [{ role: "user", content: "test" }]
             });
             const resp = await handleChat(req, "test-key");
             const body = await readBody(resp);
@@ -721,20 +727,20 @@ describe("SSE streaming from Anthropic endpoint", () => {
         // First call: Anthropic returns tool_use SSE
         // Second call: after tool execution, returns text response
         const toolCallSse = [
-            'event: message_start\ndata: {"type":"message_start","message":{"id":"msg_1","type":"message","role":"assistant","content":[]}}\n\n',
-            'event: content_block_start\ndata: {"type":"content_block_start","index":0,"content_block":{"type":"tool_use","id":"call_1","name":"generate_image","input":{}}}\n\n',
-            'event: content_block_delta\ndata: {"type":"content_block_delta","index":0,"delta":{"type":"input_json_delta","partial_json":"{}"}}\n\n',
-            'event: content_block_stop\ndata: {"type":"content_block_stop","index":0}\n\n',
-            'event: message_delta\ndata: {"type":"message_delta","delta":{"stop_reason":"tool_use"},"usage":{}}\n\n',
-            'event: message_stop\ndata: {"type":"message_stop"}\n\n',
+            "event: message_start\ndata: {\"type\":\"message_start\",\"message\":{\"id\":\"msg_1\",\"type\":\"message\",\"role\":\"assistant\",\"content\":[]}}\n\n",
+            "event: content_block_start\ndata: {\"type\":\"content_block_start\",\"index\":0,\"content_block\":{\"type\":\"tool_use\",\"id\":\"call_1\",\"name\":\"generate_image\",\"input\":{}}}\n\n",
+            "event: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"input_json_delta\",\"partial_json\":\"{}\"}}\n\n",
+            "event: content_block_stop\ndata: {\"type\":\"content_block_stop\",\"index\":0}\n\n",
+            "event: message_delta\ndata: {\"type\":\"message_delta\",\"delta\":{\"stop_reason\":\"tool_use\"},\"usage\":{}}\n\n",
+            "event: message_stop\ndata: {\"type\":\"message_stop\"}\n\n"
         ];
         const finalSse = [
-            'event: message_start\ndata: {"type":"message_start","message":{"id":"msg_2","type":"message","role":"assistant","content":[]}}\n\n',
-            'event: content_block_start\ndata: {"type":"content_block_start","index":0,"content_block":{"type":"text","text":""}}\n\n',
-            'event: content_block_delta\ndata: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"Done!"}}\n\n',
-            'event: content_block_stop\ndata: {"type":"content_block_stop","index":0}\n\n',
-            'event: message_delta\ndata: {"type":"message_delta","delta":{"stop_reason":"end_turn"},"usage":{}}\n\n',
-            'event: message_stop\ndata: {"type":"message_stop"}\n\n',
+            "event: message_start\ndata: {\"type\":\"message_start\",\"message\":{\"id\":\"msg_2\",\"type\":\"message\",\"role\":\"assistant\",\"content\":[]}}\n\n",
+            "event: content_block_start\ndata: {\"type\":\"content_block_start\",\"index\":0,\"content_block\":{\"type\":\"text\",\"text\":\"\"}}\n\n",
+            "event: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"text_delta\",\"text\":\"Done!\"}}\n\n",
+            "event: content_block_stop\ndata: {\"type\":\"content_block_stop\",\"index\":0}\n\n",
+            "event: message_delta\ndata: {\"type\":\"message_delta\",\"delta\":{\"stop_reason\":\"end_turn\"},\"usage\":{}}\n\n",
+            "event: message_stop\ndata: {\"type\":\"message_stop\"}\n\n"
         ];
 
         let callCount = 0;
@@ -752,26 +758,26 @@ describe("SSE streaming from Anthropic endpoint", () => {
                                 controller.enqueue(encoder.encode(chunk));
                             }
                             controller.close();
-                        },
+                        }
                     }),
-                    { status: 200, headers: { "Content-Type": "text/event-stream" } },
+                    { status: 200, headers: { "Content-Type": "text/event-stream" } }
                 );
             }
             if (urlStr === "https://example.com/cat.png") {
                 return new Response(new Uint8Array([1, 2, 3]), {
                     status: 200,
-                    headers: { "Content-Type": "image/png" },
+                    headers: { "Content-Type": "image/png" }
                 });
             }
             return new Response(
                 JSON.stringify({ data: { image_urls: ["https://example.com/cat.png"] } }),
-                { status: 200, headers: { "Content-Type": "application/json" } },
+                { status: 200, headers: { "Content-Type": "application/json" } }
             );
         };
 
         try {
             const req = makeRequest("POST", "/api/chat", {
-                messages: [{ role: "user", content: "draw a cat" }],
+                messages: [{ role: "user", content: "draw a cat" }]
             });
             const resp = await handleChat(req, "test-key");
             const body = await readBody(resp);
@@ -790,7 +796,7 @@ describe("SSE streaming from Anthropic endpoint", () => {
 
         try {
             const req = makeRequest("POST", "/api/chat", {
-                messages: [{ role: "user", content: "hi" }],
+                messages: [{ role: "user", content: "hi" }]
             });
             const resp = await handleChat(req, "test-key");
             // New flow returns 200 SSE with error message in the stream
@@ -807,7 +813,7 @@ describe("SSE streaming from Anthropic endpoint", () => {
 
         try {
             const req = makeRequest("POST", "/api/chat", {
-                messages: [{ role: "user", content: "hi" }],
+                messages: [{ role: "user", content: "hi" }]
             });
             const resp = await handleChat(req, "test-key");
             // New flow returns 200 SSE with safe error message
@@ -822,12 +828,12 @@ describe("SSE streaming from Anthropic endpoint", () => {
 
     it("streams partial content on finish_reason max_tokens", async () => {
         const sseChunks = [
-            'event: message_start\ndata: {"type":"message_start","message":{"id":"msg_1","type":"message","role":"assistant","content":[]}}\n\n',
-            'event: content_block_start\ndata: {"type":"content_block_start","index":0,"content_block":{"type":"text","text":""}}\n\n',
-            'event: content_block_delta\ndata: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"partial"}}\n\n',
-            'event: content_block_stop\ndata: {"type":"content_block_stop","index":0}\n\n',
-            'event: message_delta\ndata: {"type":"message_delta","delta":{"stop_reason":"max_tokens"},"usage":{}}\n\n',
-            'event: message_stop\ndata: {"type":"message_stop"}\n\n',
+            "event: message_start\ndata: {\"type\":\"message_start\",\"message\":{\"id\":\"msg_1\",\"type\":\"message\",\"role\":\"assistant\",\"content\":[]}}\n\n",
+            "event: content_block_start\ndata: {\"type\":\"content_block_start\",\"index\":0,\"content_block\":{\"type\":\"text\",\"text\":\"\"}}\n\n",
+            "event: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"text_delta\",\"text\":\"partial\"}}\n\n",
+            "event: content_block_stop\ndata: {\"type\":\"content_block_stop\",\"index\":0}\n\n",
+            "event: message_delta\ndata: {\"type\":\"message_delta\",\"delta\":{\"stop_reason\":\"max_tokens\"},\"usage\":{}}\n\n",
+            "event: message_stop\ndata: {\"type\":\"message_stop\"}\n\n"
         ];
 
         const encoder = new TextEncoder();
@@ -837,18 +843,18 @@ describe("SSE streaming from Anthropic endpoint", () => {
                     controller.enqueue(encoder.encode(chunk));
                 }
                 controller.close();
-            },
+            }
         });
 
         globalThis.fetch = async () =>
             new Response(stream, {
                 status: 200,
-                headers: { "Content-Type": "text/event-stream" },
+                headers: { "Content-Type": "text/event-stream" }
             });
 
         try {
             const req = makeRequest("POST", "/api/chat", {
-                messages: [{ role: "user", content: "hi" }],
+                messages: [{ role: "user", content: "hi" }]
             });
             const resp = await handleChat(req, "test-key");
             const body = await readBody(resp);
@@ -865,12 +871,12 @@ describe("SSE streaming from Anthropic endpoint", () => {
         globalThis.fetch = async (_url: string | URL | Request, init?: RequestInit) => {
             capturedPayload = JSON.parse(init?.body as string);
             const sseChunks = [
-                'event: message_start\ndata: {"type":"message_start","message":{}}\n\n',
-                'event: content_block_start\ndata: {"type":"content_block_start","index":0,"content_block":{"type":"text","text":""}}\n\n',
-                'event: content_block_delta\ndata: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"ok"}}\n\n',
-                'event: content_block_stop\ndata: {"type":"content_block_stop","index":0}\n\n',
-                'event: message_delta\ndata: {"type":"message_delta","delta":{"stop_reason":"end_turn"},"usage":{}}\n\n',
-                'event: message_stop\ndata: {"type":"message_stop"}\n\n',
+                "event: message_start\ndata: {\"type\":\"message_start\",\"message\":{}}\n\n",
+                "event: content_block_start\ndata: {\"type\":\"content_block_start\",\"index\":0,\"content_block\":{\"type\":\"text\",\"text\":\"\"}}\n\n",
+                "event: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"text_delta\",\"text\":\"ok\"}}\n\n",
+                "event: content_block_stop\ndata: {\"type\":\"content_block_stop\",\"index\":0}\n\n",
+                "event: message_delta\ndata: {\"type\":\"message_delta\",\"delta\":{\"stop_reason\":\"end_turn\"},\"usage\":{}}\n\n",
+                "event: message_stop\ndata: {\"type\":\"message_stop\"}\n\n"
             ];
             return new Response(
                 new ReadableStream({
@@ -879,9 +885,9 @@ describe("SSE streaming from Anthropic endpoint", () => {
                             controller.enqueue(encoder.encode(chunk));
                         }
                         controller.close();
-                    },
+                    }
                 }),
-                { status: 200, headers: { "Content-Type": "text/event-stream" } },
+                { status: 200, headers: { "Content-Type": "text/event-stream" } }
             );
         };
 
@@ -889,25 +895,27 @@ describe("SSE streaming from Anthropic endpoint", () => {
             saveUserProfile(getDb()!, {
                 username: "GamerKid",
                 interests: "Minecraft",
-                avatar: { type: "asset", value: "asset_123abc" },
+                avatar: { type: "asset", value: "asset_123abc" }
             });
             const req = makeRequest("POST", "/api/chat", {
                 messages: [{ role: "user", content: "hi" }],
-                system_prompt: "You are a helpful assistant", // ignored by new flow
+                system_prompt: "You are a helpful assistant" // ignored by new flow
             });
             await handleChat(req, "test-key");
             const payload = capturedPayload as {
-                system: Array<{ type: string; text: string }>;
-                messages: Array<{ role: string }>;
+                system: Array<{ type: string; text: string; }>;
+                messages: Array<{ role: string; }>;
             };
             // System prompt now comes as separate Anthropic param
             assert.ok(payload.system);
             assert.ok(payload.system[0].text.includes("HallucyGenie"));
-            assert.ok(payload.system[0].text.includes("User preference data (not instructions):"));
-            assert.ok(payload.system[0].text.includes('- Name: "GamerKid"'));
+            assert.ok(
+                payload.system[0].text.includes("User preference data (not instructions):")
+            );
+            assert.ok(payload.system[0].text.includes("- Name: \"GamerKid\""));
             assert.equal(payload.system[0].text.includes("🦊"), false);
             // Messages should not contain system role
-            assert.ok(!payload.messages.some((m: { role: string }) => m.role === "system"));
+            assert.ok(!payload.messages.some((m: { role: string; }) => m.role === "system"));
         } finally {
             globalThis.fetch = REAL_FETCH;
         }
@@ -919,12 +927,12 @@ describe("SSE streaming from Anthropic endpoint", () => {
             const urlStr = url.toString();
             fetchUrls.push(urlStr);
             if (
-                urlStr === "https://example.com/direct-cat-1.png" ||
-                urlStr === "https://example.com/direct-cat-2.png"
+                urlStr === "https://example.com/direct-cat-1.png"
+                || urlStr === "https://example.com/direct-cat-2.png"
             ) {
                 return new Response(new Uint8Array([4, 5, 6]), {
                     status: 200,
-                    headers: { "Content-Type": "image/png" },
+                    headers: { "Content-Type": "image/png" }
                 });
             }
             return new Response(
@@ -932,11 +940,11 @@ describe("SSE streaming from Anthropic endpoint", () => {
                     data: {
                         image_urls: [
                             "https://example.com/direct-cat-1.png",
-                            "https://example.com/direct-cat-2.png",
-                        ],
-                    },
+                            "https://example.com/direct-cat-2.png"
+                        ]
+                    }
                 }),
-                { status: 200, headers: { "Content-Type": "application/json" } },
+                { status: 200, headers: { "Content-Type": "application/json" } }
             );
         };
 
@@ -949,28 +957,28 @@ describe("SSE streaming from Anthropic endpoint", () => {
                         {
                             role: "user",
                             content:
-                                "Use generate_image with prompt: cat\nTool params: aspect_ratio=16:9",
-                        },
-                    ],
+                                "Use generate_image with prompt: cat\nTool params: aspect_ratio=16:9"
+                        }
+                    ]
                 },
-                { "X-Session-Id": "explicit-direct-session" },
+                { "X-Session-Id": "explicit-direct-session" }
             );
             const resp = await handleChat(req, "test-key", "explicit-direct-session");
             const body = await readBody(resp);
 
             assert.equal(
                 fetchUrls.some((url) => url.includes("/anthropic/v1/messages")),
-                false,
+                false
             );
             assert.equal(
                 fetchUrls.some((url) => url.includes("/v1/image_generation")),
-                true,
+                true
             );
             assert.ok(body.includes("tool_start"));
             assert.ok(body.includes("tool_result"));
             assert.ok(body.includes("/asset/"));
-            assert.ok(body.includes('"input"'));
-            assert.ok(body.includes('"prompt":"cat"'));
+            assert.ok(body.includes("\"input\""));
+            assert.ok(body.includes("\"prompt\":\"cat\""));
             assert.equal(body.includes("https://example.com/direct-cat-1.png"), false);
             assert.equal(body.includes("https://example.com/direct-cat-2.png"), false);
 
@@ -979,22 +987,22 @@ describe("SSE streaming from Anthropic endpoint", () => {
             // User message should be persisted for explicit tool directives
             assert.ok(
                 rows.some(
-                    (row) => row.role === "user" && row.content.includes("Use generate_image"),
+                    (row) => row.role === "user" && row.content.includes("Use generate_image")
                 ),
-                "user message should be persisted for explicit tool directive",
+                "user message should be persisted for explicit tool directive"
             );
             assert.equal(rows.at(-2)?.tool_calls_json?.includes("generate_image"), true);
             assert.equal(rows.at(-1)?.role, "tool");
             assert.equal((rows.at(-1)?.content.match(/\/asset\//g) ?? []).length, 2);
             const assets = getAssets(db, "explicit-direct-session").filter(
-                (asset) => asset.type === "image" && asset.tool_name === "generate_image",
+                (asset) => asset.type === "image" && asset.tool_name === "generate_image"
             );
             assert.ok(assets.length >= 2);
             const asset = assets.find((item) => item.prompt === "cat")!;
             assert.deepEqual(JSON.parse(asset.params_json!), {
                 model: "image-01",
                 prompt: "cat",
-                aspect_ratio: "16:9",
+                aspect_ratio: "16:9"
             });
         } finally {
             globalThis.fetch = REAL_FETCH;
@@ -1007,7 +1015,7 @@ describe("SSE streaming from Anthropic endpoint", () => {
             lyricsPayload = JSON.parse(String(init?.body));
             return new Response(JSON.stringify({ lyrics: "cat song" }), {
                 status: 200,
-                headers: { "Content-Type": "application/json" },
+                headers: { "Content-Type": "application/json" }
             });
         };
 
@@ -1021,20 +1029,20 @@ describe("SSE streaming from Anthropic endpoint", () => {
                             {
                                 role: "user",
                                 content:
-                                    "Use generate_lyrics with lyrics: write me a song about cats",
-                            },
-                        ],
+                                    "Use generate_lyrics with lyrics: write me a song about cats"
+                            }
+                        ]
                     },
-                    { "X-Session-Id": "explicit-lyrics-session" },
+                    { "X-Session-Id": "explicit-lyrics-session" }
                 ),
                 "test-key",
-                "explicit-lyrics-session",
+                "explicit-lyrics-session"
             );
             const body = await readBody(resp);
             assert.ok(body.includes("cat song"));
             assert.deepEqual(lyricsPayload, {
                 mode: "write_full_song",
-                prompt: "write me a song about cats",
+                prompt: "write me a song about cats"
             });
         } finally {
             globalThis.fetch = REAL_FETCH;
@@ -1053,7 +1061,7 @@ describe("SSE streaming from Anthropic endpoint", () => {
             musicPayload = JSON.parse(String(init?.body));
             return new Response(JSON.stringify({ data: { audio: "ff" } }), {
                 status: 200,
-                headers: { "Content-Type": "application/json" },
+                headers: { "Content-Type": "application/json" }
             });
         };
 
@@ -1064,10 +1072,10 @@ describe("SSE streaming from Anthropic endpoint", () => {
                     "/api/create-tool",
                     {
                         tool_name: "generate_music",
-                        input: { prompt: "boss fight", lyrics },
+                        input: { prompt: "boss fight", lyrics }
                     },
-                    { "X-Session-Id": sessionId },
-                ),
+                    { "X-Session-Id": sessionId }
+                )
             );
             const body = await readBody(resp);
 
@@ -1078,7 +1086,7 @@ describe("SSE streaming from Anthropic endpoint", () => {
             const rows = getMessages(db, sessionId);
             assert.equal(
                 rows.some((row) => row.role === "user"),
-                false,
+                false
             );
             const history = listToolInputHistory(db, sessionId, { kind: "music" });
             assert.equal(history[0]?.origin, "create");
@@ -1101,8 +1109,8 @@ describe("SSE streaming from Anthropic endpoint", () => {
             new Request("http://localhost/api/reference-image", {
                 method: "POST",
                 body: form,
-                headers: { "X-Session-Id": sessionId },
-            }),
+                headers: { "X-Session-Id": sessionId }
+            })
         );
         const body = await readBody(resp);
 
@@ -1121,17 +1129,20 @@ describe("SSE streaming from Anthropic endpoint", () => {
             const form = new FormData();
             form.set(
                 "image",
-                new File([new Uint8Array([1, 2, 3])], "ref.png", { type: "image/png" }),
+                new File([new Uint8Array([1, 2, 3])], "ref.png", { type: "image/png" })
             );
             const uploadResp = await handleRequest(
                 new Request("http://localhost/api/reference-image", {
                     method: "POST",
                     body: form,
-                    headers: { "X-Session-Id": sessionId },
-                }),
+                    headers: { "X-Session-Id": sessionId }
+                })
             );
             assert.equal(uploadResp.status, 200);
-            const uploaded = (await readJson(uploadResp)) as { assetId: string; assetUrl: string };
+            const uploaded = (await readJson(uploadResp)) as {
+                assetId: string;
+                assetUrl: string;
+            };
             let providerPayload: Record<string, unknown> | null = null;
             globalThis.fetch = async (url: string | URL | Request, init?: RequestInit) => {
                 const urlStr = url.toString();
@@ -1139,15 +1150,15 @@ describe("SSE streaming from Anthropic endpoint", () => {
                     providerPayload = JSON.parse(String(init?.body));
                     return new Response(
                         JSON.stringify({
-                            data: { image_urls: ["https://cdn.example/ref-out.png"] },
+                            data: { image_urls: ["https://cdn.example/ref-out.png"] }
                         }),
-                        { status: 200, headers: { "Content-Type": "application/json" } },
+                        { status: 200, headers: { "Content-Type": "application/json" } }
                     );
                 }
                 if (urlStr === "https://cdn.example/ref-out.png") {
                     return new Response(new Uint8Array([4, 5, 6]), {
                         status: 200,
-                        headers: { "Content-Type": "image/png", "Content-Length": "3" },
+                        headers: { "Content-Type": "image/png", "Content-Length": "3" }
                     });
                 }
                 throw new Error(`unexpected fetch ${urlStr}`);
@@ -1161,25 +1172,25 @@ describe("SSE streaming from Anthropic endpoint", () => {
                         tool_name: "generate_image",
                         input: {
                             prompt: "same fox in space",
-                            reference_asset_id: uploaded.assetId,
-                        },
+                            reference_asset_id: uploaded.assetId
+                        }
                     },
-                    { "X-Session-Id": sessionId },
-                ),
+                    { "X-Session-Id": sessionId }
+                )
             );
             const body = await readBody(resp);
             const subjectRef = providerPayload?.subject_reference as Array<Record<string, string>>;
             const history = listToolInputHistory(database, sessionId, { kind: "image" });
             const rows = getMessages(database, sessionId);
 
-            assert.ok(body.includes('"type":"image"'));
+            assert.ok(body.includes("\"type\":\"image\""));
             assert.equal(subjectRef[0]?.type, "character");
             assert.match(subjectRef[0]?.image_file ?? "", /^data:image\/png;base64,/);
             assert.equal(history[0]?.input_json.includes(uploaded.assetId), true);
             assert.equal(history[0]?.input_json.includes("data:image"), false);
             assert.equal(
                 rows.some((row) => row.content.includes("data:image")),
-                false,
+                false
             );
         } finally {
             globalThis.fetch = REAL_FETCH;
@@ -1204,29 +1215,34 @@ describe("SSE streaming from Anthropic endpoint", () => {
                     providerPayload = JSON.parse(String(init?.body));
                     return new Response(JSON.stringify({ task_id: "tts-task-1" }), {
                         status: 200,
-                        headers: { "Content-Type": "application/json" },
+                        headers: { "Content-Type": "application/json" }
                     });
                 }
                 if (urlStr.includes("/v1/query/t2a_async_query_v2")) {
                     return new Response(
                         JSON.stringify({ data: { status: "Success", file_id: "tts-file-1" } }),
-                        { status: 200, headers: { "Content-Type": "application/json" } },
+                        { status: 200, headers: { "Content-Type": "application/json" } }
                     );
                 }
                 if (urlStr.includes("/v1/files/retrieve")) {
                     return new Response(
-                        JSON.stringify({ file: { download_url: "https://cdn.example/tts.tar" } }),
-                        { status: 200, headers: { "Content-Type": "application/json" } },
+                        JSON.stringify({
+                            file: { download_url: "https://cdn.example/tts.tar" }
+                        }),
+                        { status: 200, headers: { "Content-Type": "application/json" } }
                     );
                 }
                 if (urlStr === "https://cdn.example/tts.tar") {
-                    const tar = tarWithFile("audio/result.mp3", new Uint8Array([0x49, 0x44, 0x33]));
+                    const tar = tarWithFile(
+                        "audio/result.mp3",
+                        new Uint8Array([0x49, 0x44, 0x33])
+                    );
                     return new Response(tar, {
                         status: 200,
                         headers: {
                             "Content-Type": "application/x-tar",
-                            "Content-Length": String(tar.byteLength),
-                        },
+                            "Content-Length": String(tar.byteLength)
+                        }
                     });
                 }
                 throw new Error(`unexpected fetch ${urlStr}`);
@@ -1241,20 +1257,20 @@ describe("SSE streaming from Anthropic endpoint", () => {
                         input: {
                             text: longText,
                             voice_id: "English_CaptivatingStoryteller",
-                            speed: 1.2,
-                        },
+                            speed: 1.2
+                        }
                     },
-                    { "X-Session-Id": sessionId },
-                ),
+                    { "X-Session-Id": sessionId }
+                )
             );
             const body = await readBody(resp);
             const assets = getAssets(database, sessionId);
-            const history = listToolInputHistory(database, sessionId, { kind: "narration" });
+            const history = listToolInputHistory(database, sessionId, { kind: "voice" });
             const rows = getMessages(database, sessionId);
             const tasks = listAsyncTtsTasks(database, sessionId);
             const serializedRows = JSON.stringify(rows);
 
-            assert.ok(body.includes('"type":"audio"'));
+            assert.ok(body.includes("\"type\":\"audio\""));
             assert.equal(providerPayload?.model, "speech-2.8-hd");
             assert.equal(providerPayload?.text, longText);
             assert.equal(assets[0]?.mime_type, "audio/mpeg");
@@ -1288,25 +1304,25 @@ describe("SSE streaming from Anthropic endpoint", () => {
                 assert.equal(payload.prompt, "fox mascot intro");
                 return new Response(JSON.stringify({ task_id: "video-task-1" }), {
                     status: 200,
-                    headers: { "Content-Type": "application/json" },
+                    headers: { "Content-Type": "application/json" }
                 });
             }
             if (urlStr.includes("/v1/query/video_generation")) {
                 return new Response(JSON.stringify({ status: "Success", file_id: "file-1" }), {
                     status: 200,
-                    headers: { "Content-Type": "application/json" },
+                    headers: { "Content-Type": "application/json" }
                 });
             }
             if (urlStr.includes("/v1/files/retrieve")) {
                 return new Response(
                     JSON.stringify({ download_url: "https://cdn.example/output.mp4" }),
-                    { status: 200, headers: { "Content-Type": "application/json" } },
+                    { status: 200, headers: { "Content-Type": "application/json" } }
                 );
             }
             if (urlStr === "https://cdn.example/output.mp4") {
                 return new Response(new Uint8Array([0, 1, 2, 3]), {
                     status: 200,
-                    headers: { "Content-Type": "video/mp4", "Content-Length": "4" },
+                    headers: { "Content-Type": "video/mp4", "Content-Length": "4" }
                 });
             }
             throw new Error(`unexpected fetch ${urlStr}`);
@@ -1319,16 +1335,16 @@ describe("SSE streaming from Anthropic endpoint", () => {
                     "/api/create-tool",
                     {
                         tool_name: "generate_video",
-                        input: { prompt: "fox mascot intro", duration: 6, resolution: "768p" },
+                        input: { prompt: "fox mascot intro", duration: 6, resolution: "768p" }
                     },
-                    { "X-Session-Id": sessionId },
-                ),
+                    { "X-Session-Id": sessionId }
+                )
             );
             const body = await readBody(resp);
             const assets = getAssets(database, sessionId);
             const rows = getMessages(database, sessionId);
 
-            assert.ok(body.includes('"type":"video"'));
+            assert.ok(body.includes("\"type\":\"video\""));
             assert.ok(body.includes("/asset/asset_"));
             assert.equal(body.includes("https://cdn.example/output.mp4"), false);
             assert.equal(assets.length, 1);
@@ -1337,13 +1353,73 @@ describe("SSE streaming from Anthropic endpoint", () => {
             assert.equal(assets[0]!.size_bytes, 4);
             assert.equal(
                 rows.some((row) => row.content.includes("https://cdn.example/output.mp4")),
-                false,
+                false
             );
             const tasks = listVideoTasks(database, sessionId);
             assert.equal(tasks.length, 1);
             assert.equal(tasks[0]!.status, "succeeded");
             assert.equal(tasks[0]!.asset_id, assets[0]!.id);
             assert.ok(calls.some((url) => url.includes("task_id=video-task-1")));
+        } finally {
+            globalThis.fetch = REAL_FETCH;
+            if (previousApiKey === undefined) delete process.env.MINIMAX_API_KEY;
+            else process.env.MINIMAX_API_KEY = previousApiKey;
+        }
+    });
+
+    it("persists provider diagnostics for failed Create video", async () => {
+        const sessionId = "create-video-sensitive-session";
+        const database = getDb()!;
+        createSession(database, sessionId, "Create Video Sensitive");
+        const previousApiKey = process.env.MINIMAX_API_KEY;
+        process.env.MINIMAX_API_KEY = "test-key";
+        globalThis.fetch = async (url: string | URL | Request) => {
+            const urlStr = url.toString();
+            if (urlStr.endsWith("/v1/video_generation")) {
+                return new Response(JSON.stringify({ task_id: "video-task-sensitive" }), {
+                    status: 200,
+                    headers: { "Content-Type": "application/json" }
+                });
+            }
+            if (urlStr.includes("/v1/query/video_generation")) {
+                return new Response(
+                    JSON.stringify({ status: "Fail", message: "output new_sensitive" }),
+                    { status: 200, headers: { "Content-Type": "application/json" } }
+                );
+            }
+            throw new Error(`unexpected fetch ${urlStr}`);
+        };
+
+        try {
+            const resp = await handleRequest(
+                makeRequest(
+                    "POST",
+                    "/api/create-tool",
+                    {
+                        tool_name: "generate_video",
+                        input: {
+                            prompt: "fat mermaid singing in the moonlight",
+                            duration: 10,
+                            resolution: "768p"
+                        }
+                    },
+                    { "X-Session-Id": sessionId }
+                )
+            );
+            const body = await readBody(resp);
+            const tasks = listVideoTasks(database, sessionId) as any[];
+            const history = listToolInputHistory(database, sessionId, { kind: "video" }) as any[];
+            const rows = getMessages(database, sessionId);
+
+            assert.ok(body.includes("Couldn't generate the video"));
+            assert.equal(body.includes("new_sensitive"), false);
+            assert.equal(tasks[0]!.status, "failed");
+            assert.equal(tasks[0]!.provider_task_id, "video-task-sensitive");
+            assert.equal(tasks[0]!.provider_stage, "query");
+            assert.equal(tasks[0]!.provider_status_msg, "output new_sensitive");
+            assert.equal(history[0]!.provider_stage, "query");
+            assert.equal(history[0]!.provider_status_msg, "output new_sensitive");
+            assert.equal(JSON.stringify(rows).includes("new_sensitive"), false);
         } finally {
             globalThis.fetch = REAL_FETCH;
             if (previousApiKey === undefined) delete process.env.MINIMAX_API_KEY;
@@ -1373,9 +1449,9 @@ describe("SSE streaming from Anthropic endpoint", () => {
             payload = JSON.parse(String(init?.body));
             return new Response(
                 JSON.stringify({
-                    data: { cover_feature_id: "cover-1", formatted_lyrics: "[Verse]\nhi" },
+                    data: { cover_feature_id: "cover-1", formatted_lyrics: "[Verse]\nhi" }
                 }),
-                { status: 200, headers: { "Content-Type": "application/json" } },
+                { status: 200, headers: { "Content-Type": "application/json" } }
             );
         };
 
@@ -1386,8 +1462,8 @@ describe("SSE streaming from Anthropic endpoint", () => {
             const resp = await handleRequest(
                 new Request("http://localhost/api/music-cover/preprocess", {
                     method: "POST",
-                    body: form,
-                }),
+                    body: form
+                })
             );
             const body = JSON.parse(await readBody(resp));
 
@@ -1408,12 +1484,15 @@ describe("SSE streaming from Anthropic endpoint", () => {
         try {
             const form = new FormData();
             form.set("source_kind", "upload");
-            form.set("audio", new File([new Uint8Array([1])], "bad.txt", { type: "text/plain" }));
+            form.set(
+                "audio",
+                new File([new Uint8Array([1])], "bad.txt", { type: "text/plain" })
+            );
             const resp = await handleRequest(
                 new Request("http://localhost/api/music-cover/preprocess", {
                     method: "POST",
-                    body: form,
-                }),
+                    body: form
+                })
             );
             const body = JSON.parse(await readBody(resp));
 
@@ -1437,7 +1516,7 @@ describe("SSE streaming from Anthropic endpoint", () => {
             payload = JSON.parse(String(init?.body));
             return new Response(JSON.stringify({ data: { audio: "ff" } }), {
                 status: 200,
-                headers: { "Content-Type": "application/json" },
+                headers: { "Content-Type": "application/json" }
             });
         };
 
@@ -1451,11 +1530,11 @@ describe("SSE streaming from Anthropic endpoint", () => {
                         input: {
                             prompt: "spooky boss battle",
                             lyrics: "[Verse]\nhi",
-                            cover_feature_id: "cover-1",
-                        },
+                            cover_feature_id: "cover-1"
+                        }
                     },
-                    { "X-Session-Id": sessionId },
-                ),
+                    { "X-Session-Id": sessionId }
+                )
             );
             const body = await readBody(resp);
 
@@ -1482,7 +1561,7 @@ describe("SSE streaming from Anthropic endpoint", () => {
         createSession(db, sessionId, "Create Lyrics Draft");
         saveDraft(db, sessionId, "create", {
             selectedTab: "music",
-            music: { prompt: "boss", lyrics: "" },
+            music: { prompt: "boss", lyrics: "" }
         });
 
         const previousApiKey = process.env.MINIMAX_API_KEY;
@@ -1490,7 +1569,7 @@ describe("SSE streaming from Anthropic endpoint", () => {
         globalThis.fetch = async () =>
             new Response(JSON.stringify({ lyrics: "Verse one\nChorus" }), {
                 status: 200,
-                headers: { "Content-Type": "application/json" },
+                headers: { "Content-Type": "application/json" }
             });
 
         try {
@@ -1499,15 +1578,15 @@ describe("SSE streaming from Anthropic endpoint", () => {
                     "POST",
                     "/api/create-tool",
                     { tool_name: "generate_lyrics", input: { prompt: "boss" } },
-                    { "X-Session-Id": sessionId },
-                ),
+                    { "X-Session-Id": sessionId }
+                )
             );
             const body = await readBody(resp);
 
             assert.ok(body.includes("tool_result"));
             assert.deepEqual(JSON.parse(getDraft(db, sessionId, "create")!.value_json), {
                 selectedTab: "music",
-                music: { prompt: "boss", lyrics: "" },
+                music: { prompt: "boss", lyrics: "" }
             });
             const history = listToolInputHistory(db, sessionId, { kind: "lyrics" });
             assert.equal(history[0]?.origin, "create");
@@ -1532,13 +1611,13 @@ describe("SSE streaming from Anthropic endpoint", () => {
                     status: 200,
                     headers: {
                         "Content-Type": "image/png",
-                        "Content-Length": String(21 * 1024 * 1024),
-                    },
+                        "Content-Length": String(21 * 1024 * 1024)
+                    }
                 });
             }
             return new Response(
                 JSON.stringify({ data: { image_urls: ["https://example.com/huge.png"] } }),
-                { status: 200, headers: { "Content-Type": "application/json" } },
+                { status: 200, headers: { "Content-Type": "application/json" } }
             );
         };
 
@@ -1548,8 +1627,8 @@ describe("SSE streaming from Anthropic endpoint", () => {
                     "POST",
                     "/api/create-tool",
                     { tool_name: "generate_image", input: { prompt: "huge cat" } },
-                    { "X-Session-Id": sessionId },
-                ),
+                    { "X-Session-Id": sessionId }
+                )
             );
             const body = await readBody(resp);
 
@@ -1574,7 +1653,7 @@ describe("SSE streaming from Anthropic endpoint", () => {
         globalThis.fetch = async () =>
             new Response(JSON.stringify({ data: { audio: "ff" } }), {
                 status: 200,
-                headers: { "Content-Type": "application/json" },
+                headers: { "Content-Type": "application/json" }
             });
 
         try {
@@ -1582,7 +1661,7 @@ describe("SSE streaming from Anthropic endpoint", () => {
                 "POST",
                 "/api/chat",
                 { messages: [{ role: "user", content: "Use text_to_speech with text: hello" }] },
-                { "X-Session-Id": sessionId },
+                { "X-Session-Id": sessionId }
             );
             const resp = await handleChat(req, "test-key", sessionId);
             const body = await readBody(resp);
@@ -1603,7 +1682,7 @@ describe("SSE streaming from Anthropic endpoint", () => {
         globalThis.fetch = async () =>
             new Response(
                 JSON.stringify({ base_resp: { status_code: 2013, status_msg: "bad text" } }),
-                { status: 200, headers: { "Content-Type": "application/json" } },
+                { status: 200, headers: { "Content-Type": "application/json" } }
             );
 
         try {
@@ -1611,7 +1690,7 @@ describe("SSE streaming from Anthropic endpoint", () => {
                 "POST",
                 "/api/chat",
                 { messages: [{ role: "user", content: "Use text_to_speech with text: hello" }] },
-                { "X-Session-Id": sessionId },
+                { "X-Session-Id": sessionId }
             );
             const resp = await handleChat(req, "test-key", sessionId);
             const body = await readBody(resp);
@@ -1619,7 +1698,7 @@ describe("SSE streaming from Anthropic endpoint", () => {
             assert.ok(body.includes("Couldn't generate voice audio"));
             assert.deepEqual(JSON.parse(getDraft(db, sessionId, "create")!.value_json), {
                 selectedTab: "voice",
-                voice: { text: "hello" },
+                voice: { text: "hello" }
             });
         } finally {
             globalThis.fetch = REAL_FETCH;
@@ -1630,10 +1709,12 @@ describe("SSE streaming from Anthropic endpoint", () => {
         const sessionId = "explicit-quota-once-session";
         const db = getDb()!;
         const existing = db
-            .prepare("SELECT count FROM daily_usage WHERE date = date('now') AND feature = 'image'")
-            .get() as { count: number } | undefined;
+            .prepare(
+                "SELECT count FROM daily_usage WHERE date = date('now') AND feature = 'image'"
+            )
+            .get() as { count: number; } | undefined;
         db.prepare(
-            "INSERT OR REPLACE INTO daily_usage (date, feature, count) VALUES (date('now'), 'image', 99)",
+            "INSERT OR REPLACE INTO daily_usage (date, feature, count) VALUES (date('now'), 'image', 99)"
         ).run();
 
         let imageApiCalls = 0;
@@ -1642,13 +1723,13 @@ describe("SSE streaming from Anthropic endpoint", () => {
             if (urlStr === "https://example.com/once.png") {
                 return new Response(new Uint8Array([1, 2, 3]), {
                     status: 200,
-                    headers: { "Content-Type": "image/png" },
+                    headers: { "Content-Type": "image/png" }
                 });
             }
             if (urlStr.includes("/v1/image_generation")) imageApiCalls++;
             return new Response(
                 JSON.stringify({ data: { image_urls: ["https://example.com/once.png"] } }),
-                { status: 200, headers: { "Content-Type": "application/json" } },
+                { status: 200, headers: { "Content-Type": "application/json" } }
             );
         };
 
@@ -1657,7 +1738,7 @@ describe("SSE streaming from Anthropic endpoint", () => {
                 "POST",
                 "/api/chat",
                 { messages: [{ role: "user", content: "Use generate_image with prompt: cat" }] },
-                { "X-Session-Id": sessionId },
+                { "X-Session-Id": sessionId }
             );
             const resp = await handleChat(req, "test-key", sessionId);
             const body = await readBody(resp);
@@ -1669,11 +1750,11 @@ describe("SSE streaming from Anthropic endpoint", () => {
             globalThis.fetch = REAL_FETCH;
             if (existing) {
                 db.prepare(
-                    "INSERT OR REPLACE INTO daily_usage (date, feature, count) VALUES (date('now'), 'image', ?)",
+                    "INSERT OR REPLACE INTO daily_usage (date, feature, count) VALUES (date('now'), 'image', ?)"
                 ).run(existing.count);
             } else {
                 db.prepare(
-                    "DELETE FROM daily_usage WHERE date = date('now') AND feature = 'image'",
+                    "DELETE FROM daily_usage WHERE date = date('now') AND feature = 'image'"
                 ).run();
             }
         }
@@ -1684,17 +1765,17 @@ describe("SSE streaming from Anthropic endpoint", () => {
         const db = getDb()!;
         const existing = db
             .prepare(
-                "SELECT count FROM daily_usage WHERE date = date('now') AND feature = 'speech'",
+                "SELECT count FROM daily_usage WHERE date = date('now') AND feature = 'speech'"
             )
-            .get() as { count: number } | undefined;
+            .get() as { count: number; } | undefined;
         db.prepare(
-            "INSERT OR REPLACE INTO daily_usage (date, feature, count) VALUES (date('now'), 'speech', 3)",
+            "INSERT OR REPLACE INTO daily_usage (date, feature, count) VALUES (date('now'), 'speech', 3)"
         ).run();
 
         globalThis.fetch = async () =>
             new Response(JSON.stringify({ data: { audio: "ff" } }), {
                 status: 200,
-                headers: { "Content-Type": "application/json" },
+                headers: { "Content-Type": "application/json" }
             });
 
         try {
@@ -1702,7 +1783,7 @@ describe("SSE streaming from Anthropic endpoint", () => {
                 "POST",
                 "/api/chat",
                 { messages: [{ role: "user", content: "Use text_to_speech with text: hello" }] },
-                { "X-Session-Id": sessionId },
+                { "X-Session-Id": sessionId }
             );
             const resp = await handleChat(req, "test-key", sessionId);
             const body = await readBody(resp);
@@ -1713,11 +1794,11 @@ describe("SSE streaming from Anthropic endpoint", () => {
             globalThis.fetch = REAL_FETCH;
             if (existing) {
                 db.prepare(
-                    "INSERT OR REPLACE INTO daily_usage (date, feature, count) VALUES (date('now'), 'speech', ?)",
+                    "INSERT OR REPLACE INTO daily_usage (date, feature, count) VALUES (date('now'), 'speech', ?)"
                 ).run(existing.count);
             } else {
                 db.prepare(
-                    "DELETE FROM daily_usage WHERE date = date('now') AND feature = 'speech'",
+                    "DELETE FROM daily_usage WHERE date = date('now') AND feature = 'speech'"
                 ).run();
             }
         }
@@ -1728,17 +1809,17 @@ describe("SSE streaming from Anthropic endpoint", () => {
         const db = getDb()!;
         const existing = db
             .prepare(
-                "SELECT count FROM daily_usage WHERE date = date('now') AND feature = 'speech'",
+                "SELECT count FROM daily_usage WHERE date = date('now') AND feature = 'speech'"
             )
-            .get() as { count: number } | undefined;
+            .get() as { count: number; } | undefined;
         db.prepare(
-            "INSERT OR REPLACE INTO daily_usage (date, feature, count) VALUES (date('now'), 'speech', 3)",
+            "INSERT OR REPLACE INTO daily_usage (date, feature, count) VALUES (date('now'), 'speech', 3)"
         ).run();
 
         globalThis.fetch = async () =>
             new Response(
                 JSON.stringify({ base_resp: { status_code: 2013, status_msg: "bad text" } }),
-                { status: 200, headers: { "Content-Type": "application/json" } },
+                { status: 200, headers: { "Content-Type": "application/json" } }
             );
 
         try {
@@ -1746,7 +1827,7 @@ describe("SSE streaming from Anthropic endpoint", () => {
                 "POST",
                 "/api/chat",
                 { messages: [{ role: "user", content: "Use text_to_speech with text: hello" }] },
-                { "X-Session-Id": sessionId },
+                { "X-Session-Id": sessionId }
             );
             const resp = await handleChat(req, "test-key", sessionId);
             const body = await readBody(resp);
@@ -1757,11 +1838,11 @@ describe("SSE streaming from Anthropic endpoint", () => {
             globalThis.fetch = REAL_FETCH;
             if (existing) {
                 db.prepare(
-                    "INSERT OR REPLACE INTO daily_usage (date, feature, count) VALUES (date('now'), 'speech', ?)",
+                    "INSERT OR REPLACE INTO daily_usage (date, feature, count) VALUES (date('now'), 'speech', ?)"
                 ).run(existing.count);
             } else {
                 db.prepare(
-                    "DELETE FROM daily_usage WHERE date = date('now') AND feature = 'speech'",
+                    "DELETE FROM daily_usage WHERE date = date('now') AND feature = 'speech'"
                 ).run();
             }
         }
@@ -1771,11 +1852,13 @@ describe("SSE streaming from Anthropic endpoint", () => {
         const sessionId = "quota-blocked-session";
         const db = getDb()!;
         const existing = db
-            .prepare("SELECT count FROM daily_usage WHERE date = date('now') AND feature = 'image'")
-            .get() as { count: number } | undefined;
+            .prepare(
+                "SELECT count FROM daily_usage WHERE date = date('now') AND feature = 'image'"
+            )
+            .get() as { count: number; } | undefined;
 
         db.prepare(
-            "INSERT OR REPLACE INTO daily_usage (date, feature, count) VALUES (date('now'), 'image', 100)",
+            "INSERT OR REPLACE INTO daily_usage (date, feature, count) VALUES (date('now'), 'image', 100)"
         ).run();
 
         globalThis.fetch = async () => {
@@ -1790,11 +1873,11 @@ describe("SSE streaming from Anthropic endpoint", () => {
                     messages: [
                         {
                             role: "user",
-                            content: "Use generate_image with prompt: cat",
-                        },
-                    ],
+                            content: "Use generate_image with prompt: cat"
+                        }
+                    ]
                 },
-                { "X-Session-Id": sessionId },
+                { "X-Session-Id": sessionId }
             );
             const resp = await handleChat(req, "test-key", sessionId);
             const body = await readBody(resp);
@@ -1809,11 +1892,11 @@ describe("SSE streaming from Anthropic endpoint", () => {
             globalThis.fetch = REAL_FETCH;
             if (existing) {
                 db.prepare(
-                    "INSERT OR REPLACE INTO daily_usage (date, feature, count) VALUES (date('now'), 'image', ?)",
+                    "INSERT OR REPLACE INTO daily_usage (date, feature, count) VALUES (date('now'), 'image', ?)"
                 ).run(existing.count);
             } else {
                 db.prepare(
-                    "DELETE FROM daily_usage WHERE date = date('now') AND feature = 'image'",
+                    "DELETE FROM daily_usage WHERE date = date('now') AND feature = 'image'"
                 ).run();
             }
         }
@@ -1834,7 +1917,7 @@ describe("SSE streaming from Anthropic endpoint", () => {
             mime_type: "image/jpeg",
             prompt: "old image",
             tool_name: "generate_image",
-            size_bytes: 1,
+            size_bytes: 1
         });
 
         globalThis.fetch = async (url: string | URL | Request) => {
@@ -1842,12 +1925,12 @@ describe("SSE streaming from Anthropic endpoint", () => {
             if (urlStr === "https://example.com/new-cat.png") {
                 return new Response(new Uint8Array([7, 8, 9]), {
                     status: 200,
-                    headers: { "Content-Type": "image/png" },
+                    headers: { "Content-Type": "image/png" }
                 });
             }
             return new Response(
                 JSON.stringify({ data: { image_urls: ["https://example.com/new-cat.png"] } }),
-                { status: 200, headers: { "Content-Type": "application/json" } },
+                { status: 200, headers: { "Content-Type": "application/json" } }
             );
         };
 
@@ -1859,18 +1942,18 @@ describe("SSE streaming from Anthropic endpoint", () => {
                     messages: [
                         {
                             role: "user",
-                            content: "Use generate_image with prompt: cat",
-                        },
-                    ],
+                            content: "Use generate_image with prompt: cat"
+                        }
+                    ]
                 },
-                { "X-Session-Id": sessionId },
+                { "X-Session-Id": sessionId }
             );
             const resp = await handleChat(req, "test-key", sessionId);
             const body = await readBody(resp);
             const assets = getAssets(database, sessionId);
             const toolRows = getMessages(database, sessionId).filter((row) => row.role === "tool");
             const assistantRows = getMessages(database, sessionId).filter(
-                (row) => row.role === "assistant",
+                (row) => row.role === "assistant"
             );
             const lastToolCall = JSON.parse(assistantRows.at(-1)!.tool_calls_json!)[0] as {
                 id: string;
@@ -1882,7 +1965,7 @@ describe("SSE streaming from Anthropic endpoint", () => {
             assert.equal(assets.length, 2);
             assert.equal(
                 assets.some((asset) => asset.id === "000008"),
-                true,
+                true
             );
             assert.match(newAsset!.id, /^asset_[0-9a-f-]{36}$/);
             assert.match(toolRows.at(-1)!.content, /^\/asset\/asset_[0-9a-f-]{36}$/);
@@ -1903,12 +1986,12 @@ describe("SSE streaming from Anthropic endpoint", () => {
         globalThis.fetch = async (_url: string | URL | Request, init?: RequestInit) => {
             capturedPayload = JSON.parse(init?.body as string);
             const sseChunks = [
-                'event: message_start\ndata: {"type":"message_start","message":{}}\n\n',
-                'event: content_block_start\ndata: {"type":"content_block_start","index":0,"content_block":{"type":"text","text":""}}\n\n',
-                'event: content_block_delta\ndata: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"ok"}}\n\n',
-                'event: content_block_stop\ndata: {"type":"content_block_stop","index":0}\n\n',
-                'event: message_delta\ndata: {"type":"message_delta","delta":{"stop_reason":"end_turn"},"usage":{}}\n\n',
-                'event: message_stop\ndata: {"type":"message_stop"}\n\n',
+                "event: message_start\ndata: {\"type\":\"message_start\",\"message\":{}}\n\n",
+                "event: content_block_start\ndata: {\"type\":\"content_block_start\",\"index\":0,\"content_block\":{\"type\":\"text\",\"text\":\"\"}}\n\n",
+                "event: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"text_delta\",\"text\":\"ok\"}}\n\n",
+                "event: content_block_stop\ndata: {\"type\":\"content_block_stop\",\"index\":0}\n\n",
+                "event: message_delta\ndata: {\"type\":\"message_delta\",\"delta\":{\"stop_reason\":\"end_turn\"},\"usage\":{}}\n\n",
+                "event: message_stop\ndata: {\"type\":\"message_stop\"}\n\n"
             ];
             return new Response(
                 new ReadableStream({
@@ -1917,15 +2000,15 @@ describe("SSE streaming from Anthropic endpoint", () => {
                             controller.enqueue(encoder.encode(chunk));
                         }
                         controller.close();
-                    },
+                    }
                 }),
-                { status: 200, headers: { "Content-Type": "text/event-stream" } },
+                { status: 200, headers: { "Content-Type": "text/event-stream" } }
             );
         };
 
         try {
             const req = makeRequest("POST", "/api/chat", {
-                messages: [{ role: "user", content: "hi" }],
+                messages: [{ role: "user", content: "hi" }]
             });
             await handleChat(req, "test-key");
             const payload = capturedPayload as {
@@ -1951,11 +2034,11 @@ describe("API key check", () => {
         try {
             const resp = await handleRequest(
                 makeRequest("POST", "/api/chat", {
-                    messages: [{ role: "user", content: "hi" }],
-                }),
+                    messages: [{ role: "user", content: "hi" }]
+                })
             );
             assert.equal(resp.status, 503);
-            const body = (await readJson(resp)) as { error: string };
+            const body = (await readJson(resp)) as { error: string; };
             assert.ok(body.error.includes("API key"));
         } finally {
             if (originalKey) process.env.MINIMAX_API_KEY = originalKey;
@@ -1973,9 +2056,9 @@ describe("Snapshots", () => {
             status: resp.status,
             headers: {
                 "content-type": resp.headers.get("Content-Type"),
-                "access-control-allow-origin": resp.headers.get("Access-Control-Allow-Origin"),
+                "access-control-allow-origin": resp.headers.get("Access-Control-Allow-Origin")
             },
-            body: JSON.parse(body),
+            body: JSON.parse(body)
         };
         // Verify structure (uptime is dynamic, so check shape)
         assert.equal(snapshot.status, 200);
@@ -1989,11 +2072,11 @@ describe("Snapshots", () => {
         const body = await readBody(resp);
         const snapshot = {
             status: resp.status,
-            body: JSON.parse(body),
+            body: JSON.parse(body)
         };
         assert.deepEqual(snapshot, {
             status: 404,
-            body: { error: "Not found" },
+            body: { error: "Not found" }
         });
     });
 
@@ -2032,18 +2115,18 @@ describe("Error handling", () => {
             start(controller) {
                 controller.enqueue(encoder.encode("data: {invalid json}\n\n"));
                 controller.close();
-            },
+            }
         });
 
         globalThis.fetch = async () =>
             new Response(stream, {
                 status: 200,
-                headers: { "Content-Type": "text/event-stream" },
+                headers: { "Content-Type": "text/event-stream" }
             });
 
         try {
             const req = makeRequest("POST", "/api/chat", {
-                messages: [{ role: "user", content: "hi" }],
+                messages: [{ role: "user", content: "hi" }]
             });
             const resp = await handleChat(req, "test-key");
             assert.equal(resp.status, 200);
@@ -2059,18 +2142,18 @@ describe("Error handling", () => {
         const stream = new ReadableStream({
             start(controller) {
                 controller.close();
-            },
+            }
         });
 
         globalThis.fetch = async () =>
             new Response(stream, {
                 status: 200,
-                headers: { "Content-Type": "text/event-stream" },
+                headers: { "Content-Type": "text/event-stream" }
             });
 
         try {
             const req = makeRequest("POST", "/api/chat", {
-                messages: [{ role: "user", content: "hi" }],
+                messages: [{ role: "user", content: "hi" }]
             });
             const resp = await handleChat(req, "test-key");
             assert.equal(resp.status, 200);
@@ -2087,18 +2170,18 @@ describe("Error handling", () => {
             start(controller) {
                 controller.enqueue(encoder.encode(": this is a comment\n\n"));
                 controller.close();
-            },
+            }
         });
 
         globalThis.fetch = async () =>
             new Response(stream, {
                 status: 200,
-                headers: { "Content-Type": "text/event-stream" },
+                headers: { "Content-Type": "text/event-stream" }
             });
 
         try {
             const req = makeRequest("POST", "/api/chat", {
-                messages: [{ role: "user", content: "hi" }],
+                messages: [{ role: "user", content: "hi" }]
             });
             const resp = await handleChat(req, "test-key");
             assert.equal(resp.status, 200);
@@ -2111,12 +2194,12 @@ describe("Error handling", () => {
         globalThis.fetch = async () =>
             new Response(JSON.stringify({ error: { message: "Invalid API key" } }), {
                 status: 401,
-                headers: { "Content-Type": "application/json" },
+                headers: { "Content-Type": "application/json" }
             });
 
         try {
             const req = makeRequest("POST", "/api/chat", {
-                messages: [{ role: "user", content: "hi" }],
+                messages: [{ role: "user", content: "hi" }]
             });
             const resp = await handleChat(req, "test-key");
             // New flow: error is streamed as SSE text
@@ -2143,13 +2226,13 @@ describe("Error handling", () => {
             }
             return new Response(
                 JSON.stringify({ data: { image_urls: ["https://example.com/test.png"] } }),
-                { status: 200, headers: { "Content-Type": "application/json" } },
+                { status: 200, headers: { "Content-Type": "application/json" } }
             );
         };
 
         try {
             const req = makeRequest("POST", "/api/chat", {
-                messages: [{ role: "user", content: "hi" }],
+                messages: [{ role: "user", content: "hi" }]
             });
             const resp = await handleChat(req, "test-key");
             const body = await readBody(resp);
@@ -2164,23 +2247,23 @@ describe("Error handling", () => {
     it("handles tool_use block with stop_reason end_turn (no tool execution)", async () => {
         // Tool use block that arrives but stop_reason is end_turn, not tool_use
         const sseChunks = [
-            'event: message_start\ndata: {"type":"message_start","message":{}}\n\n',
-            'event: content_block_start\ndata: {"type":"content_block_start","index":0,"content_block":{"type":"tool_use","id":"call_1","name":"test","input":{}}}\n\n',
-            'event: content_block_delta\ndata: {"type":"content_block_delta","index":0,"delta":{"type":"input_json_delta","partial_json":"{}"}}\n\n',
-            'event: content_block_stop\ndata: {"type":"content_block_stop","index":0}\n\n',
-            'event: message_delta\ndata: {"type":"message_delta","delta":{"stop_reason":"end_turn"},"usage":{}}\n\n',
-            'event: message_stop\ndata: {"type":"message_stop"}\n\n',
+            "event: message_start\ndata: {\"type\":\"message_start\",\"message\":{}}\n\n",
+            "event: content_block_start\ndata: {\"type\":\"content_block_start\",\"index\":0,\"content_block\":{\"type\":\"tool_use\",\"id\":\"call_1\",\"name\":\"test\",\"input\":{}}}\n\n",
+            "event: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"input_json_delta\",\"partial_json\":\"{}\"}}\n\n",
+            "event: content_block_stop\ndata: {\"type\":\"content_block_stop\",\"index\":0}\n\n",
+            "event: message_delta\ndata: {\"type\":\"message_delta\",\"delta\":{\"stop_reason\":\"end_turn\"},\"usage\":{}}\n\n",
+            "event: message_stop\ndata: {\"type\":\"message_stop\"}\n\n"
         ];
 
         globalThis.fetch = async () =>
             new Response(makeAnthropicStream(sseChunks), {
                 status: 200,
-                headers: { "Content-Type": "text/event-stream" },
+                headers: { "Content-Type": "text/event-stream" }
             });
 
         try {
             const req = makeRequest("POST", "/api/chat", {
-                messages: [{ role: "user", content: "hi" }],
+                messages: [{ role: "user", content: "hi" }]
             });
             const resp = await handleChat(req, "test-key");
             const body = await readBody(resp);
@@ -2197,46 +2280,46 @@ describe("Error handling", () => {
             start(controller) {
                 controller.enqueue(
                     encoder.encode(
-                        'event: message_start\ndata: {"type":"message_start","message":{}}\n\n',
-                    ),
+                        "event: message_start\ndata: {\"type\":\"message_start\",\"message\":{}}\n\n"
+                    )
                 );
                 controller.enqueue(
                     encoder.encode(
-                        'event: content_block_start\ndata: {"type":"content_block_start","index":0,"content_block":{"type":"text","text":""}}\n\n',
-                    ),
+                        "event: content_block_start\ndata: {\"type\":\"content_block_start\",\"index\":0,\"content_block\":{\"type\":\"text\",\"text\":\"\"}}\n\n"
+                    )
                 );
                 controller.enqueue(
                     encoder.encode(
-                        'event: content_block_delta\ndata: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"ok"}}\n\n',
-                    ),
+                        "event: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"text_delta\",\"text\":\"ok\"}}\n\n"
+                    )
                 );
                 controller.enqueue(
                     encoder.encode(
-                        'event: content_block_stop\ndata: {"type":"content_block_stop","index":0}\n\n',
-                    ),
+                        "event: content_block_stop\ndata: {\"type\":\"content_block_stop\",\"index\":0}\n\n"
+                    )
                 );
                 controller.enqueue(
                     encoder.encode(
-                        'event: message_delta\ndata: {"type":"message_delta","delta":{"stop_reason":"end_turn"},"usage":{}}\n\n',
-                    ),
+                        "event: message_delta\ndata: {\"type\":\"message_delta\",\"delta\":{\"stop_reason\":\"end_turn\"},\"usage\":{}}\n\n"
+                    )
                 );
                 controller.enqueue(
-                    encoder.encode('event: message_stop\ndata: {"type":"message_stop"}\n\n'),
+                    encoder.encode("event: message_stop\ndata: {\"type\":\"message_stop\"}\n\n")
                 );
                 // Simulate an error by erroring the stream
                 controller.error(new Error("Stream interrupted"));
-            },
+            }
         });
 
         globalThis.fetch = async () =>
             new Response(stream, {
                 status: 200,
-                headers: { "Content-Type": "text/event-stream" },
+                headers: { "Content-Type": "text/event-stream" }
             });
 
         try {
             const req = makeRequest("POST", "/api/chat", {
-                messages: [{ role: "user", content: "hi" }],
+                messages: [{ role: "user", content: "hi" }]
             });
             const resp = await handleChat(req, "test-key");
             // Should complete without crashing (status is always 200 for SSE)
@@ -2288,13 +2371,16 @@ describe("Database Initialization", () => {
         // Verify the database has tables from migrations
         const tables = database
             .prepare("SELECT name FROM sqlite_master WHERE type='table' ORDER BY name")
-            .all() as Array<{ name: string }>;
+            .all() as Array<{ name: string; }>;
         const tableNames = tables.map((t) => t.name);
 
         assert.ok(tableNames.includes("messages"), "messages table should exist");
         assert.ok(tableNames.includes("preferences"), "preferences table should exist");
         assert.ok(tableNames.includes("daily_usage"), "daily_usage table should exist");
-        assert.ok(tableNames.includes("schema_migrations"), "schema_migrations table should exist");
+        assert.ok(
+            tableNames.includes("schema_migrations"),
+            "schema_migrations table should exist"
+        );
 
         database.close();
     });
@@ -2337,7 +2423,7 @@ describe("Session Validation", () => {
 
     it("allows valid session ID on /api/chat", async () => {
         const req = makeRequest("POST", "/api/chat", {
-            messages: [{ role: "user", content: "hi" }],
+            messages: [{ role: "user", content: "hi" }]
         });
         // Should NOT return 400 -- it will fail at MiniMax API call but that's fine
         const resp = await handleRequest(req);
@@ -2348,7 +2434,7 @@ describe("Session Validation", () => {
         const init: RequestInit = {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ messages: [{ role: "user", content: "hi" }] }),
+            body: JSON.stringify({ messages: [{ role: "user", content: "hi" }] })
         };
         const req = new Request("http://localhost/api/chat", init);
         const resp = await handleRequest(req);
@@ -2360,7 +2446,7 @@ describe("Session Validation", () => {
         assert.ok(database);
         setActiveSessionId(database, "active-session");
         const req = new Request("http://localhost/test", {
-            headers: { "X-Session-Id": "explicit-session" },
+            headers: { "X-Session-Id": "explicit-session" }
         });
         assert.equal(resolveSessionId(req, database), "explicit-session");
     });
@@ -2385,7 +2471,7 @@ describe("Session Validation", () => {
         const init: RequestInit = {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ message: "test" }),
+            body: JSON.stringify({ message: "test" })
         };
         const req = new Request("http://localhost/api/steer", init);
         const resp = await handleRequest(req);
@@ -2399,14 +2485,14 @@ describe("Session Validation", () => {
 
     it("validateSessionId returns session ID for valid header", () => {
         const req = new Request("http://localhost/test", {
-            headers: { "X-Session-Id": "abc-123" },
+            headers: { "X-Session-Id": "abc-123" }
         });
         assert.equal(validateSessionId(req), "abc-123");
     });
 
     it("validateSessionId trims explicit header", () => {
         const req = new Request("http://localhost/test", {
-            headers: { "X-Session-Id": "  abc-123  " },
+            headers: { "X-Session-Id": "  abc-123  " }
         });
         assert.equal(validateSessionId(req), "abc-123");
     });
@@ -2439,12 +2525,12 @@ describe("Integration: chat with agent loop + persistence", () => {
         globalThis.fetch = async () =>
             new Response(makeAnthropicStream(sseChunks), {
                 status: 200,
-                headers: { "Content-Type": "text/event-stream" },
+                headers: { "Content-Type": "text/event-stream" }
             });
 
         try {
             const req = makeRequest("POST", "/api/chat", {
-                messages: [{ role: "user", content: "give me an idea" }],
+                messages: [{ role: "user", content: "give me an idea" }]
             });
             const resp = await handleChat(req, "test-key", "test-session-123");
             const body = await readBody(resp);
@@ -2471,12 +2557,12 @@ describe("Integration: chat with agent loop + persistence", () => {
     it("persists fallback instead of empty thinking-only assistant response", async () => {
         const sessionId = "thinking-only-session-" + Date.now();
         const sseChunks = [
-            'event: message_start\ndata: {"type":"message_start","message":{}}\n\n',
-            'event: content_block_start\ndata: {"type":"content_block_start","index":0,"content_block":{"type":"thinking","thinking":""}}\n\n',
-            'event: content_block_delta\ndata: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":"plan only"}}\n\n',
-            'event: content_block_stop\ndata: {"type":"content_block_stop","index":0}\n\n',
-            'event: message_delta\ndata: {"type":"message_delta","delta":{"stop_reason":"end_turn"},"usage":{}}\n\n',
-            'event: message_stop\ndata: {"type":"message_stop"}\n\n',
+            "event: message_start\ndata: {\"type\":\"message_start\",\"message\":{}}\n\n",
+            "event: content_block_start\ndata: {\"type\":\"content_block_start\",\"index\":0,\"content_block\":{\"type\":\"thinking\",\"thinking\":\"\"}}\n\n",
+            "event: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"thinking_delta\",\"thinking\":\"plan only\"}}\n\n",
+            "event: content_block_stop\ndata: {\"type\":\"content_block_stop\",\"index\":0}\n\n",
+            "event: message_delta\ndata: {\"type\":\"message_delta\",\"delta\":{\"stop_reason\":\"end_turn\"},\"usage\":{}}\n\n",
+            "event: message_stop\ndata: {\"type\":\"message_stop\"}\n\n"
         ];
 
         globalThis.fetch = async () => anthropicResponse(sseChunks);
@@ -2486,14 +2572,14 @@ describe("Integration: chat with agent loop + persistence", () => {
                 "POST",
                 "/api/chat",
                 { messages: [{ role: "user", content: "think only" }] },
-                { "X-Session-Id": sessionId },
+                { "X-Session-Id": sessionId }
             );
             const resp = await handleChat(req, "test-key", sessionId);
             const body = await readBody(resp);
             await new Promise((r) => setTimeout(r, 100));
 
             const assistantRows = getMessages(getDb()!, sessionId).filter(
-                (row) => row.role === "assistant",
+                (row) => row.role === "assistant"
             );
             assert.ok(body.includes("event: thinking"));
             assert.equal(assistantRows.length, 1);
@@ -2506,15 +2592,15 @@ describe("Integration: chat with agent loop + persistence", () => {
 
     it("persists thinking with assistant history", async () => {
         const sseChunks = [
-            'event: message_start\ndata: {"type":"message_start","message":{}}\n\n',
-            'event: content_block_start\ndata: {"type":"content_block_start","index":0,"content_block":{"type":"thinking","thinking":""}}\n\n',
-            'event: content_block_delta\ndata: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":"plan first"}}\n\n',
-            'event: content_block_stop\ndata: {"type":"content_block_stop","index":0}\n\n',
-            'event: content_block_start\ndata: {"type":"content_block_start","index":1,"content_block":{"type":"text","text":""}}\n\n',
-            'event: content_block_delta\ndata: {"type":"content_block_delta","index":1,"delta":{"type":"text_delta","text":"Answer."}}\n\n',
-            'event: content_block_stop\ndata: {"type":"content_block_stop","index":1}\n\n',
-            'event: message_delta\ndata: {"type":"message_delta","delta":{"stop_reason":"end_turn"},"usage":{}}\n\n',
-            'event: message_stop\ndata: {"type":"message_stop"}\n\n',
+            "event: message_start\ndata: {\"type\":\"message_start\",\"message\":{}}\n\n",
+            "event: content_block_start\ndata: {\"type\":\"content_block_start\",\"index\":0,\"content_block\":{\"type\":\"thinking\",\"thinking\":\"\"}}\n\n",
+            "event: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"thinking_delta\",\"thinking\":\"plan first\"}}\n\n",
+            "event: content_block_stop\ndata: {\"type\":\"content_block_stop\",\"index\":0}\n\n",
+            "event: content_block_start\ndata: {\"type\":\"content_block_start\",\"index\":1,\"content_block\":{\"type\":\"text\",\"text\":\"\"}}\n\n",
+            "event: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":1,\"delta\":{\"type\":\"text_delta\",\"text\":\"Answer.\"}}\n\n",
+            "event: content_block_stop\ndata: {\"type\":\"content_block_stop\",\"index\":1}\n\n",
+            "event: message_delta\ndata: {\"type\":\"message_delta\",\"delta\":{\"stop_reason\":\"end_turn\"},\"usage\":{}}\n\n",
+            "event: message_stop\ndata: {\"type\":\"message_stop\"}\n\n"
         ];
 
         globalThis.fetch = async () => anthropicResponse(sseChunks);
@@ -2524,7 +2610,7 @@ describe("Integration: chat with agent loop + persistence", () => {
                 "POST",
                 "/api/chat",
                 { messages: [{ role: "user", content: "think" }] },
-                { "X-Session-Id": "thinking-history-session" },
+                { "X-Session-Id": "thinking-history-session" }
             );
             const resp = await handleChat(req, "test-key", "thinking-history-session");
             const body = await readBody(resp);
@@ -2550,7 +2636,7 @@ describe("Integration: chat with agent loop + persistence", () => {
 
         globalThis.fetch = async (_url, init) => {
             const payload = JSON.parse(String(init?.body)) as {
-                messages: Array<{ role: string; content: string }>;
+                messages: Array<{ role: string; content: string; }>;
             };
             assert.equal(payload.messages.length, 1, "old history should be trimmed from payload");
             assert.equal(payload.messages[0].content, "second message");
@@ -2562,7 +2648,7 @@ describe("Integration: chat with agent loop + persistence", () => {
                 "POST",
                 "/api/chat",
                 { messages: [{ role: "user", content: "second message" }] },
-                { "X-Session-Id": sessionId },
+                { "X-Session-Id": sessionId }
             );
             const resp = await handleChat(req, "test-key", sessionId);
             await readBody(resp); // Must read stream for async DB writes to complete
@@ -2571,9 +2657,9 @@ describe("Integration: chat with agent loop + persistence", () => {
             const msgsAfterRequest = getMessages(getDb()!, sessionId);
             assert.ok(
                 msgsAfterRequest.some(
-                    (m) => m.role === "assistant" && m.content.includes("Second response"),
+                    (m) => m.role === "assistant" && m.content.includes("Second response")
                 ),
-                "Assistant response should be saved after context trimming",
+                "Assistant response should be saved after context trimming"
             );
         } finally {
             globalThis.fetch = REAL_FETCH;
@@ -2584,7 +2670,7 @@ describe("Integration: chat with agent loop + persistence", () => {
         const toolCallSse = anthropicToolUseSse(
             "tc_1",
             "generate_image",
-            '{"prompt":"cool gaming thumbnail"}',
+            "{\"prompt\":\"cool gaming thumbnail\"}"
         );
         const finalSse = anthropicTextSse(["Here is your image!"]);
 
@@ -2599,18 +2685,18 @@ describe("Integration: chat with agent loop + persistence", () => {
             if (urlStr === "https://example.com/thumb.png") {
                 return new Response(new Uint8Array([7, 8, 9]), {
                     status: 200,
-                    headers: { "Content-Type": "image/png" },
+                    headers: { "Content-Type": "image/png" }
                 });
             }
             return new Response(
                 JSON.stringify({ data: { image_urls: ["https://example.com/thumb.png"] } }),
-                { status: 200, headers: { "Content-Type": "application/json" } },
+                { status: 200, headers: { "Content-Type": "application/json" } }
             );
         };
 
         try {
             const req = makeRequest("POST", "/api/chat", {
-                messages: [{ role: "user", content: "make a thumbnail" }],
+                messages: [{ role: "user", content: "make a thumbnail" }]
             });
             const resp = await handleChat(req, "test-key", "test-session-123");
             const body = await readBody(resp);
@@ -2624,7 +2710,7 @@ describe("Integration: chat with agent loop + persistence", () => {
             assert.ok(body.includes("Here is your image!"));
             assert.equal(
                 getAssets(getDb()!, "test-session-123").some((a) => a.type === "image"),
-                true,
+                true
             );
         } finally {
             globalThis.fetch = REAL_FETCH;
@@ -2635,13 +2721,19 @@ describe("Integration: chat with agent loop + persistence", () => {
         const sessionId = "agent-quota-once-session";
         const db = getDb()!;
         const existing = db
-            .prepare("SELECT count FROM daily_usage WHERE date = date('now') AND feature = 'image'")
-            .get() as { count: number } | undefined;
+            .prepare(
+                "SELECT count FROM daily_usage WHERE date = date('now') AND feature = 'image'"
+            )
+            .get() as { count: number; } | undefined;
         db.prepare(
-            "INSERT OR REPLACE INTO daily_usage (date, feature, count) VALUES (date('now'), 'image', 99)",
+            "INSERT OR REPLACE INTO daily_usage (date, feature, count) VALUES (date('now'), 'image', 99)"
         ).run();
 
-        const toolCallSse = anthropicToolUseSse("tc_quota_1", "generate_image", '{"prompt":"cat"}');
+        const toolCallSse = anthropicToolUseSse(
+            "tc_quota_1",
+            "generate_image",
+            "{\"prompt\":\"cat\"}"
+        );
         const finalSse = anthropicTextSse(["Done."]);
         let llmCallCount = 0;
         let imageApiCalls = 0;
@@ -2655,13 +2747,15 @@ describe("Integration: chat with agent loop + persistence", () => {
             if (urlStr === "https://example.com/quota-once.png") {
                 return new Response(new Uint8Array([1, 2, 3]), {
                     status: 200,
-                    headers: { "Content-Type": "image/png" },
+                    headers: { "Content-Type": "image/png" }
                 });
             }
             if (urlStr.includes("/v1/image_generation")) imageApiCalls++;
             return new Response(
-                JSON.stringify({ data: { image_urls: ["https://example.com/quota-once.png"] } }),
-                { status: 200, headers: { "Content-Type": "application/json" } },
+                JSON.stringify({
+                    data: { image_urls: ["https://example.com/quota-once.png"] }
+                }),
+                { status: 200, headers: { "Content-Type": "application/json" } }
             );
         };
 
@@ -2670,7 +2764,7 @@ describe("Integration: chat with agent loop + persistence", () => {
                 "POST",
                 "/api/chat",
                 { messages: [{ role: "user", content: "make an image" }] },
-                { "X-Session-Id": sessionId },
+                { "X-Session-Id": sessionId }
             );
             const resp = await handleChat(req, "test-key", sessionId);
             const body = await readBody(resp);
@@ -2682,11 +2776,11 @@ describe("Integration: chat with agent loop + persistence", () => {
             globalThis.fetch = REAL_FETCH;
             if (existing) {
                 db.prepare(
-                    "INSERT OR REPLACE INTO daily_usage (date, feature, count) VALUES (date('now'), 'image', ?)",
+                    "INSERT OR REPLACE INTO daily_usage (date, feature, count) VALUES (date('now'), 'image', ?)"
                 ).run(existing.count);
             } else {
                 db.prepare(
-                    "DELETE FROM daily_usage WHERE date = date('now') AND feature = 'image'",
+                    "DELETE FROM daily_usage WHERE date = date('now') AND feature = 'image'"
                 ).run();
             }
         }
@@ -2696,13 +2790,19 @@ describe("Integration: chat with agent loop + persistence", () => {
         const sessionId = "agent-quota-failed-session";
         const db = getDb()!;
         const existing = db
-            .prepare("SELECT count FROM daily_usage WHERE date = date('now') AND feature = 'image'")
-            .get() as { count: number } | undefined;
+            .prepare(
+                "SELECT count FROM daily_usage WHERE date = date('now') AND feature = 'image'"
+            )
+            .get() as { count: number; } | undefined;
         db.prepare(
-            "INSERT OR REPLACE INTO daily_usage (date, feature, count) VALUES (date('now'), 'image', 99)",
+            "INSERT OR REPLACE INTO daily_usage (date, feature, count) VALUES (date('now'), 'image', 99)"
         ).run();
 
-        const toolCallSse = anthropicToolUseSse("tc_fail_1", "generate_image", '{"prompt":"cat"}');
+        const toolCallSse = anthropicToolUseSse(
+            "tc_fail_1",
+            "generate_image",
+            "{\"prompt\":\"cat\"}"
+        );
         const finalSse = anthropicTextSse(["Try again."]);
         let llmCallCount = 0;
         let imageApiCalls = 0;
@@ -2719,7 +2819,7 @@ describe("Integration: chat with agent loop + persistence", () => {
             if (urlStr.includes("/v1/image_generation")) imageApiCalls++;
             return new Response(
                 JSON.stringify({ data: { image_urls: ["https://example.com/bad.png"] } }),
-                { status: 200, headers: { "Content-Type": "application/json" } },
+                { status: 200, headers: { "Content-Type": "application/json" } }
             );
         };
 
@@ -2728,7 +2828,7 @@ describe("Integration: chat with agent loop + persistence", () => {
                 "POST",
                 "/api/chat",
                 { messages: [{ role: "user", content: "make an image" }] },
-                { "X-Session-Id": sessionId },
+                { "X-Session-Id": sessionId }
             );
             const resp = await handleChat(req, "test-key", sessionId);
             const body = await readBody(resp);
@@ -2739,17 +2839,17 @@ describe("Integration: chat with agent loop + persistence", () => {
             const rows = getMessages(db, sessionId);
             assert.equal(
                 rows.some((m) => m.role === "tool" && m.content.startsWith("Error: Couldn't save")),
-                true,
+                true
             );
         } finally {
             globalThis.fetch = REAL_FETCH;
             if (existing) {
                 db.prepare(
-                    "INSERT OR REPLACE INTO daily_usage (date, feature, count) VALUES (date('now'), 'image', ?)",
+                    "INSERT OR REPLACE INTO daily_usage (date, feature, count) VALUES (date('now'), 'image', ?)"
                 ).run(existing.count);
             } else {
                 db.prepare(
-                    "DELETE FROM daily_usage WHERE date = date('now') AND feature = 'image'",
+                    "DELETE FROM daily_usage WHERE date = date('now') AND feature = 'image'"
                 ).run();
             }
         }
@@ -2759,16 +2859,18 @@ describe("Integration: chat with agent loop + persistence", () => {
         const sessionId = "agent-quota-blocked-session";
         const db = getDb()!;
         const existing = db
-            .prepare("SELECT count FROM daily_usage WHERE date = date('now') AND feature = 'image'")
-            .get() as { count: number } | undefined;
+            .prepare(
+                "SELECT count FROM daily_usage WHERE date = date('now') AND feature = 'image'"
+            )
+            .get() as { count: number; } | undefined;
         db.prepare(
-            "INSERT OR REPLACE INTO daily_usage (date, feature, count) VALUES (date('now'), 'image', 100)",
+            "INSERT OR REPLACE INTO daily_usage (date, feature, count) VALUES (date('now'), 'image', 100)"
         ).run();
 
         const toolCallSse = anthropicToolUseSse(
             "tc_blocked_1",
             "generate_image",
-            '{"prompt":"cat"}',
+            "{\"prompt\":\"cat\"}"
         );
         const finalSse = anthropicTextSse(["Try later."]);
         let llmCallCount = 0;
@@ -2789,7 +2891,7 @@ describe("Integration: chat with agent loop + persistence", () => {
                 "POST",
                 "/api/chat",
                 { messages: [{ role: "user", content: "make an image" }] },
-                { "X-Session-Id": sessionId },
+                { "X-Session-Id": sessionId }
             );
             const resp = await handleChat(req, "test-key", sessionId);
             const body = await readBody(resp);
@@ -2801,11 +2903,11 @@ describe("Integration: chat with agent loop + persistence", () => {
             globalThis.fetch = REAL_FETCH;
             if (existing) {
                 db.prepare(
-                    "INSERT OR REPLACE INTO daily_usage (date, feature, count) VALUES (date('now'), 'image', ?)",
+                    "INSERT OR REPLACE INTO daily_usage (date, feature, count) VALUES (date('now'), 'image', ?)"
                 ).run(existing.count);
             } else {
                 db.prepare(
-                    "DELETE FROM daily_usage WHERE date = date('now') AND feature = 'image'",
+                    "DELETE FROM daily_usage WHERE date = date('now') AND feature = 'image'"
                 ).run();
             }
         }
@@ -2815,7 +2917,7 @@ describe("Integration: chat with agent loop + persistence", () => {
         const toolCallSse = anthropicToolUseSse(
             "tc_audio_1",
             "text_to_speech",
-            '{"text":"hello gamer"}',
+            "{\"text\":\"hello gamer\"}"
         );
         const finalSse = anthropicTextSse(["Voice is ready."]);
         const capturedAnthropicBodies: string[] = [];
@@ -2831,7 +2933,7 @@ describe("Integration: chat with agent loop + persistence", () => {
             }
             return new Response(JSON.stringify({ data: { audio: "ff".repeat(50000) } }), {
                 status: 200,
-                headers: { "Content-Type": "application/json" },
+                headers: { "Content-Type": "application/json" }
             });
         };
 
@@ -2840,7 +2942,7 @@ describe("Integration: chat with agent loop + persistence", () => {
                 "POST",
                 "/api/chat",
                 { messages: [{ role: "user", content: "say hello" }] },
-                { "X-Session-Id": "media-compact-session" },
+                { "X-Session-Id": "media-compact-session" }
             );
             const resp = await handleChat(req, "test-key", "media-compact-session");
             const body = await readBody(resp);
@@ -2849,14 +2951,18 @@ describe("Integration: chat with agent loop + persistence", () => {
             assert.ok(body.includes("/asset/"));
             assert.equal(body.includes("data:audio"), false);
             assert.equal(capturedAnthropicBodies[1]!.includes("data:audio"), false);
-            assert.ok(capturedAnthropicBodies[1]!.includes("Generated audio with text_to_speech"));
+            assert.ok(
+                capturedAnthropicBodies[1]!.includes("Generated audio with text_to_speech")
+            );
 
             const rows = getMessages(getDb()!, "media-compact-session");
             assert.equal(
                 rows.some((row) => row.content.includes("data:audio")),
-                false,
+                false
             );
-            assert.ok(rows.some((row) => row.role === "tool" && row.content.includes("/asset/")));
+            assert.ok(
+                rows.some((row) => row.role === "tool" && row.content.includes("/asset/"))
+            );
         } finally {
             globalThis.fetch = REAL_FETCH;
         }
@@ -2868,12 +2974,12 @@ describe("Integration: chat with agent loop + persistence", () => {
         globalThis.fetch = async () =>
             new Response(makeAnthropicStream(sseChunks), {
                 status: 200,
-                headers: { "Content-Type": "text/event-stream" },
+                headers: { "Content-Type": "text/event-stream" }
             });
 
         try {
             const req = makeRequest("POST", "/api/chat", {
-                messages: [{ role: "user", content: "hi" }],
+                messages: [{ role: "user", content: "hi" }]
             });
             const resp = await handleChat(req, "test-key");
             const body = await readBody(resp);
@@ -2900,16 +3006,16 @@ describe("POST /api/steer integration", () => {
 
     it("queues a steer message for a session", async () => {
         const resp = await handleRequest(
-            makeRequest("POST", "/api/steer", { message: "be more creative" }),
+            makeRequest("POST", "/api/steer", { message: "be more creative" })
         );
         assert.equal(resp.status, 200);
-        const body = (await readJson(resp)) as { ok: boolean };
+        const body = (await readJson(resp)) as { ok: boolean; };
         assert.equal(body.ok, true);
     });
 
     it("returns 400 for missing message field", async () => {
         const resp = await handleRequest(
-            makeRequest("POST", "/api/steer", { not_message: "test" }),
+            makeRequest("POST", "/api/steer", { not_message: "test" })
         );
         assert.equal(resp.status, 400);
     });
@@ -2927,7 +3033,7 @@ describe("/api/profile", () => {
         const resp = await handleRequest(makeRequest("GET", "/api/profile"));
         assert.equal(resp.status, 200);
         const body = (await readJson(resp)) as {
-            avatar: { type: string; value: string };
+            avatar: { type: string; value: string; };
             username: string;
         };
         assert.equal(body.username, "");
@@ -2941,11 +3047,11 @@ describe("/api/profile", () => {
                 interests: " Minecraft ",
                 hates: "",
                 favorites: "redstone",
-                avatar: { type: "asset", value: "asset_123abc" },
-            }),
+                avatar: { type: "asset", value: "asset_123abc" }
+            })
         );
         assert.equal(resp.status, 200);
-        const body = (await readJson(resp)) as { username: string; avatar: { value: string } };
+        const body = (await readJson(resp)) as { username: string; avatar: { value: string; }; };
         assert.equal(body.username, "GamerKid");
         assert.equal(body.avatar.value, "asset_123abc");
     });
@@ -2954,11 +3060,11 @@ describe("/api/profile", () => {
         const resp = await handleRequest(
             makeRequest("PUT", "/api/profile", {
                 username: "GamerKid",
-                avatar: { type: "asset", value: "data:image/png;base64,abc" },
-            }),
+                avatar: { type: "asset", value: "data:image/png;base64,abc" }
+            })
         );
         assert.equal(resp.status, 400);
-        const body = (await readJson(resp)) as { error: string };
+        const body = (await readJson(resp)) as { error: string; };
         assert.match(body.error, /data URL not allowed/);
     });
 
@@ -2966,22 +3072,22 @@ describe("/api/profile", () => {
         const resp = await handleRequest(
             makeRequest("PUT", "/api/profile", {
                 username: "GamerKid",
-                avatar: { type: "emoji", value: "🦊" },
-            }),
+                avatar: { type: "emoji", value: "🦊" }
+            })
         );
         assert.equal(resp.status, 400);
-        const body = (await readJson(resp)) as { error: string };
+        const body = (await readJson(resp)) as { error: string; };
         assert.match(body.error, /avatar type invalid/);
     });
 
     it("DELETE resets profile", async () => {
         saveUserProfile(getDb()!, {
             username: "GamerKid",
-            avatar: { type: "asset", value: "asset_123abc" },
+            avatar: { type: "asset", value: "asset_123abc" }
         });
         const resp = await handleRequest(makeRequest("DELETE", "/api/profile"));
         assert.equal(resp.status, 200);
-        const body = (await readJson(resp)) as { username: string; avatar: { value: string } };
+        const body = (await readJson(resp)) as { username: string; avatar: { value: string; }; };
         assert.equal(body.username, "");
         assert.equal(body.avatar.value, "");
     });
@@ -3008,7 +3114,7 @@ describe("GET /api/history", () => {
     it("returns empty messages for new session", async () => {
         const resp = await handleRequest(makeRequest("GET", "/api/history"));
         assert.equal(resp.status, 200);
-        const body = (await readJson(resp)) as { messages: unknown[] };
+        const body = (await readJson(resp)) as { messages: unknown[]; };
         assert.ok(Array.isArray(body.messages));
         assert.equal(body.messages.length, 0);
     });
@@ -3021,7 +3127,7 @@ describe("GET /api/history", () => {
         const resp = await handleRequest(makeRequest("GET", "/api/history"));
         assert.equal(resp.status, 200);
         const body = (await readJson(resp)) as {
-            messages: Array<{ role: string; content: string }>;
+            messages: Array<{ role: string; content: string; }>;
         };
         assert.equal(body.messages.length, 2);
         assert.equal(body.messages[0].role, "user");
@@ -3039,13 +3145,13 @@ describe("GET /api/history", () => {
         const req = new Request("http://localhost/api/history", { method: "GET" });
         const resp = await handleRequest(req);
         assert.equal(resp.status, 200);
-        const body = (await readJson(resp)) as { messages: Array<{ content: string }> };
+        const body = (await readJson(resp)) as { messages: Array<{ content: string; }>; };
         assert.equal(body.messages.at(-1)?.content, "active hello");
     });
 
     it("snapshot: history response structure", async () => {
         const resp = await handleRequest(makeRequest("GET", "/api/history"));
-        const body = (await readJson(resp)) as { messages: unknown[] };
+        const body = (await readJson(resp)) as { messages: unknown[]; };
         // Verify structure
         assert.ok("messages" in body);
         assert.ok(Array.isArray(body.messages));
@@ -3108,7 +3214,7 @@ describe("GET /api/usage", () => {
 
     it("snapshot: usage response structure", async () => {
         const resp = await handleRequest(makeRequest("GET", "/api/usage"));
-        const body = (await readJson(resp)) as { usage: unknown; limits: unknown };
+        const body = (await readJson(resp)) as { usage: unknown; limits: unknown; };
         assert.ok("usage" in body);
         assert.ok("limits" in body);
     });
@@ -3121,11 +3227,11 @@ describe("Coverage: DB not initialized paths", () => {
         resetStateForTesting();
         // DB is null after reset
         const req = makeRequest("POST", "/api/chat", {
-            messages: [{ role: "user", content: "hi" }],
+            messages: [{ role: "user", content: "hi" }]
         });
         const resp = await handleChat(req, "test-key");
         assert.equal(resp.status, 500);
-        const body = (await readJson(resp)) as { error: string };
+        const body = (await readJson(resp)) as { error: string; };
         assert.ok(body.error.includes("Database not initialized"));
 
         // Re-init for subsequent tests
@@ -3171,7 +3277,7 @@ describe("Coverage: History loading in handleChat", () => {
             "tool-history-session",
             "assistant",
             "<end_turn>",
-            JSON.stringify([{ id: "call_function_old_1", name: "generate_image", input: {} }]),
+            JSON.stringify([{ id: "call_function_old_1", name: "generate_image", input: {} }])
         );
         saveMessage(
             database,
@@ -3179,7 +3285,7 @@ describe("Coverage: History loading in handleChat", () => {
             "tool",
             "https://img/cat.png",
             null,
-            "call_function_old_1",
+            "call_function_old_1"
         );
 
         let capturedPayload: any = null;
@@ -3190,7 +3296,7 @@ describe("Coverage: History loading in handleChat", () => {
 
         try {
             const req = makeRequest("POST", "/api/chat", {
-                messages: [{ role: "user", content: "new message" }],
+                messages: [{ role: "user", content: "new message" }]
             });
             const resp = await handleChat(req, "test-key", "tool-history-session");
             const body = await readBody(resp);
@@ -3212,7 +3318,7 @@ describe("Coverage: History loading in handleChat", () => {
             database,
             "poison-history-session",
             "assistant",
-            "Here's your image:\n\n![cat](https://hailuo-image.example/image_inference_output/cat.jpeg)",
+            "Here's your image:\n\n![cat](https://hailuo-image.example/image_inference_output/cat.jpeg)"
         );
 
         let capturedPayload: any = null;
@@ -3223,7 +3329,7 @@ describe("Coverage: History loading in handleChat", () => {
 
         try {
             const req = makeRequest("POST", "/api/chat", {
-                messages: [{ role: "user", content: "new message" }],
+                messages: [{ role: "user", content: "new message" }]
             });
             await handleChat(req, "test-key", "poison-history-session");
 
@@ -3251,7 +3357,7 @@ describe("Coverage: History loading in handleChat", () => {
 
         try {
             const req = makeRequest("POST", "/api/chat", {
-                messages: [{ role: "user", content: "new message" }],
+                messages: [{ role: "user", content: "new message" }]
             });
             const resp = await handleChat(req, "test-key", "test-session-123");
             const body = await readBody(resp);
@@ -3261,7 +3367,7 @@ describe("Coverage: History loading in handleChat", () => {
             // Verify the payload includes history
             const payload = capturedPayload as {
                 system: unknown[];
-                messages: Array<{ role: string; content?: string }>;
+                messages: Array<{ role: string; content?: string; }>;
             };
             // System prompt + history from DB + new user message
             // System is separate in Anthropic format
@@ -3313,7 +3419,7 @@ describe("Node HTTP adapter and server lifecycle", () => {
         const resp = await fetch(`http://localhost:${port}/api/chat`, {
             method: "POST",
             headers: { "Content-Type": "application/json", "X-Session-Id": "adapter-test" },
-            body: JSON.stringify({ messages: [{ role: "user", content: "hi" }] }),
+            body: JSON.stringify({ messages: [{ role: "user", content: "hi" }] })
         });
         // No API key configured, so should get 503
         assert.equal(resp.status, 503, `Expected 503, got ${resp.status}`);
@@ -3399,7 +3505,7 @@ describe("Coverage: steer edge cases", () => {
         const req = new Request("http://localhost/api/steer", {
             method: "POST",
             headers: { "Content-Type": "application/json", "X-Session-Id": "test-steer" },
-            body: "not json",
+            body: "not json"
         });
         const resp = await handleRequest(req);
         assert.equal(resp.status, 400);
@@ -3429,7 +3535,7 @@ describe("Coverage: chat session path", () => {
         const origKey = process.env.MINIMAX_API_KEY;
         delete process.env.MINIMAX_API_KEY;
         const req = makeRequest("POST", "/api/chat", {
-            messages: [{ role: "user", content: "hi" }],
+            messages: [{ role: "user", content: "hi" }]
         });
         req.headers.set("X-Session-Id", "session-test-123");
         const resp = await handleRequest(req);
@@ -3461,8 +3567,8 @@ describe("GET /api/state", () => {
         const resp = await handleRequest(new Request("http://localhost/api/state"));
         assert.equal(resp.status, 200);
         const body = (await resp.json()) as {
-            activeSession: { id: string; name: string; nameSource: string };
-            ui: { maxMessageLength: number };
+            activeSession: { id: string; name: string; nameSource: string; };
+            ui: { maxMessageLength: number; };
         };
         assert.equal(body.activeSession.name, "New Chat");
         assert.equal(body.activeSession.nameSource, "default");
@@ -3473,31 +3579,31 @@ describe("GET /api/state", () => {
 describe("Session, draft, and create-history APIs", () => {
     it("creates, lists, activates, renames, and archives sessions", async () => {
         const createResp = await handleRequest(
-            new Request("http://localhost/api/sessions", { method: "POST" }),
+            new Request("http://localhost/api/sessions", { method: "POST" })
         );
         assert.equal(createResp.status, 201);
-        const created = (await createResp.json()) as { session: { id: string } };
+        const created = (await createResp.json()) as { session: { id: string; }; };
 
         const renameResp = await handleRequest(
             new Request(`http://localhost/api/sessions/${created.session.id}`, {
                 method: "PATCH",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ name: "Boss Fight" }),
-            }),
+                body: JSON.stringify({ name: "Boss Fight" })
+            })
         );
         assert.equal(renameResp.status, 200);
 
         const listResp = await handleRequest(new Request("http://localhost/api/sessions"));
-        const list = (await listResp.json()) as { sessions: Array<{ id: string; name: string }> };
+        const list = (await listResp.json()) as { sessions: Array<{ id: string; name: string; }>; };
         assert.equal(
             list.sessions.some((s) => s.id === created.session.id && s.name === "Boss Fight"),
-            true,
+            true
         );
 
         const archiveResp = await handleRequest(
             new Request(`http://localhost/api/sessions/${created.session.id}`, {
-                method: "DELETE",
-            }),
+                method: "DELETE"
+            })
         );
         assert.equal(archiveResp.status, 200);
     });
@@ -3506,7 +3612,7 @@ describe("Session, draft, and create-history APIs", () => {
         const body = new FormData();
         body.set(
             "avatar",
-            new File([new Uint8Array([1, 2, 3])], "avatar.png", { type: "image/png" }),
+            new File([new Uint8Array([1, 2, 3])], "avatar.png", { type: "image/png" })
         );
         body.set(
             "profile",
@@ -3517,25 +3623,25 @@ describe("Session, draft, and create-history APIs", () => {
                 hates: "spam",
                 favorites: "blue fire",
                 avatar: { type: "asset", value: "" },
-                updatedAt: 1,
-            }),
+                updatedAt: 1
+            })
         );
         const resp = await handleRequest(
-            new Request("http://localhost/api/profile/avatar", { method: "POST", body }),
+            new Request("http://localhost/api/profile/avatar", { method: "POST", body })
         );
         assert.equal(resp.status, 200);
         const json = (await resp.json()) as {
-            profile: { avatar: { type: string; value: string } };
+            profile: { avatar: { type: string; value: string; }; };
         };
         assert.equal(json.profile.avatar.type, "asset");
         assert.match(json.profile.avatar.value, /^asset_/);
         const assets = getAssets(
             getDb()!,
-            resolveSessionId(new Request("http://localhost/api/state"), getDb()!),
+            resolveSessionId(new Request("http://localhost/api/state"), getDb()!)
         );
         assert.equal(
             assets.some((asset) => asset.id === json.profile.avatar.value),
-            true,
+            true
         );
     });
 
@@ -3556,17 +3662,17 @@ describe("Session, draft, and create-history APIs", () => {
                 return new Response(
                     JSON.stringify({
                         data: { image_urls: ["https://img.test/avatar.png"] },
-                        base_resp: { status_code: 0 },
+                        base_resp: { status_code: 0 }
                     }),
                     {
                         status: 200,
-                        headers: { "Content-Type": "application/json" },
-                    },
+                        headers: { "Content-Type": "application/json" }
+                    }
                 );
             }
             return new Response(new Uint8Array([9, 8, 7]), {
                 status: 200,
-                headers: { "Content-Type": "image/png" },
+                headers: { "Content-Type": "image/png" }
             });
         };
         try {
@@ -3581,22 +3687,22 @@ describe("Session, draft, and create-history APIs", () => {
                         hates: "spam",
                         favorites: "blue fire",
                         avatar: { type: "asset", value: "" },
-                        updatedAt: 1,
-                    }),
-                }),
+                        updatedAt: 1
+                    })
+                })
             );
             assert.equal(resp.status, 200);
             const json = (await resp.json()) as {
-                profile: { avatar: { type: string; value: string } };
+                profile: { avatar: { type: string; value: string; }; };
             };
             assert.equal(json.profile.avatar.type, "asset");
             assert.equal(
                 calls.some((url) => url.includes("/v1/image_generation")),
-                true,
+                true
             );
             assert.equal(
                 calls.some((url) => url === "https://img.test/avatar.png"),
-                true,
+                true
             );
         } finally {
             globalThis.fetch = prevFetch;
@@ -3610,14 +3716,16 @@ describe("Session, draft, and create-history APIs", () => {
             new Request("http://localhost/api/draft/chat", {
                 method: "PUT",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ text: "draft" }),
-            }),
+                body: JSON.stringify({ text: "draft" })
+            })
         );
         assert.equal(putResp.status, 200);
         const getResp = await handleRequest(new Request("http://localhost/api/draft/chat"));
-        assert.deepEqual(((await getResp.json()) as { draft: unknown }).draft, { text: "draft" });
+        assert.deepEqual(((await getResp.json()) as { draft: unknown; }).draft, {
+            text: "draft"
+        });
         const delResp = await handleRequest(
-            new Request("http://localhost/api/draft/chat", { method: "DELETE" }),
+            new Request("http://localhost/api/draft/chat", { method: "DELETE" })
         );
         assert.equal(delResp.status, 200);
     });
@@ -3629,20 +3737,20 @@ describe("Session, draft, and create-history APIs", () => {
         const row = db
             .prepare(
                 `INSERT INTO tool_input_history (id, session_id, kind, origin, tool_name, input_json, status)
-                 VALUES ('hist_1', ?, 'image', 'create', 'generate_image', '{"prompt":"cat"}', 'succeeded') RETURNING id`,
+                 VALUES ('hist_1', ?, 'image', 'create', 'generate_image', '{"prompt":"cat"}', 'succeeded') RETURNING id`
             )
-            .get(sessionId) as { id: string };
+            .get(sessionId) as { id: string; };
         assert.equal(row.id, "hist_1");
         const listResp = await handleRequest(
-            new Request("http://localhost/api/create-history?kind=image"),
+            new Request("http://localhost/api/create-history?kind=image")
         );
-        const list = (await listResp.json()) as { items: Array<{ id: string; input: unknown }> };
+        const list = (await listResp.json()) as { items: Array<{ id: string; input: unknown; }>; };
         assert.equal(
             list.items.some((item) => item.id === "hist_1"),
-            true,
+            true
         );
         const delResp = await handleRequest(
-            new Request("http://localhost/api/create-history/hist_1", { method: "DELETE" }),
+            new Request("http://localhost/api/create-history/hist_1", { method: "DELETE" })
         );
         assert.equal(delResp.status, 200);
     });
@@ -3653,15 +3761,15 @@ describe("Session, draft, and create-history APIs", () => {
         saveMessage(db, sessionId, "user", "seed");
         db.prepare(
             `INSERT INTO tool_input_history (id, session_id, kind, origin, tool_name, input_json, status)
-             VALUES ('hist_origin_1', ?, 'image', 'chat', 'generate_image', '{"prompt":"dog"}', 'succeeded')`,
+             VALUES ('hist_origin_1', ?, 'image', 'chat', 'generate_image', '{"prompt":"dog"}', 'succeeded')`
         ).run(sessionId);
         db.prepare(
             `INSERT INTO tool_input_history (id, session_id, kind, origin, tool_name, input_json, status)
-             VALUES ('hist_origin_2', ?, 'image', 'agent', 'generate_image', '{"prompt":"bird"}', 'succeeded')`,
+             VALUES ('hist_origin_2', ?, 'image', 'agent', 'generate_image', '{"prompt":"bird"}', 'succeeded')`
         ).run(sessionId);
         const listResp = await handleRequest(new Request("http://localhost/api/create-history"));
         const list = (await listResp.json()) as {
-            items: Array<{ id: string; origin: string; input: unknown }>;
+            items: Array<{ id: string; origin: string; input: unknown; }>;
         };
         const chatItem = list.items.find((item) => item.id === "hist_origin_1");
         const agentItem = list.items.find((item) => item.id === "hist_origin_2");
@@ -3683,11 +3791,11 @@ describe("Session, draft, and create-history APIs", () => {
             return new Response(
                 JSON.stringify({
                     data: {
-                        image_urls: ["https://example.com/img.png"],
+                        image_urls: ["https://example.com/img.png"]
                     },
-                    base_resp: { status_code: 0 },
+                    base_resp: { status_code: 0 }
                 }),
-                { status: 200, headers: { "Content-Type": "application/json" } },
+                { status: 200, headers: { "Content-Type": "application/json" } }
             );
         };
 
@@ -3702,11 +3810,11 @@ describe("Session, draft, and create-history APIs", () => {
                             {
                                 role: "user",
                                 content:
-                                    "Use generate_image with prompt: a cute cat\nTool params: aspect_ratio=1:1",
-                            },
-                        ],
-                    }),
-                }),
+                                    "Use generate_image with prompt: a cute cat\nTool params: aspect_ratio=1:1"
+                            }
+                        ]
+                    })
+                })
             );
             assert.equal(resp.status, 200);
             await readBody(resp);
@@ -3716,14 +3824,14 @@ describe("Session, draft, and create-history APIs", () => {
                 .prepare(
                     `SELECT origin, tool_name FROM tool_input_history
                      WHERE session_id = ? AND tool_name = 'generate_image'
-                     ORDER BY created_at DESC LIMIT 1`,
+                     ORDER BY created_at DESC LIMIT 1`
                 )
-                .get(sessionId) as { origin: string; tool_name: string } | undefined;
+                .get(sessionId) as { origin: string; tool_name: string; } | undefined;
             assert.ok(history, "tool history should be recorded");
             assert.equal(
                 history.origin,
                 "chat",
-                "origin should be 'chat' for explicit directive in chat",
+                "origin should be 'chat' for explicit directive in chat"
             );
         } finally {
             globalThis.fetch = prevFetch;
@@ -3743,11 +3851,11 @@ describe("Session, draft, and create-history APIs", () => {
             return new Response(
                 JSON.stringify({
                     data: {
-                        image_urls: ["https://example.com/cat.png"],
+                        image_urls: ["https://example.com/cat.png"]
                     },
-                    base_resp: { status_code: 0 },
+                    base_resp: { status_code: 0 }
                 }),
-                { status: 200, headers: { "Content-Type": "application/json" } },
+                { status: 200, headers: { "Content-Type": "application/json" } }
             );
         };
 
@@ -3758,9 +3866,9 @@ describe("Session, draft, and create-history APIs", () => {
                     method: "POST",
                     headers: { "Content-Type": "application/json" },
                     body: JSON.stringify({
-                        messages: [{ role: "user", content: directiveText }],
-                    }),
-                }),
+                        messages: [{ role: "user", content: directiveText }]
+                    })
+                })
             );
             assert.equal(resp.status, 200);
             await readBody(resp);
@@ -3770,17 +3878,19 @@ describe("Session, draft, and create-history APIs", () => {
             const userMessages = rows.filter((row) => row.role === "user");
             assert.ok(
                 userMessages.some((row) => row.content === directiveText),
-                `user message should be persisted. Got: ${JSON.stringify(userMessages.map((r) => r.content))}`,
+                `user message should be persisted. Got: ${
+                    JSON.stringify(userMessages.map((r) => r.content))
+                }`
             );
 
             // Verify assistant and tool messages are also present
             assert.ok(
                 rows.some((row) => row.role === "assistant"),
-                "assistant message should be present",
+                "assistant message should be present"
             );
             assert.ok(
                 rows.some((row) => row.role === "tool"),
-                "tool message should be present",
+                "tool message should be present"
             );
         } finally {
             globalThis.fetch = prevFetch;
@@ -3813,28 +3923,28 @@ describe("GET /api/quota", () => {
                         model_name: "MiniMax-M*",
                         current_interval_total_count: 4500,
                         current_interval_usage_count: 17,
-                        remains_time: 14413545,
+                        remains_time: 14413545
                     },
                     {
                         model_name: "speech-hd",
                         current_interval_total_count: 9000,
                         current_interval_usage_count: 22,
-                        remains_time: 64813545,
+                        remains_time: 64813545
                     },
                     {
                         model_name: "image-01",
                         current_interval_total_count: 100,
                         current_interval_usage_count: 6,
-                        remains_time: 64813545,
+                        remains_time: 64813545
                     },
                     {
                         model_name: "music-2.6",
                         current_interval_total_count: 100,
                         current_interval_usage_count: 2,
-                        remains_time: 64813545,
-                    },
-                ],
-            }),
+                        remains_time: 64813545
+                    }
+                ]
+            })
         } as unknown as Response;
 
         let capturedUrl = "";
@@ -3873,16 +3983,16 @@ describe("GET /api/quota", () => {
                         model_name: "general",
                         current_interval_total_count: 0,
                         current_interval_usage_count: 0,
-                        remains_time: 431284,
+                        remains_time: 431284
                     },
                     {
                         model_name: "video",
                         current_interval_total_count: 0,
                         current_interval_usage_count: 0,
-                        remains_time: 431284,
-                    },
-                ],
-            }),
+                        remains_time: 431284
+                    }
+                ]
+            })
         } as unknown as Response;
 
         const prevFetch = globalThis.fetch;

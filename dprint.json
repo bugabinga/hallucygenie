@@ -1,0 +1,46 @@
+{
+    "lineWidth": 100,
+    "indentWidth": 4,
+    "includes": [
+        "**/*.ts",
+        "**/*.js",
+        "**/*.mjs",
+        "**/*.json",
+        "**/*.html",
+        "**/*.css",
+        "**/*.md",
+        "**/*.yml",
+        "**/*.yaml",
+        "**/Containerfile"
+    ],
+    "excludes": [
+        "node_modules/**",
+        "data/**",
+        "logs/**",
+        "reports/**",
+        "public/app.js",
+        "test/**/__snapshots__/**",
+        "e2e/**/__snapshots__/**"
+    ],
+    "plugins": [
+        "https://plugins.dprint.dev/typescript-0.96.1.wasm",
+        "https://plugins.dprint.dev/json-0.21.3.wasm",
+        "https://plugins.dprint.dev/g-plane/markup_fmt-v0.27.3.wasm",
+        "https://plugins.dprint.dev/g-plane/malva-v0.16.0.wasm",
+        "https://plugins.dprint.dev/markdown-0.21.1.wasm",
+        "https://plugins.dprint.dev/g-plane/pretty_yaml-v0.6.0.wasm",
+        "https://plugins.dprint.dev/dockerfile-0.3.3.wasm"
+    ],
+    "typescript": {
+        "quoteStyle": "alwaysDouble",
+        "semiColons": "always",
+        "trailingCommas": "never"
+    },
+    "json": {},
+    "markup": {},
+    "malva": {},
+    "yaml": {},
+    "dockerfile": {
+        "associations": ["Containerfile", "**/Containerfile"]
+    }
+}

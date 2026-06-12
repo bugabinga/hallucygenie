@@ -7,7 +7,7 @@
 // Child loggers carry context (reqId, sessionId) through closure, not inheritance.
 // Non-blocking: file writes go through a ring buffer flushed on a timer.
 
-import { mkdirSync, appendFileSync, existsSync } from "node:fs";
+import { appendFileSync, existsSync, mkdirSync } from "node:fs";
 import { dirname } from "node:path";
 
 // ── Types ────────────────────────────────────────────────────────────
@@ -35,7 +35,7 @@ const RANK: Record<Level, number> = {
     debug: 0,
     info: 1,
     warn: 2,
-    error: 3,
+    error: 3
 };
 
 // ── ANSI colors (tasteful, minimal) ──────────────────────────────────
@@ -51,7 +51,7 @@ const LEVEL_COLORS: Record<Level, string> = {
     debug: GREY,
     info: CYAN,
     warn: YELLOW,
-    error: RED,
+    error: RED
 };
 
 // ── Ring buffer for non-blocking file writes ─────────────────────────
@@ -98,7 +98,9 @@ function pad(n: number, w: number): string {
 }
 
 function prettyTime(date: Date): string {
-    return `${pad(date.getHours(), 2)}:${pad(date.getMinutes(), 2)}:${pad(date.getSeconds(), 2)}.${pad(date.getMilliseconds(), 3)}`;
+    return `${pad(date.getHours(), 2)}:${pad(date.getMinutes(), 2)}:${pad(date.getSeconds(), 2)}.${
+        pad(date.getMilliseconds(), 3)
+    }`;
 }
 
 function prettyLevel(level: Level): string {
@@ -150,7 +152,7 @@ export function createLogger(context: Record<string, unknown> = {}): Logger {
         // Write a header so the file is readable
         appendFileSync(
             DEV_LOG_PATH,
-            `\n--- HallucyGenie started ${new Date().toISOString()} ---\n`,
+            `\n--- HallucyGenie started ${new Date().toISOString()} ---\n`
         );
         flushTimer = setInterval(() => ringFlush(DEV_LOG_PATH), 500);
         flushTimer.unref(); // Don't keep process alive for the timer
@@ -164,7 +166,7 @@ export function createLogger(context: Record<string, unknown> = {}): Logger {
             msg,
             time: new Date().toISOString(),
             ...context,
-            ...data,
+            ...data
         };
 
         if (isDev) {
@@ -183,7 +185,7 @@ export function createLogger(context: Record<string, unknown> = {}): Logger {
         info: (msg, data?) => log("info", msg, data),
         warn: (msg, data?) => log("warn", msg, data),
         error: (msg, data?) => log("error", msg, data),
-        child: (extra) => createLogger({ ...context, ...extra }),
+        child: (extra) => createLogger({ ...context, ...extra })
     };
 }
 

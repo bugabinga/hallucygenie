@@ -22,4 +22,6 @@ CREATE TABLE IF NOT EXISTS async_tts_tasks (
     updated_at INTEGER NOT NULL
 );
 
-CREATE INDEX IF NOT EXISTS idx_async_tts_tasks_session ON async_tts_tasks (session_id, updated_at DESC);
+CREATE INDEX IF NOT EXISTS idx_async_tts_tasks_session ON async_tts_tasks (
+    session_id, updated_at DESC
+);

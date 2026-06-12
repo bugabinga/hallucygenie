@@ -35,6 +35,8 @@ type CreateToolName =
     | "analyze_image"
     | "web_search";
 
+const LONG_VOICE_TEXT_THRESHOLD = 1000;
+
 interface ToolStartEvent {
     id: string;
     name: string;
@@ -78,11 +80,10 @@ interface CreateDraft {
         cover_feature_id: string;
         cover_lyrics: string;
     };
-    video: { prompt: string; duration: string; resolution: string };
-    voice: { text: string; speed: string; voice_id: string; volume: string; pitch: string };
-    narration: { text: string; speed: string; voice_id: string; volume: string; pitch: string };
-    analyze: { image_url: string; prompt: string };
-    search: { query: string };
+    video: { prompt: string; duration: string; resolution: string; };
+    voice: { text: string; speed: string; voice_id: string; volume: string; pitch: string; };
+    analyze: { image_url: string; prompt: string; };
+    search: { query: string; };
 }
 
 interface CreateHistoryItem {
@@ -100,7 +101,7 @@ export interface UserProfile {
     interests: string;
     hates: string;
     favorites: string;
-    avatar: { type: "asset"; value: string };
+    avatar: { type: "asset"; value: string; };
     updatedAt: number;
 }
 
@@ -113,7 +114,9 @@ export { renderMarkdown };
 export function renderThinkingBlock(text: string): string {
     const lines = text.trim().split("\n").length;
     const preview = text.trim().split("\n")[0]?.slice(0, 60) ?? "";
-    return `<details class="thinking-block"><summary>💭 Thinking${lines > 1 ? ` (${lines} lines)` : ""}…</summary><div class="thinking-content">${renderMarkdown(text)}</div></details>`;
+    return `<details class="thinking-block"><summary>💭 Thinking${
+        lines > 1 ? ` (${lines} lines)` : ""
+    }…</summary><div class="thinking-content">${renderMarkdown(text)}</div></details>`;
 }
 
 // ── API helpers ──────────────────────────────────────────────────────
@@ -127,12 +130,12 @@ let currentProfile: UserProfile = {
     hates: "",
     favorites: "",
     avatar: { type: "asset", value: "" },
-    updatedAt: 0,
+    updatedAt: 0
 };
 
 export function createApiHeaders(): Record<string, string> {
     return {
-        "Content-Type": "application/json",
+        "Content-Type": "application/json"
     };
 }
 
@@ -149,7 +152,7 @@ export async function sendSteer(message: string): Promise<void> {
     const resp = await fetch("/api/steer", {
         method: "POST",
         headers: createApiHeaders(),
-        body: JSON.stringify({ message }),
+        body: JSON.stringify({ message })
     });
     if (!resp.ok) {
         throw new Error(`Steer failed: ${resp.status}`);
@@ -166,7 +169,7 @@ export async function putProfile(profile: UserProfile): Promise<UserProfile> {
     const resp = await fetch("/api/profile", {
         method: "PUT",
         headers: createApiHeaders(),
-        body: JSON.stringify(profile),
+        body: JSON.stringify(profile)
     });
     if (!resp.ok) throw new Error(`Failed to save profile: ${resp.status}`);
     return (await resp.json()) as UserProfile;
@@ -184,51 +187,51 @@ async function uploadProfileAvatar(file: File, profile: UserProfile): Promise<Us
     body.set("profile", JSON.stringify(profile));
     const resp = await fetch("/api/profile/avatar", { method: "POST", body });
     if (!resp.ok) throw new Error(`Failed to upload avatar: ${resp.status}`);
-    return ((await resp.json()) as { profile: UserProfile }).profile;
+    return ((await resp.json()) as { profile: UserProfile; }).profile;
 }
 
-async function uploadAnalyzeImage(file: File): Promise<{ assetId: string; assetUrl: string }> {
+async function uploadAnalyzeImage(file: File): Promise<{ assetId: string; assetUrl: string; }> {
     const body = new FormData();
     body.set("image", file);
     const resp = await fetch("/api/analyze-image", { method: "POST", body });
     if (!resp.ok) throw new Error(`Failed to upload image: ${resp.status}`);
-    return (await resp.json()) as { assetId: string; assetUrl: string };
+    return (await resp.json()) as { assetId: string; assetUrl: string; };
 }
 
-async function uploadReferenceImage(file: File): Promise<{ assetId: string; assetUrl: string }> {
+async function uploadReferenceImage(file: File): Promise<{ assetId: string; assetUrl: string; }> {
     const body = new FormData();
     body.set("image", file);
     const resp = await fetch("/api/reference-image", { method: "POST", body });
     if (!resp.ok) throw new Error(`Failed to upload reference image: ${resp.status}`);
-    return (await resp.json()) as { assetId: string; assetUrl: string };
+    return (await resp.json()) as { assetId: string; assetUrl: string; };
 }
 
 async function generateProfileAvatar(profile: UserProfile): Promise<UserProfile> {
     const resp = await fetch("/api/profile/avatar/generate", {
         method: "POST",
         headers: createApiHeaders(),
-        body: JSON.stringify(profile),
+        body: JSON.stringify(profile)
     });
     if (!resp.ok) throw new Error(`Failed to generate avatar: ${resp.status}`);
-    return ((await resp.json()) as { profile: UserProfile }).profile;
+    return ((await resp.json()) as { profile: UserProfile; }).profile;
 }
 
-async function fetchSessions(): Promise<{ activeSessionId: string; sessions: SessionRow[] }> {
+async function fetchSessions(): Promise<{ activeSessionId: string; sessions: SessionRow[]; }> {
     const resp = await fetch("/api/sessions");
     if (!resp.ok) throw new Error(`Failed to load sessions: ${resp.status}`);
-    return (await resp.json()) as { activeSessionId: string; sessions: SessionRow[] };
+    return (await resp.json()) as { activeSessionId: string; sessions: SessionRow[]; };
 }
 
 async function createNewSession(): Promise<SessionRow> {
     const resp = await fetch("/api/sessions", { method: "POST", headers: createApiHeaders() });
     if (!resp.ok) throw new Error(`Failed to create session: ${resp.status}`);
-    return ((await resp.json()) as { session: SessionRow }).session;
+    return ((await resp.json()) as { session: SessionRow; }).session;
 }
 
 async function activateSession(id: string): Promise<void> {
     const resp = await fetch(`/api/sessions/${encodeURIComponent(id)}/activate`, {
         method: "POST",
-        headers: createApiHeaders(),
+        headers: createApiHeaders()
     });
     if (!resp.ok) throw new Error(`Failed to activate session: ${resp.status}`);
 }
@@ -242,7 +245,7 @@ async function getDraft(kind: "chat" | "create"): Promise<unknown | null> {
     try {
         const resp = await fetch(`/api/draft/${kind}`);
         if (!resp.ok) return null;
-        return ((await resp.json()) as { draft: unknown | null }).draft;
+        return ((await resp.json()) as { draft: unknown | null; }).draft;
     } catch {
         return null;
     }
@@ -254,7 +257,7 @@ async function putDraft(kind: "chat" | "create", value: unknown): Promise<void> 
         await fetch(`/api/draft/${kind}`, {
             method: "PUT",
             headers: createApiHeaders(),
-            body: JSON.stringify(value),
+            body: JSON.stringify(value)
         });
     } catch {
         return;
@@ -273,13 +276,13 @@ async function clearDraft(kind: "chat" | "create"): Promise<void> {
 async function fetchCreateHistory(kind: string): Promise<CreateHistoryItem[]> {
     const resp = await fetch(`/api/create-history?kind=${encodeURIComponent(kind)}&limit=5`);
     if (!resp.ok) return [];
-    return ((await resp.json()) as { items: CreateHistoryItem[] }).items;
+    return ((await resp.json()) as { items: CreateHistoryItem[]; }).items;
 }
 
 async function deleteCreateHistoryItem(id: string): Promise<void> {
     await fetch(`/api/create-history/${encodeURIComponent(id)}`, {
         method: "DELETE",
-        headers: createApiHeaders(),
+        headers: createApiHeaders()
     });
 }
 
@@ -304,7 +307,7 @@ export function normalizedProfileFromForm(form: {
         hates: Array.from(form.hates.trim()).slice(0, 300).join(""),
         favorites: Array.from(form.favorites.trim()).slice(0, 300).join(""),
         avatar: { type: "asset", value: normalizeAvatarAsset(form.avatarAsset ?? "") },
-        updatedAt: Date.now(),
+        updatedAt: Date.now()
     };
 }
 
@@ -334,7 +337,7 @@ export interface SSEEvent {
     data: string;
 }
 
-export function parseSSELine(line: string): { field: string; value: string } | null {
+export function parseSSELine(line: string): { field: string; value: string; } | null {
     if (line.startsWith("event:")) {
         return { field: "event", value: line.slice(6).trim() };
     }
@@ -385,7 +388,7 @@ export function $(selector: string): HTMLElement {
 export function createElement(
     tag: string,
     attrs?: Record<string, string>,
-    children?: (string | Node)[],
+    children?: (string | Node)[]
 ): HTMLElement {
     const el = document.createElement(tag);
     if (attrs) {
@@ -414,7 +417,7 @@ export function renderProfileAvatar(profile = currentProfile): HTMLElement {
             class: "profile-avatar-img",
             src: `/asset/${profile.avatar.value}`,
             alt: "",
-            loading: "lazy",
+            loading: "lazy"
         }) as HTMLImageElement;
         img.addEventListener("error", () => {
             avatar.textContent = DEFAULT_USER_AVATAR;
@@ -438,7 +441,7 @@ export function renderUserMessage(content: string): HTMLElement {
     return msg;
 }
 
-export function renderAssistantMessage(): { container: HTMLElement; contentEl: HTMLElement } {
+export function renderAssistantMessage(): { container: HTMLElement; contentEl: HTMLElement; } {
     const msg = createElement("div", { class: "message message--assistant" });
     const avatar = createElement("div", { class: "message-avatar" }, ["🧞"]);
     const bubble = createElement("div", { class: "message-bubble" });
@@ -472,7 +475,7 @@ const TOOL_EMOJIS: Record<string, string> = {
     generate_video: "🎬",
     generate_lyrics: "📝",
     analyze_image: "🔎",
-    web_search: "🔍",
+    web_search: "🔍"
 };
 
 export function getToolEmoji(name: string): string {
@@ -485,13 +488,15 @@ const TWEAKABLE_TOOL_KINDS: Record<string, string> = {
     generate_music_cover: "cover",
     generate_video: "video",
     text_to_speech: "voice",
-    generate_long_speech: "narration",
+    generate_long_speech: "voice",
     generate_lyrics: "music",
     analyze_image: "analyze",
-    web_search: "search",
+    web_search: "search"
 };
 
-export function sanitizeToolInput(input?: Record<string, unknown>): Record<string, unknown> | null {
+export function sanitizeToolInput(
+    input?: Record<string, unknown>
+): Record<string, unknown> | null {
     if (!input) return null;
     const clean: Record<string, unknown> = {};
     for (const [key, value] of Object.entries(input)) {
@@ -516,18 +521,19 @@ function appendHighlightedJson(pre: HTMLElement, json: string): void {
     let index = 0;
     for (const match of json.matchAll(tokenPattern)) {
         if (match.index === undefined) continue;
-        if (match.index > index)
+        if (match.index > index) {
             pre.appendChild(document.createTextNode(json.slice(index, match.index)));
+        }
         const token = match[0];
-        const className = token.startsWith('"')
+        const className = token.startsWith("\"")
             ? json.slice(match.index + token.length).match(/^\s*:/)
                 ? "json-key"
                 : "json-string"
             : /^(?:true|false|null)$/.test(token)
-              ? "json-literal"
-              : /^-?\d/.test(token)
-                ? "json-number"
-                : "json-punctuation";
+            ? "json-literal"
+            : /^-?\d/.test(token)
+            ? "json-number"
+            : "json-punctuation";
         pre.appendChild(createElement("span", { class: className }, [token]));
         index = match.index + token.length;
     }
@@ -545,7 +551,7 @@ function renderToolInputDetails(input: Record<string, unknown>): HTMLElement {
 
 function renderToolTweakButton(
     toolName: string,
-    input: Record<string, unknown>,
+    input: Record<string, unknown>
 ): HTMLElement | null {
     if (!TWEAKABLE_TOOL_KINDS[toolName]) return null;
     const button = createElement(
@@ -553,13 +559,13 @@ function renderToolTweakButton(
         {
             type: "button",
             class: "tool-tweak-button",
-            "data-tool-name": toolName,
+            "data-tool-name": toolName
         },
-        ["Tweak"],
+        ["Tweak"]
     );
     button.addEventListener("click", () => {
         document.dispatchEvent(
-            new CustomEvent("hallucygenie:tweak-tool", { detail: { toolName, input } }),
+            new CustomEvent("hallucygenie:tweak-tool", { detail: { toolName, input } })
         );
     });
     return button;
@@ -585,7 +591,7 @@ export function renderToolCardLoading(name: string): HTMLElement {
 export function renderToolResult(
     toolName: string,
     result: ToolResult,
-    input?: Record<string, unknown>,
+    input?: Record<string, unknown>
 ): HTMLElement {
     const card = createElement("div", { class: "tool-card" });
     const header = createElement("div", { class: "tool-card-header" });
@@ -609,7 +615,7 @@ export function renderToolResult(
                 class: "tool-result-image",
                 src: url,
                 alt: "Generated image",
-                loading: "lazy",
+                loading: "lazy"
             });
             img.addEventListener("click", () => openLightbox(url));
             grid.appendChild(img);
@@ -619,7 +625,7 @@ export function renderToolResult(
         const audio = createElement("audio", {
             class: "tool-result-audio",
             controls: "",
-            src: result.content,
+            src: result.content
         });
         body.appendChild(audio);
     } else if (result.type === "video") {
@@ -627,7 +633,7 @@ export function renderToolResult(
             class: "tool-result-video",
             controls: "",
             src: result.content,
-            preload: "metadata",
+            preload: "metadata"
         });
         body.appendChild(video);
     } else {
@@ -650,8 +656,8 @@ let lightboxReturnFocus: HTMLElement | null = null;
 function focusableIn(root: HTMLElement): HTMLElement[] {
     return Array.from(
         root.querySelectorAll<HTMLElement>(
-            'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])',
-        ),
+            "button, [href], input, select, textarea, [tabindex]:not([tabindex=\"-1\"])"
+        )
     ).filter((el) => !el.hasAttribute("disabled") && !el.closest("[hidden]"));
 }
 
@@ -871,13 +877,13 @@ function renderAssetCard(asset: Asset): HTMLElement {
         reference.textContent = "Use as character";
         reference.setAttribute(
             "aria-label",
-            "Use this image as the Create Image character reference",
+            "Use this image as the Create Image character reference"
         );
         reference.addEventListener("click", () => {
             document.dispatchEvent(
                 new CustomEvent("hallucygenie:use-reference-asset", {
-                    detail: { assetId: asset.id, assetUrl: asset.url },
-                }),
+                    detail: { assetId: asset.id, assetUrl: asset.url }
+                })
             );
         });
         card.appendChild(reference);
@@ -900,7 +906,7 @@ export function loadAssets(): void {
     empty.hidden = true;
 
     fetch("/assets")
-        .then((r) => r.json() as Promise<{ assets: Asset[] }>)
+        .then((r) => r.json() as Promise<{ assets: Asset[]; }>)
         .then(({ assets }) => {
             if (!assets.length) {
                 empty.hidden = false;
@@ -963,12 +969,12 @@ let refreshSessionsAfterDone: (() => void) | null = null;
 async function streamSseRequest(
     path: string,
     body: unknown,
-    onEvent?: (event: SSEEvent) => void,
+    onEvent?: (event: SSEEvent) => void
 ): Promise<void> {
     const resp = await fetch(path, {
         method: "POST",
         headers: createApiHeaders(),
-        body: JSON.stringify(body),
+        body: JSON.stringify(body)
     });
 
     if (resp.status === 400) {
@@ -1033,8 +1039,8 @@ async function streamSseRequest(
 }
 
 export async function streamChat(
-    messages: Array<{ role: string; content: string }>,
-    onEvent?: (event: SSEEvent) => void,
+    messages: Array<{ role: string; content: string; }>,
+    onEvent?: (event: SSEEvent) => void
 ): Promise<void> {
     await streamSseRequest("/api/chat", { messages }, onEvent);
 }
@@ -1042,7 +1048,7 @@ export async function streamChat(
 async function streamCreateTool(
     toolName: CreateToolName,
     input: Record<string, unknown>,
-    onEvent?: (event: SSEEvent) => void,
+    onEvent?: (event: SSEEvent) => void
 ): Promise<void> {
     await streamSseRequest("/api/create-tool", { tool_name: toolName, input }, onEvent);
 }
@@ -1124,9 +1130,9 @@ function handleSSEEvent(event: SSEEvent): void {
             const parsed: ToolResultEvent = JSON.parse(data);
             // Capture lyrics text for "Write lyrics for me" button flow
             if (
-                parsed.name === "generate_lyrics" &&
-                parsed.result.type === "text" &&
-                lyricsWriteResolve
+                parsed.name === "generate_lyrics"
+                && parsed.result.type === "text"
+                && lyricsWriteResolve
             ) {
                 capturedLyricsText = parsed.result.content;
             }
@@ -1172,7 +1178,7 @@ function handleSSEEvent(event: SSEEvent): void {
 
 function getOrCreateContentRegion(
     className: string,
-    position: "start" | "end",
+    position: "start" | "end"
 ): HTMLElement | null {
     if (!currentAssistantContent) return null;
     let region = currentAssistantContent.querySelector<HTMLElement>(`.${className}`);
@@ -1299,10 +1305,12 @@ function finishStreaming(): void {
             el.innerHTML = renderMarkdown(rawTextBuffer);
             el.classList.remove("is-streaming");
         });
-    document.querySelectorAll<HTMLElement>(".assistant-text-region.is-streaming").forEach((el) => {
-        unwrapStreamChunks(el);
-        el.classList.remove("is-streaming");
-    });
+    document.querySelectorAll<HTMLElement>(".assistant-text-region.is-streaming").forEach(
+        (el) => {
+            unwrapStreamChunks(el);
+            el.classList.remove("is-streaming");
+        }
+    );
     document
         .querySelectorAll(".message--steer")
         .forEach((el) => el.classList.remove("message--steer"));
@@ -1313,10 +1321,11 @@ function finishStreaming(): void {
     rawTextBuffer = "";
     renderedStreamTextLength = 0;
     thinkingBuffer = "";
-    const shouldClearDraft =
-        clearDraftAfterDone === "chat" || (clearDraftAfterDone === "create" && streamHadToolResult);
-    if (clearDraftAfterDone && shouldClearDraft && !streamHadError)
+    const shouldClearDraft = clearDraftAfterDone === "chat"
+        || (clearDraftAfterDone === "create" && streamHadToolResult);
+    if (clearDraftAfterDone && shouldClearDraft && !streamHadError) {
         void clearDraft(clearDraftAfterDone);
+    }
     if (!streamHadError) refreshSessionsAfterDone?.();
     if (streamHadToolResult) void updateQuotaBadge();
     clearDraftAfterDone = null;
@@ -1360,7 +1369,7 @@ function setStreamingUI(streaming: boolean): void {
 
 export async function sendMessage(
     content: string,
-    draftKind: "chat" | "create" = "chat",
+    draftKind: "chat" | "create" = "chat"
 ): Promise<void> {
     if (!content.trim()) return;
 
@@ -1406,7 +1415,7 @@ export async function sendCreateTool(
     toolName: CreateToolName,
     input: Record<string, unknown>,
     visibleLabel: string,
-    clearDraftOnSuccess = true,
+    clearDraftOnSuccess = true
 ): Promise<void> {
     if (isStreaming) return;
 
@@ -1465,7 +1474,7 @@ function parseHistoryToolCalls(value?: string | null): HistoryToolCall[] {
         const parsed = JSON.parse(value) as HistoryToolCall[];
         if (!Array.isArray(parsed)) return [];
         return parsed.filter(
-            (call) => typeof call.id === "string" && typeof call.name === "string",
+            (call) => typeof call.id === "string" && typeof call.name === "string"
         );
     } catch {
         return [];
@@ -1484,11 +1493,11 @@ function inferHistoryToolResult(toolName: string, content: string): ToolResult {
     }
 
     if (
-        (toolName === "text_to_speech" ||
-            toolName === "generate_long_speech" ||
-            toolName === "generate_music" ||
-            toolName === "generate_music_cover") &&
-        /^(?:\/asset\/|https?:\/\/|data:audio\/)/i.test(content)
+        (toolName === "text_to_speech"
+            || toolName === "generate_long_speech"
+            || toolName === "generate_music"
+            || toolName === "generate_music_cover")
+        && /^(?:\/asset\/|https?:\/\/|data:audio\/)/i.test(content)
     ) {
         return { type: "audio", content };
     }
@@ -1502,7 +1511,7 @@ function inferHistoryToolResult(toolName: string, content: string): ToolResult {
 
 function renderHistoryAssistantMessage(
     msg: HistoryMessage,
-    toolRows: Map<string, HistoryMessage>,
+    toolRows: Map<string, HistoryMessage>
 ): HTMLElement {
     const { container, contentEl } = renderAssistantMessage();
 
@@ -1525,8 +1534,8 @@ function renderHistoryAssistantMessage(
             renderToolResult(
                 call.name,
                 inferHistoryToolResult(call.name, toolRow.content),
-                call.input,
-            ),
+                call.input
+            )
         );
     }
 
@@ -1594,7 +1603,7 @@ function debounce(fn: () => void, ms: number): () => void {
 const IMAGE_SIZE_PRESETS: Record<string, number> = {
     small: 1024,
     medium: 1536,
-    large: 2048,
+    large: 2048
 };
 
 function multipleOf8(value: number): number {
@@ -1603,8 +1612,8 @@ function multipleOf8(value: number): number {
 
 export function imageDimensionsForPreset(
     aspectRatio: string,
-    preset: string,
-): { width: number; height: number } | null {
+    preset: string
+): { width: number; height: number; } | null {
     const longEdge = IMAGE_SIZE_PRESETS[preset];
     if (!longEdge) return null;
     const match = aspectRatio.match(/^(\d+):(\d+)$/);
@@ -1680,7 +1689,7 @@ function defaultCreateDraft(): CreateDraft {
             width: "",
             height: "",
             prompt_optimizer: false,
-            reference_asset_id: "",
+            reference_asset_id: ""
         },
         music: {
             prompt: "",
@@ -1689,7 +1698,7 @@ function defaultCreateDraft(): CreateDraft {
             cover_audio_url: "",
             cover_style: "",
             cover_feature_id: "",
-            cover_lyrics: "",
+            cover_lyrics: ""
         },
         video: { prompt: "", duration: "6", resolution: "768p" },
         voice: {
@@ -1697,17 +1706,10 @@ function defaultCreateDraft(): CreateDraft {
             speed: "1.0",
             voice_id: "English_expressive_narrator",
             volume: "",
-            pitch: "",
-        },
-        narration: {
-            text: "",
-            speed: "1.0",
-            voice_id: "English_expressive_narrator",
-            volume: "",
-            pitch: "",
+            pitch: ""
         },
         analyze: { image_url: "", prompt: "What do you see?" },
-        search: { query: "" },
+        search: { query: "" }
     };
 }
 
@@ -1722,7 +1724,7 @@ function createDraftFromDom(): CreateDraft {
             width: ($("#img-width") as HTMLInputElement).value,
             height: ($("#img-height") as HTMLInputElement).value,
             prompt_optimizer: ($("#img-prompt-optimizer") as HTMLInputElement).checked,
-            reference_asset_id: ($("#img-reference-asset") as HTMLInputElement).value,
+            reference_asset_id: ($("#img-reference-asset") as HTMLInputElement).value
         },
         music: {
             prompt: ($("#music-prompt") as HTMLTextAreaElement).value,
@@ -1731,41 +1733,28 @@ function createDraftFromDom(): CreateDraft {
             cover_audio_url: ($("#cover-audio-url") as HTMLInputElement).value,
             cover_style: ($("#cover-style") as HTMLTextAreaElement).value,
             cover_feature_id: ($("#cover-feature-id") as HTMLInputElement).value,
-            cover_lyrics: ($("#cover-lyrics") as HTMLTextAreaElement).value,
+            cover_lyrics: ($("#cover-lyrics") as HTMLTextAreaElement).value
         },
         video: {
             prompt: ($("#video-prompt") as HTMLTextAreaElement).value,
             duration: ($("#video-duration") as HTMLSelectElement).value,
-            resolution: ($("#video-resolution") as HTMLSelectElement).value,
+            resolution: ($("#video-resolution") as HTMLSelectElement).value
         },
         voice: {
             text: ($("#voice-text") as HTMLTextAreaElement).value,
             speed: ($("#voice-speed") as HTMLSelectElement).value,
-            voice_id:
-                (document.querySelector("#voice-id") as HTMLSelectElement | null)?.value ??
-                "English_expressive_narrator",
-            volume:
-                (document.querySelector("#voice-volume") as HTMLInputElement | null)?.value ?? "",
-            pitch: (document.querySelector("#voice-pitch") as HTMLInputElement | null)?.value ?? "",
-        },
-        narration: {
-            text: ($("#narration-text") as HTMLTextAreaElement).value,
-            speed: ($("#narration-speed") as HTMLSelectElement).value,
-            voice_id:
-                (document.querySelector("#narration-voice-id") as HTMLSelectElement | null)
-                    ?.value ?? "English_expressive_narrator",
-            volume:
-                (document.querySelector("#narration-volume") as HTMLInputElement | null)?.value ??
-                "",
-            pitch:
-                (document.querySelector("#narration-pitch") as HTMLInputElement | null)?.value ??
-                "",
+            voice_id: (document.querySelector("#voice-id") as HTMLSelectElement | null)?.value
+                ?? "English_expressive_narrator",
+            volume: (document.querySelector("#voice-volume") as HTMLInputElement | null)?.value
+                ?? "",
+            pitch: (document.querySelector("#voice-pitch") as HTMLInputElement | null)?.value
+                ?? ""
         },
         analyze: {
             image_url: ($("#analyze-url") as HTMLInputElement).value,
-            prompt: ($("#analyze-prompt") as HTMLTextAreaElement).value,
+            prompt: ($("#analyze-prompt") as HTMLTextAreaElement).value
         },
-        search: { query: ($("#search-query") as HTMLTextAreaElement).value },
+        search: { query: ($("#search-query") as HTMLTextAreaElement).value }
     };
 }
 
@@ -1777,23 +1766,24 @@ function applyCreateDraft(draft: CreateDraft): void {
     ($("#img-width") as HTMLInputElement).value = draft.image.width ?? "";
     ($("#img-height") as HTMLInputElement).value = draft.image.height ?? "";
     const imageSize = document.querySelector("#img-size") as HTMLSelectElement | null;
-    if (imageSize)
+    if (imageSize) {
         imageSize.value = sizePresetFromDimensions(draft.image.width, draft.image.height);
+    }
     const imageSeedStatus = document.querySelector("#img-seed-status") as HTMLElement | null;
     if (imageSeedStatus) {
         imageSeedStatus.textContent = imageSeedStatusText(
             draft.image.n ?? "",
-            draft.image.seed ?? "",
+            draft.image.seed ?? ""
         );
     }
     ($("#img-prompt-optimizer") as HTMLInputElement).checked = Boolean(
-        draft.image.prompt_optimizer,
+        draft.image.prompt_optimizer
     );
     ($("#img-reference-asset") as HTMLInputElement).value = draft.image.reference_asset_id ?? "";
     ($("#music-prompt") as HTMLTextAreaElement).value = draft.music.prompt;
     ($("#music-lyrics") as HTMLTextAreaElement).value = draft.music.lyrics;
-    ($("#cover-source-kind") as HTMLSelectElement).value =
-        draft.music.cover_source_kind ?? "direct";
+    ($("#cover-source-kind") as HTMLSelectElement).value = draft.music.cover_source_kind
+        ?? "direct";
     ($("#cover-audio-url") as HTMLInputElement).value = draft.music.cover_audio_url ?? "";
     ($("#cover-style") as HTMLTextAreaElement).value = draft.music.cover_style ?? "";
     ($("#cover-feature-id") as HTMLInputElement).value = draft.music.cover_feature_id ?? "";
@@ -1809,38 +1799,27 @@ function applyCreateDraft(draft: CreateDraft): void {
     if (voiceId) voiceId.value = draft.voice.voice_id ?? "English_expressive_narrator";
     if (voiceVolume) voiceVolume.value = draft.voice.volume || "1";
     if (voicePitch) voicePitch.value = draft.voice.pitch || "0";
-    ($("#narration-text") as HTMLTextAreaElement).value = draft.narration?.text ?? "";
-    ($("#narration-speed") as HTMLSelectElement).value = draft.narration?.speed ?? "1.0";
-    const narrationVoiceId = document.querySelector(
-        "#narration-voice-id",
-    ) as HTMLSelectElement | null;
-    const narrationVolume = document.querySelector("#narration-volume") as HTMLInputElement | null;
-    const narrationPitch = document.querySelector("#narration-pitch") as HTMLInputElement | null;
-    if (narrationVoiceId)
-        narrationVoiceId.value = draft.narration?.voice_id ?? "English_expressive_narrator";
-    if (narrationVolume) narrationVolume.value = draft.narration?.volume || "1";
-    if (narrationPitch) narrationPitch.value = draft.narration?.pitch || "0";
     ($("#analyze-url") as HTMLInputElement).value = draft.analyze?.image_url ?? "";
-    ($("#analyze-prompt") as HTMLTextAreaElement).value =
-        draft.analyze?.prompt ?? "What do you see?";
+    ($("#analyze-prompt") as HTMLTextAreaElement).value = draft.analyze?.prompt
+        ?? "What do you see?";
     ($("#search-query") as HTMLTextAreaElement).value = draft.search.query;
 }
 
 function isCreateDraft(value: unknown): value is CreateDraft {
     return Boolean(
-        value && typeof value === "object" && "image" in value && "selectedTab" in value,
+        value && typeof value === "object" && "image" in value && "selectedTab" in value
     );
 }
 
 // ── Quota Badge ──────────────────────────────────────────────────
 
 interface QuotaData {
-    chat: { used: number; total: number } | null;
-    speech: { used: number; total: number } | null;
-    image: { used: number; total: number } | null;
-    music: { used: number; total: number } | null;
-    video: { used: number; total: number } | null;
-    lyrics: { used: number; total: number } | null;
+    chat: { used: number; total: number; } | null;
+    speech: { used: number; total: number; } | null;
+    image: { used: number; total: number; } | null;
+    music: { used: number; total: number; } | null;
+    video: { used: number; total: number; } | null;
+    lyrics: { used: number; total: number; } | null;
 }
 
 const QUOTA_LABELS: Record<keyof QuotaData, string> = {
@@ -1849,7 +1828,7 @@ const QUOTA_LABELS: Record<keyof QuotaData, string> = {
     image: "Images",
     music: "Music",
     video: "Video",
-    lyrics: "Lyrics",
+    lyrics: "Lyrics"
 };
 
 export async function updateQuotaBadge(): Promise<void> {
@@ -1884,8 +1863,11 @@ export async function updateQuotaBadge(): Promise<void> {
             const pct = q.used / q.total;
             const state = pct >= 0.95 ? "critical" : pct >= 0.8 ? "warning" : "ok";
             item.querySelector(".quota-used")!.textContent = `${remaining}`;
-            item.className =
-                pct >= 0.95 ? "quota-item critical" : pct >= 0.8 ? "quota-item warn" : "quota-item";
+            item.className = pct >= 0.95
+                ? "quota-item critical"
+                : pct >= 0.8
+                ? "quota-item warn"
+                : "quota-item";
             labels.push(`${label}: ${remaining} of ${q.total} remaining, ${state}`);
         }
         badge.setAttribute("aria-label", labels.join(". "));
@@ -1942,8 +1924,9 @@ export function init(): void {
         void switchSession(sessionSelect.value).catch(() => showError("Failed to switch chat 😕"));
     });
     sessionNew?.addEventListener("click", () => {
-        if (isStreaming && !confirm("A response is still running. Start a new chat anyway?"))
+        if (isStreaming && !confirm("A response is still running. Start a new chat anyway?")) {
             return;
+        }
         void createNewSession()
             .then(refreshSessions)
             .then(reloadActiveSessionUi)
@@ -1977,7 +1960,7 @@ export function init(): void {
 
     connectionStatus.setAttribute(
         "aria-label",
-        `Connection status: ${connectionStatus.title || "Connected"}`,
+        `Connection status: ${connectionStatus.title || "Connected"}`
     );
 
     const profileBtn = $("#profile-btn") as HTMLButtonElement;
@@ -2004,7 +1987,7 @@ export function init(): void {
         profileAvatarPreview.setAttribute("aria-busy", pending ? "true" : "false");
         profileAvatarPreview.setAttribute(
             "aria-label",
-            pending ? "Generating avatar. Please wait." : "Current avatar. Click to upload image",
+            pending ? "Generating avatar. Please wait." : "Current avatar. Click to upload image"
         );
         profileAvatarStatus.textContent = pending ? "Generating avatar." : "Avatar ready.";
     }
@@ -2028,7 +2011,7 @@ export function init(): void {
             interests: profileInterests.value,
             hates: profileHates.value,
             favorites: profileFavorites.value,
-            avatarAsset: profileAvatarAsset.value,
+            avatarAsset: profileAvatarAsset.value
         });
     }
 
@@ -2050,8 +2033,8 @@ export function init(): void {
     function getProfileModalFocusable(): HTMLElement[] {
         return Array.from(
             profileModal.querySelectorAll<HTMLElement>(
-                'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])',
-            ),
+                "button, [href], input, select, textarea, [tabindex]:not([tabindex=\"-1\"])"
+            )
         ).filter((el) => !el.hasAttribute("disabled") && !el.closest("[hidden]"));
     }
 
@@ -2290,8 +2273,8 @@ export function init(): void {
     function getCreateModalFocusable(): HTMLElement[] {
         return Array.from(
             createModal.querySelectorAll<HTMLElement>(
-                'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])',
-            ),
+                "button, [href], input, select, textarea, [tabindex]:not([tabindex=\"-1\"])"
+            )
         ).filter((el) => !el.hasAttribute("disabled") && !el.closest("[hidden]"));
     }
 
@@ -2391,7 +2374,6 @@ export function init(): void {
     const createMusicForm = $("#create-music-form") as HTMLFormElement;
     const createVideoForm = $("#create-video-form") as HTMLFormElement;
     const createVoiceForm = $("#create-voice-form") as HTMLFormElement;
-    const createNarrationForm = $("#create-narration-form") as HTMLFormElement;
     const createAnalyzeForm = $("#create-analyze-form") as HTMLFormElement;
     const createSearchForm = $("#create-search-form") as HTMLFormElement;
     const imgPromptInput = $("#img-prompt") as HTMLTextAreaElement;
@@ -2433,14 +2415,16 @@ export function init(): void {
     const voiceIdInput = document.querySelector<HTMLSelectElement>("#voice-id");
     const voiceVolumeInput = document.querySelector<HTMLInputElement>("#voice-volume");
     const voicePitchInput = document.querySelector<HTMLInputElement>("#voice-pitch");
-    const narrationTextInput = $("#narration-text") as HTMLTextAreaElement;
-    const narrationSpeedInput = $("#narration-speed") as HTMLSelectElement;
-    const narrationVoiceIdInput = document.querySelector<HTMLSelectElement>("#narration-voice-id");
-    const narrationVolumeInput = document.querySelector<HTMLInputElement>("#narration-volume");
-    const narrationPitchInput = document.querySelector<HTMLInputElement>("#narration-pitch");
-    const voicePauseDurationInput =
-        document.querySelector<HTMLSelectElement>("#voice-pause-duration");
+    const voicePauseDurationInput = document.querySelector<HTMLSelectElement>(
+        "#voice-pause-duration"
+    );
     const voiceInsertPause = document.querySelector<HTMLButtonElement>("#voice-insert-pause");
+    const voiceInterjectionInput = document.querySelector<HTMLSelectElement>(
+        "#voice-interjection"
+    );
+    const voiceInsertInterjection = document.querySelector<HTMLButtonElement>(
+        "#voice-insert-interjection"
+    );
     const voiceComposerStatus = document.querySelector<HTMLElement>("#voice-composer-status");
     const analyzeFileInput = document.querySelector<HTMLInputElement>("#analyze-file");
     const analyzeDropzone = document.querySelector<HTMLButtonElement>("#analyze-dropzone");
@@ -2455,9 +2439,9 @@ export function init(): void {
 
     void fetch("/api/music-cover/status")
         .then((resp) => resp.json())
-        .then((data: { youtubeEnabled?: boolean }) => {
+        .then((data: { youtubeEnabled?: boolean; }) => {
             const youtube = coverSourceKind.querySelector(
-                'option[value="youtube"]',
+                "option[value=\"youtube\"]"
             ) as HTMLOptionElement | null;
             if (youtube && !data.youtubeEnabled) {
                 youtube.disabled = true;
@@ -2493,8 +2477,8 @@ export function init(): void {
     function insertVoiceText(snippet: string): void {
         const start = voiceTextInput.selectionStart ?? voiceTextInput.value.length;
         const end = voiceTextInput.selectionEnd ?? start;
-        voiceTextInput.value =
-            voiceTextInput.value.slice(0, start) + snippet + voiceTextInput.value.slice(end);
+        voiceTextInput.value = voiceTextInput.value.slice(0, start) + snippet
+            + voiceTextInput.value.slice(end);
         const cursor = start + snippet.length;
         voiceTextInput.selectionStart = cursor;
         voiceTextInput.selectionEnd = cursor;
@@ -2505,8 +2489,9 @@ export function init(): void {
     function insertVoicePause(): void {
         const duration = Number(voicePauseDurationInput?.value ?? "0.5");
         if (duration < 0.01 || duration > 99.99) {
-            if (voiceComposerStatus)
+            if (voiceComposerStatus) {
                 voiceComposerStatus.textContent = "Pause must be 0.01 to 99.99 seconds.";
+            }
             return;
         }
         const start = voiceTextInput.selectionStart ?? voiceTextInput.value.length;
@@ -2514,24 +2499,33 @@ export function init(): void {
         const before = voiceTextInput.value.slice(0, start);
         const after = voiceTextInput.value.slice(end);
         if (
-            !before.trim() ||
-            !after.trim() ||
-            /<#\d+(?:\.\d+)?#>\s*$/.test(before) ||
-            /^\s*<#\d+(?:\.\d+)?#>/.test(after)
+            !before.trim()
+            || !after.trim()
+            || /<#\d+(?:\.\d+)?#>\s*$/.test(before)
+            || /^\s*<#\d+(?:\.\d+)?#>/.test(after)
         ) {
-            if (voiceComposerStatus)
+            if (voiceComposerStatus) {
                 voiceComposerStatus.textContent =
                     "Put pauses between words, not at edges or beside another pause.";
+            }
             return;
         }
         insertVoiceText(` <#${duration}#> `);
-        if (voiceComposerStatus)
+        if (voiceComposerStatus) {
             voiceComposerStatus.textContent = `Inserted ${duration} sec pause.`;
+        }
+    }
+
+    function insertVoiceInterjection(): void {
+        const tag = voiceInterjectionInput?.value;
+        if (!tag) return;
+        insertVoiceText(` (${tag}) `);
+        if (voiceComposerStatus) voiceComposerStatus.textContent = `Inserted (${tag}).`;
     }
 
     function fillCreateFormFromToolInput(
         toolName: string,
-        inputData: Record<string, unknown>,
+        inputData: Record<string, unknown>
     ): void {
         const kind = TWEAKABLE_TOOL_KINDS[toolName] ?? toolName;
         if (kind === "image") {
@@ -2543,11 +2537,11 @@ export function init(): void {
             imgHeightInput.value = String(inputData.height ?? "");
             imgSizeInput.value = sizePresetFromDimensions(
                 imgWidthInput.value,
-                imgHeightInput.value,
+                imgHeightInput.value
             );
             imgSeedStatus.textContent = imageSeedStatusText(
                 imgCountInput.value,
-                imgSeedInput.value,
+                imgSeedInput.value
             );
             imgReferenceAsset.value = String(inputData.reference_asset_id ?? "");
             updateImageReferenceUi();
@@ -2568,21 +2562,12 @@ export function init(): void {
         } else if (kind === "voice") {
             voiceTextInput.value = String(inputData.text ?? "");
             voiceSpeedInput.value = String(inputData.speed ?? "1.0");
-            if (voiceIdInput)
+            if (voiceIdInput) {
                 voiceIdInput.value = String(inputData.voice_id ?? "English_expressive_narrator");
+            }
             if (voiceVolumeInput) voiceVolumeInput.value = String(inputData.volume ?? "");
             if (voicePitchInput) voicePitchInput.value = String(inputData.pitch ?? "");
             setCreateTab("voice");
-        } else if (kind === "narration") {
-            narrationTextInput.value = String(inputData.text ?? "");
-            narrationSpeedInput.value = String(inputData.speed ?? "1.0");
-            if (narrationVoiceIdInput)
-                narrationVoiceIdInput.value = String(
-                    inputData.voice_id ?? "English_expressive_narrator",
-                );
-            if (narrationVolumeInput) narrationVolumeInput.value = String(inputData.volume ?? "");
-            if (narrationPitchInput) narrationPitchInput.value = String(inputData.pitch ?? "");
-            setCreateTab("narration");
         } else if (kind === "analyze") {
             analyzeUrlInput.value = String(inputData.image_url ?? "");
             analyzePromptInput.value = String(inputData.prompt ?? "What do you see?");
@@ -2611,7 +2596,7 @@ export function init(): void {
     });
 
     document.addEventListener("hallucygenie:use-reference-asset", (event) => {
-        const detail = (event as CustomEvent).detail as { assetId?: string; assetUrl?: string };
+        const detail = (event as CustomEvent).detail as { assetId?: string; assetUrl?: string; };
         if (!detail?.assetId || !/^asset_[0-9a-f-]+$/i.test(detail.assetId)) return;
         openCreateModal();
         imgReferenceAsset.value = detail.assetId;
@@ -2623,7 +2608,7 @@ export function init(): void {
 
     async function loadRecent(kind: string): Promise<void> {
         const container = createModal.querySelector<HTMLElement>(
-            `.create-recent[data-kind="${kind}"]`,
+            `.create-recent[data-kind="${kind}"]`
         );
         if (!container) return;
         const items = await fetchCreateHistory(kind);
@@ -2638,7 +2623,7 @@ export function init(): void {
             button.type = "button";
             button.className = "recent-button";
             button.textContent = String(
-                item.input.prompt ?? item.input.text ?? item.input.query ?? item.tool_name,
+                item.input.prompt ?? item.input.text ?? item.input.query ?? item.tool_name
             ).slice(0, 24);
             button.addEventListener("click", () => fillFormFromHistory(item));
             const remove = document.createElement("button");
@@ -2669,8 +2654,9 @@ export function init(): void {
     }
 
     async function selectAnalyzeFile(file: File): Promise<void> {
-        if (!analyzeFileInput || !analyzeDropzone || !analyzeFileStatus || !analyzeFilePreview)
+        if (!analyzeFileInput || !analyzeDropzone || !analyzeFileStatus || !analyzeFilePreview) {
             return;
+        }
         const error = rejectBadAnalyzeFile(file);
         if (error) {
             showError(error);
@@ -2747,7 +2733,7 @@ export function init(): void {
     async function restoreDrafts(): Promise<void> {
         const chatDraft = await getDraft("chat");
         if (chatDraft && typeof chatDraft === "object" && "text" in chatDraft) {
-            input.value = String((chatDraft as { text: unknown }).text ?? "");
+            input.value = String((chatDraft as { text: unknown; }).text ?? "");
         } else {
             input.value = "";
         }
@@ -2842,17 +2828,12 @@ export function init(): void {
         voiceIdInput,
         voiceVolumeInput,
         voicePitchInput,
-        narrationTextInput,
-        narrationSpeedInput,
-        narrationVoiceIdInput,
-        narrationVolumeInput,
-        narrationPitchInput,
         analyzeUrlInput,
         analyzePromptInput,
-        searchQueryInput,
+        searchQueryInput
     ]
         .filter((el): el is HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement =>
-            Boolean(el),
+            Boolean(el)
         )
         .forEach((el) => {
             el.addEventListener("input", persistCreateDraft);
@@ -2898,20 +2879,11 @@ export function init(): void {
         resetCoverPreparedState("URL changed. Prepare it before generating.");
     });
     voiceInsertPause?.addEventListener("click", insertVoicePause);
-    document
-        .querySelectorAll<HTMLButtonElement>(".voice-interjection[data-tag]")
-        .forEach((button) => {
-            button.addEventListener("click", () => {
-                const tag = button.dataset.tag;
-                if (!tag) return;
-                insertVoiceText(` (${tag}) `);
-                if (voiceComposerStatus) voiceComposerStatus.textContent = `Inserted (${tag}).`;
-            });
-        });
+    voiceInsertInterjection?.addEventListener("click", insertVoiceInterjection);
 
     input.addEventListener("paste", (event) => {
         const file = Array.from(event.clipboardData?.files ?? []).find((item) =>
-            item.type.startsWith("image/"),
+            item.type.startsWith("image/")
         );
         if (!file) return;
         event.preventDefault();
@@ -2928,7 +2900,7 @@ export function init(): void {
                 await sendCreateTool(
                     "analyze_image",
                     { image_url: uploaded.assetUrl, prompt: "What do you see in this image?" },
-                    `Analyze pasted image: ${file.name || "clipboard image"}`,
+                    `Analyze pasted image: ${file.name || "clipboard image"}`
                 );
             } catch {
                 showError("Failed to upload pasted image 😕");
@@ -2972,7 +2944,7 @@ export function init(): void {
         const input: Record<string, unknown> = {
             prompt,
             aspect_ratio: imgRatioInput.value,
-            prompt_optimizer: imgPromptOptimizerInput.checked,
+            prompt_optimizer: imgPromptOptimizerInput.checked
         };
         const validationError = imageCreateValidationError(prompt, imgCountInput.value);
         if (validationError) {
@@ -2989,8 +2961,9 @@ export function init(): void {
             input.width = Number(imgWidthInput.value.trim());
             input.height = Number(imgHeightInput.value.trim());
         }
-        if (imgReferenceAsset.value.trim())
+        if (imgReferenceAsset.value.trim()) {
             input.reference_asset_id = imgReferenceAsset.value.trim();
+        }
         if (prompt) {
             closeCreateModal();
             void sendCreateTool("generate_image", input, `Create image: ${prompt}`);
@@ -3017,9 +2990,9 @@ export function init(): void {
                 {
                     prompt,
                     duration: Number(videoDurationInput.value),
-                    resolution: videoResolutionInput.value,
+                    resolution: videoResolutionInput.value
                 },
-                `Create video: ${prompt}`,
+                `Create video: ${prompt}`
             );
         }
     });
@@ -3050,7 +3023,7 @@ export function init(): void {
                 writeLyricsBtn.disabled = false;
                 updateLyricsButton();
                 setLyricsWriteResolve(null);
-            },
+            }
         );
     });
 
@@ -3080,7 +3053,10 @@ export function init(): void {
         coverPreprocess.disabled = true;
         coverStatus.textContent = "Preparing cover...";
         try {
-            const resp = await fetch("/api/music-cover/preprocess", { method: "POST", body: form });
+            const resp = await fetch("/api/music-cover/preprocess", {
+                method: "POST",
+                body: form
+            });
             const data = (await resp.json()) as {
                 cover_feature_id?: string;
                 lyrics?: string;
@@ -3124,46 +3100,31 @@ export function init(): void {
         void sendCreateTool(
             "generate_music_cover",
             { prompt, lyrics, cover_feature_id: featureId },
-            `Create cover: ${prompt}`,
+            `Create cover: ${prompt}`
         );
     });
 
     createVoiceForm.addEventListener("submit", (e) => {
         e.preventDefault();
-        const text = voiceTextInput.value.trim();
+        const text = voiceTextInput.value;
         const input: Record<string, unknown> = {
             text,
-            speed: Number(voiceSpeedInput.value),
+            speed: Number(voiceSpeedInput.value)
         };
         if (voiceIdInput?.value.trim()) input.voice_id = voiceIdInput.value.trim();
         if (voiceVolumeInput?.value.trim()) input.volume = Number(voiceVolumeInput.value.trim());
         if (voicePitchInput?.value.trim()) input.pitch = Number(voicePitchInput.value.trim());
-        if (text) {
+        if (text.trim()) {
             closeCreateModal();
-            void sendCreateTool("text_to_speech", input, `Create voice: ${text}`);
-        }
-    });
-
-    createNarrationForm.addEventListener("submit", (e) => {
-        e.preventDefault();
-        const text = narrationTextInput.value.trim();
-        const input: Record<string, unknown> = {
-            text,
-            speed: Number(narrationSpeedInput.value),
-        };
-        if (narrationVoiceIdInput?.value.trim())
-            input.voice_id = narrationVoiceIdInput.value.trim();
-        if (narrationVolumeInput?.value.trim())
-            input.volume = Number(narrationVolumeInput.value.trim());
-        if (narrationPitchInput?.value.trim())
-            input.pitch = Number(narrationPitchInput.value.trim());
-        if (text) {
-            closeCreateModal();
-            void sendCreateTool(
-                "generate_long_speech",
-                input,
-                `Create long narration: ${text.slice(0, 80)}${text.length > 80 ? "…" : ""}`,
-            );
+            if (text.length > LONG_VOICE_TEXT_THRESHOLD) {
+                void sendCreateTool(
+                    "generate_long_speech",
+                    input,
+                    `Create voice: ${text.slice(0, 80)}${text.length > 80 ? "…" : ""}`
+                );
+            } else {
+                void sendCreateTool("text_to_speech", input, `Create voice: ${text}`);
+            }
         }
     });
 
@@ -3180,7 +3141,7 @@ export function init(): void {
         void sendCreateTool(
             "analyze_image",
             { image_url: imageUrl, prompt },
-            `Analyze image: ${prompt}`,
+            `Analyze image: ${prompt}`
         );
     });
 

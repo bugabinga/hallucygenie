@@ -7,7 +7,7 @@
 > chat, image, voice, and song,
 > for one gamer kid.
 >
-> > ~~ The Machine
+>> ~~ The Machine
 
 HallucyGenie is a kid-friendly MiniMax web UI for chat, images, voice, music,
 lyrics, image analysis, web search, and local generated assets.
@@ -64,7 +64,7 @@ just release v1.0.0
 
 ## Commands
 
-• `just ready` — format, typecheck, build-check, unit, integration, E2E.
+• `just ready` — lint, typecheck, build-check, unit, integration, E2E.
 • `just release-check` — `ready`, metadata validation, container build, smoke test.
 • `just release vX.Y.Z` — verify, open Chrome, ask manual approval, tag, push.
 • `just container` — local production image.

@@ -3,7 +3,7 @@
 
 import { Database } from "bun:sqlite";
 import { randomUUID } from "node:crypto";
-import { readFileSync, readdirSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 
 // ── Quota Limits (MiniMax Plus-Highspeed plan) ──────────────────────
@@ -12,7 +12,7 @@ export const QUOTAS: Record<string, number> = {
     speech: 9000,
     image: 100,
     music: 100,
-    lyrics: 100,
+    lyrics: 100
 };
 
 const QUOTA_WARNING_THRESHOLD = 0.8;
@@ -53,10 +53,14 @@ export function runMigrations(db: Database, migrationsDir: string): void {
         return;
     }
 
-    const latest = files.reduce((max, file) => Math.max(max, parseInt(file.split("-")[0], 10)), 0);
+    const latest = files.reduce(
+        (max, file) => Math.max(max, parseInt(file.split("-")[0], 10)),
+        0
+    );
     for (const version of applied) {
-        if (version > latest)
+        if (version > latest) {
             throw new Error(`Database schema version ${version} is newer than code ${latest}`);
+        }
     }
 
     // Run pending migrations in a transaction
@@ -74,7 +78,7 @@ export function runMigrations(db: Database, migrationsDir: string): void {
             const sql = readFileSync(join(migrationsDir, file), "utf-8");
             db.exec(sql);
             db.prepare(
-                "INSERT INTO schema_migrations (version, applied_at) VALUES (?, datetime('now'))",
+                "INSERT INTO schema_migrations (version, applied_at) VALUES (?, datetime('now'))"
             ).run(version);
         }
         db.exec("COMMIT");
@@ -116,7 +120,7 @@ export interface UserProfile {
     interests: string;
     hates: string;
     favorites: string;
-    avatar: { type: "asset"; value: string };
+    avatar: { type: "asset"; value: string; };
     updatedAt: number;
 }
 
@@ -127,7 +131,7 @@ export const DEFAULT_USER_PROFILE: UserProfile = {
     hates: "",
     favorites: "",
     avatar: { type: "asset", value: "" },
-    updatedAt: 0,
+    updatedAt: 0
 };
 
 function tableExists(db: Database, name: string): boolean {
@@ -145,7 +149,7 @@ function normalizeSessionId(sessionId: string, context: string): string {
 
 export function getActiveSessionId(db: Database): string | null {
     const row = db.prepare("SELECT value FROM app_state WHERE key = ?").get(ACTIVE_SESSION_KEY) as
-        | { value: string }
+        | { value: string; }
         | undefined;
     if (!row) return null;
     return normalizeSessionId(row.value, "getActiveSessionId");
@@ -156,7 +160,7 @@ export function setActiveSessionId(db: Database, sessionId: string): void {
     db.prepare(
         `INSERT INTO app_state (key, value, updated_at)
          VALUES (?, ?, datetime('now'))
-         ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = datetime('now')`,
+         ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = datetime('now')`
     ).run(ACTIVE_SESSION_KEY, normalized);
 }
 
@@ -192,8 +196,9 @@ function normalizeProfileText(value: unknown, field: string, max: number): strin
 
 function normalizeProfileAvatar(value: unknown): UserProfile["avatar"] {
     if (value === undefined || value === null) return DEFAULT_USER_PROFILE.avatar;
-    if (typeof value !== "object" || Array.isArray(value))
+    if (typeof value !== "object" || Array.isArray(value)) {
         throw new Error("avatar must be an object");
+    }
     const avatar = value as Record<string, unknown>;
     if (avatar.type !== "asset") throw new Error("avatar type invalid");
     if (typeof avatar.value !== "string") throw new Error("avatar value must be a string");
@@ -215,13 +220,13 @@ export function normalizeUserProfile(input: unknown, now = Date.now()): UserProf
         hates: normalizeProfileText(obj.hates ?? "", "hates", 300),
         favorites: normalizeProfileText(obj.favorites ?? "", "favorites", 300),
         avatar: normalizeProfileAvatar(obj.avatar),
-        updatedAt: now,
+        updatedAt: now
     };
 }
 
 export function getUserProfile(db: Database): UserProfile {
     const row = db.prepare("SELECT value FROM app_state WHERE key = ?").get(USER_PROFILE_KEY) as
-        | { value: string }
+        | { value: string; }
         | undefined;
     if (!row) return { ...DEFAULT_USER_PROFILE, avatar: { ...DEFAULT_USER_PROFILE.avatar } };
     const parsed = JSON.parse(row.value) as Record<string, unknown>;
@@ -234,7 +239,7 @@ export function saveUserProfile(db: Database, input: unknown): UserProfile {
     db.prepare(
         `INSERT INTO app_state (key, value, updated_at)
          VALUES (?, ?, datetime('now'))
-         ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = datetime('now')`,
+         ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = datetime('now')`
     ).run(USER_PROFILE_KEY, JSON.stringify(profile));
     return profile;
 }
@@ -264,12 +269,12 @@ function normalizeSessionName(name: string): string {
 export function createSession(
     db: Database,
     id: string = randomUUID(),
-    name = DEFAULT_SESSION_NAME,
+    name = DEFAULT_SESSION_NAME
 ): SessionRow {
     const normalized = normalizeSessionName(name);
     db.prepare(
         `INSERT INTO sessions (id, name, name_source, created_at, updated_at)
-         VALUES (?, ?, ?, datetime('now'), datetime('now'))`,
+         VALUES (?, ?, ?, datetime('now'), datetime('now'))`
     ).run(id, normalized, DEFAULT_SESSION_NAME_SOURCE);
     return getSession(db, id)!;
 }
@@ -290,7 +295,7 @@ export function getSession(db: Database, id: string): SessionRow | null {
         .prepare(
             `SELECT id, name, name_source, created_at, updated_at, archived_at
              FROM sessions
-             WHERE id = ?`,
+             WHERE id = ?`
         )
         .get(id) as SessionRow | null;
 }
@@ -301,7 +306,7 @@ export function listSessions(db: Database): SessionRow[] {
             `SELECT id, name, name_source, created_at, updated_at, archived_at
              FROM sessions
              WHERE archived_at IS NULL
-             ORDER BY updated_at DESC, created_at DESC, id DESC`,
+             ORDER BY updated_at DESC, created_at DESC, id DESC`
         )
         .all() as SessionRow[];
 }
@@ -312,7 +317,7 @@ export function renameSession(db: Database, id: string, name: string): SessionRo
         .prepare(
             `UPDATE sessions
              SET name = ?, name_source = 'manual', updated_at = datetime('now')
-             WHERE id = ? AND archived_at IS NULL`,
+             WHERE id = ? AND archived_at IS NULL`
         )
         .run(normalized, id);
     if (result.changes !== 1) throw new Error(`session not found: ${id}`);
@@ -324,7 +329,7 @@ export function archiveSession(db: Database, id: string): void {
         .prepare(
             `UPDATE sessions
              SET archived_at = datetime('now'), updated_at = datetime('now')
-             WHERE id = ? AND archived_at IS NULL`,
+             WHERE id = ? AND archived_at IS NULL`
         )
         .run(id);
     if (result.changes !== 1) throw new Error(`session not found: ${id}`);
@@ -336,7 +341,7 @@ export function autoNameSession(db: Database, id: string, name: string): Session
         .prepare(
             `UPDATE sessions
              SET name = ?, name_source = 'auto', updated_at = datetime('now')
-             WHERE id = ? AND archived_at IS NULL AND name_source = 'default'`,
+             WHERE id = ? AND archived_at IS NULL AND name_source = 'default'`
         )
         .run(normalized, id);
     if (result.changes !== 1) throw new Error(`session not auto-nameable: ${id}`);
@@ -360,11 +365,11 @@ function validateDraftKind(kind: string): "chat" | "create" {
 export function getDraft(
     db: Database,
     sessionId: string,
-    kind: "chat" | "create",
+    kind: "chat" | "create"
 ): DraftRow | null {
     return db
         .prepare(
-            "SELECT session_id, kind, value_json, updated_at FROM drafts WHERE session_id = ? AND kind = ?",
+            "SELECT session_id, kind, value_json, updated_at FROM drafts WHERE session_id = ? AND kind = ?"
         )
         .get(sessionId, kind) as DraftRow | null;
 }
@@ -373,7 +378,7 @@ export function saveDraft(
     db: Database,
     sessionId: string,
     kind: "chat" | "create",
-    value: unknown,
+    value: unknown
 ): DraftRow {
     const validKind = validateDraftKind(kind);
     const valueJson = JSON.stringify(value);
@@ -381,7 +386,7 @@ export function saveDraft(
     db.prepare(
         `INSERT INTO drafts (session_id, kind, value_json, updated_at)
          VALUES (?, ?, ?, datetime('now'))
-         ON CONFLICT(session_id, kind) DO UPDATE SET value_json = excluded.value_json, updated_at = datetime('now')`,
+         ON CONFLICT(session_id, kind) DO UPDATE SET value_json = excluded.value_json, updated_at = datetime('now')`
     ).run(sessionId, validKind, valueJson);
     return getDraft(db, sessionId, validKind)!;
 }
@@ -389,7 +394,7 @@ export function saveDraft(
 export function deleteDraft(db: Database, sessionId: string, kind: "chat" | "create"): void {
     db.prepare("DELETE FROM drafts WHERE session_id = ? AND kind = ?").run(
         sessionId,
-        validateDraftKind(kind),
+        validateDraftKind(kind)
     );
 }
 
@@ -404,6 +409,11 @@ export interface ToolInputHistoryRow {
     input_json: string;
     status: "submitted" | "succeeded" | "failed";
     asset_id: string | null;
+    provider_stage: string | null;
+    provider_status_code: number | null;
+    provider_status_msg: string | null;
+    provider_task_id: string | null;
+    provider_file_id: string | null;
     hidden_at: string | null;
     created_at: string;
     updated_at: string;
@@ -415,7 +425,8 @@ export function kindForTool(toolName: string): string {
     if (toolName === "generate_music") return "music";
     if (toolName === "generate_lyrics") return "lyrics";
     if (toolName === "text_to_speech") return "voice";
-    if (toolName === "generate_long_speech") return "narration";
+    if (toolName === "generate_long_speech") return "voice";
+    if (toolName === "generate_video") return "video";
     if (toolName === "web_search") return "search";
     if (toolName === "analyze_image") return "analyze";
     return "other";
@@ -436,15 +447,24 @@ export function recordToolInputHistory(
         input: Record<string, unknown>;
         status: "submitted" | "succeeded" | "failed";
         asset_id?: string | null;
-    },
+        provider?: {
+            stage?: string;
+            status_code?: number;
+            status_msg?: string;
+            task_id?: string;
+            file_id?: string;
+        };
+    }
 ): ToolInputHistoryRow {
     const id = randomUUID();
     const inputJson = JSON.stringify(input.input);
+    const providerJson = JSON.stringify(input.provider ?? {});
     assertNoRawAssetDataInMessage(inputJson);
+    assertNoRawAssetDataInMessage(providerJson);
     db.prepare(
         `INSERT INTO tool_input_history
-         (id, session_id, kind, origin, tool_name, input_json, status, asset_id, created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))`,
+         (id, session_id, kind, origin, tool_name, input_json, status, asset_id, provider_stage, provider_status_code, provider_status_msg, provider_task_id, provider_file_id, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))`
     ).run(
         id,
         input.session_id,
@@ -454,6 +474,11 @@ export function recordToolInputHistory(
         inputJson,
         validateHistoryStatus(input.status),
         input.asset_id ?? null,
+        input.provider?.stage ?? null,
+        input.provider?.status_code ?? null,
+        input.provider?.status_msg ?? null,
+        input.provider?.task_id ?? null,
+        input.provider?.file_id ?? null
     );
     return getToolInputHistory(db, id)!;
 }
@@ -467,7 +492,7 @@ export function getToolInputHistory(db: Database, id: string): ToolInputHistoryR
 export function listToolInputHistory(
     db: Database,
     sessionId: string,
-    options: { kind?: string; limit?: number; offset?: number } = {},
+    options: { kind?: string; limit?: number; offset?: number; } = {}
 ): ToolInputHistoryRow[] {
     const limit = Math.min(Math.max(options.limit ?? 20, 1), 50);
     const offset = Math.max(options.offset ?? 0, 0);
@@ -477,7 +502,7 @@ export function listToolInputHistory(
                 `SELECT * FROM tool_input_history
                  WHERE session_id = ? AND kind = ? AND hidden_at IS NULL
                  ORDER BY created_at DESC, id DESC
-                 LIMIT ? OFFSET ?`,
+                 LIMIT ? OFFSET ?`
             )
             .all(sessionId, options.kind, limit, offset) as ToolInputHistoryRow[];
     }
@@ -486,7 +511,7 @@ export function listToolInputHistory(
             `SELECT * FROM tool_input_history
              WHERE session_id = ? AND hidden_at IS NULL
              ORDER BY created_at DESC, id DESC
-             LIMIT ? OFFSET ?`,
+             LIMIT ? OFFSET ?`
         )
         .all(sessionId, limit, offset) as ToolInputHistoryRow[];
 }
@@ -496,7 +521,7 @@ export function hideToolInputHistory(db: Database, sessionId: string, id: string
         .prepare(
             `UPDATE tool_input_history
              SET hidden_at = datetime('now'), updated_at = datetime('now')
-             WHERE id = ? AND session_id = ? AND hidden_at IS NULL`,
+             WHERE id = ? AND session_id = ? AND hidden_at IS NULL`
         )
         .run(id, sessionId);
     if (result.changes !== 1) throw new Error(`history item not found: ${id}`);
@@ -539,12 +564,12 @@ export function saveMessage(
     content: string,
     toolCalls?: string | null,
     toolCallId?: string | null,
-    thinking?: string | null,
+    thinking?: string | null
 ): void {
     assertMessageTextIsSafe(content, thinking);
     db.prepare(
         `INSERT INTO messages (session_id, role, content, tool_calls_json, tool_call_id, thinking)
-     VALUES (?, ?, ?, ?, ?, ?)`,
+     VALUES (?, ?, ?, ?, ?, ?)`
     ).run(sessionId, role, content, toolCalls ?? null, toolCallId ?? null, thinking ?? null);
 }
 
@@ -557,7 +582,7 @@ export function getMessages(db: Database, sessionId: string): MessageRow[] {
             `SELECT id, session_id, role, content, tool_calls_json, tool_call_id, thinking, created_at
        FROM messages
        WHERE session_id = ?
-       ORDER BY created_at ASC, id ASC`,
+       ORDER BY created_at ASC, id ASC`
         )
         .all(sessionId) as unknown as MessageRow[];
 }
@@ -571,7 +596,7 @@ export function savePreference(db: Database, key: string, value: string): void {
     db.prepare(
         `INSERT INTO preferences (key, value, updated_at)
      VALUES (?, ?, datetime('now'))
-     ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = datetime('now')`,
+     ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = datetime('now')`
     ).run(key, value);
 }
 
@@ -600,7 +625,7 @@ export function trackUsage(db: Database, feature: string): void {
     db.prepare(
         `INSERT INTO daily_usage (date, feature, count)
      VALUES (date('now'), ?, 1)
-     ON CONFLICT(date, feature) DO UPDATE SET count = count + 1`,
+     ON CONFLICT(date, feature) DO UPDATE SET count = count + 1`
     ).run(feature);
 }
 
@@ -611,7 +636,7 @@ export function trackUsage(db: Database, feature: string): void {
 export function getUsageToday(db: Database): Record<string, number> {
     const rows = db
         .prepare("SELECT feature, count FROM daily_usage WHERE date = date('now')")
-        .all() as Array<{ feature: string; count: number }>;
+        .all() as Array<{ feature: string; count: number; }>;
     const result: Record<string, number> = {};
     for (const row of rows) {
         result[row.feature] = row.count;
@@ -641,7 +666,7 @@ export function checkQuota(db: Database, feature: string): QuotaStatus {
 
     const row = db
         .prepare("SELECT count FROM daily_usage WHERE date = date('now') AND feature = ?")
-        .get(feature) as { count: number } | undefined;
+        .get(feature) as { count: number; } | undefined;
 
     const used = row?.count ?? 0;
     const remaining = Math.max(0, limit - used);
@@ -664,18 +689,18 @@ export function consumeQuota(db: Database, feature: string, amount = 1): number 
     return db.transaction(() => {
         const row = db
             .prepare("SELECT count FROM daily_usage WHERE date = date('now') AND feature = ?")
-            .get(feature) as { count: number } | undefined;
+            .get(feature) as { count: number; } | undefined;
         const currentCount = row?.count ?? 0;
 
         if (currentCount + amount > limit) return null;
 
         if (row) {
             db.prepare(
-                "UPDATE daily_usage SET count = count + ? WHERE date = date('now') AND feature = ?",
+                "UPDATE daily_usage SET count = count + ? WHERE date = date('now') AND feature = ?"
             ).run(amount, feature);
         } else {
             db.prepare(
-                "INSERT INTO daily_usage (date, feature, count) VALUES (date('now'), ?, ?)",
+                "INSERT INTO daily_usage (date, feature, count) VALUES (date('now'), ?, ?)"
             ).run(feature, amount);
         }
 
@@ -693,7 +718,7 @@ export function releaseQuota(db: Database, feature: string, amount = 1): void {
     db.prepare(
         `UPDATE daily_usage
          SET count = max(0, count - ?)
-         WHERE date = date('now') AND feature = ? AND count > 0`,
+         WHERE date = date('now') AND feature = ? AND count > 0`
     ).run(amount, feature);
 }
 
@@ -723,11 +748,11 @@ export function saveAsset(
     asset: Omit<AssetRow, "created_at" | "params_json"> & {
         created_at?: number;
         params_json?: string | null;
-    },
+    }
 ): void {
     assertAssetParamsAreSafe(asset.params_json);
     db.prepare(
-        "INSERT INTO assets (id, session_id, type, filename, mime_type, prompt, tool_name, size_bytes, created_at, params_json) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        "INSERT INTO assets (id, session_id, type, filename, mime_type, prompt, tool_name, size_bytes, created_at, params_json) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
     ).run(
         asset.id,
         asset.session_id,
@@ -738,7 +763,7 @@ export function saveAsset(
         asset.tool_name,
         asset.size_bytes,
         asset.created_at ?? Date.now(),
-        asset.params_json ?? null,
+        asset.params_json ?? null
     );
 }
 
@@ -754,7 +779,14 @@ export function getAsset(db: Database, assetId: string): AssetRow | null {
         .get(assetId) as unknown as AssetRow | null;
 }
 
-export interface VideoTaskRow {
+export interface ProviderDiagnosticRow {
+    provider_stage?: string | null;
+    provider_status_code?: number | null;
+    provider_status_msg?: string | null;
+    provider_file_id?: string | null;
+}
+
+export interface VideoTaskRow extends ProviderDiagnosticRow {
     id: string;
     session_id: string;
     provider_task_id: string;
@@ -770,8 +802,8 @@ export interface VideoTaskRow {
 export function saveVideoTask(db: Database, task: VideoTaskRow): void {
     assertNoRawAssetDataInMessage(JSON.stringify(task));
     db.prepare(
-        `INSERT INTO video_tasks (id, session_id, provider_task_id, status, prompt, file_id, asset_id, error, created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        `INSERT INTO video_tasks (id, session_id, provider_task_id, status, prompt, file_id, asset_id, error, provider_stage, provider_status_code, provider_status_msg, provider_file_id, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
     ).run(
         task.id,
         task.session_id,
@@ -781,15 +813,32 @@ export function saveVideoTask(db: Database, task: VideoTaskRow): void {
         task.file_id,
         task.asset_id,
         task.error,
+        task.provider_stage ?? null,
+        task.provider_status_code ?? null,
+        task.provider_status_msg ?? null,
+        task.provider_file_id ?? null,
         task.created_at,
-        task.updated_at,
+        task.updated_at
     );
 }
 
 export function updateVideoTask(
     db: Database,
     id: string,
-    patch: Partial<Pick<VideoTaskRow, "status" | "file_id" | "asset_id" | "error">>,
+    patch: Partial<
+        Pick<
+            VideoTaskRow,
+            | "provider_task_id"
+            | "status"
+            | "file_id"
+            | "asset_id"
+            | "error"
+            | "provider_stage"
+            | "provider_status_code"
+            | "provider_status_msg"
+            | "provider_file_id"
+        >
+    >
 ): void {
     const current = db.prepare("SELECT * FROM video_tasks WHERE id = ?").get(id) as
         | VideoTaskRow
@@ -799,9 +848,21 @@ export function updateVideoTask(
     assertNoRawAssetDataInMessage(JSON.stringify(next));
     db.prepare(
         `UPDATE video_tasks
-         SET status = ?, file_id = ?, asset_id = ?, error = ?, updated_at = ?
-         WHERE id = ?`,
-    ).run(next.status, next.file_id, next.asset_id, next.error, next.updated_at, id);
+         SET provider_task_id = ?, status = ?, file_id = ?, asset_id = ?, error = ?, provider_stage = ?, provider_status_code = ?, provider_status_msg = ?, provider_file_id = ?, updated_at = ?
+         WHERE id = ?`
+    ).run(
+        next.provider_task_id,
+        next.status,
+        next.file_id,
+        next.asset_id,
+        next.error,
+        next.provider_stage ?? null,
+        next.provider_status_code ?? null,
+        next.provider_status_msg ?? null,
+        next.provider_file_id ?? null,
+        next.updated_at,
+        id
+    );
 }
 
 export function listVideoTasks(db: Database, sessionId: string): VideoTaskRow[] {
@@ -810,7 +871,7 @@ export function listVideoTasks(db: Database, sessionId: string): VideoTaskRow[] 
         .all(sessionId) as unknown as VideoTaskRow[];
 }
 
-export interface AsyncTtsTaskRow {
+export interface AsyncTtsTaskRow extends ProviderDiagnosticRow {
     id: string;
     session_id: string;
     provider_task_id: string;
@@ -827,8 +888,8 @@ export interface AsyncTtsTaskRow {
 export function saveAsyncTtsTask(db: Database, task: AsyncTtsTaskRow): void {
     assertNoRawAssetDataInMessage(JSON.stringify(task));
     db.prepare(
-        `INSERT INTO async_tts_tasks (id, session_id, provider_task_id, status, text_summary, voice_id, file_id, asset_id, error, created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        `INSERT INTO async_tts_tasks (id, session_id, provider_task_id, status, text_summary, voice_id, file_id, asset_id, error, provider_stage, provider_status_code, provider_status_msg, provider_file_id, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
     ).run(
         task.id,
         task.session_id,
@@ -839,15 +900,32 @@ export function saveAsyncTtsTask(db: Database, task: AsyncTtsTaskRow): void {
         task.file_id,
         task.asset_id,
         task.error,
+        task.provider_stage ?? null,
+        task.provider_status_code ?? null,
+        task.provider_status_msg ?? null,
+        task.provider_file_id ?? null,
         task.created_at,
-        task.updated_at,
+        task.updated_at
     );
 }
 
 export function updateAsyncTtsTask(
     db: Database,
     id: string,
-    patch: Partial<Pick<AsyncTtsTaskRow, "status" | "file_id" | "asset_id" | "error">>,
+    patch: Partial<
+        Pick<
+            AsyncTtsTaskRow,
+            | "provider_task_id"
+            | "status"
+            | "file_id"
+            | "asset_id"
+            | "error"
+            | "provider_stage"
+            | "provider_status_code"
+            | "provider_status_msg"
+            | "provider_file_id"
+        >
+    >
 ): void {
     const current = db.prepare("SELECT * FROM async_tts_tasks WHERE id = ?").get(id) as
         | AsyncTtsTaskRow
@@ -857,9 +935,21 @@ export function updateAsyncTtsTask(
     assertNoRawAssetDataInMessage(JSON.stringify(next));
     db.prepare(
         `UPDATE async_tts_tasks
-         SET status = ?, file_id = ?, asset_id = ?, error = ?, updated_at = ?
-         WHERE id = ?`,
-    ).run(next.status, next.file_id, next.asset_id, next.error, next.updated_at, id);
+         SET provider_task_id = ?, status = ?, file_id = ?, asset_id = ?, error = ?, provider_stage = ?, provider_status_code = ?, provider_status_msg = ?, provider_file_id = ?, updated_at = ?
+         WHERE id = ?`
+    ).run(
+        next.provider_task_id,
+        next.status,
+        next.file_id,
+        next.asset_id,
+        next.error,
+        next.provider_stage ?? null,
+        next.provider_status_code ?? null,
+        next.provider_status_msg ?? null,
+        next.provider_file_id ?? null,
+        next.updated_at,
+        id
+    );
 }
 
 export function listAsyncTtsTasks(db: Database, sessionId: string): AsyncTtsTaskRow[] {

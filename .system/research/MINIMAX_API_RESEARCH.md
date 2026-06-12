@@ -239,13 +239,13 @@ These handle the same capabilities as our `tools.ts` (speech, voice cloning, vid
 
 ## Summary of Fixes Applied
 
-| #   | Issue                                             | Severity | Fix                                              |
-| --- | ------------------------------------------------- | -------- | ------------------------------------------------ |
-| 1   | All tools used `x-api-key` auth (failed silently) | CRITICAL | Changed to `Authorization: Bearer` in `tools.ts` |
-| 2   | TTS model already `speech-2.8-hd`                 | —        | Already correct, no change needed                |
-| 3   | AGENTS.md had wrong auth note                     | LOW      | Updated auth header docs                         |
-| 4   | AGENTS.md quotas didn't note per-call limitation  | LOW      | Added tracking limitation note                   |
-| 5   | AGENTS.md missing unsupported models              | LOW      | Added model availability table                   |
+| # | Issue                                             | Severity | Fix                                              |
+| - | ------------------------------------------------- | -------- | ------------------------------------------------ |
+| 1 | All tools used `x-api-key` auth (failed silently) | CRITICAL | Changed to `Authorization: Bearer` in `tools.ts` |
+| 2 | TTS model already `speech-2.8-hd`                 | —        | Already correct, no change needed                |
+| 3 | AGENTS.md had wrong auth note                     | LOW      | Updated auth header docs                         |
+| 4 | AGENTS.md quotas didn't note per-call limitation  | LOW      | Added tracking limitation note                   |
+| 5 | AGENTS.md missing unsupported models              | LOW      | Added model availability table                   |
 
 ---
 

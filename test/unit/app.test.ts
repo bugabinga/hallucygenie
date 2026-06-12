@@ -2,10 +2,10 @@
 // Tests: SSE parsing, message rendering, API helpers, input state, DOM helpers
 // Uses happy-dom for DOM environment
 
-import { describe, it, before, after } from "node:test";
 import assert from "node:assert/strict";
-import { writeFileSync, mkdirSync } from "node:fs";
-import { join, dirname } from "node:path";
+import { mkdirSync, writeFileSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { after, before, describe, it } from "node:test";
 import { fileURLToPath } from "node:url";
 import {
     imageCreateValidationError,
@@ -13,7 +13,7 @@ import {
     imageSeedForSubmit,
     imageSeedStatusText,
     imageSurpriseCode,
-    renderMarkdown,
+    renderMarkdown
 } from "../../public/app.ts";
 import type { SSEEvent } from "../../public/app.ts";
 
@@ -22,8 +22,8 @@ const SNAPSHOTS_DIR = join(__dirname, "__snapshots__");
 // Capture the real (native) fetch. Use getOwnPropertyDescriptor so we
 // reliably get the native fetch even if this file is loaded in a worker
 // where another parallel file already reassigned globalThis.fetch.
-const ORIGINAL_FETCH =
-    Object.getOwnPropertyDescriptor(globalThis, "fetch")?.value ?? globalThis.fetch;
+const ORIGINAL_FETCH = Object.getOwnPropertyDescriptor(globalThis, "fetch")?.value
+    ?? globalThis.fetch;
 
 after(() => {
     globalThis.fetch = ORIGINAL_FETCH;
@@ -41,7 +41,7 @@ function writeSnapshot(name: string, html: string): void {
 // ── Inline testable functions (mirrors app.ts logic exactly) ─────────
 
 // SSE parsing
-function parseSSELine(line: string): { field: string; value: string } | null {
+function parseSSELine(line: string): { field: string; value: string; } | null {
     if (line.startsWith("event:")) {
         return { field: "event", value: line.slice(6).trim() };
     }
@@ -87,7 +87,7 @@ function* parseSSEChunk(chunk: string): Generator<SSEEvent> {
 // API helpers
 function createApiHeaders(): Record<string, string> {
     return {
-        "Content-Type": "application/json",
+        "Content-Type": "application/json"
     };
 }
 
@@ -100,7 +100,7 @@ const TOOL_EMOJIS: Record<string, string> = {
     generate_music_cover: "🎵",
     generate_video: "🎬",
     analyze_image: "🔎",
-    web_search: "🔍",
+    web_search: "🔍"
 };
 
 function getToolEmoji(name: string): string {
@@ -144,8 +144,8 @@ describe("SSE Parsing", () => {
     });
 
     it("parseSSELine - data field", () => {
-        const result = parseSSELine('data: {"delta": "hello"}');
-        assert.deepEqual(result, { field: "data", value: '{"delta": "hello"}' });
+        const result = parseSSELine("data: {\"delta\": \"hello\"}");
+        assert.deepEqual(result, { field: "data", value: "{\"delta\": \"hello\"}" });
     });
 
     it("parseSSELine - returns null for non-SSE lines", () => {
@@ -155,15 +155,15 @@ describe("SSE Parsing", () => {
     });
 
     it("parseSSEChunk - single text event (OpenAI format)", () => {
-        const chunk = 'data: {"choices":[{"delta":{"content":"hi"}}]\n\n';
+        const chunk = "data: {\"choices\":[{\"delta\":{\"content\":\"hi\"}}]\n\n";
         const events = [...parseSSEChunk(chunk)];
         assert.equal(events.length, 1);
         assert.equal(events[0].event, "message");
-        assert.equal(events[0].data, '{"choices":[{"delta":{"content":"hi"}}]');
+        assert.equal(events[0].data, "{\"choices\":[{\"delta\":{\"content\":\"hi\"}}]");
     });
 
     it("parseSSEChunk - tool_start event", () => {
-        const chunk = 'event: tool_start\ndata: {"id":"t1","name":"generate_image"}\n\n';
+        const chunk = "event: tool_start\ndata: {\"id\":\"t1\",\"name\":\"generate_image\"}\n\n";
         const events = [...parseSSEChunk(chunk)];
         assert.equal(events.length, 1);
         assert.equal(events[0].event, "tool_start");
@@ -174,7 +174,7 @@ describe("SSE Parsing", () => {
 
     it("parseSSEChunk - tool_result event", () => {
         const chunk =
-            'event: tool_result\ndata: {"id":"t1","name":"generate_image","result":{"type":"image","content":"http://example.com/img.png"}}\n\n';
+            "event: tool_result\ndata: {\"id\":\"t1\",\"name\":\"generate_image\",\"result\":{\"type\":\"image\",\"content\":\"http://example.com/img.png\"}}\n\n";
         const events = [...parseSSEChunk(chunk)];
         assert.equal(events.length, 1);
         assert.equal(events[0].event, "tool_result");
@@ -191,7 +191,7 @@ describe("SSE Parsing", () => {
     });
 
     it("parseSSEChunk - error event", () => {
-        const chunk = 'event: error\ndata: {"error":"something broke"}\n\n';
+        const chunk = "event: error\ndata: {\"error\":\"something broke\"}\n\n";
         const events = [...parseSSEChunk(chunk)];
         assert.equal(events.length, 1);
         assert.equal(events[0].event, "error");
@@ -201,18 +201,18 @@ describe("SSE Parsing", () => {
 
     it("parseSSEChunk - multiple events in single chunk", () => {
         const chunk =
-            'data: {"choices":[{"delta":{"content":"hello"}}]\n\ndata: {"choices":[{"delta":{"content":" world"}}]\n\n';
+            "data: {\"choices\":[{\"delta\":{\"content\":\"hello\"}}]\n\ndata: {\"choices\":[{\"delta\":{\"content\":\" world\"}}]\n\n";
         const events = [...parseSSEChunk(chunk)];
         assert.equal(events.length, 2);
-        assert.equal(events[0].data, '{"choices":[{"delta":{"content":"hello"}}]');
-        assert.equal(events[1].data, '{"choices":[{"delta":{"content":" world"}}]');
+        assert.equal(events[0].data, "{\"choices\":[{\"delta\":{\"content\":\"hello\"}}]");
+        assert.equal(events[1].data, "{\"choices\":[{\"delta\":{\"content\":\" world\"}}]");
     });
 
     it("parseSSEChunk - handles no trailing newline", () => {
-        const chunk = 'data: {"test":true}';
+        const chunk = "data: {\"test\":true}";
         const events = [...parseSSEChunk(chunk)];
         assert.equal(events.length, 1);
-        assert.equal(events[0].data, '{"test":true}');
+        assert.equal(events[0].data, "{\"test\":true}");
     });
 
     it("parseSSEChunk - empty chunk yields nothing", () => {
@@ -222,7 +222,7 @@ describe("SSE Parsing", () => {
 
     it("parseSSEChunk - mixed event types", () => {
         const chunk =
-            'data: {"choices":[{"delta":{"content":"making art"}}]\n\nevent: tool_start\ndata: {"id":"t1","name":"generate_image"}\n\n';
+            "data: {\"choices\":[{\"delta\":{\"content\":\"making art\"}}]\n\nevent: tool_start\ndata: {\"id\":\"t1\",\"name\":\"generate_image\"}\n\n";
         const events = [...parseSSEChunk(chunk)];
         assert.equal(events.length, 2);
         assert.equal(events[0].event, "message");
@@ -246,15 +246,15 @@ describe("Create image control helpers", () => {
     it("keeps size presets linked to aspect ratio", () => {
         assert.deepEqual(imageDimensionsForPreset("16:9", "medium"), {
             width: 1536,
-            height: 864,
+            height: 864
         });
         assert.deepEqual(imageDimensionsForPreset("9:16", "medium"), {
             width: 864,
-            height: 1536,
+            height: 1536
         });
         assert.deepEqual(imageDimensionsForPreset("1:1", "small"), {
             width: 1024,
-            height: 1024,
+            height: 1024
         });
         assert.equal(imageDimensionsForPreset("16:9", ""), null);
     });
@@ -262,11 +262,11 @@ describe("Create image control helpers", () => {
     it("creates bounded surprise codes for optional seeds", () => {
         assert.equal(
             imageSurpriseCode(() => 0),
-            "1",
+            "1"
         );
         assert.equal(
             imageSurpriseCode(() => 0.5),
-            "1073741824",
+            "1073741824"
         );
     });
 
@@ -275,7 +275,7 @@ describe("Create image control helpers", () => {
         assert.equal(imageSeedForSubmit("2", "123"), null);
         assert.equal(
             imageSeedStatusText("2", "123"),
-            "Surprise code is off for multiple pictures so each one is different.",
+            "Surprise code is off for multiple pictures so each one is different."
         );
     });
 
@@ -337,7 +337,7 @@ describe("DOM Rendering", () => {
     function createElement(
         tag: string,
         attrs?: Record<string, string>,
-        children?: (string | Node)[],
+        children?: (string | Node)[]
     ): HTMLElement {
         const el = doc.createElement(tag);
         if (attrs) {
@@ -368,7 +368,7 @@ describe("DOM Rendering", () => {
         return msg;
     }
 
-    function renderAssistantMessage(): { container: HTMLElement; contentEl: HTMLElement } {
+    function renderAssistantMessage(): { container: HTMLElement; contentEl: HTMLElement; } {
         const msg = createElement("div", { class: "message message--assistant" });
         const avatar = createElement("div", { class: "message-avatar" }, ["🧞"]);
         const bubble = createElement("div", { class: "message-bubble" });
@@ -407,7 +407,7 @@ describe("DOM Rendering", () => {
 
     function renderToolResult(
         toolName: string,
-        result: { type: string; content: string },
+        result: { type: string; content: string; }
     ): HTMLElement {
         const card = createElement("div", { class: "tool-card" });
         const header = createElement("div", { class: "tool-card-header" });
@@ -423,14 +423,14 @@ describe("DOM Rendering", () => {
                 class: "tool-result-image",
                 src: result.content,
                 alt: "Generated image",
-                loading: "lazy",
+                loading: "lazy"
             });
             body.appendChild(img);
         } else if (result.type === "audio") {
             const audio = createElement("audio", {
                 class: "tool-result-audio",
                 controls: "",
-                src: result.content,
+                src: result.content
             });
             body.appendChild(audio);
         } else if (result.type === "video") {
@@ -438,7 +438,7 @@ describe("DOM Rendering", () => {
                 class: "tool-result-video",
                 controls: "",
                 src: result.content,
-                preload: "metadata",
+                preload: "metadata"
             });
             body.appendChild(video);
         } else if (result.type === "error") {
@@ -494,7 +494,7 @@ describe("DOM Rendering", () => {
     it("tool result image card has img element", () => {
         const card = renderToolResult("generate_image", {
             type: "image",
-            content: "http://example.com/img.png",
+            content: "http://example.com/img.png"
         });
         const img = card.querySelector("img");
         assert.ok(img);
@@ -505,7 +505,7 @@ describe("DOM Rendering", () => {
     it("tool result audio card has audio element", () => {
         const card = renderToolResult("text_to_speech", {
             type: "audio",
-            content: "http://example.com/audio.mp3",
+            content: "http://example.com/audio.mp3"
         });
         const audio = card.querySelector("audio");
         assert.ok(audio);
@@ -516,7 +516,7 @@ describe("DOM Rendering", () => {
     it("tool result music card has audio element", () => {
         const card = renderToolResult("generate_music", {
             type: "audio",
-            content: "http://example.com/music.mp3",
+            content: "http://example.com/music.mp3"
         });
         const audio = card.querySelector("audio");
         assert.ok(audio);
@@ -526,7 +526,7 @@ describe("DOM Rendering", () => {
     it("tool result video card has video element", () => {
         const card = renderToolResult("generate_video", {
             type: "video",
-            content: "/asset/asset_video",
+            content: "/asset/asset_video"
         });
         const video = card.querySelector("video");
         assert.ok(video);
@@ -537,7 +537,7 @@ describe("DOM Rendering", () => {
     it("tool result error card shows friendly error", () => {
         const card = renderToolResult("generate_image", {
             type: "error",
-            content: "Rate limited",
+            content: "Rate limited"
         });
         assert.ok(card.textContent!.includes("😕"));
         assert.ok(card.textContent!.includes("Rate limited"));
@@ -564,7 +564,7 @@ describe("Snapshot Tests - Message Bubbles", () => {
     function createElement(
         tag: string,
         attrs?: Record<string, string>,
-        children?: (string | Node)[],
+        children?: (string | Node)[]
     ): HTMLElement {
         const el = doc.createElement(tag);
         if (attrs) {
@@ -614,8 +614,12 @@ describe("Snapshot Tests - Message Bubbles", () => {
     function renderToolCardLoading(name: string): HTMLElement {
         const card = createElement("div", { class: "tool-card" });
         const header = createElement("div", { class: "tool-card-header" });
-        header.appendChild(createElement("span", { class: "tool-emoji" }, [getToolEmoji(name)]));
-        header.appendChild(createElement("span", {}, [`Running ${name.replace(/_/g, " ")}...`]));
+        header.appendChild(
+            createElement("span", { class: "tool-emoji" }, [getToolEmoji(name)])
+        );
+        header.appendChild(
+            createElement("span", {}, [`Running ${name.replace(/_/g, " ")}...`])
+        );
         const loading = createElement("div", { class: "tool-card-loading" });
         loading.appendChild(createElement("div", { class: "spinner" }));
         card.appendChild(header);
@@ -625,12 +629,12 @@ describe("Snapshot Tests - Message Bubbles", () => {
 
     function renderToolResult(
         toolName: string,
-        result: { type: string; content: string },
+        result: { type: string; content: string; }
     ): HTMLElement {
         const card = createElement("div", { class: "tool-card" });
         const header = createElement("div", { class: "tool-card-header" });
         header.appendChild(
-            createElement("span", { class: "tool-emoji" }, [getToolEmoji(toolName)]),
+            createElement("span", { class: "tool-emoji" }, [getToolEmoji(toolName)])
         );
         header.appendChild(createElement("span", {}, [toolName.replace(/_/g, " ")]));
         const body = createElement("div", { class: "tool-card-body" });
@@ -641,16 +645,16 @@ describe("Snapshot Tests - Message Bubbles", () => {
                 createElement("img", {
                     class: "tool-result-image",
                     src: result.content,
-                    alt: "Generated image",
-                }),
+                    alt: "Generated image"
+                })
             );
         } else if (result.type === "audio") {
             body.appendChild(
                 createElement("audio", {
                     class: "tool-result-audio",
                     controls: "",
-                    src: result.content,
-                }),
+                    src: result.content
+                })
             );
         } else if (result.type === "error") {
             body.textContent = `😕 ${result.content}`;
@@ -665,10 +669,10 @@ describe("Snapshot Tests - Message Bubbles", () => {
         const msg = renderUserMessage("Hello HallucyGenie!");
         const html = msg.outerHTML;
         // Verify key structural elements
-        assert.ok(html.includes('class="message message--user"'));
-        assert.ok(html.includes('class="message-avatar"'));
-        assert.ok(html.includes('class="message-bubble"'));
-        assert.ok(html.includes('class="message-content"'));
+        assert.ok(html.includes("class=\"message message--user\""));
+        assert.ok(html.includes("class=\"message-avatar\""));
+        assert.ok(html.includes("class=\"message-bubble\""));
+        assert.ok(html.includes("class=\"message-content\""));
         assert.ok(html.includes("Hello HallucyGenie!"));
         // Write snapshot to file for reference
         writeSnapshot("user-message", html);
@@ -677,8 +681,8 @@ describe("Snapshot Tests - Message Bubbles", () => {
     it("snapshot: assistant message bubble HTML structure", () => {
         const msg = renderAssistantMessage();
         const html = msg.outerHTML;
-        assert.ok(html.includes('class="message message--assistant"'));
-        assert.ok(html.includes('class="message-avatar"'));
+        assert.ok(html.includes("class=\"message message--assistant\""));
+        assert.ok(html.includes("class=\"message-avatar\""));
         assert.ok(html.includes("🧞"));
         assert.ok(html.includes("Hello world"));
         writeSnapshot("assistant-message", html);
@@ -696,8 +700,8 @@ describe("Snapshot Tests - Message Bubbles", () => {
     it("snapshot: tool card loading HTML structure", () => {
         const card = renderToolCardLoading("generate_image");
         const html = card.outerHTML;
-        assert.ok(html.includes('class="tool-card"'));
-        assert.ok(html.includes('class="spinner"'));
+        assert.ok(html.includes("class=\"tool-card\""));
+        assert.ok(html.includes("class=\"spinner\""));
         assert.ok(html.includes("🎨"));
         assert.ok(html.includes("generate image"));
         writeSnapshot("tool-loading", html);
@@ -706,24 +710,24 @@ describe("Snapshot Tests - Message Bubbles", () => {
     it("snapshot: tool result image card HTML structure", () => {
         const card = renderToolResult("generate_image", {
             type: "image",
-            content: "http://example.com/gen.png",
+            content: "http://example.com/gen.png"
         });
         const html = card.outerHTML;
         assert.ok(html.includes("tool-result-image"));
-        assert.ok(html.includes('src="http://example.com/gen.png"'));
-        assert.ok(html.includes('alt="Generated image"'));
+        assert.ok(html.includes("src=\"http://example.com/gen.png\""));
+        assert.ok(html.includes("alt=\"Generated image\""));
         writeSnapshot("tool-image", html);
     });
 
     it("snapshot: tool result audio card (TTS) HTML structure", () => {
         const card = renderToolResult("text_to_speech", {
             type: "audio",
-            content: "http://example.com/speech.mp3",
+            content: "http://example.com/speech.mp3"
         });
         const html = card.outerHTML;
         assert.ok(html.includes("tool-result-audio"));
-        assert.ok(html.includes('src="http://example.com/speech.mp3"'));
-        assert.ok(html.includes('controls=""'));
+        assert.ok(html.includes("src=\"http://example.com/speech.mp3\""));
+        assert.ok(html.includes("controls=\"\""));
         assert.ok(html.includes("🎙️"));
         writeSnapshot("tool-tts", html);
     });
@@ -731,17 +735,20 @@ describe("Snapshot Tests - Message Bubbles", () => {
     it("snapshot: tool result audio card (music) HTML structure", () => {
         const card = renderToolResult("generate_music", {
             type: "audio",
-            content: "http://example.com/music.mp3",
+            content: "http://example.com/music.mp3"
         });
         const html = card.outerHTML;
         assert.ok(html.includes("tool-result-audio"));
-        assert.ok(html.includes('src="http://example.com/music.mp3"'));
+        assert.ok(html.includes("src=\"http://example.com/music.mp3\""));
         assert.ok(html.includes("🎵"));
         writeSnapshot("tool-music", html);
     });
 
     it("snapshot: tool result error card HTML structure", () => {
-        const card = renderToolResult("generate_image", { type: "error", content: "Rate limited" });
+        const card = renderToolResult("generate_image", {
+            type: "error",
+            content: "Rate limited"
+        });
         const html = card.outerHTML;
         assert.ok(html.includes("😕"));
         assert.ok(html.includes("Rate limited"));
@@ -785,14 +792,14 @@ describe("renderMarkdown", () => {
         const result = renderMarkdown("click [here](https://example.com)");
         assert.ok(
             result.includes(
-                '<a href="https://example.com" target="_blank" rel="noopener">here</a>',
-            ),
+                "<a href=\"https://example.com\" target=\"_blank\" rel=\"noopener\">here</a>"
+            )
         );
     });
 
     it("renders autolinks for bare URLs", () => {
         const result = renderMarkdown("see https://example.com for info");
-        assert.ok(result.includes('<a href="https://example.com"'));
+        assert.ok(result.includes("<a href=\"https://example.com\""));
         assert.ok(result.includes(">https://example.com</a>"));
     });
 
@@ -856,7 +863,7 @@ describe("renderMarkdown", () => {
     it("renders fenced code block with language", () => {
         const input = "```js\nconst x = 1;\n```";
         const result = renderMarkdown(input);
-        assert.ok(result.includes('<pre><code class="lang-js">'), `got: ${result}`);
+        assert.ok(result.includes("<pre><code class=\"lang-js\">"), `got: ${result}`);
         assert.ok(result.includes("const x = 1;"));
     });
 
@@ -917,14 +924,14 @@ describe("renderMarkdown", () => {
 
     it("renders unchecked task", () => {
         const result = renderMarkdown("- [ ] todo");
-        assert.ok(result.includes('class="task-checkbox"'));
+        assert.ok(result.includes("class=\"task-checkbox\""));
         assert.ok(!result.includes("checked"));
     });
 
     it("renders checked task", () => {
         const result = renderMarkdown("- [x] done");
         assert.ok(result.includes("checked"));
-        assert.ok(result.includes('class="task-checkbox task-checked"'));
+        assert.ok(result.includes("class=\"task-checkbox task-checked\""));
     });
 
     // ── Horizontal rule ──────────────────────────────────────────────
@@ -951,8 +958,8 @@ describe("renderMarkdown", () => {
         const result = renderMarkdown("![cat](https://example.com/cat.png)");
         assert.ok(!result.includes("<img"));
         assert.ok(result.includes("[image: cat]"));
-        assert.ok(result.includes('href="https://example.com/cat.png"'));
-        assert.ok(result.includes('rel="noopener nofollow"'));
+        assert.ok(result.includes("href=\"https://example.com/cat.png\""));
+        assert.ok(result.includes("rel=\"noopener nofollow\""));
     });
 
     it("normalizes excessive blank lines before rendering", () => {
@@ -996,7 +1003,7 @@ describe("renderMarkdown", () => {
             "```",
             "",
             "- [x] Done",
-            "- [ ] Todo",
+            "- [ ] Todo"
         ].join("\n");
         const result = renderMarkdown(input);
         writeSnapshot("gfm-sample", result);
@@ -1004,7 +1011,7 @@ describe("renderMarkdown", () => {
 
     it("snapshot: simple message", () => {
         const result = renderMarkdown(
-            "Hey! Here's a **cool idea**: try `console.log` and see https://example.com for more.",
+            "Hey! Here's a **cool idea**: try `console.log` and see https://example.com for more."
         );
         writeSnapshot("simple-message", result);
     });
@@ -1026,34 +1033,34 @@ function createTestWindow(options?: ConstructorParameters<typeof Window>[0]): Wi
 }
 
 import {
-    renderThinkingBlock,
-    fetchHistory,
-    sendSteer,
     $,
-    createElement,
-    renderUserMessage,
-    renderProfileAvatar,
-    normalizedProfileFromForm,
-    fetchProfile,
-    putProfile,
-    deleteProfile,
-    renderAssistantMessage,
-    renderSteerMessage,
-    renderToolCardLoading,
-    renderToolResult,
-    openLightbox,
-    closeLightbox,
-    showError,
-    streamChat,
-    sendMessage,
-    sendCreateTool,
-    sendSteerMessage,
-    loadHistory,
     autoResizeInput,
+    closeLightbox,
+    createElement,
+    deleteProfile,
+    fetchHistory,
+    fetchProfile,
     handleInputChange,
     init,
-    updateQuotaBadge,
     loadAssets,
+    loadHistory,
+    normalizedProfileFromForm,
+    openLightbox,
+    putProfile,
+    renderAssistantMessage,
+    renderProfileAvatar,
+    renderSteerMessage,
+    renderThinkingBlock,
+    renderToolCardLoading,
+    renderToolResult,
+    renderUserMessage,
+    sendCreateTool,
+    sendMessage,
+    sendSteer,
+    sendSteerMessage,
+    showError,
+    streamChat,
+    updateQuotaBadge
 } from "../../public/app.ts";
 
 // ── DOM Setup Helpers ────────────────────────────────────────────────
@@ -1062,7 +1069,7 @@ import {
  * Creates a full DOM environment with all elements that app.ts expects.
  * Sets globalThis.document, window, localStorage, etc.
  */
-function setupDOM(): { win: any; doc: any; errors: string[] } {
+function setupDOM(): { win: any; doc: any; errors: string[]; } {
     const win = createTestWindow();
     const doc = win.document;
 
@@ -1166,7 +1173,6 @@ function setupDOM(): { win: any; doc: any; errors: string[] } {
           <button class="create-tab" data-tab="video">🎬 Video</button>
           <button class="create-tab" data-tab="cover">🎧 Cover Song</button>
           <button class="create-tab" data-tab="voice">🎤 Voice</button>
-          <button class="create-tab" data-tab="narration">📖 Narration</button>
           <button class="create-tab" data-tab="analyze">🔎 Analyze</button>
           <button class="create-tab" data-tab="search">🔍 Search</button>
         </div>
@@ -1224,11 +1230,12 @@ function setupDOM(): { win: any; doc: any; errors: string[] } {
           </form>
           <form id="create-voice-form" class="create-panel" data-panel="voice" hidden>
             <div class="form-group">
-              <textarea id="voice-text"></textarea>
+              <textarea id="voice-text" maxlength="50000"></textarea>
             </div>
             <select id="voice-pause-duration"><option value="0.5">0.5 sec</option></select>
             <button id="voice-insert-pause" type="button">Insert pause</button>
-            <button class="voice-interjection" type="button" data-tag="laughs">laughs</button>
+            <select id="voice-interjection"><option value="laughs">laughs</option></select>
+            <button id="voice-insert-interjection" type="button">Insert interjection</button>
             <p id="voice-composer-status" role="status"></p>
             <div class="form-group">
               <select id="voice-speed">
@@ -1238,13 +1245,6 @@ function setupDOM(): { win: any; doc: any; errors: string[] } {
             <select id="voice-id"><option value="English_expressive_narrator">Expressive Narrator</option></select>
             <input id="voice-volume" type="range" value="1" />
             <input id="voice-pitch" type="range" value="0" />
-          </form>
-          <form id="create-narration-form" class="create-panel" data-panel="narration" hidden>
-            <textarea id="narration-text"></textarea>
-            <select id="narration-speed"><option value="1.0" selected>1.0x</option></select>
-            <select id="narration-voice-id"><option value="English_expressive_narrator">Expressive Narrator</option></select>
-            <input id="narration-volume" type="range" value="1" />
-            <input id="narration-pitch" type="range" value="0" />
           </form>
           <form id="create-analyze-form" class="create-panel" data-panel="analyze" hidden>
             <div class="form-group">
@@ -1277,13 +1277,13 @@ function setupDOM(): { win: any; doc: any; errors: string[] } {
         KeyboardEvent: win.KeyboardEvent,
         InputEvent: win.InputEvent,
         FocusEvent: win.FocusEvent,
-        CustomEvent: win.CustomEvent,
+        CustomEvent: win.CustomEvent
     });
     const localStore = new Map<string, string>();
     (globalThis as any).localStorage = {
         getItem: (key: string) => localStore.get(key) ?? null,
         setItem: (key: string, value: string) => localStore.set(key, value),
-        removeItem: (key: string) => localStore.delete(key),
+        removeItem: (key: string) => localStore.delete(key)
     };
     (globalThis as any).requestAnimationFrame = (cb: () => void) => {
         cb();
@@ -1303,14 +1303,14 @@ function setupDOM(): { win: any; doc: any; errors: string[] } {
  */
 function createSSEResponse(
     chunks: string[],
-    options: { status?: number; json?: any } = {},
+    options: { status?: number; json?: any; } = {}
 ): Response {
     const status = options.status ?? 200;
     if (status !== 200) {
         const body = options.json ? JSON.stringify(options.json) : "{}";
         return new Response(body, {
             status,
-            headers: { "Content-Type": "application/json" },
+            headers: { "Content-Type": "application/json" }
         });
     }
 
@@ -1324,19 +1324,19 @@ function createSSEResponse(
                 // Deliver chunk by chunk
                 const chunk = fullBody.slice(
                     offset,
-                    offset + Math.max(1, Math.ceil(fullBody.length / chunks.length)),
+                    offset + Math.max(1, Math.ceil(fullBody.length / chunks.length))
                 );
                 controller.enqueue(encoder.encode(chunk));
                 offset += chunk.length;
             } else {
                 controller.close();
             }
-        },
+        }
     });
 
     return new Response(stream, {
         status: 200,
-        headers: { "Content-Type": "text/event-stream" },
+        headers: { "Content-Type": "text/event-stream" }
     });
 }
 
@@ -1422,8 +1422,8 @@ describe("streamChat error paths", () => {
             Promise.resolve(
                 new Response(JSON.stringify({ error: "Bad request" }), {
                     status: 400,
-                    headers: { "Content-Type": "application/json" },
-                }),
+                    headers: { "Content-Type": "application/json" }
+                })
             );
 
         await streamChat([{ role: "user", content: "hi" }]);
@@ -1445,8 +1445,8 @@ describe("streamChat error paths", () => {
             Promise.resolve(
                 new Response(JSON.stringify({ error: "Service unavailable" }), {
                     status: 503,
-                    headers: { "Content-Type": "application/json" },
-                }),
+                    headers: { "Content-Type": "application/json" }
+                })
             );
 
         await streamChat([{ role: "user", content: "hi" }]);
@@ -1475,7 +1475,10 @@ describe("streamChat error paths", () => {
         (globalThis as any).fetch = () => Promise.reject(new Error("Network error"));
 
         // streamChat doesn't catch — it propagates. sendMessage catches.
-        await assert.rejects(() => streamChat([{ role: "user", content: "hi" }]), /Network error/);
+        await assert.rejects(
+            () => streamChat([{ role: "user", content: "hi" }]),
+            /Network error/
+        );
     });
 
     it("onEvent callback receives events", async () => {
@@ -1539,11 +1542,11 @@ describe("streamChat SSE processing", () => {
         const stream = new ReadableStream<Uint8Array>({
             start(c) {
                 controller = c;
-            },
+            }
         });
         (globalThis as any).fetch = () =>
             Promise.resolve(
-                new Response(stream, { headers: { "Content-Type": "text/event-stream" } }),
+                new Response(stream, { headers: { "Content-Type": "text/event-stream" } })
             );
 
         const promise = sendMessage("stream markdown");
@@ -1564,11 +1567,11 @@ describe("streamChat SSE processing", () => {
         assert.ok(doc.querySelector(".assistant-text-region li .stream-chunk"));
         assert.equal(
             doc.querySelector(".assistant-text-region")?.textContent?.includes("**"),
-            false,
+            false
         );
         assert.equal(
             doc.querySelector(".assistant-text-region")?.textContent?.includes("`"),
-            false,
+            false
         );
 
         controller.enqueue(enc.encode(sseDone()));
@@ -1578,7 +1581,7 @@ describe("streamChat SSE processing", () => {
         assert.ok(doc.querySelector(".assistant-text-region strong"));
         assert.equal(
             doc.querySelector(".assistant-text-region")?.classList.contains("is-streaming"),
-            false,
+            false
         );
     });
 
@@ -1594,12 +1597,12 @@ describe("streamChat SSE processing", () => {
                     name: "generate_image",
                     result: {
                         type: "image",
-                        content: "https://example.com/cat.png",
-                    },
-                }),
+                        content: "https://example.com/cat.png"
+                    }
+                })
             ),
             sseText("done"),
-            sseDone(),
+            sseDone()
         ];
         (globalThis as any).fetch = () => Promise.resolve(createSSEResponse(chunks));
 
@@ -1612,7 +1615,7 @@ describe("streamChat SSE processing", () => {
         assert.ok(doc.querySelector(".assistant-text-region")?.innerHTML.includes("done"));
         writeSnapshot(
             "assistant-tool-text-mixed",
-            doc.querySelector(".message--assistant:last-child")!.outerHTML,
+            doc.querySelector(".message--assistant:last-child")!.outerHTML
         );
     });
 
@@ -1622,7 +1625,7 @@ describe("streamChat SSE processing", () => {
         const sessionSelect = doc.createElement("select");
         sessionSelect.id = "session-select";
         doc.body.appendChild(sessionSelect);
-        const calls: Array<{ url: string; method: string }> = [];
+        const calls: Array<{ url: string; method: string; }> = [];
         const chunks = [
             sseEvent("tool_start", JSON.stringify({ id: "tool-ok", name: "text_to_speech" })),
             sseEvent(
@@ -1630,10 +1633,10 @@ describe("streamChat SSE processing", () => {
                 JSON.stringify({
                     id: "tool-ok",
                     name: "text_to_speech",
-                    result: { type: "audio", content: "/asset/voice.mp3" },
-                }),
+                    result: { type: "audio", content: "/asset/voice.mp3" }
+                })
             ),
-            sseDone(),
+            sseDone()
         ];
         (globalThis as any).fetch = (url: string, init?: RequestInit) => {
             calls.push({ url: String(url), method: init?.method ?? "GET" });
@@ -1646,7 +1649,7 @@ describe("streamChat SSE processing", () => {
 
         assert.equal(
             calls.some((call) => call.url === "/api/draft/create" && call.method === "DELETE"),
-            true,
+            true
         );
     });
 
@@ -1656,7 +1659,7 @@ describe("streamChat SSE processing", () => {
         const sessionSelect = doc.createElement("select");
         sessionSelect.id = "session-select";
         doc.body.appendChild(sessionSelect);
-        const calls: Array<{ url: string; method: string; body: string }> = [];
+        const calls: Array<{ url: string; method: string; body: string; }> = [];
         const chunks = [
             sseEvent("tool_start", JSON.stringify({ id: "tool-ok", name: "generate_image" })),
             sseEvent(
@@ -1664,19 +1667,20 @@ describe("streamChat SSE processing", () => {
                 JSON.stringify({
                     id: "tool-ok",
                     name: "generate_image",
-                    result: { type: "image", content: "/asset/img.png" },
-                }),
+                    result: { type: "image", content: "/asset/img.png" }
+                })
             ),
-            sseDone(),
+            sseDone()
         ];
         (globalThis as any).fetch = (url: string, init?: RequestInit) => {
             calls.push({
                 url: String(url),
                 method: init?.method ?? "GET",
-                body: String(init?.body ?? ""),
+                body: String(init?.body ?? "")
             });
-            if (String(url) === "/api/create-tool")
+            if (String(url) === "/api/create-tool") {
                 return Promise.resolve(createSSEResponse(chunks));
+            }
             return Promise.resolve(new Response("{}", { status: 200 }));
         };
 
@@ -1687,19 +1691,19 @@ describe("streamChat SSE processing", () => {
         assert.ok(createCall);
         assert.deepEqual(JSON.parse(createCall.body), {
             tool_name: "generate_image",
-            input: { prompt: "cat" },
+            input: { prompt: "cat" }
         });
         assert.equal(
             doc.querySelector(".message--user")?.textContent?.includes("Create image: cat"),
-            true,
+            true
         );
         assert.equal(
             doc.querySelector(".message--user")?.textContent?.includes("Use generate_"),
-            false,
+            false
         );
         assert.equal(
             calls.some((call) => call.url === "/api/draft/create" && call.method === "DELETE"),
-            true,
+            true
         );
     });
 
@@ -1709,7 +1713,7 @@ describe("streamChat SSE processing", () => {
         const sessionSelect = doc.createElement("select");
         sessionSelect.id = "session-select";
         doc.body.appendChild(sessionSelect);
-        const calls: Array<{ url: string; method: string; body: string }> = [];
+        const calls: Array<{ url: string; method: string; body: string; }> = [];
         const chunks = [
             sseEvent("tool_start", JSON.stringify({ id: "lyrics-ok", name: "generate_lyrics" })),
             sseEvent(
@@ -1717,19 +1721,20 @@ describe("streamChat SSE processing", () => {
                 JSON.stringify({
                     id: "lyrics-ok",
                     name: "generate_lyrics",
-                    result: { type: "text", content: "Verse one\nChorus" },
-                }),
+                    result: { type: "text", content: "Verse one\nChorus" }
+                })
             ),
-            sseDone(),
+            sseDone()
         ];
         (globalThis as any).fetch = (url: string, init?: RequestInit) => {
             calls.push({
                 url: String(url),
                 method: init?.method ?? "GET",
-                body: String(init?.body ?? ""),
+                body: String(init?.body ?? "")
             });
-            if (String(url) === "/api/create-tool")
+            if (String(url) === "/api/create-tool") {
                 return Promise.resolve(createSSEResponse(chunks));
+            }
             return Promise.resolve(new Response("{}", { status: 200 }));
         };
 
@@ -1738,7 +1743,7 @@ describe("streamChat SSE processing", () => {
 
         assert.equal(
             calls.some((call) => call.url === "/api/draft/create" && call.method === "DELETE"),
-            false,
+            false
         );
     });
 
@@ -1748,7 +1753,7 @@ describe("streamChat SSE processing", () => {
         const sessionSelect = doc.createElement("select");
         sessionSelect.id = "session-select";
         doc.body.appendChild(sessionSelect);
-        const calls: Array<{ url: string; method: string }> = [];
+        const calls: Array<{ url: string; method: string; }> = [];
         (globalThis as any).fetch = (url: string, init?: RequestInit) => {
             calls.push({ url: String(url), method: init?.method ?? "GET" });
             if (String(url) === "/api/chat") {
@@ -1762,7 +1767,7 @@ describe("streamChat SSE processing", () => {
 
         assert.equal(
             calls.some((call) => call.url === "/api/draft/create" && call.method === "DELETE"),
-            false,
+            false
         );
     });
 
@@ -1772,7 +1777,7 @@ describe("streamChat SSE processing", () => {
         const sessionSelect = doc.createElement("select");
         sessionSelect.id = "session-select";
         doc.body.appendChild(sessionSelect);
-        const calls: Array<{ url: string; method: string }> = [];
+        const calls: Array<{ url: string; method: string; }> = [];
         const chunks = [
             sseEvent("tool_start", JSON.stringify({ id: "tool-err", name: "text_to_speech" })),
             sseEvent(
@@ -1780,10 +1785,10 @@ describe("streamChat SSE processing", () => {
                 JSON.stringify({
                     id: "tool-err",
                     name: "text_to_speech",
-                    result: { type: "error", content: "bad text" },
-                }),
+                    result: { type: "error", content: "bad text" }
+                })
             ),
-            sseDone(),
+            sseDone()
         ];
         (globalThis as any).fetch = (url: string, init?: RequestInit) => {
             calls.push({ url: String(url), method: init?.method ?? "GET" });
@@ -1796,7 +1801,7 @@ describe("streamChat SSE processing", () => {
 
         assert.equal(
             calls.some((call) => call.url === "/api/draft/create" && call.method === "DELETE"),
-            false,
+            false
         );
         assert.ok(doc.querySelector(".tool-card")?.textContent?.includes("bad text"));
     });
@@ -1813,12 +1818,12 @@ describe("streamChat SSE processing", () => {
                     name: "generate_image",
                     result: {
                         type: "image",
-                        content: "https://example.com/cat.png",
-                    },
-                }),
+                        content: "https://example.com/cat.png"
+                    }
+                })
             ),
             sseEvent("thinking", JSON.stringify({ content: "checking result" })),
-            sseDone(),
+            sseDone()
         ];
         (globalThis as any).fetch = () => Promise.resolve(createSSEResponse(chunks));
 
@@ -1828,7 +1833,7 @@ describe("streamChat SSE processing", () => {
         assert.ok(
             doc
                 .querySelector(".assistant-thinking-region")
-                ?.textContent?.includes("checking result"),
+                ?.textContent?.includes("checking result")
         );
     });
 
@@ -1841,11 +1846,11 @@ describe("streamChat SSE processing", () => {
                 JSON.stringify({
                     id: "missing-tool-start",
                     name: "generate_image",
-                    result: { type: "image", content: "https://example.com/cat.png" },
-                }),
+                    result: { type: "image", content: "https://example.com/cat.png" }
+                })
             ),
             sseText("still works"),
-            sseDone(),
+            sseDone()
         ];
         (globalThis as any).fetch = () => Promise.resolve(createSSEResponse(chunks));
 
@@ -1854,7 +1859,7 @@ describe("streamChat SSE processing", () => {
         assert.equal(doc.querySelectorAll(".tool-card").length, 1);
         assert.equal(doc.querySelectorAll(".tool-result-image").length, 1);
         assert.ok(
-            doc.querySelector(".assistant-text-region")?.textContent?.includes("still works"),
+            doc.querySelector(".assistant-text-region")?.textContent?.includes("still works")
         );
     });
 
@@ -1878,12 +1883,12 @@ describe("streamChat SSE processing", () => {
         const toolResultData = JSON.stringify({
             id: "tool-2",
             name: "generate_image",
-            result: { type: "image", content: "data:image/png;base64,abc" },
+            result: { type: "image", content: "data:image/png;base64,abc" }
         });
         const chunks = [
             sseEvent("tool_start", toolStartData),
             sseEvent("tool_result", toolResultData),
-            sseDone(),
+            sseDone()
         ];
         (globalThis as any).fetch = () => Promise.resolve(createSSEResponse(chunks));
 
@@ -1906,10 +1911,10 @@ describe("streamChat SSE processing", () => {
             scrollTop: {
                 get: () => scrollTop,
                 set: (value) => (scrollTop = value),
-                configurable: true,
+                configurable: true
             },
             scrollHeight: { get: () => scrollHeight, configurable: true },
-            clientHeight: { get: () => 500, configurable: true },
+            clientHeight: { get: () => 500, configurable: true }
         });
         const chunks = [
             sseEvent("tool_start", JSON.stringify({ id: "tool-grow", name: "generate_image" })),
@@ -1918,10 +1923,10 @@ describe("streamChat SSE processing", () => {
                 JSON.stringify({
                     id: "tool-grow",
                     name: "generate_image",
-                    result: { type: "image", content: "https://example.com/big.png" },
-                }),
+                    result: { type: "image", content: "https://example.com/big.png" }
+                })
             ),
-            sseDone(),
+            sseDone()
         ];
         (globalThis as any).fetch = () => Promise.resolve(createSSEResponse(chunks));
 
@@ -1942,10 +1947,10 @@ describe("streamChat SSE processing", () => {
             scrollTop: {
                 get: () => scrollTop,
                 set: (value) => (scrollTop = value),
-                configurable: true,
+                configurable: true
             },
             scrollHeight: { get: () => 1000, configurable: true },
-            clientHeight: { get: () => 500, configurable: true },
+            clientHeight: { get: () => 500, configurable: true }
         });
         const chunks = [
             sseEvent(
@@ -1953,10 +1958,10 @@ describe("streamChat SSE processing", () => {
                 JSON.stringify({
                     id: "orphan-grow",
                     name: "generate_image",
-                    result: { type: "image", content: "https://example.com/orphan.png" },
-                }),
+                    result: { type: "image", content: "https://example.com/orphan.png" }
+                })
             ),
-            sseDone(),
+            sseDone()
         ];
         (globalThis as any).fetch = () => Promise.resolve(createSSEResponse(chunks));
 
@@ -1992,14 +1997,17 @@ describe("streamChat SSE processing", () => {
         const { doc: newDoc } = setupDOM();
         doc = newDoc;
         const messageList = doc.querySelector("#message-list");
-        messageList.innerHTML = `<div class="message message--assistant"><div class="message-bubble"><div class="message-content"><div class="assistant-text-region is-streaming"><span class="stream-chunk">old done</span></div></div></div></div>`;
+        messageList.innerHTML =
+            `<div class="message message--assistant"><div class="message-bubble"><div class="message-content"><div class="assistant-text-region is-streaming"><span class="stream-chunk">old done</span></div></div></div></div>`;
         (globalThis as any).fetch = () => Promise.resolve(createSSEResponse([sseDone()]));
 
         await sendMessage("next turn");
 
         assert.equal(doc.querySelectorAll(".assistant-text-region.is-streaming").length, 0);
         assert.equal(doc.querySelectorAll(".stream-chunk").length, 0);
-        assert.ok(doc.querySelector(".assistant-text-region")?.textContent?.includes("old done"));
+        assert.ok(
+            doc.querySelector(".assistant-text-region")?.textContent?.includes("old done")
+        );
     });
 
     it("[DONE] signal converts steer bubbles to normal user bubbles", async () => {
@@ -2064,7 +2072,7 @@ describe("appendText with thinking blocks (via sendMessage)", () => {
             sseThinking("Let me think about this"),
             sseThinking(" more carefully"),
             sseText("Here is my answer."),
-            sseDone(),
+            sseDone()
         ];
         (globalThis as any).fetch = () => Promise.resolve(createSSEResponse(chunks));
 
@@ -2079,7 +2087,11 @@ describe("appendText with thinking blocks (via sendMessage)", () => {
         const { doc: newDoc } = setupDOM();
         doc = newDoc;
 
-        const chunks = [sseThinking("internal thought"), sseText("The answer is 42."), sseDone()];
+        const chunks = [
+            sseThinking("internal thought"),
+            sseText("The answer is 42."),
+            sseDone()
+        ];
         (globalThis as any).fetch = () => Promise.resolve(createSSEResponse(chunks));
 
         await sendMessage("test mixed");
@@ -2100,7 +2112,7 @@ describe("profile frontend helpers", () => {
             username: "  GamerKid  ",
             interests: " Minecraft ",
             hates: " spam ",
-            favorites: "redstone",
+            favorites: "redstone"
         });
 
         assert.equal(profile.username, "GamerKid");
@@ -2118,9 +2130,9 @@ describe("profile frontend helpers", () => {
                     interests: "",
                     hates: "",
                     favorites: "",
-                    avatarAsset: "data:image/png;base64,abc",
+                    avatarAsset: "data:image/png;base64,abc"
                 }),
-            /Avatar asset id is invalid/,
+            /Avatar asset id is invalid/
         );
     });
 
@@ -2131,7 +2143,7 @@ describe("profile frontend helpers", () => {
             interests: "Minecraft",
             hates: "spam",
             favorites: "blue fire",
-            avatarAsset: "asset_123abc",
+            avatarAsset: "asset_123abc"
         });
 
         assert.deepEqual(profile.avatar, { type: "asset", value: "asset_123abc" });
@@ -2146,7 +2158,7 @@ describe("profile frontend helpers", () => {
             hates: "",
             favorites: "",
             avatar: { type: "asset", value: "" },
-            updatedAt: 1,
+            updatedAt: 1
         });
         assert.equal(fallback.textContent, "🎮");
 
@@ -2157,14 +2169,14 @@ describe("profile frontend helpers", () => {
             hates: "",
             favorites: "",
             avatar: { type: "asset", value: "asset_123abc" },
-            updatedAt: 1,
+            updatedAt: 1
         });
         assert.equal(asset.querySelector("img")?.getAttribute("src"), "/asset/asset_123abc");
     });
 
     it("profile API helpers use DB routes", async () => {
         setupDOM();
-        const calls: Array<{ url: string; method: string }> = [];
+        const calls: Array<{ url: string; method: string; }> = [];
         (globalThis as any).fetch = (url: string, init?: RequestInit) => {
             calls.push({ url, method: init?.method ?? "GET" });
             return Promise.resolve(
@@ -2176,10 +2188,10 @@ describe("profile frontend helpers", () => {
                         hates: "",
                         favorites: "",
                         avatar: { type: "asset", value: "" },
-                        updatedAt: 1,
+                        updatedAt: 1
                     }),
-                    { status: 200, headers: { "Content-Type": "application/json" } },
-                ),
+                    { status: 200, headers: { "Content-Type": "application/json" } }
+                )
             );
         };
 
@@ -2189,15 +2201,15 @@ describe("profile frontend helpers", () => {
                 username: "x",
                 interests: "",
                 hates: "",
-                favorites: "",
-            }),
+                favorites: ""
+            })
         );
         await deleteProfile();
 
         assert.deepEqual(calls, [
             { url: "/api/profile", method: "GET" },
             { url: "/api/profile", method: "PUT" },
-            { url: "/api/profile", method: "DELETE" },
+            { url: "/api/profile", method: "DELETE" }
         ]);
     });
 });
@@ -2272,7 +2284,7 @@ describe("sendMessage", () => {
                 start(controller) {
                     streamController = controller;
                     controller.enqueue(encoder.encode(sseText("thinking...")));
-                },
+                }
             });
             return Promise.resolve(new Response(stream, { status: 200 }));
         };
@@ -2329,8 +2341,8 @@ describe("loadHistory", () => {
             Promise.resolve(
                 new Response(JSON.stringify({ messages: [] }), {
                     status: 200,
-                    headers: { "Content-Type": "application/json" },
-                }),
+                    headers: { "Content-Type": "application/json" }
+                })
             );
 
         await loadHistory();
@@ -2356,11 +2368,11 @@ describe("loadHistory", () => {
                             { role: "user", content: "Hello" },
                             { role: "assistant", content: "Hi there!" },
                             { role: "user", content: "How are you?" },
-                            { role: "assistant", content: "I'm doing great!" },
-                        ],
+                            { role: "assistant", content: "I'm doing great!" }
+                        ]
                     }),
-                    { status: 200, headers: { "Content-Type": "application/json" } },
-                ),
+                    { status: 200, headers: { "Content-Type": "application/json" } }
+                )
             );
 
         await loadHistory();
@@ -2389,18 +2401,18 @@ describe("loadHistory", () => {
                                 content: "Done.",
                                 thinking: "I should use the image tool.",
                                 tool_calls_json: JSON.stringify([
-                                    { id: "tc-history-1", name: "generate_image", input: {} },
-                                ]),
+                                    { id: "tc-history-1", name: "generate_image", input: {} }
+                                ])
                             },
                             {
                                 role: "tool",
                                 content: "/asset/asset_abc?s=session-1",
-                                tool_call_id: "tc-history-1",
-                            },
-                        ],
+                                tool_call_id: "tc-history-1"
+                            }
+                        ]
                     }),
-                    { status: 200, headers: { "Content-Type": "application/json" } },
-                ),
+                    { status: 200, headers: { "Content-Type": "application/json" } }
+                )
             );
 
         await loadHistory();
@@ -2409,9 +2421,9 @@ describe("loadHistory", () => {
         assert.equal(doc.querySelectorAll(".tool-card").length, 1);
         assert.equal(
             (doc.querySelector(".tool-result-image") as HTMLImageElement | null)?.getAttribute(
-                "src",
+                "src"
             ),
-            "/asset/asset_abc?s=session-1",
+            "/asset/asset_abc?s=session-1"
         );
         assert.ok(doc.querySelector(".assistant-text-region")?.textContent?.includes("Done."));
     });
@@ -2429,25 +2441,25 @@ describe("loadHistory", () => {
                                 role: "assistant",
                                 content: "",
                                 tool_calls_json: JSON.stringify([
-                                    { id: "tc-error-1", name: "generate_music", input: {} },
-                                ]),
+                                    { id: "tc-error-1", name: "generate_music", input: {} }
+                                ])
                             },
                             {
                                 role: "tool",
                                 content: "Error: Couldn't generate music.",
-                                tool_call_id: "tc-error-1",
-                            },
-                        ],
+                                tool_call_id: "tc-error-1"
+                            }
+                        ]
                     }),
-                    { status: 200, headers: { "Content-Type": "application/json" } },
-                ),
+                    { status: 200, headers: { "Content-Type": "application/json" } }
+                )
             );
 
         await loadHistory();
 
         assert.equal(doc.querySelectorAll(".tool-card").length, 1);
         assert.ok(
-            doc.querySelector(".tool-card")?.textContent?.includes("😕 Couldn't generate music."),
+            doc.querySelector(".tool-card")?.textContent?.includes("😕 Couldn't generate music.")
         );
     });
 
@@ -2548,8 +2560,8 @@ describe("init event binding", () => {
                 return Promise.resolve(
                     new Response(JSON.stringify({ messages: [] }), {
                         status: 200,
-                        headers: { "Content-Type": "application/json" },
-                    }),
+                        headers: { "Content-Type": "application/json" }
+                    })
                 );
             }
             return Promise.resolve(createSSEResponse([sseText("reply"), sseDone()]));
@@ -2582,32 +2594,32 @@ describe("init event binding", () => {
                 return Promise.resolve(
                     new Response(JSON.stringify({ draft: null }), {
                         status: 200,
-                        headers: { "Content-Type": "application/json" },
-                    }),
+                        headers: { "Content-Type": "application/json" }
+                    })
                 );
             }
             if (url === "/api/draft/create") {
                 return Promise.resolve(
                     new Response(JSON.stringify({ draft: null }), {
                         status: 200,
-                        headers: { "Content-Type": "application/json" },
-                    }),
+                        headers: { "Content-Type": "application/json" }
+                    })
                 );
             }
             if (url === "/api/history") {
                 return Promise.resolve(
                     new Response(JSON.stringify({ messages: [] }), {
                         status: 200,
-                        headers: { "Content-Type": "application/json" },
-                    }),
+                        headers: { "Content-Type": "application/json" }
+                    })
                 );
             }
             if (url === "/api/sessions") {
                 return Promise.resolve(
                     new Response(JSON.stringify({ activeSessionId: "s1", sessions: [] }), {
                         status: 200,
-                        headers: { "Content-Type": "application/json" },
-                    }),
+                        headers: { "Content-Type": "application/json" }
+                    })
                 );
             }
             if (url === "/api/profile") {
@@ -2620,10 +2632,10 @@ describe("init event binding", () => {
                             hates: "",
                             favorites: "",
                             avatar: { type: "asset", value: "" },
-                            updatedAt: 0,
+                            updatedAt: 0
                         }),
-                        { status: 200, headers: { "Content-Type": "application/json" } },
-                    ),
+                        { status: 200, headers: { "Content-Type": "application/json" } }
+                    )
                 );
             }
             return Promise.resolve(new Response(JSON.stringify({}), { status: 200 }));
@@ -2701,9 +2713,9 @@ describe("init event binding", () => {
             new win.CustomEvent("hallucygenie:use-reference-asset", {
                 detail: {
                     assetId: "asset_12345678-1234-1234-1234-123456789abc",
-                    assetUrl: "/asset/asset_12345678-1234-1234-1234-123456789abc",
-                },
-            }),
+                    assetUrl: "/asset/asset_12345678-1234-1234-1234-123456789abc"
+                }
+            })
         );
 
         const referenceAsset = doc.querySelector("#img-reference-asset") as HTMLInputElement;
@@ -2758,7 +2770,7 @@ describe("init event binding", () => {
 
     it("pasted chat image uploads asset and starts analyze tool", async () => {
         setupFullDOM();
-        const calls: Array<{ url: string; method: string; body: unknown }> = [];
+        const calls: Array<{ url: string; method: string; body: unknown; }> = [];
         (globalThis as any).fetch = (url: string, init?: RequestInit) => {
             calls.push({ url: String(url), method: init?.method ?? "GET", body: init?.body });
             if (url === "/api/analyze-image") {
@@ -2767,9 +2779,9 @@ describe("init event binding", () => {
                         JSON.stringify({ assetId: "asset_1", assetUrl: "/asset/asset_1" }),
                         {
                             status: 200,
-                            headers: { "Content-Type": "application/json" },
-                        },
-                    ),
+                            headers: { "Content-Type": "application/json" }
+                        }
+                    )
                 );
             }
             if (url === "/api/create-tool") {
@@ -2785,17 +2797,17 @@ describe("init event binding", () => {
                             hates: "",
                             favorites: "",
                             avatar: { type: "asset", value: "" },
-                            updatedAt: 0,
+                            updatedAt: 0
                         }),
-                        { status: 200, headers: { "Content-Type": "application/json" } },
-                    ),
+                        { status: 200, headers: { "Content-Type": "application/json" } }
+                    )
                 );
             }
             return Promise.resolve(new Response(JSON.stringify({}), { status: 200 }));
         };
         init();
         const file = new win.File([new Uint8Array([1, 2, 3])], "paste.png", {
-            type: "image/png",
+            type: "image/png"
         });
         const event = new win.Event("paste", { bubbles: true, cancelable: true });
         Object.defineProperty(event, "clipboardData", { value: { files: [file] } });
@@ -2808,17 +2820,19 @@ describe("init event binding", () => {
         assert.ok(create);
         assert.deepEqual(JSON.parse(String(create.body)), {
             tool_name: "analyze_image",
-            input: { image_url: "/asset/asset_1", prompt: "What do you see in this image?" },
+            input: { image_url: "/asset/asset_1", prompt: "What do you see in this image?" }
         });
         assert.equal(JSON.stringify(calls).includes("data:image"), false);
     });
 
-    it("long narration form sends async TTS create tool", async () => {
+    it("Voice sends async TTS for long text transparently", async () => {
         setupFullDOM();
-        const calls: Array<{ url: string; body: string }> = [];
+        const calls: Array<{ url: string; body: string; }> = [];
         (globalThis as any).fetch = (url: string, init?: RequestInit) => {
             calls.push({ url: String(url), body: String(init?.body ?? "") });
-            if (url === "/api/create-tool") return Promise.resolve(createSSEResponse([sseDone()]));
+            if (url === "/api/create-tool") {
+                return Promise.resolve(createSSEResponse([sseDone()]));
+            }
             if (url === "/api/profile") {
                 return Promise.resolve(
                     new Response(
@@ -2829,19 +2843,20 @@ describe("init event binding", () => {
                             hates: "",
                             favorites: "",
                             avatar: { type: "asset", value: "" },
-                            updatedAt: 0,
+                            updatedAt: 0
                         }),
-                        { status: 200, headers: { "Content-Type": "application/json" } },
-                    ),
+                        { status: 200, headers: { "Content-Type": "application/json" } }
+                    )
                 );
             }
             return Promise.resolve(new Response(JSON.stringify({}), { status: 200 }));
         };
         init();
-        const text = doc.querySelector("#narration-text") as HTMLTextAreaElement;
-        text.value = "Long story for a YouTube intro";
-        (doc.querySelector("#create-narration-form") as HTMLFormElement).dispatchEvent(
-            new win.Event("submit", { bubbles: true, cancelable: true }),
+        const longText = "Long story. ".repeat(100);
+        const text = doc.querySelector("#voice-text") as HTMLTextAreaElement;
+        text.value = longText;
+        (doc.querySelector("#create-voice-form") as HTMLFormElement).dispatchEvent(
+            new win.Event("submit", { bubbles: true, cancelable: true })
         );
         await new Promise((resolve) => setTimeout(resolve, 40));
 
@@ -2850,29 +2865,32 @@ describe("init event binding", () => {
         assert.deepEqual(JSON.parse(create.body), {
             tool_name: "generate_long_speech",
             input: {
-                text: "Long story for a YouTube intro",
+                text: longText,
                 speed: 1,
                 voice_id: "English_expressive_narrator",
                 volume: 1,
-                pitch: 0,
-            },
+                pitch: 0
+            }
         });
     });
 
     it("lyrics helper edits current lyrics when textarea has text", async () => {
         setupFullDOM();
-        const calls: Array<{ url: string; body: string }> = [];
+        const calls: Array<{ url: string; body: string; }> = [];
         const chunks = [
-            sseEvent("tool_start", JSON.stringify({ id: "lyrics-edit", name: "generate_lyrics" })),
+            sseEvent(
+                "tool_start",
+                JSON.stringify({ id: "lyrics-edit", name: "generate_lyrics" })
+            ),
             sseEvent(
                 "tool_result",
                 JSON.stringify({
                     id: "lyrics-edit",
                     name: "generate_lyrics",
-                    result: { type: "text", content: "better lyrics" },
-                }),
+                    result: { type: "text", content: "better lyrics" }
+                })
             ),
-            sseDone(),
+            sseDone()
         ];
         (globalThis as any).fetch = (url: string, init?: RequestInit) => {
             calls.push({ url: String(url), body: String(init?.body ?? "") });
@@ -2887,10 +2905,10 @@ describe("init event binding", () => {
                             hates: "",
                             favorites: "",
                             avatar: { type: "asset", value: "" },
-                            updatedAt: 0,
+                            updatedAt: 0
                         }),
-                        { status: 200, headers: { "Content-Type": "application/json" } },
-                    ),
+                        { status: 200, headers: { "Content-Type": "application/json" } }
+                    )
                 );
             }
             return Promise.resolve(new Response(JSON.stringify({}), { status: 200 }));
@@ -2911,7 +2929,7 @@ describe("init event binding", () => {
         assert.ok(call);
         assert.deepEqual(JSON.parse(call.body), {
             tool_name: "generate_lyrics",
-            input: { prompt: "boss fight", mode: "edit", lyrics: "draft lyrics" },
+            input: { prompt: "boss fight", mode: "edit", lyrics: "draft lyrics" }
         });
         assert.equal(lyrics.value, "better lyrics");
     });
@@ -2925,8 +2943,8 @@ describe("init event binding", () => {
                 return Promise.resolve(
                     new Response(JSON.stringify({ cover_feature_id: "cover-1", lyrics: "la" }), {
                         status: 200,
-                        headers: { "Content-Type": "application/json" },
-                    }),
+                        headers: { "Content-Type": "application/json" }
+                    })
                 );
             }
             if (url === "/api/profile") {
@@ -2939,10 +2957,10 @@ describe("init event binding", () => {
                             hates: "",
                             favorites: "",
                             avatar: { type: "asset", value: "" },
-                            updatedAt: 0,
+                            updatedAt: 0
                         }),
-                        { status: 200, headers: { "Content-Type": "application/json" } },
-                    ),
+                        { status: 200, headers: { "Content-Type": "application/json" } }
+                    )
                 );
             }
             return Promise.resolve(new Response(JSON.stringify({}), { status: 200 }));
@@ -2984,7 +3002,9 @@ describe("init event binding", () => {
         setupFullDOM();
         init();
         const text = doc.querySelector("#voice-text");
-        const button = doc.querySelector('.voice-interjection[data-tag="laughs"]');
+        const select = doc.querySelector("#voice-interjection");
+        const button = doc.querySelector("#voice-insert-interjection");
+        select.value = "laughs";
         text.value = "hello";
         text.selectionStart = 5;
         text.selectionEnd = 5;
@@ -3033,10 +3053,10 @@ describe("showError", () => {
     it("does not show raw provider JSON in toast", () => {
         setupDOM();
         doc = globalThis.document;
-        showError('{"base_resp":{"status_code":1004,"status_msg":"login fail"}}');
+        showError("{\"base_resp\":{\"status_code\":1004,\"status_msg\":\"login fail\"}}");
         assert.equal(
             doc.querySelector("#error-toast-message").textContent,
-            "Something went wrong. Try again! 🤷",
+            "Something went wrong. Try again! 🤷"
         );
     });
 });
@@ -3076,10 +3096,10 @@ describe("setStreamingUI (via sendMessage)", () => {
                             await pending;
                             controller.enqueue(new TextEncoder().encode(sseDone()));
                             controller.close();
-                        },
+                        }
                     }),
-                    { status: 200 },
-                ),
+                    { status: 200 }
+                )
             );
 
         const sendPromise = sendMessage("test");
@@ -3215,7 +3235,7 @@ describe("renderToolResult", () => {
     it("renders image result", () => {
         const card = renderToolResult("generate_image", {
             type: "image",
-            content: "data:image/png;base64,abc",
+            content: "data:image/png;base64,abc"
         });
         assert.ok(card.outerHTML.includes("img"));
     });
@@ -3224,7 +3244,7 @@ describe("renderToolResult", () => {
         const card = renderToolResult("generate_image", {
             type: "image",
             content: "/asset/one",
-            urls: ["/asset/one", "/asset/two"],
+            urls: ["/asset/one", "/asset/two"]
         });
         assert.equal(card.querySelectorAll(".tool-result-image").length, 2);
         assert.ok(card.querySelector(".tool-result-image-grid"));
@@ -3233,7 +3253,7 @@ describe("renderToolResult", () => {
     it("renders error result", () => {
         const card = renderToolResult("generate_image", {
             type: "error",
-            content: "Something failed",
+            content: "Something failed"
         });
         assert.ok(card.outerHTML.includes("Something failed"));
     });
@@ -3241,7 +3261,7 @@ describe("renderToolResult", () => {
     it("renders audio result", () => {
         const card = renderToolResult("text_to_speech", {
             type: "audio",
-            content: "data:audio/mp3;base64,abc",
+            content: "data:audio/mp3;base64,abc"
         });
         assert.ok(card.outerHTML.includes("audio"));
     });
@@ -3249,7 +3269,7 @@ describe("renderToolResult", () => {
     it("renders video result", () => {
         const card = renderToolResult("generate_video", {
             type: "video",
-            content: "/asset/asset_video",
+            content: "/asset/asset_video"
         });
         const video = card.querySelector("video.tool-result-video");
         assert.ok(video);
@@ -3268,10 +3288,13 @@ describe("renderToolResult", () => {
                 prompt_optimizer: true,
                 image: "data:image/png;base64,raw",
                 audio_base64: "raw",
-                api_key: "secret",
-            },
+                api_key: "secret"
+            }
         );
-        assert.equal(card.querySelector("details.tool-input-details")?.hasAttribute("open"), false);
+        assert.equal(
+            card.querySelector("details.tool-input-details")?.hasAttribute("open"),
+            false
+        );
         assert.ok(card.textContent?.includes("Input details"));
         assert.ok(card.textContent?.includes("neon fox"));
         assert.ok(card.textContent?.includes(JSON.stringify(longLyrics).slice(1, -1)));
@@ -3311,8 +3334,8 @@ describe("fetchHistory", () => {
             return Promise.resolve(
                 new Response(JSON.stringify({ messages: [{ role: "user", content: "hi" }] }), {
                     status: 200,
-                    headers: { "Content-Type": "application/json" },
-                }),
+                    headers: { "Content-Type": "application/json" }
+                })
             );
         };
 
@@ -3386,7 +3409,7 @@ describe("init accessibility behavior", () => {
             hates: "gore",
             favorites: "blue fire",
             avatar: { type: "asset", value: "" },
-            updatedAt: 1,
+            updatedAt: 1
         };
         (globalThis as any).fetch = (input: string | Request) => {
             const url = input.toString();
@@ -3399,15 +3422,15 @@ describe("init accessibility behavior", () => {
                 return Promise.resolve(
                     new Response(JSON.stringify(profile), {
                         status: 200,
-                        headers: { "Content-Type": "application/json" },
-                    }),
+                        headers: { "Content-Type": "application/json" }
+                    })
                 );
             }
             return Promise.resolve(
                 new Response(JSON.stringify({ messages: [], sessions: [], items: [] }), {
                     status: 200,
-                    headers: { "Content-Type": "application/json" },
-                }),
+                    headers: { "Content-Type": "application/json" }
+                })
             );
         };
 
@@ -3428,12 +3451,12 @@ describe("init accessibility behavior", () => {
                         ...profile,
                         avatar: {
                             type: "asset",
-                            value: "asset_12345678-1234-1234-1234-123456789abc",
-                        },
-                    },
+                            value: "asset_12345678-1234-1234-1234-123456789abc"
+                        }
+                    }
                 }),
-                { status: 200, headers: { "Content-Type": "application/json" } },
-            ),
+                { status: 200, headers: { "Content-Type": "application/json" } }
+            )
         );
         await new Promise((resolve) => setTimeout(resolve, 0));
 
@@ -3451,12 +3474,12 @@ describe("init accessibility behavior", () => {
             hates: "gore",
             favorites: "blue fire",
             avatar: { type: "asset", value: "" },
-            updatedAt: 1,
+            updatedAt: 1
         };
         const savedProfile = {
             ...defaultProfile,
             avatar: { type: "asset", value: "asset_12345678-1234-1234-1234-123456789abc" },
-            updatedAt: 2,
+            updatedAt: 2
         };
         (globalThis as any).fetch = (input: string | Request, init?: RequestInit) => {
             const url = input.toString();
@@ -3464,23 +3487,23 @@ describe("init accessibility behavior", () => {
                 return Promise.resolve(
                     new Response(JSON.stringify(savedProfile), {
                         status: 200,
-                        headers: { "Content-Type": "application/json" },
-                    }),
+                        headers: { "Content-Type": "application/json" }
+                    })
                 );
             }
             if (url.includes("/api/profile")) {
                 return Promise.resolve(
                     new Response(JSON.stringify(defaultProfile), {
                         status: 200,
-                        headers: { "Content-Type": "application/json" },
-                    }),
+                        headers: { "Content-Type": "application/json" }
+                    })
                 );
             }
             return Promise.resolve(
                 new Response(JSON.stringify({ messages: [], sessions: [], items: [] }), {
                     status: 200,
-                    headers: { "Content-Type": "application/json" },
-                }),
+                    headers: { "Content-Type": "application/json" }
+                })
             );
         };
 
@@ -3489,7 +3512,7 @@ describe("init accessibility behavior", () => {
         const messageList = doc.querySelector("#message-list") as HTMLElement;
         messageList.appendChild(renderUserMessage("Existing message"));
         const originalAvatar = messageList.querySelector(
-            ".message--user .message-avatar",
+            ".message--user .message-avatar"
         ) as HTMLElement;
         assert.equal(originalAvatar.textContent, "🎮");
         assert.equal(originalAvatar.querySelector("img"), null);
@@ -3497,16 +3520,16 @@ describe("init accessibility behavior", () => {
         (doc.querySelector("#profile-avatar-asset") as HTMLInputElement).value =
             "asset_12345678-1234-1234-1234-123456789abc";
         (doc.querySelector("#profile-form") as HTMLFormElement).dispatchEvent(
-            new Event("submit", { bubbles: true, cancelable: true }),
+            new Event("submit", { bubbles: true, cancelable: true })
         );
         await new Promise((resolve) => setTimeout(resolve, 0));
 
         const repaintedAvatar = messageList.querySelector(
-            ".message--user .message-avatar .profile-avatar-img",
+            ".message--user .message-avatar .profile-avatar-img"
         ) as HTMLImageElement | null;
         assert.equal(
             repaintedAvatar?.getAttribute("src"),
-            "/asset/asset_12345678-1234-1234-1234-123456789abc",
+            "/asset/asset_12345678-1234-1234-1234-123456789abc"
         );
     });
 
@@ -3529,10 +3552,10 @@ describe("init accessibility behavior", () => {
                         hates: "",
                         favorites: "",
                         avatar: { type: "asset", value: "" },
-                        updatedAt: 1,
+                        updatedAt: 1
                     }),
-                    { status: 200, headers: { "Content-Type": "application/json" } },
-                ),
+                    { status: 200, headers: { "Content-Type": "application/json" } }
+                )
             );
         };
 
@@ -3574,10 +3597,10 @@ describe("init accessibility behavior", () => {
         const { doc } = setupDOM();
         init();
 
-        const imageTab = doc.querySelector('.create-tab[data-tab="image"]') as HTMLButtonElement;
-        const musicTab = doc.querySelector('.create-tab[data-tab="music"]') as HTMLButtonElement;
-        const imagePanel = doc.querySelector('.create-panel[data-panel="image"]') as HTMLElement;
-        const musicPanel = doc.querySelector('.create-panel[data-panel="music"]') as HTMLElement;
+        const imageTab = doc.querySelector(".create-tab[data-tab=\"image\"]") as HTMLButtonElement;
+        const musicTab = doc.querySelector(".create-tab[data-tab=\"music\"]") as HTMLButtonElement;
+        const imagePanel = doc.querySelector(".create-panel[data-panel=\"image\"]") as HTMLElement;
+        const musicPanel = doc.querySelector(".create-panel[data-panel=\"music\"]") as HTMLElement;
 
         musicTab.click();
 
@@ -3601,7 +3624,7 @@ describe("init accessibility behavior", () => {
         createBtn.click();
         promptOptimizer.focus();
         modal.dispatchEvent(
-            new win.KeyboardEvent("keydown", { key: "Tab", bubbles: true, cancelable: true }),
+            new win.KeyboardEvent("keydown", { key: "Tab", bubbles: true, cancelable: true })
         );
         assert.equal(doc.activeElement, closeBtn);
     });
@@ -3621,8 +3644,8 @@ describe("init accessibility behavior", () => {
                 key: "Tab",
                 shiftKey: true,
                 bubbles: true,
-                cancelable: true,
-            }),
+                cancelable: true
+            })
         );
         assert.equal(doc.activeElement, last);
 
@@ -3645,7 +3668,7 @@ describe("init accessibility behavior", () => {
         assert.equal(doc.activeElement, closeBtn);
 
         lightbox.dispatchEvent(
-            new win.KeyboardEvent("keydown", { key: "Tab", bubbles: true, cancelable: true }),
+            new win.KeyboardEvent("keydown", { key: "Tab", bubbles: true, cancelable: true })
         );
         assert.equal(doc.activeElement, closeBtn);
 
@@ -3682,10 +3705,10 @@ describe("init accessibility behavior", () => {
                     new Response(
                         JSON.stringify({
                             activeSessionId: "s1",
-                            sessions: [{ id: "s1", name: "New Chat" }],
+                            sessions: [{ id: "s1", name: "New Chat" }]
                         }),
-                        { status: 200, headers: { "Content-Type": "application/json" } },
-                    ),
+                        { status: 200, headers: { "Content-Type": "application/json" } }
+                    )
                 );
             }
             if (url === "/api/profile") {
@@ -3698,33 +3721,33 @@ describe("init accessibility behavior", () => {
                             hates: "",
                             favorites: "",
                             avatar: { type: "asset", value: "" },
-                            updatedAt: 0,
+                            updatedAt: 0
                         }),
-                        { status: 200, headers: { "Content-Type": "application/json" } },
-                    ),
+                        { status: 200, headers: { "Content-Type": "application/json" } }
+                    )
                 );
             }
             if (url === "/api/history") {
                 return Promise.resolve(
                     new Response(JSON.stringify({ messages: [] }), {
                         status: 200,
-                        headers: { "Content-Type": "application/json" },
-                    }),
+                        headers: { "Content-Type": "application/json" }
+                    })
                 );
             }
             if (url === "/api/draft/chat" || url === "/api/draft/create") {
                 return Promise.resolve(
                     new Response(JSON.stringify({ draft: null }), {
                         status: 200,
-                        headers: { "Content-Type": "application/json" },
-                    }),
+                        headers: { "Content-Type": "application/json" }
+                    })
                 );
             }
             return Promise.resolve(
                 new Response(JSON.stringify({}), {
                     status: 200,
-                    headers: { "Content-Type": "application/json" },
-                }),
+                    headers: { "Content-Type": "application/json" }
+                })
             );
         };
 
@@ -3748,7 +3771,7 @@ describe("renderToolResult asset URLs", () => {
         setupDOM();
         const card = renderToolResult("generate_image", {
             type: "image",
-            content: "/asset/abc123",
+            content: "/asset/abc123"
         });
         const img = card.querySelector("img");
         assert.ok(img, "should have img element");
@@ -3760,7 +3783,7 @@ describe("renderToolResult asset URLs", () => {
         setupDOM();
         const card = renderToolResult("text_to_speech", {
             type: "audio",
-            content: "/asset/def456",
+            content: "/asset/def456"
         });
         const audio = card.querySelector("audio");
         assert.ok(audio, "should have audio element");
@@ -3779,25 +3802,25 @@ describe("updateQuotaBadge", () => {
                         speech: { used: 5, total: 100 },
                         image: { used: 10, total: 100 },
                         music: { used: 3, total: 100 },
-                        video: { used: 1, total: 5 },
+                        video: { used: 1, total: 5 }
                     }),
-                    { headers: { "Content-Type": "application/json" } },
-                ),
+                    { headers: { "Content-Type": "application/json" } }
+                )
             );
 
         await updateQuotaBadge();
 
-        const imageItem = doc.querySelector('.quota-item[data-type="image"]');
+        const imageItem = doc.querySelector(".quota-item[data-type=\"image\"]");
         assert.ok(imageItem, "image quota item exists");
         const imageUsed = imageItem!.querySelector(".quota-used");
         assert.equal(imageUsed!.textContent, "90"); // 100 - 10
 
-        const speechItem = doc.querySelector('.quota-item[data-type="speech"]');
+        const speechItem = doc.querySelector(".quota-item[data-type=\"speech\"]");
         assert.ok(speechItem, "speech quota item exists");
         const speechUsed = speechItem!.querySelector(".quota-used");
         assert.equal(speechUsed!.textContent, "95"); // 100 - 5
         const label = doc.querySelector("#quota-badge")!.getAttribute("aria-label") ?? "";
-        const videoItem = doc.querySelector('.quota-item[data-type="video"]');
+        const videoItem = doc.querySelector(".quota-item[data-type=\"video\"]");
         assert.ok(videoItem, "video quota item exists");
         const videoUsed = videoItem!.querySelector(".quota-used");
         assert.equal(videoUsed!.textContent, "4");
@@ -3815,21 +3838,21 @@ describe("updateQuotaBadge", () => {
                         image: { used: 0, total: 0 },
                         speech: { used: 0, total: 0 },
                         music: { used: 0, total: 0 },
-                        video: { used: 0, total: 0 },
+                        video: { used: 0, total: 0 }
                     }),
-                    { headers: { "Content-Type": "application/json" } },
-                ),
+                    { headers: { "Content-Type": "application/json" } }
+                )
             );
 
         await updateQuotaBadge();
 
         assert.equal(
-            doc.querySelector('.quota-item[data-type="image"] .quota-used')!.textContent,
-            "?",
+            doc.querySelector(".quota-item[data-type=\"image\"] .quota-used")!.textContent,
+            "?"
         );
         assert.equal(
-            doc.querySelector('.quota-item[data-type="video"] .quota-used')!.textContent,
-            "?",
+            doc.querySelector(".quota-item[data-type=\"video\"] .quota-used")!.textContent,
+            "?"
         );
         const label = doc.querySelector("#quota-badge")!.getAttribute("aria-label") ?? "";
         assert.match(label, /Images quota exact count unknown/);
@@ -3869,7 +3892,7 @@ describe("loadAssets", () => {
                                     created_at: Date.now(),
                                     params: {},
                                     url: "/asset/img-1",
-                                    download_url: "/asset/img-1",
+                                    download_url: "/asset/img-1"
                                 },
                                 {
                                     id: "aud-1",
@@ -3883,7 +3906,7 @@ describe("loadAssets", () => {
                                     created_at: Date.now(),
                                     params: {},
                                     url: "/asset/aud-1",
-                                    download_url: "/asset/aud-1",
+                                    download_url: "/asset/aud-1"
                                 },
                                 {
                                     id: "vid-1",
@@ -3897,12 +3920,12 @@ describe("loadAssets", () => {
                                     created_at: Date.now(),
                                     params: { duration: 6, resolution: "768p" },
                                     url: "/asset/vid-1",
-                                    download_url: "/asset/vid-1",
-                                },
-                            ],
+                                    download_url: "/asset/vid-1"
+                                }
+                            ]
                         }),
-                        { headers: { "Content-Type": "application/json" } },
-                    ),
+                        { headers: { "Content-Type": "application/json" } }
+                    )
                 );
             }
             return Promise.resolve(new Response(null, { status: 404 }));
@@ -3951,7 +3974,7 @@ describe("loadAssets", () => {
 
     it("lets an existing image asset become the Create Image reference", async () => {
         const { doc } = setupDOM();
-        let selected: { assetId?: string; assetUrl?: string } | null = null;
+        let selected: { assetId?: string; assetUrl?: string; } | null = null;
         doc.addEventListener("hallucygenie:use-reference-asset", (event) => {
             selected = (event as CustomEvent).detail;
         });
@@ -3972,12 +3995,12 @@ describe("loadAssets", () => {
                                 created_at: Date.now(),
                                 params: {},
                                 url: "/asset/asset_12345678-1234-1234-1234-123456789abc",
-                                download_url: "/asset/asset_12345678-1234-1234-1234-123456789abc",
-                            },
-                        ],
+                                download_url: "/asset/asset_12345678-1234-1234-1234-123456789abc"
+                            }
+                        ]
                     }),
-                    { headers: { "Content-Type": "application/json" } },
-                ),
+                    { headers: { "Content-Type": "application/json" } }
+                )
             );
 
         loadAssets();
@@ -3986,7 +4009,7 @@ describe("loadAssets", () => {
 
         assert.deepEqual(selected, {
             assetId: "asset_12345678-1234-1234-1234-123456789abc",
-            assetUrl: "/asset/asset_12345678-1234-1234-1234-123456789abc",
+            assetUrl: "/asset/asset_12345678-1234-1234-1234-123456789abc"
         });
     });
 
@@ -4011,12 +4034,12 @@ describe("loadAssets", () => {
                                 created_at: timestamp,
                                 params: { model: "MiniMax/Image-01" },
                                 url: "/asset/img-1",
-                                download_url: "/asset/img-1",
-                            },
-                        ],
+                                download_url: "/asset/img-1"
+                            }
+                        ]
                     }),
-                    { headers: { "Content-Type": "application/json" } },
-                ),
+                    { headers: { "Content-Type": "application/json" } }
+                )
             );
 
         loadAssets();
@@ -4058,15 +4081,15 @@ describe("loadAssets", () => {
                                 created_at: Date.now(),
                                 params: {
                                     aspect_ratio: "16:9",
-                                    model: "MiniMax/Image-01",
+                                    model: "MiniMax/Image-01"
                                 },
                                 url: "/asset/img-1",
-                                download_url: "/asset/img-1",
-                            },
-                        ],
+                                download_url: "/asset/img-1"
+                            }
+                        ]
                     }),
-                    { headers: { "Content-Type": "application/json" } },
-                ),
+                    { headers: { "Content-Type": "application/json" } }
+                )
             );
 
         loadAssets();
@@ -4096,15 +4119,15 @@ describe("loadAssets", () => {
                                 size_bytes: 2048,
                                 created_at: Date.now(),
                                 params: {
-                                    lyrics: "This is a long lyrics preview",
+                                    lyrics: "This is a long lyrics preview"
                                 },
                                 url: "/asset/music-1",
-                                download_url: "/asset/music-1",
-                            },
-                        ],
+                                download_url: "/asset/music-1"
+                            }
+                        ]
                     }),
-                    { headers: { "Content-Type": "application/json" } },
-                ),
+                    { headers: { "Content-Type": "application/json" } }
+                )
             );
 
         loadAssets();
@@ -4136,12 +4159,12 @@ describe("loadAssets", () => {
                                 created_at: Date.now(),
                                 params: {},
                                 url: "/asset/img-1",
-                                download_url: "/asset/img-1",
-                            },
-                        ],
+                                download_url: "/asset/img-1"
+                            }
+                        ]
                     }),
-                    { headers: { "Content-Type": "application/json" } },
-                ),
+                    { headers: { "Content-Type": "application/json" } }
+                )
             );
 
         loadAssets();
@@ -4179,12 +4202,12 @@ describe("loadAssets", () => {
                                 created_at: Date.now(),
                                 params: {},
                                 url: "/asset/img-1",
-                                download_url: "/asset/img-1",
-                            },
-                        ],
+                                download_url: "/asset/img-1"
+                            }
+                        ]
                     }),
-                    { headers: { "Content-Type": "application/json" } },
-                ),
+                    { headers: { "Content-Type": "application/json" } }
+                )
             );
 
         loadAssets();
@@ -4218,15 +4241,15 @@ describe("loadAssets", () => {
                                 created_at: Date.now(),
                                 params: {
                                     speed: "1.5",
-                                    voice_id: "hunter",
+                                    voice_id: "hunter"
                                 },
                                 url: "/asset/voice-1",
-                                download_url: "/asset/voice-1",
-                            },
-                        ],
+                                download_url: "/asset/voice-1"
+                            }
+                        ]
                     }),
-                    { headers: { "Content-Type": "application/json" } },
-                ),
+                    { headers: { "Content-Type": "application/json" } }
+                )
             );
 
         loadAssets();
@@ -4240,7 +4263,7 @@ describe("loadAssets", () => {
     it("audio asset card click does not create hidden autoplay", async () => {
         const { doc } = setupDOM();
         let hiddenAudioCreated = false;
-        (globalThis as any).Audio = function () {
+        (globalThis as any).Audio = function() {
             hiddenAudioCreated = true;
             return { play: () => Promise.resolve() };
         };
@@ -4261,12 +4284,12 @@ describe("loadAssets", () => {
                                 created_at: Date.now(),
                                 params: {},
                                 url: "/asset/aud-1",
-                                download_url: "/asset/aud-1",
-                            },
-                        ],
+                                download_url: "/asset/aud-1"
+                            }
+                        ]
                     }),
-                    { headers: { "Content-Type": "application/json" } },
-                ),
+                    { headers: { "Content-Type": "application/json" } }
+                )
             );
 
         loadAssets();

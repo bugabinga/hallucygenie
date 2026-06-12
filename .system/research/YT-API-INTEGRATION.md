@@ -1,7 +1,7 @@
 # YouTube API integration research
 
-**Ticket:** `HG-TICKET-038-youtube-api-research.md`  
-**Spec:** `.system/specs/HG-SPEC-010-youtube-api-integration-research.md`  
+**Ticket:** `HG-TICKET-038-youtube-api-research.md`\
+**Spec:** `.system/specs/HG-SPEC-010-youtube-api-integration-research.md`\
 **Status:** research-only recommendation
 
 ## APIs reviewed

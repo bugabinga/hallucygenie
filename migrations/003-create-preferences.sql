@@ -1,5 +1,5 @@
 CREATE TABLE IF NOT EXISTS preferences (
-    key TEXT PRIMARY KEY,
-    value TEXT NOT NULL,
-    updated_at TEXT NOT NULL DEFAULT (datetime ('now'))
-);
+key TEXT PRIMARY KEY,
+value TEXT NOT NULL,
+updated_at TEXT NOT NULL DEFAULT (datetime ('now'))
+) ;

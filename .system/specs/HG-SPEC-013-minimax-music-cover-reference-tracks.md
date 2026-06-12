@@ -24,8 +24,8 @@ YouTube ToS, copyright, artist imitation, deploy deps.
 - Core app never vendors or shells out to yt-dlp.
 - Missing extractor disables YouTube URL input.
 - Cover flow is two-step:
-    1. `/v1/music_cover_preprocess` from `audio_url` or `audio_base64`.
-    2. User edits lyrics/style.
-    3. `/v1/music_generation` with `cover_feature_id`.
+  1. `/v1/music_cover_preprocess` from `audio_url` or `audio_base64`.
+  2. User edits lyrics/style.
+  3. `/v1/music_generation` with `cover_feature_id`.
 - Direct audio URL uses MiniMax `audio_url`.
 - Local upload and YouTube extraction use `audio_base64`.

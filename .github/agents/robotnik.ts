@@ -1,16 +1,16 @@
 /**
+ *      ◢████◣
+ *     █ ◉  ◉ █
+ *     █  ▬▬  █
+ *      ◥████◤
+ *     ⚙ ║  ║ ⚙
+ *       ╨  ╨
  *
- *         .-"""-.
- *        /  .-.  \      robotnik
- *       |  /   \  |     grabs the next open issue,
- *       |  \___/  |     bolts on a fix,
- *        \  ___  /      ships one PR at a time
- *         `-...-'
- *        /|     |\
+ *      one ticket wakes, one branch takes wing
  *
- * ╔═════════════════════════════════════════╗
- * ║ Single pass: zai/glm-5.1 -> fix issue   ║
- * ╚═════════════════════════════════════════╝
+ * ╔════════════════════════════════════════════╗
+ * ║ Run: MiniMax-M3 -> fix issue               ║
+ * ╚════════════════════════════════════════════╝
  */
 import { existsSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
@@ -55,7 +55,13 @@ function nextOpenIssue() {
         .map((name) => {
             const path = join(ISSUES_DIR, name);
             const text = readFileSync(path, "utf-8");
-            return { name, path, text, id: issueIdFromName(name), status: statusOf(text) };
+            return {
+                name,
+                path,
+                text,
+                id: issueIdFromName(name),
+                status: statusOf(text)
+            };
         })
         .filter((issue) => issue.id && issue.status === "open")
         .sort((a, b) => issueNumber(a.id) - issueNumber(b.id))[0];
@@ -75,7 +81,7 @@ function issueFromExistingBranch(branch: string) {
     const id = branch.match(/HG-ISSUE-\d{3}/)?.[0];
     if (!id || !existsSync(ISSUES_DIR)) return undefined;
     const file = readdirSync(ISSUES_DIR).find(
-        (name) => name.startsWith(id) && name.endsWith(".md"),
+        (name) => name.startsWith(id) && name.endsWith(".md")
     );
     if (!file) return undefined;
     const path = join(ISSUES_DIR, file);
@@ -87,21 +93,25 @@ const existingPr = prepareExistingPr("robotnik", "agent/robotnik-");
 if (existingPr) {
     const issue = issueFromExistingBranch(existingPr.branch);
     const issueBlock = issue
-        ? `\nISSUE ${issue.id}\nPath: ${issue.path}\n${issue.text}\n\nRELATED SPECS\n${specsBlock(issue.text) || "none"}`
+        ? `\nISSUE ${issue.id}\nPath: ${issue.path}\n${issue.text}\n\nRELATED SPECS\n${
+            specsBlock(issue.text) || "none"
+        }`
         : "";
 
-    console.log(`\n=== Repair existing PR #${existingPr.number} (zai/glm-5.1) ===\n`);
+    console.log(
+        `\n=== Repair existing PR #${existingPr.number} (minimax/MiniMax-M3) ===\n`
+    );
     runPi(
         "code",
         [
             "-p",
             ...piFlags,
             "--provider",
-            "zai",
+            "minimax",
             "--model",
-            "glm-5.1",
+            "MiniMax-M3",
             "--thinking",
-            "off",
+            "medium",
             "--tools",
             "read,edit,write,bash,grep,find",
             `Repair existing robotnik PR #${existingPr.number}.
@@ -116,15 +126,15 @@ Run relevant tests. Write repair summary/update notes to /tmp/pi-agent-pr-body.m
 If janitor asks for PR body/metadata changes, write the complete replacement PR body to /tmp/pi-agent-pr-update-body.md.
 Use /tmp/pi-agent-pr-body.md only for run summary/update notes.
 
-No talk. Repair. Test. Write notes. Done.`,
+No talk. Repair. Test. Write notes. Done.`
         ],
-        timeout,
+        timeout
     );
     try {
         writeFileSync(
             "/tmp/pi-agent-pr-body.md",
             `robotnik: addressed janitor feedback for PR #${existingPr.number}.`,
-            { flag: "wx" },
+            { flag: "wx" }
         );
     } catch {
         /* already written */
@@ -151,9 +161,9 @@ runPi(
         "-p",
         ...piFlags,
         "--provider",
-        "zai",
+        "minimax",
         "--model",
-        "glm-5.1",
+        "MiniMax-M3",
         "--thinking",
         "medium",
         "--tools",
@@ -177,13 +187,15 @@ JOB
 - Run relevant tests or explain why not in PR body.
 - Write PR body to /tmp/pi-agent-pr-body.md. Include issue id, summary, tests.
 
-No talk. Fix. Test. Write PR body. Done.`,
+No talk. Fix. Test. Write PR body. Done.`
     ],
-    timeout,
+    timeout
 );
 
 try {
-    writeFileSync("/tmp/pi-agent-pr-body.md", `robotnik: fixes ${issue.id}.`, { flag: "wx" });
+    writeFileSync("/tmp/pi-agent-pr-body.md", `robotnik: fixes ${issue.id}.`, {
+        flag: "wx"
+    });
 } catch {
     /* already written */
 }

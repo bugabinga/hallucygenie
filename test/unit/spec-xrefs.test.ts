@@ -1,8 +1,8 @@
 // HallucyGenie — test/spec crossrefs
 
-import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import { existsSync } from "node:fs";
+import { describe, it } from "node:test";
 
 const SPEC_TEST_COVERAGE: Record<string, string[]> = {
     "HG-SPEC-001": ["test/unit/static.test.ts"],
@@ -21,7 +21,7 @@ const SPEC_TEST_COVERAGE: Record<string, string[]> = {
     "HG-SPEC-014": ["test/unit/static.test.ts"],
     "HG-SPEC-015": ["test/unit/static.test.ts", "test/unit/app.test.ts", "e2e/run-e2e.ts"],
     "HG-SPEC-016": ["test/unit/static.test.ts", "test/unit/app.test.ts"],
-    "HG-SPEC-017": ["test/unit/db.test.ts", "test/unit/static.test.ts"],
+    "HG-SPEC-017": ["test/unit/db.test.ts", "test/unit/static.test.ts"]
 };
 
 describe("test crossrefs", () => {

@@ -1,0 +1,38 @@
+{
+    "$schema": "https://biomejs.dev/schemas/latest/schema.json",
+    "formatter": {
+        "enabled": false
+    },
+    "linter": {
+        "enabled": true,
+        "rules": {
+            "recommended": false,
+            "correctness": {
+                "noConstAssign": "error",
+                "noUnreachable": "error"
+            },
+            "suspicious": {
+                "noDebugger": "error",
+                "noDuplicateCase": "error",
+                "noDuplicateObjectKeys": "error"
+            }
+        }
+    },
+    "files": {
+        "includes": [
+            "**/*.ts",
+            "**/*.js",
+            "**/*.mjs",
+            "**/*.json",
+            "**/*.html",
+            "**/*.css",
+            "!public/app.js",
+            "!node_modules/**",
+            "!data/**",
+            "!logs/**",
+            "!reports/**",
+            "!test/**/__snapshots__/**",
+            "!e2e/**/__snapshots__/**"
+        ]
+    }
+}

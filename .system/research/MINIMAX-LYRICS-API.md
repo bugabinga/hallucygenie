@@ -1,7 +1,7 @@
 # MiniMax lyrics API research
 
-**Ticket:** `HG-TICKET-046-minimax-lyrics-api-research.md`  
-**Spec:** `.system/specs/HG-SPEC-012-minimax-music-creator-tools.md`  
+**Ticket:** `HG-TICKET-046-minimax-lyrics-api-research.md`\
+**Spec:** `.system/specs/HG-SPEC-012-minimax-music-creator-tools.md`\
 **Status:** docs + live smoke verified on 2026-05-10
 
 ## Known endpoint
@@ -23,8 +23,8 @@ provided.
 
 ```json
 {
-  "mode": "write_full_song",
-  "prompt": "spooky Minecraft boss fight song"
+    "mode": "write_full_song",
+    "prompt": "spooky Minecraft boss fight song"
 }
 ```
 
@@ -32,10 +32,10 @@ Optional fields:
 
 ```json
 {
-  "mode": "edit",
-  "prompt": "make the chorus stronger",
-  "lyrics": "[Chorus]\nWe win today",
-  "title": "Victory Song"
+    "mode": "edit",
+    "prompt": "make the chorus stronger",
+    "lyrics": "[Chorus]\nWe win today",
+    "title": "Victory Song"
 }
 ```
 
@@ -45,10 +45,10 @@ MiniMax returns top-level lyrics fields, not `data.lyrics`:
 
 ```json
 {
-  "song_title": "...",
-  "style_tags": "...",
-  "lyrics": "[Verse]\n...",
-  "base_resp": { "status_code": 0, "status_msg": "success" }
+    "song_title": "...",
+    "style_tags": "...",
+    "lyrics": "[Verse]\n...",
+    "base_resp": { "status_code": 0, "status_msg": "success" }
 }
 ```
 
@@ -72,8 +72,8 @@ A live request was run on 2026-05-10 with:
 
 ```json
 {
-  "mode": "write_full_song",
-  "prompt": "short kid-friendly four-line song about a brave robot"
+    "mode": "write_full_song",
+    "prompt": "short kid-friendly four-line song about a brave robot"
 }
 ```
 

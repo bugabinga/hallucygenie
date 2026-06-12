@@ -3,22 +3,35 @@
 set dotenv-load
 set unstable
 
-# format, build-check, typecheck, unit, integration, e2e
+# lint, build-check, typecheck, unit, integration, e2e
 [group('check')]
-ready: fmt-check typecheck build-check unit integration e2e
+ready: lint typecheck build-check unit integration e2e
 
-# format and rebuild ignored generated frontend
+# format files
 [group('check')]
-fix:
+fmt:
     just -f ./justfile --fmt
-    bunx prettier --write .
-    just build
+    bunx dprint fmt
+    sqruff fix migrations/*.sql test/fixtures/db/v1.0.0/schema.sql
 
-# check formatting without modifying files
+# format and apply safe lint autofixes
 [group('check')]
-fmt-check:
+fix: fmt
+    bunx biome lint --write .
+
+# check formatting, lint, and deploy metadata
+[group('check')]
+lint:
     just -f ./justfile --fmt --check
-    bunx prettier --check .
+    bunx dprint check
+    bunx biome lint .
+    sqruff lint migrations/*.sql test/fixtures/db/v1.0.0/schema.sql
+    tmp="$(mktemp -d)"; \
+    trap 'rm -rf "$tmp"' EXIT; \
+    mkdir -p "$tmp/config/containers/systemd" "$tmp/out" "$tmp/early" "$tmp/late"; \
+    cp deploy/hallucygenie.container "$tmp/config/containers/systemd/hallucygenie.container"; \
+    XDG_CONFIG_HOME="$tmp/config" /usr/lib/systemd/user-generators/podman-user-generator "$tmp/out" "$tmp/early" "$tmp/late" >/dev/null; \
+    systemd-analyze --user verify "$tmp/out/hallucygenie.service"
 
 # type check (tsc --noEmit)
 [group('check')]
@@ -73,7 +86,7 @@ install:
 [group('setup')]
 fonts-update commit="8fee968603b86ac85d4fbf0f3ffbde3fed1d84e1":
     bun scripts/update-fonts.ts {{ commit }}
-    bunx prettier --write public/fonts/fonts.manifest.json public/style.css
+    just fmt
 
 # start dev server (port 3000)
 [group('dev')]

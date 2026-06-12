@@ -1,21 +1,21 @@
 // HallucyGenie — Tools tests
 
-import { describe, it, beforeEach, afterEach, after } from "node:test";
 import assert from "node:assert/strict";
+import { after, afterEach, beforeEach, describe, it } from "node:test";
 import {
-    getToolDefinitions,
+    analyzeImage,
     executeTool,
     generateImage,
-    textToSpeech,
     generateLongSpeech,
-    generateMusic,
     generateLyrics,
-    generateVideo,
-    webSearch,
-    analyzeImage,
+    generateMusic,
     generateMusicCover,
-    musicCoverPreprocess,
+    generateVideo,
+    getToolDefinitions,
     MINIMAX_BASE,
+    musicCoverPreprocess,
+    textToSpeech,
+    webSearch
 } from "../../src/tools.ts";
 
 // ── Test helpers ─────────────────────────────────────────────────────
@@ -47,20 +47,22 @@ function mockFetchWithHandler(handler: (url: string, init?: RequestInit) => Resp
 function jsonResponse(data: unknown, status = 200): Response {
     return new Response(JSON.stringify(data), {
         status,
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json" }
     });
 }
 
 function imageResponse(type = "image/png", bytes = new Uint8Array([1, 2, 3])): Response {
     return new Response(bytes, {
-        headers: { "Content-Type": type, "Content-Length": String(bytes.byteLength) },
+        headers: { "Content-Type": type, "Content-Length": String(bytes.byteLength) }
     });
 }
 
-function schemaFor(toolName: string): { properties: Record<string, unknown>; required: string[] } {
+function schemaFor(
+    toolName: string
+): { properties: Record<string, unknown>; required: string[]; } {
     const tool = getToolDefinitions().find((def) => def.name === toolName);
     assert.ok(tool, `missing tool schema: ${toolName}`);
-    return tool.input_schema as { properties: Record<string, unknown>; required: string[] };
+    return tool.input_schema as { properties: Record<string, unknown>; required: string[]; };
 }
 
 // ── Tool definitions ─────────────────────────────────────────────────
@@ -71,15 +73,15 @@ describe("getToolDefinitions", () => {
         assert.equal(defs.length, 8);
         assert.equal(
             defs.some((tool) => tool.name === "analyze_image"),
-            true,
+            true
         );
         assert.equal(
             defs.some((tool) => tool.name === "generate_video"),
-            true,
+            true
         );
         assert.equal(
             defs.some((tool) => tool.name === "generate_long_speech"),
-            true,
+            true
         );
     });
 
@@ -203,7 +205,7 @@ describe("MiniMax parameter contract", () => {
 
     const contract: Record<
         string,
-        { supported: string[]; forbidden: string[]; required: string[] }
+        { supported: string[]; forbidden: string[]; required: string[]; }
     > = {
         generate_image: {
             supported: [
@@ -213,10 +215,10 @@ describe("MiniMax parameter contract", () => {
                 "seed",
                 "width",
                 "height",
-                "prompt_optimizer",
+                "prompt_optimizer"
             ],
             forbidden: ["response_format", "subject_reference", "image_url"],
-            required: ["prompt"],
+            required: ["prompt"]
         },
         text_to_speech: {
             supported: ["text", "voice_id", "speed", "volume", "pitch"],
@@ -233,9 +235,9 @@ describe("MiniMax parameter contract", () => {
                 "subtitle_type",
                 "stream",
                 "stream_options",
-                "output_format",
+                "output_format"
             ],
-            required: ["text"],
+            required: ["text"]
         },
         generate_long_speech: {
             supported: ["text", "voice_id", "speed", "volume", "pitch"],
@@ -246,14 +248,14 @@ describe("MiniMax parameter contract", () => {
                 "stream",
                 "output_format",
                 "file_id",
-                "task_id",
+                "task_id"
             ],
-            required: ["text"],
+            required: ["text"]
         },
         generate_lyrics: {
             supported: ["prompt", "mode", "lyrics", "title"],
             forbidden: [],
-            required: ["prompt"],
+            required: ["prompt"]
         },
         generate_music: {
             supported: ["prompt", "lyrics"],
@@ -266,25 +268,25 @@ describe("MiniMax parameter contract", () => {
                 "output_format",
                 "audio_url",
                 "audio_base64",
-                "cover_feature_id",
+                "cover_feature_id"
             ],
-            required: ["prompt"],
+            required: ["prompt"]
         },
         generate_video: {
             supported: ["prompt", "duration", "resolution"],
             forbidden: ["model", "first_frame_image", "subject_reference", "prompt_optimizer"],
-            required: ["prompt"],
+            required: ["prompt"]
         },
         analyze_image: {
             supported: ["image_url", "prompt"],
             forbidden: ["image_base64", "data_url"],
-            required: ["image_url"],
+            required: ["image_url"]
         },
         web_search: {
             supported: ["query"],
             forbidden: [],
-            required: ["query"],
-        },
+            required: ["query"]
+        }
     };
 
     for (const [toolName, { supported, forbidden, required }] of Object.entries(contract)) {
@@ -310,9 +312,9 @@ describe("MiniMax parameter contract", () => {
                 prompt: "cat",
                 width: 1024,
                 response_format: "base64",
-                subject_reference: "https://example.com/cat.png",
+                subject_reference: "https://example.com/cat.png"
             } as unknown as Parameters<typeof generateImage>[0],
-            API_KEY,
+            API_KEY
         );
         const body = JSON.parse(capturedBody);
         assert.equal(body.response_format, "url");
@@ -336,20 +338,22 @@ describe("MiniMax parameter contract", () => {
                 subtitle_enable: true,
                 audio_setting: { sample_rate: 32000 },
                 output_format: "wav",
-                stream: true,
+                stream: true
             } as unknown as Parameters<typeof textToSpeech>[0],
-            API_KEY,
+            API_KEY
         );
         const body = JSON.parse(capturedBody);
         assert.equal(body.output_format, "hex");
         assert.deepEqual(body.audio_setting, { format: "mp3" });
-        for (const key of [
-            "emotion",
-            "language_boost",
-            "subtitle_enable",
-            "stream",
-            "stream_options",
-        ]) {
+        for (
+            const key of [
+                "emotion",
+                "language_boost",
+                "subtitle_enable",
+                "stream",
+                "stream_options"
+            ]
+        ) {
             assert.equal(key in body, false, `${key} should stay omitted`);
             assert.equal(key in body.voice_setting, false, `${key} should not be voice_setting`);
         }
@@ -376,23 +380,25 @@ describe("MiniMax parameter contract", () => {
                 audio_url: "https://example.com/ref.mp3",
                 audio_base64: "AAAA",
                 cover_feature_id: "cover-1",
-                stream: true,
+                stream: true
             } as unknown as Parameters<typeof generateMusic>[0],
-            API_KEY,
+            API_KEY
         );
         const body = JSON.parse(capturedBody);
         assert.equal(body.is_instrumental, true);
         assert.equal("lyrics" in body, false);
         assert.equal(body.output_format, "hex");
         assert.deepEqual(body.audio_setting, { format: "mp3" });
-        for (const key of [
-            "instrumental",
-            "lyrics_optimizer",
-            "audio_url",
-            "audio_base64",
-            "cover_feature_id",
-            "stream",
-        ]) {
+        for (
+            const key of [
+                "instrumental",
+                "lyrics_optimizer",
+                "audio_url",
+                "audio_base64",
+                "cover_feature_id",
+                "stream"
+            ]
+        ) {
             assert.equal(key in body, false, `${key} should stay omitted`);
         }
     });
@@ -425,19 +431,19 @@ describe("MiniMax parameter contract", () => {
 
         const shortPrompt = await generateMusicCover(
             { prompt: "short", lyrics: "valid lyric", cover_feature_id: "cover-1" },
-            API_KEY,
+            API_KEY
         );
         const longPrompt = await generateMusicCover(
             { prompt: "x".repeat(301), lyrics: "valid lyric", cover_feature_id: "cover-1" },
-            API_KEY,
+            API_KEY
         );
         const shortLyrics = await generateMusicCover(
             { prompt: "valid style", lyrics: "short", cover_feature_id: "cover-1" },
-            API_KEY,
+            API_KEY
         );
         const longLyrics = await generateMusicCover(
             { prompt: "valid style", lyrics: "x".repeat(1001), cover_feature_id: "cover-1" },
-            API_KEY,
+            API_KEY
         );
 
         assert.equal(called, false);
@@ -466,7 +472,7 @@ describe("executeTool", () => {
             capturedUrl = url.toString();
             capturedBody = init?.body as string;
             return jsonResponse({
-                data: { image_urls: ["https://example.com/img.png"] },
+                data: { image_urls: ["https://example.com/img.png"] }
             });
         };
 
@@ -500,7 +506,7 @@ describe("executeTool", () => {
         const result = await executeTool(
             "generate_music_cover",
             { prompt: "boss fight", lyrics: "valid lyric", cover_feature_id: "cover-1" },
-            API_KEY,
+            API_KEY
         );
         assert.equal(result.type, "audio");
         assert.ok(result.content.startsWith("data:audio/mp3;base64,"));
@@ -518,7 +524,9 @@ describe("executeTool", () => {
     it("dispatches to analyze_image", async () => {
         let capturedBody = "";
         globalThis.fetch = async (url: string | URL | Request, init?: RequestInit) => {
-            if (!url.toString().includes("/v1/coding_plan/vlm")) return imageResponse("image/png");
+            if (!url.toString().includes("/v1/coding_plan/vlm")) {
+                return imageResponse("image/png");
+            }
             capturedBody = init?.body as string;
             return jsonResponse({ content: "A mountain" });
         };
@@ -526,7 +534,7 @@ describe("executeTool", () => {
         const result = await executeTool(
             "analyze_image",
             { image_url: "https://example.com/mountain.png", prompt: "one thing" },
-            API_KEY,
+            API_KEY
         );
         assert.equal(result.type, "text");
         assert.equal(result.content, "A mountain");
@@ -558,7 +566,7 @@ describe("generateImage", () => {
             capturedUrl = url.toString();
             capturedInit = init;
             return jsonResponse({
-                data: { image_urls: ["https://cdn.minimax.io/img123.png"] },
+                data: { image_urls: ["https://cdn.minimax.io/img123.png"] }
             });
         };
 
@@ -602,9 +610,9 @@ describe("generateImage", () => {
                 n: 12,
                 width: 517,
                 height: 2055,
-                prompt_optimizer: false,
+                prompt_optimizer: false
             },
-            API_KEY,
+            API_KEY
         );
         const body = JSON.parse(capturedBody);
         assert.equal(body.aspect_ratio, "21:9");
@@ -626,14 +634,14 @@ describe("generateImage", () => {
             {
                 prompt: "same fox in armor",
                 subject_reference: [
-                    { type: "character", image_file: "data:image/png;base64,cmVm" },
-                ],
+                    { type: "character", image_file: "data:image/png;base64,cmVm" }
+                ]
             },
-            API_KEY,
+            API_KEY
         );
         const body = JSON.parse(capturedBody);
         assert.deepEqual(body.subject_reference, [
-            { type: "character", image_file: "data:image/png;base64,cmVm" },
+            { type: "character", image_file: "data:image/png;base64,cmVm" }
         ]);
     });
 
@@ -697,9 +705,9 @@ describe("generateImage", () => {
         mockFetch(
             jsonResponse({
                 data: {
-                    image_urls: ["https://example.com/img1.png", "https://example.com/img2.png"],
-                },
-            }),
+                    image_urls: ["https://example.com/img1.png", "https://example.com/img2.png"]
+                }
+            })
         );
 
         const result = await generateImage("test", API_KEY);
@@ -707,7 +715,7 @@ describe("generateImage", () => {
         assert.equal(result.content, "https://example.com/img1.png");
         assert.deepEqual(result.urls, [
             "https://example.com/img1.png",
-            "https://example.com/img2.png",
+            "https://example.com/img2.png"
         ]);
     });
 });
@@ -840,7 +848,9 @@ describe("textToSpeech", () => {
     });
 
     it("handles MiniMax base_resp error response", async () => {
-        mockFetch(jsonResponse({ base_resp: { status_code: 2013, status_msg: "text too long" } }));
+        mockFetch(
+            jsonResponse({ base_resp: { status_code: 2013, status_msg: "text too long" } })
+        );
 
         const result = await textToSpeech("hello", API_KEY);
         assert.equal(result.type, "error");
@@ -964,8 +974,8 @@ describe("generateMusic", () => {
         mockFetch(
             jsonResponse({
                 data: null,
-                base_resp: { status_code: 2013, status_msg: "invalid params, lyrics is required" },
-            }),
+                base_resp: { status_code: 2013, status_msg: "invalid params, lyrics is required" }
+            })
         );
 
         const result = await generateMusic("test", API_KEY);
@@ -1032,13 +1042,13 @@ describe("music cover", () => {
         globalThis.fetch = async (_url: string | URL | Request, init?: RequestInit) => {
             capturedBody = init?.body as string;
             return jsonResponse({
-                data: { cover_feature_id: "cover-1", formatted_lyrics: "[Verse]\nhi" },
+                data: { cover_feature_id: "cover-1", formatted_lyrics: "[Verse]\nhi" }
             });
         };
 
         const result = await musicCoverPreprocess(
             { audio_url: "https://example.com/a.mp3" },
-            API_KEY,
+            API_KEY
         );
 
         assert.equal(result.cover_feature_id, "cover-1");
@@ -1061,13 +1071,13 @@ describe("music cover", () => {
 
         const result = await generateMusicCover(
             { prompt: "spooky boss battle", lyrics: "[Verse]\nhi", cover_feature_id: "cover-1" },
-            API_KEY,
+            API_KEY
         );
 
         const expectedBase64 = Buffer.from("4d75736963", "hex").toString("base64");
         assert.deepEqual(result, {
             type: "audio",
-            content: `data:audio/mp3;base64,${expectedBase64}`,
+            content: `data:audio/mp3;base64,${expectedBase64}`
         });
         assert.ok(capturedUrl.endsWith("/v1/music_generation"));
         assert.equal(capturedInit!.method, "POST");
@@ -1078,7 +1088,7 @@ describe("music cover", () => {
             prompt: "spooky boss battle",
             lyrics: "[Verse]\nhi",
             output_format: "hex",
-            audio_setting: { format: "mp3" },
+            audio_setting: { format: "mp3" }
         });
         assert.equal(body.output_format, "hex");
         assert.deepEqual(body.audio_setting, { format: "mp3" });
@@ -1092,7 +1102,7 @@ describe("music cover", () => {
 
         const result = await generateMusicCover(
             { prompt: "spooky boss", lyrics: "[Verse]\nhi", cover_feature_id: "cover-1" },
-            API_KEY,
+            API_KEY
         );
 
         assert.deepEqual(result, { type: "error", content: "Music cover API error: 503" });
@@ -1103,10 +1113,14 @@ describe("music cover", () => {
 
         const result = await generateMusicCover(
             { prompt: "spooky boss", lyrics: "[Verse]\nhi", cover_feature_id: "cover-1" },
-            API_KEY,
+            API_KEY
         );
 
-        assert.deepEqual(result, { type: "error", content: "Music cover failed: bad cover" });
+        assert.deepEqual(result, {
+            type: "error",
+            content: "Music cover failed: bad cover",
+            provider: { stage: "Music cover", status_code: 2013, status_msg: "bad cover" }
+        });
     });
 
     it("reports music cover responses with no audio", async () => {
@@ -1114,7 +1128,7 @@ describe("music cover", () => {
 
         const result = await generateMusicCover(
             { prompt: "spooky boss", lyrics: "[Verse]\nhi", cover_feature_id: "cover-1" },
-            API_KEY,
+            API_KEY
         );
 
         assert.deepEqual(result, { type: "error", content: "Music cover returned no audio" });
@@ -1127,10 +1141,13 @@ describe("music cover", () => {
 
         const result = await generateMusicCover(
             { prompt: "spooky boss", lyrics: "[Verse]\nhi", cover_feature_id: "cover-1" },
-            API_KEY,
+            API_KEY
         );
 
-        assert.deepEqual(result, { type: "error", content: "Music cover failed: Error: offline" });
+        assert.deepEqual(result, {
+            type: "error",
+            content: "Music cover failed: Error: offline"
+        });
     });
 
     it("preprocesses audio_base64 and preserves formatted lyrics priority", async () => {
@@ -1142,7 +1159,11 @@ describe("music cover", () => {
             capturedBody = init?.body as string;
             capturedInit = init;
             return jsonResponse({
-                data: { cover_feature_id: "cover-2", lyrics: "raw", formatted_lyrics: "formatted" },
+                data: {
+                    cover_feature_id: "cover-2",
+                    lyrics: "raw",
+                    formatted_lyrics: "formatted"
+                }
             });
         };
 
@@ -1151,7 +1172,10 @@ describe("music cover", () => {
         assert.deepEqual(result, { cover_feature_id: "cover-2", lyrics: "formatted" });
         assert.ok(capturedUrl.endsWith("/v1/music_cover_preprocess"));
         assert.equal(capturedInit!.method, "POST");
-        assert.deepEqual(JSON.parse(capturedBody), { model: "music-cover", audio_base64: "QUJD" });
+        assert.deepEqual(JSON.parse(capturedBody), {
+            model: "music-cover",
+            audio_base64: "QUJD"
+        });
         const headers = capturedInit!.headers as Record<string, string>;
         assert.equal(headers["Authorization"], `Bearer ${API_KEY}`);
         assert.equal(headers["Content-Type"], "application/json");
@@ -1164,8 +1188,8 @@ describe("music cover", () => {
             await musicCoverPreprocess({ audio_url: "https://example.com/a.mp3" }, API_KEY),
             {
                 cover_feature_id: "cover-3",
-                lyrics: "raw",
-            },
+                lyrics: "raw"
+            }
         );
 
         globalThis.fetch = async () => jsonResponse({ data: { cover_feature_id: "cover-4" } });
@@ -1173,8 +1197,8 @@ describe("music cover", () => {
             await musicCoverPreprocess({ audio_url: "https://example.com/a.mp3" }, API_KEY),
             {
                 cover_feature_id: "cover-4",
-                lyrics: "",
-            },
+                lyrics: ""
+            }
         );
     });
 
@@ -1186,8 +1210,8 @@ describe("music cover", () => {
             await musicCoverPreprocess({ audio_url: "https://example.com/a.mp3" }, API_KEY),
             {
                 cover_feature_id: "cover-top",
-                lyrics: "[Verse]\ntop",
-            },
+                lyrics: "[Verse]\ntop"
+            }
         );
     });
 
@@ -1206,9 +1230,9 @@ describe("music cover", () => {
             () =>
                 musicCoverPreprocess(
                     { audio_url: "https://example.com/a.mp3", audio_base64: "QUJD" },
-                    API_KEY,
+                    API_KEY
                 ),
-            /audio_url and audio_base64 are mutually exclusive/,
+            /audio_url and audio_base64 are mutually exclusive/
         );
         assert.equal(called, false);
     });
@@ -1217,19 +1241,19 @@ describe("music cover", () => {
         globalThis.fetch = async () => new Response("broken", { status: 502 });
         await assert.rejects(
             () => musicCoverPreprocess({ audio_url: "https://example.com/a.mp3" }, API_KEY),
-            /music cover preprocess API error: 502/,
+            /music cover preprocess API error: 502/
         );
 
         mockFetch(jsonResponse({ base_resp: { status_code: 2013, status_msg: "bad source" } }));
         await assert.rejects(
             () => musicCoverPreprocess({ audio_url: "https://example.com/a.mp3" }, API_KEY),
-            /Music cover preprocess failed: bad source/,
+            /Music cover preprocess failed: bad source/
         );
 
         mockFetch(jsonResponse({ data: {} }));
         await assert.rejects(
             () => musicCoverPreprocess({ audio_url: "https://example.com/a.mp3" }, API_KEY),
-            /music cover preprocess returned no cover_feature_id/,
+            /music cover preprocess returned no cover_feature_id/
         );
     });
 });
@@ -1255,7 +1279,7 @@ describe("generateLyrics", () => {
                 song_title: "Hello Song",
                 style_tags: "Pop, Happy",
                 lyrics: "Verse: Hello world\nChorus: Hello again!",
-                base_resp: { status_code: 0, status_msg: "success" },
+                base_resp: { status_code: 0, status_msg: "success" }
             });
         };
 
@@ -1287,9 +1311,9 @@ describe("generateLyrics", () => {
                 prompt: "make this chorus stronger",
                 mode: "edit",
                 lyrics: "[Chorus]\nWe win today",
-                title: "Victory Song",
+                title: "Victory Song"
             },
-            API_KEY,
+            API_KEY
         );
         const body = JSON.parse(capturedBody);
         assert.equal(body.mode, "edit");
@@ -1347,8 +1371,8 @@ describe("generateLyrics", () => {
         mockFetch(
             jsonResponse({
                 data: null,
-                base_resp: { status_code: 2001, status_msg: "invalid prompt" },
-            }),
+                base_resp: { status_code: 2001, status_msg: "invalid prompt" }
+            })
         );
 
         const result = await generateLyrics("test", API_KEY);
@@ -1393,7 +1417,7 @@ describe("generateLyrics", () => {
     it("returns lyrics text on success", async () => {
         globalThis.fetch = async () =>
             jsonResponse({
-                lyrics: "Verse: Jump up and down\nChorus: We are champions!",
+                lyrics: "Verse: Jump up and down\nChorus: We are champions!"
             });
 
         const result = await generateLyrics("a fun gaming anthem", API_KEY);
@@ -1405,13 +1429,13 @@ describe("generateLyrics", () => {
     it("snapshot: generate_lyrics result format", async () => {
         globalThis.fetch = async () =>
             jsonResponse({
-                lyrics: "Verse: Happy birthday to you!\nChorus: Happy birthday!",
+                lyrics: "Verse: Happy birthday to you!\nChorus: Happy birthday!"
             });
 
         const result = await generateLyrics("a birthday song", API_KEY);
         assert.deepEqual(result, {
             type: "text",
-            content: "Verse: Happy birthday to you!\nChorus: Happy birthday!",
+            content: "Verse: Happy birthday to you!\nChorus: Happy birthday!"
         });
     });
 });
@@ -1430,14 +1454,14 @@ describe("Tool result snapshots", () => {
     it("snapshot: generate_image result", async () => {
         mockFetch(
             jsonResponse({
-                data: { image_urls: ["https://cdn.example.com/generated-image.png"] },
-            }),
+                data: { image_urls: ["https://cdn.example.com/generated-image.png"] }
+            })
         );
 
         const result = await generateImage("a colorful parrot", API_KEY);
         assert.deepEqual(result, {
             type: "image",
-            content: "https://cdn.example.com/generated-image.png",
+            content: "https://cdn.example.com/generated-image.png"
         });
     });
 
@@ -1543,7 +1567,7 @@ describe("generateLongSpeech", () => {
         const result = await generateLongSpeech(
             { text: "Long narration", voice_id: "English_CaptivatingStoryteller", speed: 1.2 },
             API_KEY,
-            { pollDelayMs: 0, maxPolls: 1 },
+            { pollDelayMs: 0, maxPolls: 1 }
         );
         const payload = JSON.parse(createBody);
 
@@ -1551,7 +1575,7 @@ describe("generateLongSpeech", () => {
         assert.equal(result.content, "https://cdn.example/tts.tar");
         assert.deepEqual(
             calls.map((url) => new URL(url).pathname),
-            ["/v1/t2a_async_v2", "/v1/query/t2a_async_query_v2", "/v1/files/retrieve"],
+            ["/v1/t2a_async_v2", "/v1/query/t2a_async_query_v2", "/v1/files/retrieve"]
         );
         assert.equal(payload.model, "speech-2.8-hd");
         assert.equal(payload.voice_setting.voice_id, "English_CaptivatingStoryteller");
@@ -1561,7 +1585,9 @@ describe("generateLongSpeech", () => {
     it("returns timeout when provider never finishes", async () => {
         globalThis.fetch = async (url: string | URL | Request) => {
             const urlStr = url.toString();
-            if (urlStr.endsWith("/v1/t2a_async_v2")) return jsonResponse({ task_id: "tts-task-1" });
+            if (urlStr.endsWith("/v1/t2a_async_v2")) {
+                return jsonResponse({ task_id: "tts-task-1" });
+            }
             if (urlStr.includes("/v1/query/t2a_async_query_v2")) {
                 return jsonResponse({ data: { status: "Processing" } });
             }
@@ -1570,7 +1596,7 @@ describe("generateLongSpeech", () => {
 
         const result = await generateLongSpeech("Long narration", API_KEY, {
             pollDelayMs: 0,
-            maxPolls: 1,
+            maxPolls: 1
         });
 
         assert.equal(result.type, "error");
@@ -1606,16 +1632,20 @@ describe("generateVideo", () => {
                 return jsonResponse({
                     file_id: "file_1",
                     filename: "output.mp4",
-                    download_url: "https://cdn.example/video.mp4",
+                    download_url: "https://cdn.example/video.mp4"
                 });
             }
             throw new Error(`unexpected fetch ${urlStr}`);
         };
 
         const result = await generateVideo(
-            { prompt: "A fox mascot jumps through a neon portal", duration: 6, resolution: "768p" },
+            {
+                prompt: "A fox mascot jumps through a neon portal",
+                duration: 6,
+                resolution: "768p"
+            },
             API_KEY,
-            { pollDelayMs: 0, maxPolls: 1 },
+            { pollDelayMs: 0, maxPolls: 1 }
         );
 
         assert.equal(result.type, "video");
@@ -1624,7 +1654,7 @@ describe("generateVideo", () => {
             model: "MiniMax-Hailuo-02",
             prompt: "A fox mascot jumps through a neon portal",
             duration: 6,
-            resolution: "768P",
+            resolution: "768P"
         });
         assert.ok(calls.some((url) => url.includes("task_id=task_1")));
         assert.ok(calls.some((url) => url.includes("file_id=file_1")));
@@ -1633,15 +1663,18 @@ describe("generateVideo", () => {
     it("returns loud user-safe failure when provider task fails", async () => {
         globalThis.fetch = async (url: string | URL | Request) => {
             const urlStr = url.toString();
-            if (urlStr.endsWith("/v1/video_generation")) return jsonResponse({ task_id: "task_1" });
-            if (urlStr.includes("/v1/query/video_generation"))
+            if (urlStr.endsWith("/v1/video_generation")) {
+                return jsonResponse({ task_id: "task_1" });
+            }
+            if (urlStr.includes("/v1/query/video_generation")) {
                 return jsonResponse({ status: "Fail", message: "quota gone" });
+            }
             throw new Error(`unexpected fetch ${urlStr}`);
         };
 
         const result = await generateVideo("make a trailer", API_KEY, {
             pollDelayMs: 0,
-            maxPolls: 1,
+            maxPolls: 1
         });
 
         assert.equal(result.type, "error");
@@ -1661,10 +1694,10 @@ describe("executeTool web_search", () => {
                     {
                         title: "Gaming News",
                         link: "https://example.com/1",
-                        snippet: "Latest games",
+                        snippet: "Latest games"
                     },
-                    { title: "Reviews", link: "https://example.com/2", snippet: "Top rated" },
-                ],
+                    { title: "Reviews", link: "https://example.com/2", snippet: "Top rated" }
+                ]
             });
 
         const result = await executeTool("web_search", { query: "gaming news" }, API_KEY);
@@ -1725,7 +1758,7 @@ describe("generateMusic HTTP request structure", () => {
 
         assert.ok(
             capturedUrl.includes("/v1/music_generation"),
-            "should call music generation endpoint",
+            "should call music generation endpoint"
         );
         assert.equal(capturedInit?.method, "POST", "should use POST method");
 
@@ -1745,16 +1778,16 @@ describe("generateMusic HTTP request structure", () => {
 
         assert.ok(
             capturedHeaders["Authorization"]?.startsWith("Bearer "),
-            "should have Authorization Bearer header",
+            "should have Authorization Bearer header"
         );
         assert.ok(
             capturedHeaders["Authorization"]?.includes(API_KEY),
-            "Authorization header should contain API key",
+            "Authorization header should contain API key"
         );
         assert.equal(
             capturedHeaders["Content-Type"],
             "application/json",
-            "should have Content-Type header",
+            "should have Content-Type header"
         );
     });
 
@@ -1787,7 +1820,7 @@ describe("generateMusic HTTP request structure", () => {
         assert.equal(
             body.is_instrumental,
             false,
-            "should disable instrumental mode when lyrics exist",
+            "should disable instrumental mode when lyrics exist"
         );
         assert.equal("instrumental" in body, false, "should not send stale field name");
     });
@@ -1830,7 +1863,7 @@ describe("webSearch HTTP request structure", () => {
 
         assert.ok(
             capturedHeaders["Authorization"]?.includes(API_KEY),
-            "Authorization header should contain API key",
+            "Authorization header should contain API key"
         );
     });
 
@@ -1852,8 +1885,8 @@ describe("webSearch HTTP request structure", () => {
             jsonResponse({
                 organic: [
                     { title: "Game Tip 1", link: "https://ex.com/1", snippet: "Do this" },
-                    { title: "Game Tip 2", link: "https://ex.com/2", snippet: "Also this" },
-                ],
+                    { title: "Game Tip 2", link: "https://ex.com/2", snippet: "Also this" }
+                ]
             });
 
         const result = await webSearch("tips", API_KEY);
@@ -1871,8 +1904,8 @@ describe("webSearch HTTP request structure", () => {
                 organic: Array.from({ length: 10 }, (_, i) => ({
                     title: `Result ${i}`,
                     link: `https://ex.com/${i}`,
-                    snippet: `Snippet ${i}`,
-                })),
+                    snippet: `Snippet ${i}`
+                }))
             });
 
         const result = await webSearch("many results", API_KEY);
@@ -1887,10 +1920,10 @@ describe("webSearch HTTP request structure", () => {
                         {
                             title: "Nested Result",
                             url: "https://example.com/nested",
-                            snippet: "Nested snippet",
-                        },
-                    ],
-                },
+                            snippet: "Nested snippet"
+                        }
+                    ]
+                }
             });
 
         const result = await webSearch("nested", API_KEY);
@@ -1909,10 +1942,10 @@ describe("webSearch HTTP request structure", () => {
                         {
                             title: "Fallback Result",
                             url: "https://example.com/fallback",
-                            snippet: "Fallback snippet",
-                        },
-                    ],
-                },
+                            snippet: "Fallback snippet"
+                        }
+                    ]
+                }
             });
 
         const result = await webSearch("fallback", API_KEY);
@@ -1932,15 +1965,15 @@ describe("webSearch HTTP request structure", () => {
                         {
                             title: "Watch this",
                             link: "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
-                            snippet: "Video result",
-                        },
-                    ],
+                            snippet: "Video result"
+                        }
+                    ]
                 });
             }
             return jsonResponse({
                 title: "Minecraft Lava Challenge",
                 author_name: "CoolGamer",
-                thumbnail_url: "https://i.ytimg.com/vi/dQw4w9WgXcQ/hqdefault.jpg",
+                thumbnail_url: "https://i.ytimg.com/vi/dQw4w9WgXcQ/hqdefault.jpg"
             });
         };
 
@@ -1951,19 +1984,20 @@ describe("webSearch HTTP request structure", () => {
         assert.ok(result.content.includes("Title: Minecraft Lava Challenge"));
         assert.ok(result.content.includes("Author: CoolGamer"));
         assert.ok(
-            result.content.includes("Thumbnail: https://i.ytimg.com/vi/dQw4w9WgXcQ/hqdefault.jpg"),
+            result.content.includes("Thumbnail: https://i.ytimg.com/vi/dQw4w9WgXcQ/hqdefault.jpg")
         );
         assert.ok(urls.some((url) => url.startsWith("https://www.youtube.com/oembed?")));
     });
 
     it("enriches YouTube URLs pasted directly into query when search has no results", async () => {
         globalThis.fetch = async (url: string | URL | Request) => {
-            if (url.toString().includes("/v1/coding_plan/search"))
+            if (url.toString().includes("/v1/coding_plan/search")) {
                 return jsonResponse({ organic: [] });
+            }
             return jsonResponse({
                 title: "Direct Video",
                 author_name: "Direct Creator",
-                thumbnail_url: "https://i.ytimg.com/vi/dQw4w9WgXcQ/hqdefault.jpg",
+                thumbnail_url: "https://i.ytimg.com/vi/dQw4w9WgXcQ/hqdefault.jpg"
             });
         };
 
@@ -1984,16 +2018,16 @@ describe("webSearch HTTP request structure", () => {
                         {
                             title: "Same video",
                             link: "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
-                            snippet: "Video",
-                        },
-                    ],
+                            snippet: "Video"
+                        }
+                    ]
                 });
             }
             oembedCalls += 1;
             return jsonResponse({
                 title: "Same Video",
                 author_name: "Creator",
-                thumbnail_url: "https://i.ytimg.com/thumb.jpg",
+                thumbnail_url: "https://i.ytimg.com/thumb.jpg"
             });
         };
 
@@ -2012,15 +2046,15 @@ describe("webSearch HTTP request structure", () => {
                     organic: ["dQw4w9WgXcQ", "abcdefghijk", "lmnopqrstuv"].map((id) => ({
                         title: id,
                         link: `https://www.youtube.com/watch?v=${id}`,
-                        snippet: "Video",
-                    })),
+                        snippet: "Video"
+                    }))
                 });
             }
             oembedCalls += 1;
             return jsonResponse({
                 title: `Video ${oembedCalls}`,
                 author_name: "Creator",
-                thumbnail_url: "https://i.ytimg.com/thumb.jpg",
+                thumbnail_url: "https://i.ytimg.com/thumb.jpg"
             });
         };
 
@@ -2081,7 +2115,9 @@ describe("analyzeImage HTTP request structure", () => {
     it("sends Authorization Bearer header", async () => {
         let capturedHeaders: Record<string, string> = {};
         globalThis.fetch = async (url: string | URL | Request, init?: RequestInit) => {
-            if (!url.toString().includes("/v1/coding_plan/vlm")) return imageResponse("image/jpeg");
+            if (!url.toString().includes("/v1/coding_plan/vlm")) {
+                return imageResponse("image/jpeg");
+            }
             capturedHeaders = init?.headers as Record<string, string>;
             return jsonResponse({ content: "A cat" });
         };
@@ -2090,22 +2126,23 @@ describe("analyzeImage HTTP request structure", () => {
 
         assert.ok(
             capturedHeaders["Authorization"]?.includes(API_KEY),
-            "Authorization header should contain API key",
+            "Authorization header should contain API key"
         );
     });
 
     it("sends prompt and normalized data image_url in request body", async () => {
         let capturedBody = "";
         globalThis.fetch = async (url: string | URL | Request, init?: RequestInit) => {
-            if (!url.toString().includes("/v1/coding_plan/vlm"))
+            if (!url.toString().includes("/v1/coding_plan/vlm")) {
                 return imageResponse("image/png", new Uint8Array([1, 2, 3]));
+            }
             capturedBody = init?.body as string;
             return jsonResponse({ content: "A gaming logo" });
         };
 
         await analyzeImage(
             { image_url: "https://cdn.example.com/logo.png", prompt: "Find the logo" },
-            API_KEY,
+            API_KEY
         );
 
         const body = JSON.parse(capturedBody);
@@ -2115,7 +2152,9 @@ describe("analyzeImage HTTP request structure", () => {
 
     it("returns description on success", async () => {
         globalThis.fetch = async (url: string | URL | Request) => {
-            if (!url.toString().includes("/v1/coding_plan/vlm")) return imageResponse("image/png");
+            if (!url.toString().includes("/v1/coding_plan/vlm")) {
+                return imageResponse("image/png");
+            }
             return jsonResponse({ content: "A colorful gaming logo with neon lights" });
         };
 
@@ -2126,7 +2165,9 @@ describe("analyzeImage HTTP request structure", () => {
 
     it("returns choices message content on VLM success", async () => {
         globalThis.fetch = async (url: string | URL | Request) => {
-            if (!url.toString().includes("/v1/coding_plan/vlm")) return imageResponse("image/png");
+            if (!url.toString().includes("/v1/coding_plan/vlm")) {
+                return imageResponse("image/png");
+            }
             return jsonResponse({ choices: [{ message: { content: "A tiny red pixel" } }] });
         };
 
@@ -2137,7 +2178,9 @@ describe("analyzeImage HTTP request structure", () => {
 
     it("returns error on provider HTTP failure", async () => {
         globalThis.fetch = async (url: string | URL | Request) => {
-            if (!url.toString().includes("/v1/coding_plan/vlm")) return imageResponse("image/png");
+            if (!url.toString().includes("/v1/coding_plan/vlm")) {
+                return imageResponse("image/png");
+            }
             return new Response(null, { status: 502 });
         };
 
@@ -2148,7 +2191,9 @@ describe("analyzeImage HTTP request structure", () => {
 
     it("returns error on base_resp status_code != 0", async () => {
         globalThis.fetch = async (url: string | URL | Request) => {
-            if (!url.toString().includes("/v1/coding_plan/vlm")) return imageResponse("image/png");
+            if (!url.toString().includes("/v1/coding_plan/vlm")) {
+                return imageResponse("image/png");
+            }
             return jsonResponse({ base_resp: { status_code: 1004, status_msg: "login fail" } });
         };
 
@@ -2181,7 +2226,7 @@ describe("analyzeImage HTTP request structure", () => {
         };
         const result = await analyzeImage(
             { image_url: "data:image/png;base64,AQID", allow_data_url: true },
-            API_KEY,
+            API_KEY
         );
         assert.equal(result.type, "text");
         assert.equal(result.content, "uploaded image description");
@@ -2191,7 +2236,9 @@ describe("analyzeImage HTTP request structure", () => {
     it("accepts gif images for analysis", async () => {
         let capturedBody = "";
         globalThis.fetch = async (url: string | URL | Request, init?: RequestInit) => {
-            if (!url.toString().includes("/v1/coding_plan/vlm")) return imageResponse("image/gif");
+            if (!url.toString().includes("/v1/coding_plan/vlm")) {
+                return imageResponse("image/gif");
+            }
             capturedBody = String(init?.body ?? "");
             return jsonResponse({ content: "animated image description" });
         };
@@ -2209,7 +2256,9 @@ describe("analyzeImage HTTP request structure", () => {
 
     it("handles empty content field gracefully", async () => {
         globalThis.fetch = async (url: string | URL | Request) => {
-            if (!url.toString().includes("/v1/coding_plan/vlm")) return imageResponse("image/png");
+            if (!url.toString().includes("/v1/coding_plan/vlm")) {
+                return imageResponse("image/png");
+            }
             return jsonResponse({ content: "" });
         };
 
@@ -2220,7 +2269,9 @@ describe("analyzeImage HTTP request structure", () => {
 
     it("handles missing content field gracefully", async () => {
         globalThis.fetch = async (url: string | URL | Request) => {
-            if (!url.toString().includes("/v1/coding_plan/vlm")) return imageResponse("image/png");
+            if (!url.toString().includes("/v1/coding_plan/vlm")) {
+                return imageResponse("image/png");
+            }
             return jsonResponse({});
         };
 
@@ -2262,7 +2313,7 @@ describe("getToolDefinitions schema content", () => {
         const result = (await executeTool(
             "web_search",
             { query: "test" },
-            "fake-key",
+            "fake-key"
         )) as ToolResult;
         assert.equal(result.type, "error");
         assert.ok((result.content as string).includes("Network timeout"));

@@ -12,7 +12,7 @@ const requiredFiles = [
     ".env.example",
     ".pi/prompts/release.md",
     ".github/workflows/release.yml",
-    "test/fixtures/db/v1.0.0/schema.sql",
+    "test/fixtures/db/v1.0.0/schema.sql"
 ];
 
 function fail(message: string): never {
@@ -36,7 +36,7 @@ function exactGitTag(): string | null {
     try {
         return execFileSync("git", ["describe", "--tags", "--exact-match"], {
             encoding: "utf-8",
-            stdio: ["ignore", "pipe", "ignore"],
+            stdio: ["ignore", "pipe", "ignore"]
         }).trim();
     } catch {
         return null;
@@ -58,7 +58,7 @@ if (currentTag && currentTag !== tag) fail(`git tag ${currentTag} != ${tag}`);
 requireMatch(
     "CHANGELOG.md",
     new RegExp(`^## ${version} - \\d{4}-\\d{2}-\\d{2}$`, "m"),
-    "missing current version heading",
+    "missing current version heading"
 );
 requireMatch("CHANGELOG.md", /Kid notes/i, "missing kid notes");
 requireMatch("CHANGELOG.md", /Parent notes/i, "missing parent notes");
@@ -66,7 +66,7 @@ requireMatch("CHANGELOG.md", /Database/i, "missing DB notes");
 requireMatch(
     "README.md",
     new RegExp(`ghcr\\.io/bugabinga/hallucygenie:${tag}`),
-    "missing GHCR run tag",
+    "missing GHCR run tag"
 );
 requireMatch("README.md", /MINIMAX_API_KEY/, "missing API key docs");
 requireMatch("README.md", /No built-in auth/i, "missing no-auth warning");
@@ -78,65 +78,69 @@ requireMatch(".env.example", /^COVER_EXTRACTOR_URL=$/m, "missing COVER_EXTRACTOR
 requireMatch(
     ".pi/prompts/release.md",
     /RELEASE_TAG=\$ARGUMENTS just release-check/,
-    "missing tagged release gate instruction",
+    "missing tagged release gate instruction"
 );
 requireMatch(
     ".pi/prompts/release.md",
     /just release \$ARGUMENTS/,
-    "missing release recipe instruction",
+    "missing release recipe instruction"
 );
 requireMatch(
     ".pi/prompts/release.md",
     /Manual test OK\? \[y\/N\]/,
-    "missing interactive manual approval instruction",
+    "missing interactive manual approval instruction"
 );
 requireMatch(".pi/prompts/release.md", /dirty worktrees/, "missing clean worktree instruction");
 requireMatch(
     ".pi/prompts/release.md",
     /image tag, `RELEASE_TAG`, `package\.json`, or OCI image label disagree/,
-    "missing tag-label coherence rule",
+    "missing tag-label coherence rule"
 );
 requireMatch(".pi/prompts/release.md", /CHANGELOG\.md/, "missing changelog instruction");
 requireMatch(".pi/prompts/release.md", /\.system\/issues/, "missing issue update instruction");
 requireMatch(
     "AGENTS.md",
     /Release -> `.pi\/prompts\/release\.md`/,
-    "missing release prompt pointer",
+    "missing release prompt pointer"
 );
 requireMatch("deploy/Containerfile", /^USER bun$/m, "runtime must use non-root bun user");
 requireMatch(
     "deploy/Containerfile",
     /org\.opencontainers\.image\.version/,
-    "missing OCI version label",
+    "missing OCI version label"
 );
 requireMatch("justfile", /--health-cmd/, "missing Podman-native healthcheck");
 requireMatch("justfile", /podman healthcheck run/, "missing Podman healthcheck proof");
 requireMatch(
     ".github/workflows/release.yml",
     /ghcr\.io\/bugabinga\/hallucygenie/,
-    "missing GHCR image",
+    "missing GHCR image"
 );
-requireMatch(".github/workflows/release.yml", /just release-check/, "missing local artifact proof");
+requireMatch(
+    ".github/workflows/release.yml",
+    /just release-check/,
+    "missing local artifact proof"
+);
 requireMatch(
     ".github/workflows/release.yml",
     /just publish-container/,
-    "missing Podman publish proof",
+    "missing Podman publish proof"
 );
 forbidMatch(
     "justfile",
     /\bdocker (?:build|buildx|volume|run|inspect|rm)\b/,
-    "local release recipes must use podman",
+    "local release recipes must use podman"
 );
 forbidMatch("README.md", /\bdocker (?:pull|run)\b/, "release image docs must use podman");
 forbidMatch(
     "justfile",
     /Dockerfile|--format docker|image healthcheck/i,
-    "use OCI Containerfile and Podman-native healthchecks",
+    "use OCI Containerfile and Podman-native healthchecks"
 );
 forbidMatch(
     ".github/workflows/release.yml",
     /docker\//,
-    "release workflow must not use Docker actions",
+    "release workflow must not use Docker actions"
 );
 
 console.log(`release-check metadata ok: ${tag}`);

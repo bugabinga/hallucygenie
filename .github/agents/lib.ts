@@ -13,13 +13,19 @@ export type PiRole = "analyze" | "code";
 const agentDir = "/tmp/pi-agent-cfg";
 mkdirSync(agentDir, { recursive: true });
 try {
-    cpSync(join(import.meta.dirname, "models.json"), join(agentDir, "models.json"));
+    cpSync(
+        join(import.meta.dirname, "models.json"),
+        join(agentDir, "models.json")
+    );
 } catch {
     /* no models.json — use built-ins only */
 }
 
 const REPO = process.env.GITHUB_REPOSITORY || "bugabinga/hallucygenie";
-const BOT_AUTHORS = new Set(["app/hallucygenie-agent-bot", "app/github-actions"]);
+const BOT_AUTHORS = new Set([
+    "app/hallucygenie-agent-bot",
+    "app/github-actions"
+]);
 const JANITOR_MARKER = "<!-- hallucygenie-janitor -->";
 
 type ExistingPrListItem = {
@@ -28,7 +34,7 @@ type ExistingPrListItem = {
     headRefName: string;
     headRefOid: string;
     baseRefName: string;
-    author: { login: string };
+    author: { login: string; };
     isDraft: boolean;
     updatedAt: string;
 };
@@ -37,7 +43,7 @@ type IssueComment = {
     id: number;
     body?: string;
     created_at?: string;
-    user?: { login: string };
+    user?: { login: string; };
 };
 
 export type ExistingPrContext = {
@@ -46,22 +52,31 @@ export type ExistingPrContext = {
     contextPath: string;
 };
 
-function run(command: string, args: string[], opts: { input?: string; allowFail?: boolean } = {}) {
+function run(
+    command: string,
+    args: string[],
+    opts: { input?: string; allowFail?: boolean; } = {}
+) {
     const result = spawnSync(command, args, {
         encoding: "utf-8",
         input: opts.input,
         maxBuffer: 16 * 1024 * 1024,
-        env: process.env,
+        env: process.env
     });
     if (!opts.allowFail && result.status !== 0) {
         throw new Error(
-            `${command} ${args.join(" ")} failed\nSTDOUT:\n${result.stdout}\nSTDERR:\n${result.stderr}`,
+            `${command} ${
+                args.join(" ")
+            } failed\nSTDOUT:\n${result.stdout}\nSTDERR:\n${result.stderr}`
         );
     }
     return result;
 }
 
-function gh(args: string[], opts: { input?: string; allowFail?: boolean } = {}) {
+function gh(
+    args: string[],
+    opts: { input?: string; allowFail?: boolean; } = {}
+) {
     return run("gh", args, opts);
 }
 
@@ -93,7 +108,11 @@ function findJanitorComment(comments: IssueComment[]) {
 }
 
 function checkoutBranch(branch: string) {
-    run("git", ["fetch", "origin", `+refs/heads/${branch}:refs/remotes/origin/${branch}`]);
+    run("git", [
+        "fetch",
+        "origin",
+        `+refs/heads/${branch}:refs/remotes/origin/${branch}`
+    ]);
     run("git", ["checkout", "-B", branch, `origin/${branch}`]);
 }
 
@@ -101,10 +120,10 @@ function updateBranchWithBase(baseRefName: string) {
     run("git", [
         "fetch",
         "origin",
-        `+refs/heads/${baseRefName}:refs/remotes/origin/${baseRefName}`,
+        `+refs/heads/${baseRefName}:refs/remotes/origin/${baseRefName}`
     ]);
     const result = run("git", ["merge", "--no-edit", `origin/${baseRefName}`], {
-        allowFail: true,
+        allowFail: true
     });
     if (result.status === 0) {
         const output = `${result.stdout}${result.stderr}`.trim();
@@ -113,24 +132,29 @@ function updateBranchWithBase(baseRefName: string) {
     }
 
     console.log(
-        `Automatic base update failed; leaving PR branch unchanged for agent repair.\nSTDOUT:\n${result.stdout}\nSTDERR:\n${result.stderr}`,
+        `Automatic base update failed; leaving PR branch unchanged for agent repair.\nSTDOUT:\n${result.stdout}\nSTDERR:\n${result.stderr}`
     );
     run("git", ["merge", "--abort"], { allowFail: true });
 }
 
-function buildExistingPrContext(pr: ExistingPrListItem, comments: IssueComment[]) {
+function buildExistingPrContext(
+    pr: ExistingPrListItem,
+    comments: IssueComment[]
+) {
     const detail = ghJson<any>([
         "pr",
         "view",
         String(pr.number),
         "--json",
-        "number,title,body,author,headRefName,headRefOid,baseRefName,isDraft,mergeStateStatus,reviewDecision,comments,reviews,files,commits,statusCheckRollup,labels,updatedAt,createdAt",
+        "number,title,body,author,headRefName,headRefOid,baseRefName,isDraft,mergeStateStatus,reviewDecision,comments,reviews,files,commits,statusCheckRollup,labels,updatedAt,createdAt"
     ]);
     const checks = detail.statusCheckRollup ?? [];
     const checksSummary = checks
         .map(
             (check: any) =>
-                `- ${check.name}: status=${check.status || ""} conclusion=${check.conclusion || ""} url=${check.detailsUrl || ""}`,
+                `- ${check.name}: status=${check.status || ""} conclusion=${
+                    check.conclusion || ""
+                } url=${check.detailsUrl || ""}`
         )
         .join("\n");
     const files = (detail.files ?? [])
@@ -139,16 +163,22 @@ function buildExistingPrContext(pr: ExistingPrListItem, comments: IssueComment[]
     const reviews = (detail.reviews ?? [])
         .map(
             (review: any) =>
-                `- ${review.author?.login || "unknown"} state=${review.state} commit=${review.commit?.oid || ""}\n  ${String(review.body || "").replace(/\n/g, "\n  ")}`,
+                `- ${review.author?.login || "unknown"} state=${review.state} commit=${
+                    review.commit?.oid || ""
+                }\n  ${String(review.body || "").replace(/\n/g, "\n  ")}`
         )
         .join("\n\n");
     const conversation = comments
         .map(
             (comment) =>
-                `- ${comment.user?.login || "unknown"} ${comment.created_at || ""}\n  ${String(comment.body || "").replace(/\n/g, "\n  ")}`,
+                `- ${comment.user?.login || "unknown"} ${comment.created_at || ""}\n  ${
+                    String(comment.body || "").replace(/\n/g, "\n  ")
+                }`
         )
         .join("\n\n");
-    const diff = gh(["pr", "diff", String(pr.number)], { allowFail: true }).stdout;
+    const diff = gh(["pr", "diff", String(pr.number)], {
+        allowFail: true
+    }).stdout;
     const sticky = findJanitorComment(comments)?.body || "No janitor sticky comment.";
 
     return `# Existing Bot PR Repair Context
@@ -193,7 +223,7 @@ ${shellBlock(truncate(diff || "No diff available.", 20_000))}
 
 export function prepareExistingPr(
     agentName: string,
-    branchPrefix: string,
+    branchPrefix: string
 ): ExistingPrContext | undefined {
     if (process.env.GITHUB_ACTIONS !== "true") return undefined;
 
@@ -208,14 +238,18 @@ export function prepareExistingPr(
         "--json",
         "number,title,headRefName,headRefOid,baseRefName,author,isDraft,updatedAt",
         "--limit",
-        "50",
+        "50"
     ])
-        .filter((pr) => pr.headRefName.startsWith(branchPrefix) && BOT_AUTHORS.has(pr.author.login))
+        .filter(
+            (pr) =>
+                pr.headRefName.startsWith(branchPrefix)
+                && BOT_AUTHORS.has(pr.author.login)
+        )
         .map((pr) => {
             const comments = ghJson<IssueComment[]>([
                 "api",
                 `/repos/${REPO}/issues/${pr.number}/comments`,
-                "--paginate",
+                "--paginate"
             ]);
             const sticky = findJanitorComment(comments)?.body || "";
             return { pr, comments, sticky, status: janitorStatus(sticky) };
@@ -225,23 +259,31 @@ export function prepareExistingPr(
     const repair = candidates.find((item) => item.status === "needs-fix");
     if (repair) {
         console.log(
-            `Repairing existing ${agentName} PR #${repair.pr.number} (${repair.pr.headRefName}) from janitor checklist`,
+            `Repairing existing ${agentName} PR #${repair.pr.number} (${repair.pr.headRefName}) from janitor checklist`
         );
         checkoutBranch(repair.pr.headRefName);
         updateBranchWithBase(repair.pr.baseRefName);
 
         const contextPath = "/tmp/pi-agent-pr-context.md";
-        writeFileSync(contextPath, buildExistingPrContext(repair.pr, repair.comments));
+        writeFileSync(
+            contextPath,
+            buildExistingPrContext(repair.pr, repair.comments)
+        );
         writeFileSync("/tmp/pi-agent-existing-pr-number", String(repair.pr.number));
         writeFileSync("/tmp/pi-agent-existing-pr-branch", repair.pr.headRefName);
 
-        return { number: repair.pr.number, branch: repair.pr.headRefName, contextPath };
+        return {
+            number: repair.pr.number,
+            branch: repair.pr.headRefName,
+            contextPath
+        };
     }
 
     const blocker = candidates[0];
     if (blocker) {
         const status = blocker.status || "awaiting-janitor";
-        const message = `${agentName}: open PR #${blocker.pr.number} (${blocker.pr.headRefName}) is ${status}; skipping new work to keep one open PR per agent.\n`;
+        const message =
+            `${agentName}: open PR #${blocker.pr.number} (${blocker.pr.headRefName}) is ${status}; skipping new work to keep one open PR per agent.\n`;
         console.log(message.trim());
         writeFileSync("/tmp/pi-agent-pr-body.md", message);
         process.exit(0);
@@ -255,14 +297,16 @@ export function runPi(role: PiRole, args: string[], timeout: number): void {
     const result = spawnSync("pi", args, {
         stdio: "inherit",
         env: { ...process.env, PI_OFFLINE: "1", PI_CODING_AGENT_DIR: agentDir },
-        timeout,
+        timeout
     });
 
     if (result.error) {
         const code = (result.error as NodeJS.ErrnoException).code;
         if (code === "ETIMEDOUT") {
             console.error(`\n❌ ${label} TIMED OUT after ${timeout / 1000}s`);
-            console.error(`   Model too slow or prompt too large. Bump timeout or simplify task.`);
+            console.error(
+                `   Model too slow or prompt too large. Bump timeout or simplify task.`
+            );
         } else {
             console.error(`\n❌ ${label} FAILED: ${code}`);
         }
@@ -287,7 +331,7 @@ export function readFindings(context: string): string {
         console.error(`\n❌ PASS 1 DID NOT WRITE FINDINGS`);
         console.error(`   Model ran but did not write /tmp/pi-agent-findings.md`);
         console.error(
-            `   Possible causes: model ignored instructions, tool call failed, or ran out of context.`,
+            `   Possible causes: model ignored instructions, tool call failed, or ran out of context.`
         );
         process.exit(1);
         return context; // unreachable, keeps TS happy

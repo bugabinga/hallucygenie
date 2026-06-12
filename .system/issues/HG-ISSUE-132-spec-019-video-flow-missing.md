@@ -5,6 +5,7 @@
 Repro: `bun scripts/verify-new-specs.ts` fails HG-SPEC-019 checks.
 
 Missing:
+
 - Create Video tab/panel.
 - Direct `generate_video` create path.
 - MiniMax `/v1/video_generation`, `/v1/query/video_generation`, and file retrieve/download wiring.
@@ -12,6 +13,7 @@ Missing:
 - `video` asset type plus native video preview/download rendering.
 
 Already present:
+
 - Generic DB guard rejects `data:image|audio|video` in message/profile text.
 - Live provider proof 2026-06-11: `POST /v1/video_generation` accepted `MiniMax-Hailuo-02`; query reached `Success`; file retrieve returned `output.mp4`, `purpose=video_generation`, provider `bytes: 0`, working download URL; sampled download returned HTTP 206 `video/mp4`.
 - Live quota proof 2026-06-11: `/v1/token_plan/remains` reported `video total=0 used=0` before/after while video generation still succeeded. Do not use this endpoint as authoritative video availability.

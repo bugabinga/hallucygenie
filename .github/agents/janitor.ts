@@ -1,22 +1,26 @@
 /**
+ *              ╭────────────────╮
+ *              │   ⌬  ◉  ◉  ⌬   │
+ *         ◌────┤   ╭╲╱────╲╱╮   ├────◌
+ *              │   ╰╱╲────╱╲╯   │
+ *              ╰──────┬─────────╯
+ *                    🧹
  *
- *        _.-._
- *       /| | |\     janitor
- *       || | ||     sweeps bot PRs, reads CI/comments,
- *       \\_._//     leaves one sticky checklist comment
- *        `---'
+ *      green lights hum after the broom
  *
- * Uses zai/glm-5.1 for review synthesis.
+ * ╔════════════════════════════════════════════╗
+ * ║ Review: minimax/M3                         ║
+ * ╚════════════════════════════════════════════╝
  */
+import { spawnSync } from "node:child_process";
 import { existsSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { spawnSync } from "node:child_process";
 import { runPi } from "./lib.ts";
 
 const OWNER = process.env.GITHUB_REPOSITORY_OWNER || "bugabinga";
-const REPO_NAME =
-    (process.env.GITHUB_REPOSITORY || "bugabinga/hallucygenie").split("/")[1] || "hallucygenie";
+const REPO_NAME = (process.env.GITHUB_REPOSITORY || "bugabinga/hallucygenie").split("/")[1]
+    || "hallucygenie";
 const REPO = `${OWNER}/${REPO_NAME}`;
 const MARKER = "<!-- hallucygenie-janitor -->";
 const HUMAN_REVIEWER = process.env.JANITOR_HUMAN_REVIEWER || OWNER;
@@ -27,14 +31,20 @@ const JANITOR_LABELS = {
     "needs-fix": "janitor:needs-fix",
     ready: "janitor:ready",
     "needs-human": "janitor:needs-human",
-    "waiting-for-ci": "janitor:waiting-for-ci",
+    "waiting-for-ci": "janitor:waiting-for-ci"
 } as const;
 
 const JANITOR_LABEL_META = {
-    "needs-fix": { color: "d73a4a", description: "Janitor found agent-repairable work" },
+    "needs-fix": {
+        color: "d73a4a",
+        description: "Janitor found agent-repairable work"
+    },
     ready: { color: "0e8a16", description: "Janitor says bot PR is merge-ready" },
     "needs-human": { color: "b60205", description: "Janitor needs human triage" },
-    "waiting-for-ci": { color: "fbca04", description: "Janitor is waiting for CI" },
+    "waiting-for-ci": {
+        color: "fbca04",
+        description: "Janitor is waiting for CI"
+    }
 } as const;
 
 type JanitorStatus = keyof typeof JANITOR_LABELS;
@@ -44,7 +54,7 @@ type PrListItem = {
     title: string;
     headRefName: string;
     headRefOid: string;
-    author: { login: string };
+    author: { login: string; };
     isDraft: boolean;
     mergeStateStatus: string;
     updatedAt: string;
@@ -53,25 +63,34 @@ type PrListItem = {
 type IssueComment = {
     id: number;
     body?: string;
-    user?: { login: string };
+    user?: { login: string; };
 };
 
-function run(command: string, args: string[], opts: { input?: string; allowFail?: boolean } = {}) {
+function run(
+    command: string,
+    args: string[],
+    opts: { input?: string; allowFail?: boolean; } = {}
+) {
     const result = spawnSync(command, args, {
         encoding: "utf-8",
         input: opts.input,
         maxBuffer: 16 * 1024 * 1024,
-        env: process.env,
+        env: process.env
     });
     if (!opts.allowFail && result.status !== 0) {
         throw new Error(
-            `${command} ${args.join(" ")} failed\nSTDOUT:\n${result.stdout}\nSTDERR:\n${result.stderr}`,
+            `${command} ${
+                args.join(" ")
+            } failed\nSTDOUT:\n${result.stdout}\nSTDERR:\n${result.stderr}`
         );
     }
     return result;
 }
 
-function gh(args: string[], opts: { input?: string; allowFail?: boolean } = {}) {
+function gh(
+    args: string[],
+    opts: { input?: string; allowFail?: boolean; } = {}
+) {
     return run("gh", args, opts);
 }
 
@@ -98,20 +117,24 @@ function listOpenBotPrs() {
         "--json",
         "number,title,headRefName,headRefOid,author,isDraft,mergeStateStatus,updatedAt",
         "--limit",
-        "50",
+        "50"
     ]);
 
     return prs.filter(
         (pr) =>
-            pr.headRefName.startsWith("agent/") &&
-            ["app/hallucygenie-agent-bot", "app/github-actions"].includes(pr.author.login),
+            pr.headRefName.startsWith("agent/")
+            && ["app/hallucygenie-agent-bot", "app/github-actions"].includes(
+                pr.author.login
+            )
     );
 }
 
 function failedRunLogs(statusCheckRollup: any[]) {
     const urls = statusCheckRollup
         .filter((check) =>
-            ["FAILURE", "TIMED_OUT", "CANCELLED", "ACTION_REQUIRED"].includes(check.conclusion),
+            ["FAILURE", "TIMED_OUT", "CANCELLED", "ACTION_REQUIRED"].includes(
+                check.conclusion
+            )
         )
         .map((check) => String(check.detailsUrl || ""))
         .filter(Boolean);
@@ -124,7 +147,9 @@ function failedRunLogs(statusCheckRollup: any[]) {
         const runId = match[1];
         if (seen.has(runId)) continue;
         seen.add(runId);
-        const result = gh(["run", "view", runId, "--log-failed"], { allowFail: true });
+        const result = gh(["run", "view", runId, "--log-failed"], {
+            allowFail: true
+        });
         const body = result.stdout.trim() || result.stderr.trim();
         if (body) chunks.push(`## Failed run ${runId}\n${truncate(body, 8_000)}`);
     }
@@ -172,11 +197,13 @@ function reviewThreads(number: number) {
             "-F",
             `number=${number}`,
             "-f",
-            `query=${query}`,
+            `query=${query}`
         ],
-        { allowFail: true },
+        { allowFail: true }
     );
-    if (result.status !== 0) return `Could not fetch review threads:\n${result.stderr}`;
+    if (result.status !== 0) {
+        return `Could not fetch review threads:\n${result.stderr}`;
+    }
     const parsed = JSON.parse(result.stdout);
     const nodes = parsed?.data?.repository?.pullRequest?.reviewThreads?.nodes ?? [];
     if (nodes.length === 0) return "No review threads.";
@@ -185,10 +212,16 @@ function reviewThreads(number: number) {
             const comments = (thread.comments?.nodes ?? [])
                 .map(
                     (comment: any) =>
-                        `- ${comment.author?.login || "unknown"} ${comment.path || thread.path}:${comment.line || thread.line || "?"} ${comment.createdAt}\n  ${String(comment.body || "").replace(/\n/g, "\n  ")}\n  ${comment.url || ""}`,
+                        `- ${comment.author?.login || "unknown"} ${comment.path || thread.path}:${
+                            comment.line || thread.line || "?"
+                        } ${comment.createdAt}\n  ${
+                            String(comment.body || "").replace(/\n/g, "\n  ")
+                        }\n  ${comment.url || ""}`
                 )
                 .join("\n");
-            return `Thread ${thread.id} resolved=${thread.isResolved} outdated=${thread.isOutdated} path=${thread.path}:${thread.line || "?"}\n${comments}`;
+            return `Thread ${thread.id} resolved=${thread.isResolved} outdated=${thread.isOutdated} path=${thread.path}:${
+                thread.line || "?"
+            }\n${comments}`;
         })
         .join("\n\n");
 }
@@ -197,7 +230,7 @@ function existingStickyComment(number: number) {
     const comments = ghJson<IssueComment[]>([
         "api",
         `/repos/${REPO}/issues/${number}/comments`,
-        "--paginate",
+        "--paginate"
     ]);
     return comments.find((comment) => comment.body?.includes(MARKER));
 }
@@ -214,19 +247,26 @@ function upsertStickyComment(number: number, body: string) {
                 "PATCH",
                 `/repos/${REPO}/issues/comments/${comment.id}`,
                 "--input",
-                "-",
+                "-"
             ],
             {
-                input: payload,
-            },
+                input: payload
+            }
         );
         console.log(`Updated janitor comment on PR #${number}`);
     } else {
         gh(
-            ["api", "--method", "POST", `/repos/${REPO}/issues/${number}/comments`, "--input", "-"],
+            [
+                "api",
+                "--method",
+                "POST",
+                `/repos/${REPO}/issues/${number}/comments`,
+                "--input",
+                "-"
+            ],
             {
-                input: payload,
-            },
+                input: payload
+            }
         );
         console.log(`Created janitor comment on PR #${number}`);
     }
@@ -249,33 +289,35 @@ function normalizeCommentBody(body: string) {
     const status = janitorStatus(normalized);
     const hasUncheckedItems = /^- \[ \]/m.test(normalized);
     const hasHumanOnlyUncheckedItems =
-        /^- \[ \].*(action_required|unknown merge state|manual approval|human decision|\bsecurity\b|\bauth\b|\bdeploy\b|workflow risk|duplicate PR|(?:three|3) failed repair attempts|repeated (?:failed )?repair (?:attempts|failures?))/im.test(
-            normalized,
-        );
+        /^- \[ \].*(action_required|unknown merge state|manual approval|human decision|\bsecurity\b|\bauth\b|\bdeploy\b|workflow risk|duplicate PR|(?:three|3) failed repair attempts|repeated (?:failed )?repair (?:attempts|failures?))/im
+            .test(
+                normalized
+            );
     const hasAgentRepairableUncheckedItems =
-        /^- \[ \].*(PR body|metadata|CI|check|test|code|fix|frontmatter|logs?|branch behind|behind trunk|rebase|out[- ]of[- ]date|merge conflict|conflict)/im.test(
-            normalized,
-        );
+        /^- \[ \].*(PR body|metadata|CI|check|test|code|fix|frontmatter|logs?|branch behind|behind trunk|rebase|out[- ]of[- ]date|merge conflict|conflict)/im
+            .test(
+                normalized
+            );
     if (status === "ready" && hasUncheckedItems) {
         normalized = normalized.replace(
             /## Janitor status:\s*ready/i,
-            "## Janitor status: needs-fix",
+            "## Janitor status: needs-fix"
         );
     }
     if (
-        status === "needs-human" &&
-        hasAgentRepairableUncheckedItems &&
-        !hasHumanOnlyUncheckedItems
+        status === "needs-human"
+        && hasAgentRepairableUncheckedItems
+        && !hasHumanOnlyUncheckedItems
     ) {
         normalized = normalized.replace(
             /## Janitor status:\s*needs-human/i,
-            "## Janitor status: needs-fix",
+            "## Janitor status: needs-fix"
         );
     }
     if (status === "needs-fix" && hasHumanOnlyUncheckedItems) {
         normalized = normalized.replace(
             /## Janitor status:\s*needs-fix/i,
-            "## Janitor status: needs-human",
+            "## Janitor status: needs-human"
         );
     }
 
@@ -296,11 +338,13 @@ function ensureLabel(status: JanitorStatus) {
             meta.color,
             "--description",
             meta.description,
-            "--force",
+            "--force"
         ],
-        { allowFail: true },
+        { allowFail: true }
     );
-    if (result.status !== 0) console.log(`Could not ensure label ${label}: ${result.stderr}`);
+    if (result.status !== 0) {
+        console.log(`Could not ensure label ${label}: ${result.stderr}`);
+    }
 }
 
 function syncJanitorLabels(number: number, status: JanitorStatus | undefined) {
@@ -314,26 +358,38 @@ function syncJanitorLabels(number: number, status: JanitorStatus | undefined) {
                 "api",
                 "--method",
                 "DELETE",
-                `/repos/${REPO}/issues/${number}/labels/${encodeURIComponent(label)}`,
+                `/repos/${REPO}/issues/${number}/labels/${encodeURIComponent(label)}`
             ],
-            { allowFail: true },
+            { allowFail: true }
         );
     }
     const result = gh(
-        ["api", "--method", "POST", `/repos/${REPO}/issues/${number}/labels`, "--input", "-"],
-        { input: JSON.stringify({ labels: [wanted] }), allowFail: true },
+        [
+            "api",
+            "--method",
+            "POST",
+            `/repos/${REPO}/issues/${number}/labels`,
+            "--input",
+            "-"
+        ],
+        { input: JSON.stringify({ labels: [wanted] }), allowFail: true }
     );
-    if (result.status !== 0) console.log(`Could not add label ${wanted}: ${result.stderr}`);
+    if (result.status !== 0) {
+        console.log(`Could not add label ${wanted}: ${result.stderr}`);
+    }
 }
 
 function requestHumanReview(number: number, status: JanitorStatus | undefined) {
     if (status !== "needs-human") return;
-    const result = gh(["pr", "edit", String(number), "--add-reviewer", HUMAN_REVIEWER], {
-        allowFail: true,
-    });
+    const result = gh(
+        ["pr", "edit", String(number), "--add-reviewer", HUMAN_REVIEWER],
+        {
+            allowFail: true
+        }
+    );
     if (result.status !== 0) {
         console.log(
-            `Could not request ${HUMAN_REVIEWER} review on PR #${number}: ${result.stderr}`,
+            `Could not request ${HUMAN_REVIEWER} review on PR #${number}: ${result.stderr}`
         );
     }
 }
@@ -344,13 +400,15 @@ function buildContext(pr: PrListItem) {
         "view",
         String(pr.number),
         "--json",
-        "number,title,body,author,headRefName,headRefOid,baseRefName,isDraft,mergeStateStatus,reviewDecision,comments,reviews,files,commits,statusCheckRollup,labels,updatedAt,createdAt",
+        "number,title,body,author,headRefName,headRefOid,baseRefName,isDraft,mergeStateStatus,reviewDecision,comments,reviews,files,commits,statusCheckRollup,labels,updatedAt,createdAt"
     ]);
     const checks = detail.statusCheckRollup ?? [];
     const checksSummary = checks
         .map(
             (check: any) =>
-                `- ${check.name}: status=${check.status || ""} conclusion=${check.conclusion || ""} url=${check.detailsUrl || ""}`,
+                `- ${check.name}: status=${check.status || ""} conclusion=${
+                    check.conclusion || ""
+                } url=${check.detailsUrl || ""}`
         )
         .join("\n");
     const files = (detail.files ?? [])
@@ -359,19 +417,25 @@ function buildContext(pr: PrListItem) {
     const reviews = (detail.reviews ?? [])
         .map(
             (review: any) =>
-                `- ${review.author?.login || "unknown"} state=${review.state} commit=${review.commit?.oid || ""}\n  ${String(review.body || "").replace(/\n/g, "\n  ")}`,
+                `- ${review.author?.login || "unknown"} state=${review.state} commit=${
+                    review.commit?.oid || ""
+                }\n  ${String(review.body || "").replace(/\n/g, "\n  ")}`
         )
         .join("\n\n");
     const comments = (detail.comments ?? [])
         .map(
             (comment: any) =>
-                `- ${comment.author?.login || "unknown"} ${comment.createdAt}\n  ${String(comment.body || "").replace(/\n/g, "\n  ")}`,
+                `- ${comment.author?.login || "unknown"} ${comment.createdAt}\n  ${
+                    String(comment.body || "").replace(/\n/g, "\n  ")
+                }`
         )
         .join("\n\n");
 
-    const diff = gh(["pr", "diff", String(pr.number)], { allowFail: true }).stdout;
-    const existingSticky =
-        existingStickyComment(pr.number)?.body || "No janitor sticky comment yet.";
+    const diff = gh(["pr", "diff", String(pr.number)], {
+        allowFail: true
+    }).stdout;
+    const existingSticky = existingStickyComment(pr.number)?.body
+        || "No janitor sticky comment yet.";
     const failures = failedRunLogs(checks);
 
     return `# Janitor PR Context
@@ -429,9 +493,9 @@ function reviewPr(pr: PrListItem) {
             "--no-session",
             "--no-prompt-templates",
             "--provider",
-            "zai",
+            "minimax",
             "--model",
-            "glm-5.1",
+            "MiniMax-M3",
             "--thinking",
             "medium",
             "--tools",
@@ -473,15 +537,18 @@ Decision rules:
 - Janitor syncs a janitor:* label from this status and requests ${HUMAN_REVIEWER} review for needs-human.
 - Address owning agent directly. Tell it to fix only current PR scope.
 
-No extra output. Just write the file.`,
+No extra output. Just write the file.`
         ],
-        timeout,
+        timeout
     );
 
-    if (!existsSync(outputPath)) throw new Error(`Janitor did not write ${outputPath}`);
+    if (!existsSync(outputPath)) {
+        throw new Error(`Janitor did not write ${outputPath}`);
+    }
     const body = normalizeCommentBody(readFileSync(outputPath, "utf-8"));
-    if (!body.includes(MARKER))
+    if (!body.includes(MARKER)) {
         throw new Error(`Janitor output missing marker for PR #${pr.number}`);
+    }
     upsertStickyComment(pr.number, body);
     const status = janitorStatus(body);
     syncJanitorLabels(pr.number, status);
@@ -495,6 +562,6 @@ if (prs.length === 0) {
 }
 
 console.log(
-    `Reviewing ${prs.length} open bot PR(s): ${prs.map((pr) => `#${pr.number}`).join(", ")}`,
+    `Reviewing ${prs.length} open bot PR(s): ${prs.map((pr) => `#${pr.number}`).join(", ")}`
 );
 for (const pr of prs) reviewPr(pr);

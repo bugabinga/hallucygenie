@@ -1,21 +1,21 @@
 /**
+ *      SPECK ━━━━━╮
+ *                 ╰━╮
+ *                   ╰╮
+ *         💩      ▁▂▆█▆▂▁      𓃟
+ *                         𝙎𝙉𝙍𝙍𝙆!!
  *
- *     ,---.
- *    / o o \    speck ferkel
- *   (  =_=  )   sniffs out drift between spec and code
- *    \  ~  /    picks a random spec, roots around in src/
- *    /|   |\
- *   (_|   |_)   the truffle hog of code quality
+ *      where contracts rot, the truffle nose knows
  *
- * ╔═════════════════════════════════════════╗
- * ║ Pass 1: minimax/M2.7 -> analyze (smart) ║
- * ║ Pass 2: minimax/M2.5 -> fix (coder)     ║
- * ╚═════════════════════════════════════════╝
+ * ╔════════════════════════════════════════════╗
+ * ║ Pass 1: minimax/M3 -> sniff                ║
+ * ║ Pass 2: minimax/M2.5 -> mend               ║
+ * ╚════════════════════════════════════════════╝
  */
+import { randomInt } from "node:crypto";
 import { readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { randomInt } from "node:crypto";
-import { prepareExistingPr, runPi, readFindings } from "./lib.ts";
+import { prepareExistingPr, readFindings, runPi } from "./lib.ts";
 
 const root = join(import.meta.dirname, "../..");
 const SPECS_DIR = join(root, ".system/specs");
@@ -27,14 +27,16 @@ if (existingPr) {
     const existingSpecName = existingPr.branch.replace("agent/speck-ferkel-", "");
     let specBlock = "";
     try {
-        specBlock = `\nSPEC ${existingSpecName}\n${readFileSync(join(SPECS_DIR, `${existingSpecName}.md`), "utf-8")}`;
+        specBlock = `\nSPEC ${existingSpecName}\n${
+            readFileSync(join(SPECS_DIR, `${existingSpecName}.md`), "utf-8")
+        }`;
         writeFileSync("/tmp/pi-agent-spec-name", existingSpecName);
     } catch {
         /* PR context still has enough info */
     }
 
     console.log(
-        `\n=== Repair existing PR #${existingPr.number} (minimax/MiniMax-M2.5-highspeed) ===\n`,
+        `\n=== Repair existing PR #${existingPr.number} (minimax/MiniMax-M2.5-highspeed) ===\n`
     );
     runPi(
         "code",
@@ -60,15 +62,15 @@ Run relevant tests. Write repair summary/update notes to /tmp/pi-agent-pr-body.m
 If janitor asks for PR body/metadata changes, write the complete replacement PR body to /tmp/pi-agent-pr-update-body.md.
 Use /tmp/pi-agent-pr-body.md only for run summary/update notes.
 
-No talk. Repair. Test. Write notes. Done.`,
+No talk. Repair. Test. Write notes. Done.`
         ],
-        timeout,
+        timeout
     );
     try {
         writeFileSync(
             "/tmp/pi-agent-pr-body.md",
             `speck-ferkel: addressed janitor feedback for PR #${existingPr.number}.`,
-            { flag: "wx" },
+            { flag: "wx" }
         );
     } catch {
         /* already written */
@@ -117,16 +119,19 @@ Write findings to /tmp/pi-agent-findings.md.
 MATCH -> one word: NO_ISSUES_FOUND
 MISMATCH -> per gap: file, spec-says, code-does, must-change. No intro. No summary.
 
-No talk. No modify. Read. Write file. Done.`,
+No talk. No modify. Read. Write file. Done.`
     ],
-    timeout,
+    timeout
 );
 
 const findings = readFindings(specName);
 
 if (findings === "NO_ISSUES_FOUND" || findings.length === 0) {
     console.log("\nNo drift. Spec matches code.");
-    writeFileSync("/tmp/pi-agent-pr-body.md", `speck-ferkel: ${specName} -- no drift.\n`);
+    writeFileSync(
+        "/tmp/pi-agent-pr-body.md",
+        `speck-ferkel: ${specName} -- no drift.\n`
+    );
     process.exit(0);
 }
 
@@ -159,15 +164,19 @@ Fix every gap. Code must match spec. Add missing tests.
 Only touch src/ and test/. Never touch .system/.
 Write PR body to /tmp/pi-agent-pr-body.md.
 
-No talk. Read gaps. Fix code. Run tests. Write PR body. Done.`,
+No talk. Read gaps. Fix code. Run tests. Write PR body. Done.`
     ],
-    timeout,
+    timeout
 );
 
 try {
-    writeFileSync("/tmp/pi-agent-pr-body.md", `speck-ferkel: ${specName}. See commit.`, {
-        flag: "wx",
-    });
+    writeFileSync(
+        "/tmp/pi-agent-pr-body.md",
+        `speck-ferkel: ${specName}. See commit.`,
+        {
+            flag: "wx"
+        }
+    );
 } catch {
     /* already written */
 }

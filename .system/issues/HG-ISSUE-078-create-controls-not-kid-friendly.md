@@ -1,5 +1,16 @@
 ---
-{ "status": "fixed", "specs": ["HG-SPEC-004", "HG-SPEC-006", "HG-SPEC-008", "HG-SPEC-011", "HG-SPEC-012", "HG-SPEC-015", "HG-SPEC-016"] }
+{
+    "status": "fixed",
+    "specs": [
+        "HG-SPEC-004",
+        "HG-SPEC-006",
+        "HG-SPEC-008",
+        "HG-SPEC-011",
+        "HG-SPEC-012",
+        "HG-SPEC-015",
+        "HG-SPEC-016",
+    ],
+}
 ---
 
 # HG-ISSUE-078: Create controls are too technical for kids

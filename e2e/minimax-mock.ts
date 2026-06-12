@@ -3,9 +3,74 @@
 
 const MINIMAX_BASE = "https://api.minimax.io";
 const GENERATED_IMAGE_PNG = new Uint8Array([
-    137, 80, 78, 71, 13, 10, 26, 10, 0, 0, 0, 13, 73, 72, 68, 82, 0, 0, 0, 1, 0, 0, 0, 1, 8, 6, 0,
-    0, 0, 31, 21, 196, 137, 0, 0, 0, 13, 73, 68, 65, 84, 120, 156, 99, 248, 15, 4, 0, 9, 251, 3,
-    253, 167, 95, 88, 29, 0, 0, 0, 0, 73, 69, 78, 68, 174, 66, 96, 130,
+    137,
+    80,
+    78,
+    71,
+    13,
+    10,
+    26,
+    10,
+    0,
+    0,
+    0,
+    13,
+    73,
+    72,
+    68,
+    82,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    1,
+    8,
+    6,
+    0,
+    0,
+    0,
+    31,
+    21,
+    196,
+    137,
+    0,
+    0,
+    0,
+    13,
+    73,
+    68,
+    65,
+    84,
+    120,
+    156,
+    99,
+    248,
+    15,
+    4,
+    0,
+    9,
+    251,
+    3,
+    253,
+    167,
+    95,
+    88,
+    29,
+    0,
+    0,
+    0,
+    0,
+    73,
+    69,
+    78,
+    68,
+    174,
+    66,
+    96,
+    130
 ]);
 let previousFetch: typeof fetch | null = null;
 
@@ -32,21 +97,21 @@ function anthropicTextSSE(text: string): string {
                     type: "message",
                     role: "assistant",
                     content: [],
-                    model: "MiniMax-M3",
-                },
-            },
+                    model: "MiniMax-M3"
+                }
+            }
         },
         {
             event: "content_block_start",
             data: {
                 type: "content_block_start",
                 index: 0,
-                content_block: { type: "text", text: "" },
-            },
+                content_block: { type: "text", text: "" }
+            }
         },
         {
             event: "content_block_delta",
-            data: { type: "content_block_delta", index: 0, delta: { type: "text_delta", text } },
+            data: { type: "content_block_delta", index: 0, delta: { type: "text_delta", text } }
         },
         { event: "content_block_stop", data: { type: "content_block_stop", index: 0 } },
         {
@@ -54,20 +119,21 @@ function anthropicTextSSE(text: string): string {
             data: {
                 type: "message_delta",
                 delta: { stop_reason: "end_turn" },
-                usage: { output_tokens: text.length },
-            },
+                usage: { output_tokens: text.length }
+            }
         },
-        { event: "message_stop", data: { type: "message_stop" } },
+        { event: "message_stop", data: { type: "message_stop" } }
     ];
     return (
-        events.map((e) => `event: ${e.event}\ndata: ${JSON.stringify(e.data)}\n`).join("\n") + "\n"
+        events.map((e) => `event: ${e.event}\ndata: ${JSON.stringify(e.data)}\n`).join("\n")
+        + "\n"
     );
 }
 
 function jsonResponse(body: unknown): Response {
     return new Response(JSON.stringify(body), {
         status: 200,
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json" }
     });
 }
 
@@ -89,9 +155,9 @@ function minimaxResponse(url: URL, init?: RequestInit): Response | null {
                     status: 200,
                     headers: {
                         "Content-Type": "text/event-stream",
-                        "Cache-Control": "no-cache",
-                    },
-                },
+                        "Cache-Control": "no-cache"
+                    }
+                }
             );
 
         case "/v1/image_generation": {
@@ -100,42 +166,42 @@ function minimaxResponse(url: URL, init?: RequestInit): Response | null {
                 data: {
                     image_urls: Array.from(
                         { length: n },
-                        (_, index) => `https://example.com/generated/test-${index + 1}.png`,
-                    ),
+                        (_, index) => `https://example.com/generated/test-${index + 1}.png`
+                    )
                 },
-                base_resp: { status_code: 0 },
+                base_resp: { status_code: 0 }
             });
         }
 
         case "/v1/t2a_v2":
             return jsonResponse({
                 data: {
-                    audio: Buffer.from("fake-mp3-data").toString("hex"),
+                    audio: Buffer.from("fake-mp3-data").toString("hex")
                 },
-                base_resp: { status_code: 0 },
+                base_resp: { status_code: 0 }
             });
 
         case "/v1/lyrics_generation":
             return jsonResponse({
                 lyrics: "Verse one, game on\nChorus, win the fight",
-                base_resp: { status_code: 0 },
+                base_resp: { status_code: 0 }
             });
 
         case "/v1/music_generation":
             return jsonResponse({
                 data: {
-                    audio: Buffer.from("fake-music-data").toString("hex"),
+                    audio: Buffer.from("fake-music-data").toString("hex")
                 },
-                base_resp: { status_code: 0 },
+                base_resp: { status_code: 0 }
             });
 
         case "/v1/music_cover_preprocess":
             return jsonResponse({
                 data: {
                     cover_feature_id: "cover-e2e-1",
-                    formatted_lyrics: "Verse, cover ready\nChorus, remix go",
+                    formatted_lyrics: "Verse, cover ready\nChorus, remix go"
                 },
-                base_resp: { status_code: 0 },
+                base_resp: { status_code: 0 }
             });
 
         case "/v1/coding_plan/search":
@@ -145,19 +211,19 @@ function minimaxResponse(url: URL, init?: RequestInit): Response | null {
                         {
                             title: "Test Result",
                             url: "https://example.com",
-                            snippet: "This is a test search result.",
-                        },
-                    ],
-                },
+                            snippet: "This is a test search result."
+                        }
+                    ]
+                }
             });
 
         case "/v1/coding_plan/vlm":
             return jsonResponse({
                 choices: [
                     {
-                        message: { content: "I can see a test image." },
-                    },
-                ],
+                        message: { content: "I can see a test image." }
+                    }
+                ]
             });
 
         case "/v1/token_plan/remains":
@@ -167,27 +233,27 @@ function minimaxResponse(url: URL, init?: RequestInit): Response | null {
                         model_name: "MiniMax-M3",
                         current_interval_total_count: 1000,
                         current_interval_usage_count: 5,
-                        remains_time: 86400000,
+                        remains_time: 86400000
                     },
                     {
                         model_name: "speech-hd",
                         current_interval_total_count: 9000,
                         current_interval_usage_count: 10,
-                        remains_time: 86400000,
+                        remains_time: 86400000
                     },
                     {
                         model_name: "image-01",
                         current_interval_total_count: 100,
                         current_interval_usage_count: 2,
-                        remains_time: 86400000,
+                        remains_time: 86400000
                     },
                     {
                         model_name: "music-2.6",
                         current_interval_total_count: 100,
                         current_interval_usage_count: 1,
-                        remains_time: 86400000,
-                    },
-                ],
+                        remains_time: 86400000
+                    }
+                ]
             });
 
         default:
@@ -206,7 +272,7 @@ export function setupMinimaxMocks(): void {
             minimaxMockCalls.push({
                 url: url.href,
                 method: init?.method ?? "GET",
-                body: typeof init?.body === "string" ? init.body : "",
+                body: typeof init?.body === "string" ? init.body : ""
             });
             const response = minimaxResponse(url, init);
             if (response) return response;
@@ -214,7 +280,7 @@ export function setupMinimaxMocks(): void {
         if (/^https:\/\/example\.com\/generated\/test-\d+\.png$/.test(url.href)) {
             return new Response(GENERATED_IMAGE_PNG, {
                 status: 200,
-                headers: { "Content-Type": "image/png" },
+                headers: { "Content-Type": "image/png" }
             });
         }
         return previousFetch!(input, init);

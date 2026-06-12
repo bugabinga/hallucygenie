@@ -8,15 +8,14 @@ const quotaEntry = (
         current_interval_usage_count: number;
         current_interval_total_count: number;
         remains_time: number;
-    } | null,
-) =>
-    m
-        ? {
-              used: m.current_interval_usage_count,
-              total: m.current_interval_total_count,
-              resetsInMs: m.remains_time,
-          }
-        : null;
+    } | null
+) => m
+    ? {
+        used: m.current_interval_usage_count,
+        total: m.current_interval_total_count,
+        resetsInMs: m.remains_time
+    }
+    : null;
 
 // HallucyGenie — HTTP server with SSE chat proxy
 // Target: Node.js runtime
@@ -25,45 +24,45 @@ import { randomUUID } from "node:crypto";
 import { mkdirSync, writeFileSync } from "node:fs";
 
 import {
-    initDb,
-    saveAsset,
-    getAssets,
-    getAsset,
-    getUserProfile,
-    saveUserProfile,
-    deleteUserProfile,
-    getMessages,
-    saveMessage,
-    getPreferences,
-    consumeQuota,
-    releaseQuota,
-    getUsageToday,
-    getOrCreateActiveSessionId,
-    getOrCreateActiveSession,
-    listSessions,
-    createSession,
-    setActiveSessionId,
-    getSession,
-    renameSession,
     archiveSession,
-    autoNameSession,
-    getDraft,
-    saveDraft,
-    deleteDraft,
-    recordToolInputHistory,
-    listToolInputHistory,
-    hideToolInputHistory,
-    saveVideoTask,
-    updateVideoTask,
-    saveAsyncTtsTask,
-    updateAsyncTtsTask,
-    listAsyncTtsTasks,
-    QUOTAS,
     type AssetRow,
+    autoNameSession,
+    consumeQuota,
+    createSession,
+    deleteDraft,
+    deleteUserProfile,
+    getAsset,
+    getAssets,
+    getDraft,
+    getMessages,
+    getOrCreateActiveSession,
+    getOrCreateActiveSessionId,
+    getPreferences,
+    getSession,
+    getUsageToday,
+    getUserProfile,
+    hideToolInputHistory,
+    initDb,
+    listAsyncTtsTasks,
+    listSessions,
+    listToolInputHistory,
+    QUOTAS,
+    recordToolInputHistory,
+    releaseQuota,
+    renameSession,
+    saveAsset,
+    saveAsyncTtsTask,
+    saveDraft,
+    saveMessage,
+    saveUserProfile,
+    saveVideoTask,
+    setActiveSessionId,
+    updateAsyncTtsTask,
+    updateVideoTask
 } from "./db.ts";
 
+import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
 import { dirname } from "node:path";
-import { createServer, type IncomingMessage, type ServerResponse, type Server } from "node:http";
 import { Readable } from "node:stream";
 import { createLogger, nextReqId } from "./log.ts";
 
@@ -81,7 +80,7 @@ function compactLongSpeechInput(args: Record<string, unknown>): Record<string, u
     const text = typeof args.text === "string" ? args.text : "";
     const out: Record<string, unknown> = {
         text_summary: longTextSummary(text),
-        text_length: text.length,
+        text_length: text.length
     };
     for (const key of ["voice_id", "speed", "volume", "pitch"] as const) {
         if (args[key] !== undefined) out[key] = args[key];
@@ -89,24 +88,27 @@ function compactLongSpeechInput(args: Record<string, unknown>): Record<string, u
     return out;
 }
 
-function publicToolInput(toolName: string, args: Record<string, unknown>): Record<string, unknown> {
+function publicToolInput(
+    toolName: string,
+    args: Record<string, unknown>
+): Record<string, unknown> {
     return toolName === "generate_long_speech" ? compactLongSpeechInput(args) : args;
 }
 import type { Database } from "bun:sqlite";
-import { MINIMAX_BASE, musicCoverPreprocess, type ToolResult } from "./tools.ts";
 import {
-    runAgentLoop,
-    buildSystemPrompt,
-    buildContext,
-    estimateTokens,
-    createSteerQueue,
-    queueSteer,
-    drainSteer,
-    executeToolSafely,
-    safeToolResultForUser,
-    type SteerQueue,
     type AgentEvent,
+    buildContext,
+    buildSystemPrompt,
+    createSteerQueue,
+    drainSteer,
+    estimateTokens,
+    executeToolSafely,
+    queueSteer,
+    runAgentLoop,
+    safeToolResultForUser,
+    type SteerQueue
 } from "./agent.ts";
+import { MINIMAX_BASE, musicCoverPreprocess, type ToolResult } from "./tools.ts";
 
 const steerQueues = new Map<string, SteerQueue>();
 
@@ -127,7 +129,7 @@ export interface ChatMessage {
     thinking?: string;
     thinking_signature?: string;
     tool_call_id?: string;
-    tool_calls?: Array<{ id: string; name: string; input: Record<string, unknown> }>;
+    tool_calls?: Array<{ id: string; name: string; input: Record<string, unknown>; }>;
 }
 
 export interface ChatRequestBody {
@@ -178,7 +180,7 @@ export const PORT = Number(process.env.PORT) || 3000;
 const CORS_HEADERS: Record<string, string> = {
     "Access-Control-Allow-Origin": "*",
     "Access-Control-Allow-Headers": "Content-Type, X-Session-Id",
-    "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
+    "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS"
 };
 
 // ── JSON response helpers ────────────────────────────────────────────
@@ -186,12 +188,12 @@ const CORS_HEADERS: Record<string, string> = {
 function jsonResponse(
     data: unknown,
     status = 200,
-    extraHeaders: Record<string, string> = {},
+    extraHeaders: Record<string, string> = {}
 ): Response {
     const headers: Record<string, string> = {
         "Content-Type": "application/json",
         ...CORS_HEADERS,
-        ...extraHeaders,
+        ...extraHeaders
     };
     return new Response(JSON.stringify(data), { status, headers });
 }
@@ -202,8 +204,8 @@ function sseResponse(stream: ReadableStream<Uint8Array>): Response {
             "Content-Type": "text/event-stream",
             "Cache-Control": "no-cache",
             Connection: "keep-alive",
-            ...CORS_HEADERS,
-        },
+            ...CORS_HEADERS
+        }
     });
 }
 
@@ -211,13 +213,14 @@ function sseResponse(stream: ReadableStream<Uint8Array>): Response {
 
 function validateChatBody(body: unknown):
     | {
-          ok: true;
-          body: ChatRequestBody;
-      }
+        ok: true;
+        body: ChatRequestBody;
+    }
     | {
-          ok: false;
-          error: string;
-      } {
+        ok: false;
+        error: string;
+    }
+{
     if (body === null || body === undefined || typeof body !== "object") {
         return { ok: false, error: "Request body must be a JSON object" };
     }
@@ -238,33 +241,33 @@ function validateChatBody(body: unknown):
         if (typeof msg !== "object" || msg === null) {
             return {
                 ok: false,
-                error: `messages[${i}] must be an object`,
+                error: `messages[${i}] must be an object`
             };
         }
         if (typeof msg.role !== "string") {
             return {
                 ok: false,
-                error: `messages[${i}].role must be a string`,
+                error: `messages[${i}].role must be a string`
             };
         }
         if (typeof msg.content !== "string") {
             return {
                 ok: false,
-                error: `messages[${i}].content must be a string`,
+                error: `messages[${i}].content must be a string`
             };
         }
     }
 
     return {
         ok: true,
-        body: obj as unknown as ChatRequestBody,
+        body: obj as unknown as ChatRequestBody
     };
 }
 
 // ── Static file serving ──────────────────────────────────────────────
 
 import { readFile, stat } from "node:fs/promises";
-import { resolve, join, sep } from "node:path";
+import { join, resolve, sep } from "node:path";
 
 const MIME_TYPES: Record<string, string> = {
     ".html": "text/html; charset=utf-8",
@@ -280,7 +283,7 @@ const MIME_TYPES: Record<string, string> = {
     ".webp": "image/webp",
     ".woff2": "font/woff2",
     ".woff": "font/woff",
-    ".ttf": "font/ttf",
+    ".ttf": "font/ttf"
 };
 
 function headResponse(resp: Response): Response {
@@ -305,7 +308,7 @@ async function serveStaticFile(path: string): Promise<Response | null> {
         const contentType = MIME_TYPES[ext] || "application/octet-stream";
         const headers: Record<string, string> = {
             "Content-Type": contentType,
-            "Content-Length": String(data.byteLength),
+            "Content-Length": String(data.byteLength)
         };
         if (path.startsWith("/fonts/")) {
             headers["Cache-Control"] = "public, max-age=31536000, immutable";
@@ -335,7 +338,7 @@ function contentForPersistence(msg: ChatMessage, savedTool: ToolResult | null): 
 export async function handleChat(
     req: Request,
     apiKey: string,
-    sessionId?: string,
+    sessionId?: string
 ): Promise<Response> {
     // Parse body
     let parsed: unknown;
@@ -359,7 +362,7 @@ export async function handleChat(
     // Build message history: load from DB, append new user message
     const systemPrompt = buildSystemPrompt(
         sessionId ? getPreferences(database) : undefined,
-        getUserProfile(database),
+        getUserProfile(database)
     );
 
     const messages: ChatMessage[] = [];
@@ -374,13 +377,14 @@ export async function handleChat(
             if (row.role === "tool") continue;
             if (row.role === "assistant" && row.tool_calls_json) continue;
 
-            const content =
-                row.role === "assistant" ? sanitizeAssistantMediaMarkup(row.content) : row.content;
+            const content = row.role === "assistant"
+                ? sanitizeAssistantMediaMarkup(row.content)
+                : row.content;
             if (row.role === "assistant" && !content.trim()) continue;
 
             const msg: ChatMessage = {
                 role: row.role as ChatMessage["role"],
-                content,
+                content
             };
             messages.push(msg);
         }
@@ -402,7 +406,7 @@ export async function handleChat(
                 autoNameDefaultSession(
                     database,
                     sessionId,
-                    explicitTool.prompt ?? explicitTool.name,
+                    explicitTool.prompt ?? explicitTool.name
                 );
             }
         }
@@ -432,7 +436,7 @@ export async function handleChat(
     const writer = writable.getWriter();
     const encoder = new TextEncoder();
     const savedToolResults = new Map<string, ToolResult>();
-    const consumedQuotaByToolId = new Map<string, { feature: string; amount: number }>();
+    const consumedQuotaByToolId = new Map<string, { feature: string; amount: number; }>();
     let assistantTurnStarts = 0;
 
     // Run agent loop in background, streaming events to SSE
@@ -447,34 +451,43 @@ export async function handleChat(
                         case "thinking_reset": {
                             if (assistantTurnStarts > 0) {
                                 await writer.write(
-                                    encoder.encode("event: assistant_turn_start\ndata: {}\n\n"),
+                                    encoder.encode("event: assistant_turn_start\ndata: {}\n\n")
                                 );
                             }
                             assistantTurnStarts++;
                             break;
                         }
                         case "thinking": {
-                            const sseData = `event: thinking\ndata: ${JSON.stringify({
-                                content: event.content,
-                            })}\n\n`;
+                            const sseData = `event: thinking\ndata: ${
+                                JSON.stringify({
+                                    content: event.content
+                                })
+                            }\n\n`;
                             await writer.write(encoder.encode(sseData));
                             break;
                         }
                         case "text": {
-                            const sseData = `data: ${JSON.stringify({
-                                choices: [
-                                    { delta: { content: event.content }, finish_reason: null },
-                                ],
-                            })}\n\n`;
+                            const sseData = `data: ${
+                                JSON.stringify({
+                                    choices: [
+                                        {
+                                            delta: { content: event.content },
+                                            finish_reason: null
+                                        }
+                                    ]
+                                })
+                            }\n\n`;
                             await writer.write(encoder.encode(sseData));
                             break;
                         }
                         case "tool_start": {
-                            const sseData = `event: tool_start\ndata: ${JSON.stringify({
-                                id: event.id,
-                                name: event.name,
-                                input: event.args,
-                            })}\n\n`;
+                            const sseData = `event: tool_start\ndata: ${
+                                JSON.stringify({
+                                    id: event.id,
+                                    name: event.name,
+                                    input: event.args
+                                })
+                            }\n\n`;
                             await writer.write(encoder.encode(sseData));
                             break;
                         }
@@ -483,12 +496,12 @@ export async function handleChat(
                             // Save image/audio assets to disk
                             const saved = sessionId
                                 ? await saveAssetFile(
-                                      event.result,
-                                      sessionId,
-                                      event.name ?? "",
-                                      event.prompt ?? null,
-                                      event.args,
-                                  )
+                                    event.result,
+                                    sessionId,
+                                    event.name ?? "",
+                                    event.prompt ?? null,
+                                    event.args
+                                )
                                 : event.result;
                             if (event.id) {
                                 savedToolResults.set(event.id, saved);
@@ -499,10 +512,10 @@ export async function handleChat(
                                 }
                             }
                             if (
-                                sessionId &&
-                                getSession(database, sessionId) &&
-                                event.name &&
-                                event.args
+                                sessionId
+                                && getSession(database, sessionId)
+                                && event.name
+                                && event.args
                             ) {
                                 try {
                                     recordToolInputHistory(database, {
@@ -512,17 +525,20 @@ export async function handleChat(
                                         input: event.args,
                                         status: saved.type === "error" ? "failed" : "succeeded",
                                         asset_id: assetIdFromToolResult(saved),
+                                        provider: event.result.provider
                                     });
                                 } catch (err) {
                                     log.warn("tool history save failed", { error: String(err) });
                                 }
                             }
-                            const sseData = `event: tool_result\ndata: ${JSON.stringify({
-                                id: event.id,
-                                name: event.name,
-                                result: saved,
-                                input: event.args,
-                            })}\n\n`;
+                            const sseData = `event: tool_result\ndata: ${
+                                JSON.stringify({
+                                    id: event.id,
+                                    name: event.name,
+                                    result: publicToolResult(saved),
+                                    input: event.args
+                                })
+                            }\n\n`;
                             await writer.write(encoder.encode(sseData));
                             break;
                         }
@@ -535,19 +551,19 @@ export async function handleChat(
                 steerQueue,
                 sessionId
                     ? (toolName: string, _args: Record<string, unknown>, toolId?: string) => {
-                          const feature = featureForTool(toolName);
-                          if (!feature) return null;
-                          const amount = quotaAmountForTool(toolName, _args);
-                          if (consumeQuota(database, feature, amount) !== null) {
-                              if (toolId) consumedQuotaByToolId.set(toolId, { feature, amount });
-                              return null;
-                          }
-                          return {
-                              type: "error" as const,
-                              content: `Daily ${feature} quota is used up.`,
-                          };
-                      }
-                    : undefined,
+                        const feature = featureForTool(toolName);
+                        if (!feature) return null;
+                        const amount = quotaAmountForTool(toolName, _args);
+                        if (consumeQuota(database, feature, amount) !== null) {
+                            if (toolId) consumedQuotaByToolId.set(toolId, { feature, amount });
+                            return null;
+                        }
+                        return {
+                            type: "error" as const,
+                            content: `Daily ${feature} quota is used up.`
+                        };
+                    }
+                    : undefined
             );
 
             // Save assistant messages and tool results to DB
@@ -564,8 +580,9 @@ export async function handleChat(
                         ? (savedToolResults.get(msg.tool_call_id) ?? null)
                         : null;
                     const content = contentForPersistence(msg, savedTool);
-                    const thinking =
-                        msg.role === "assistant" && msg.thinking?.trim() ? msg.thinking : null;
+                    const thinking = msg.role === "assistant" && msg.thinking?.trim()
+                        ? msg.thinking
+                        : null;
                     saveMessage(
                         database,
                         sessionId,
@@ -573,7 +590,7 @@ export async function handleChat(
                         content,
                         toolCallsJson,
                         msg.tool_call_id ?? null,
-                        thinking,
+                        thinking
                     );
                 }
 
@@ -639,7 +656,7 @@ function parseToolParams(raw: string | undefined, allowed: Set<string>): Record<
 
 export function parseExplicitToolDirective(content: string): ExplicitToolDirective | null {
     const match = content.match(
-        /^Use\s+(generate_image|generate_music|generate_video|text_to_speech|generate_long_speech|generate_lyrics|analyze_image)\s+with\s+(prompt|text|image_url|lyrics):\s*([\s\S]*?)(?:\nTool params:\s*([\s\S]*))?$/i,
+        /^Use\s+(generate_image|generate_music|generate_video|text_to_speech|generate_long_speech|generate_lyrics|analyze_image)\s+with\s+(prompt|text|image_url|lyrics):\s*([\s\S]*?)(?:\nTool params:\s*([\s\S]*))?$/i
     );
     if (!match) return null;
 
@@ -655,14 +672,14 @@ export function parseExplicitToolDirective(content: string): ExplicitToolDirecti
             "seed",
             "width",
             "height",
-            "prompt_optimizer",
+            "prompt_optimizer"
         ]),
         generate_music: new Set(["lyrics"]),
         generate_video: new Set(["duration", "resolution"]),
         text_to_speech: new Set(["voice_id", "speed", "volume", "pitch"]),
         generate_long_speech: new Set(["voice_id", "speed", "volume", "pitch"]),
         generate_lyrics: new Set(["mode", "lyrics", "title"]),
-        analyze_image: new Set(["prompt"]),
+        analyze_image: new Set(["prompt"])
     };
     const args = parseToolParams(match[4], allowedParams[name]);
 
@@ -671,7 +688,7 @@ export function parseExplicitToolDirective(content: string): ExplicitToolDirecti
         return {
             name,
             args,
-            prompt: name === "generate_long_speech" ? longTextSummary(value) : value,
+            prompt: name === "generate_long_speech" ? longTextSummary(value) : value
         };
     }
 
@@ -723,31 +740,36 @@ function analyzeDataMime(mime: string): "jpeg" | "png" | "webp" | "gif" {
 async function localAnalyzeAssetDataUrl(
     database: Database,
     sessionId: string,
-    imageUrl: string,
+    imageUrl: string
 ): Promise<string> {
     const match = imageUrl.match(/^\/asset\/(asset_[0-9a-f-]+)$/i);
     if (!match) return imageUrl;
     const asset = getAsset(database, match[1]!);
     if (!asset || asset.session_id !== sessionId) throw new Error("analyze image asset not found");
-    if (!isAllowedImageMime(asset.mime_type, ANALYZE_IMAGE_MIMES))
+    if (!isAllowedImageMime(asset.mime_type, ANALYZE_IMAGE_MIMES)) {
         throw new Error("analyze image type invalid");
+    }
     if (asset.size_bytes > 20 * 1024 * 1024) throw new Error("analyze image too large");
     const file = await readFile(`data/assets/${asset.session_id}/${asset.filename}`);
     if (file.byteLength > 20 * 1024 * 1024) throw new Error("analyze image too large");
-    return `data:image/${analyzeDataMime(asset.mime_type)};base64,${Buffer.from(file).toString("base64")}`;
+    return `data:image/${analyzeDataMime(asset.mime_type)};base64,${
+        Buffer.from(file).toString("base64")
+    }`;
 }
 
 async function localReferenceAssetDataUrl(
     database: Database,
     sessionId: string,
-    assetId: string,
+    assetId: string
 ): Promise<string> {
     if (!/^asset_[0-9a-f-]+$/i.test(assetId)) throw new Error("reference image asset invalid");
     const asset = getAsset(database, assetId);
-    if (!asset || asset.session_id !== sessionId)
+    if (!asset || asset.session_id !== sessionId) {
         throw new Error("reference image asset not found");
-    if (!isAllowedImageMime(asset.mime_type, REFERENCE_IMAGE_MIMES))
+    }
+    if (!isAllowedImageMime(asset.mime_type, REFERENCE_IMAGE_MIMES)) {
         throw new Error("reference image must be PNG or JPG");
+    }
     if (asset.size_bytes > 20 * 1024 * 1024) throw new Error("reference image too large");
     const file = await readFile(`data/assets/${asset.session_id}/${asset.filename}`);
     if (file.byteLength > 20 * 1024 * 1024) throw new Error("reference image too large");
@@ -757,7 +779,7 @@ async function localReferenceAssetDataUrl(
 async function explicitExecutionArgs(
     directive: DirectToolExecution,
     database: Database,
-    sessionId?: string,
+    sessionId?: string
 ): Promise<Record<string, unknown>> {
     if (directive.name === "generate_image") {
         const referenceAssetId = directive.args.reference_asset_id;
@@ -772,10 +794,10 @@ async function explicitExecutionArgs(
                     image_file: await localReferenceAssetDataUrl(
                         database,
                         sessionId,
-                        referenceAssetId,
-                    ),
-                },
-            ],
+                        referenceAssetId
+                    )
+                }
+            ]
         };
     }
     if (directive.name !== "analyze_image") return directive.args;
@@ -785,11 +807,15 @@ async function explicitExecutionArgs(
     return {
         ...directive.args,
         image_url: await localAnalyzeAssetDataUrl(database, sessionId, imageUrl),
-        allow_data_url: true,
+        allow_data_url: true
     };
 }
 
-function parseStringField(input: Record<string, unknown>, key: string, max: number): string | null {
+function parseStringField(
+    input: Record<string, unknown>,
+    key: string,
+    max: number
+): string | null {
     const value = input[key];
     if (typeof value !== "string") return null;
     const trimmed = value.trim();
@@ -800,7 +826,7 @@ function parseStringField(input: Record<string, unknown>, key: string, max: numb
 function optionalStringField(
     input: Record<string, unknown>,
     key: string,
-    max: number,
+    max: number
 ): string | undefined {
     const value = input[key];
     if (typeof value !== "string") return undefined;
@@ -813,7 +839,7 @@ function optionalNumberField(
     input: Record<string, unknown>,
     key: string,
     min: number,
-    max: number,
+    max: number
 ): number | undefined {
     const value = input[key];
     if (typeof value !== "number" || !Number.isFinite(value)) return undefined;
@@ -824,7 +850,7 @@ function optionalIntegerField(
     input: Record<string, unknown>,
     key: string,
     min: number,
-    max: number,
+    max: number
 ): number | undefined {
     const value = input[key];
     if (typeof value !== "number" || !Number.isInteger(value)) return undefined;
@@ -960,7 +986,7 @@ function handleDirectToolExecution(
     database: Database,
     sessionId: string | undefined,
     origin: "chat" | "create",
-    clearCreateDraftOnSuccess: boolean,
+    clearCreateDraftOnSuccess: boolean
 ): Response {
     const { readable, writable } = new TransformStream<Uint8Array, Uint8Array>();
     const writer = writable.getWriter();
@@ -978,7 +1004,7 @@ function handleDirectToolExecution(
             await writeSse("tool_start", {
                 id: toolCallId,
                 name: directive.name,
-                input: publicInput,
+                input: publicInput
             });
 
             const feature = featureForTool(directive.name);
@@ -989,12 +1015,12 @@ function handleDirectToolExecution(
             const executionArgs = quotaBlocked
                 ? directive.args
                 : await explicitExecutionArgs(directive, database, sessionId);
-            const videoTaskId =
-                sessionId && directive.name === "generate_video" ? `video_${randomUUID()}` : null;
-            const asyncTtsTaskId =
-                sessionId && directive.name === "generate_long_speech"
-                    ? `tts_${randomUUID()}`
-                    : null;
+            const videoTaskId = sessionId && directive.name === "generate_video"
+                ? `video_${randomUUID()}`
+                : null;
+            const asyncTtsTaskId = sessionId && directive.name === "generate_long_speech"
+                ? `tts_${randomUUID()}`
+                : null;
             if (videoTaskId && sessionId) {
                 const now = Date.now();
                 saveVideoTask(database, {
@@ -1007,7 +1033,7 @@ function handleDirectToolExecution(
                     asset_id: null,
                     error: quotaBlocked ? `Daily ${feature} quota is used up.` : null,
                     created_at: now,
-                    updated_at: now,
+                    updated_at: now
                 });
             }
             if (asyncTtsTaskId && sessionId) {
@@ -1018,39 +1044,46 @@ function handleDirectToolExecution(
                     provider_task_id: toolCallId,
                     status: quotaBlocked ? "failed" : "running",
                     text_summary: longTextSummary(String(directive.args.text ?? "")),
-                    voice_id:
-                        typeof directive.args.voice_id === "string"
-                            ? directive.args.voice_id
-                            : null,
+                    voice_id: typeof directive.args.voice_id === "string"
+                        ? directive.args.voice_id
+                        : null,
                     file_id: null,
                     asset_id: null,
                     error: quotaBlocked ? `Daily ${feature} quota is used up.` : null,
                     created_at: now,
-                    updated_at: now,
+                    updated_at: now
                 });
             }
-            const result = quotaBlocked
+            const rawResult = quotaBlocked
                 ? { type: "error" as const, content: `Daily ${feature} quota is used up.` }
-                : safeToolResultForUser(
-                      directive.name,
-                      await executeToolSafely(directive.name, executionArgs, apiKey),
-                  );
+                : await executeToolSafely(directive.name, executionArgs, apiKey);
+            const result = quotaBlocked
+                ? rawResult
+                : safeToolResultForUser(directive.name, rawResult);
             const saved = sessionId
                 ? await saveAssetFile(
-                      result,
-                      sessionId,
-                      directive.name,
-                      directive.prompt,
-                      directive.args,
-                  )
+                    result,
+                    sessionId,
+                    directive.name,
+                    directive.prompt,
+                    directive.args
+                )
                 : result;
             if (videoTaskId) {
                 updateVideoTask(
                     database,
                     videoTaskId,
                     saved.type === "error"
-                        ? { status: "failed", error: saved.content }
-                        : { status: "succeeded", asset_id: assetIdFromToolResult(saved) },
+                        ? {
+                            status: "failed",
+                            error: saved.content,
+                            ...providerTaskColumns(result.provider)
+                        }
+                        : {
+                            status: "succeeded",
+                            asset_id: assetIdFromToolResult(saved),
+                            ...providerTaskColumns(result.provider)
+                        }
                 );
             }
             if (asyncTtsTaskId) {
@@ -1058,8 +1091,16 @@ function handleDirectToolExecution(
                     database,
                     asyncTtsTaskId,
                     saved.type === "error"
-                        ? { status: "failed", error: saved.content }
-                        : { status: "succeeded", asset_id: assetIdFromToolResult(saved) },
+                        ? {
+                            status: "failed",
+                            error: saved.content,
+                            ...providerTaskColumns(result.provider)
+                        }
+                        : {
+                            status: "succeeded",
+                            asset_id: assetIdFromToolResult(saved),
+                            ...providerTaskColumns(result.provider)
+                        }
                 );
             }
             if (feature && !quotaBlocked && saved.type === "error") {
@@ -1075,6 +1116,7 @@ function handleDirectToolExecution(
                         input: publicInput,
                         status: saved.type === "error" ? "failed" : "succeeded",
                         asset_id: assetIdFromToolResult(saved),
+                        provider: result.provider
                     });
                 } catch (err) {
                     log.warn("tool history save failed", { error: String(err) });
@@ -1084,8 +1126,8 @@ function handleDirectToolExecution(
             await writeSse("tool_result", {
                 id: toolCallId,
                 name: directive.name,
-                result: saved,
-                input: publicInput,
+                result: publicToolResult(saved),
+                input: publicInput
             });
             if (sessionId && saved.type !== "error" && clearCreateDraftOnSuccess) {
                 deleteDraft(database, sessionId, "create");
@@ -1098,8 +1140,12 @@ function handleDirectToolExecution(
                     sessionId,
                     "assistant",
                     "",
-                    JSON.stringify([{ id: toolCallId, name: directive.name, input: publicInput }]),
-                    null,
+                    JSON.stringify([{
+                        id: toolCallId,
+                        name: directive.name,
+                        input: publicInput
+                    }]),
+                    null
                 );
                 saveMessage(
                     database,
@@ -1108,10 +1154,10 @@ function handleDirectToolExecution(
                     saved.type === "error"
                         ? `Error: ${saved.content}`
                         : saved.type === "image" && saved.urls?.length
-                          ? saved.urls.join("\n")
-                          : saved.content,
+                        ? saved.urls.join("\n")
+                        : saved.content,
                     null,
-                    toolCallId,
+                    toolCallId
                 );
             }
         } catch (err) {
@@ -1128,7 +1174,7 @@ function handleExplicitToolDirective(
     directive: ExplicitToolDirective,
     apiKey: string,
     database: Database,
-    sessionId?: string,
+    sessionId?: string
 ): Response {
     return handleDirectToolExecution(directive, apiKey, database, sessionId, "chat", true);
 }
@@ -1136,7 +1182,7 @@ function handleExplicitToolDirective(
 async function handleCreateTool(
     req: Request,
     apiKey: string,
-    database: Database,
+    database: Database
 ): Promise<Response> {
     let parsed: unknown;
     try {
@@ -1156,7 +1202,7 @@ async function handleCreateTool(
         database,
         sessionId,
         "create",
-        normalized.name !== "generate_lyrics",
+        normalized.name !== "generate_lyrics"
     );
 }
 
@@ -1178,14 +1224,14 @@ const startTime = Date.now();
 function handleHealth(): Response {
     return jsonResponse({
         status: "ok",
-        uptime: Math.floor((Date.now() - startTime) / 1000),
+        uptime: Math.floor((Date.now() - startTime) / 1000)
     });
 }
 
 function countSessionUserMessages(database: Database, sessionId: string): number {
     const row = database
         .prepare("SELECT count(*) AS count FROM messages WHERE session_id = ? AND role = 'user'")
-        .get(sessionId) as { count: number };
+        .get(sessionId) as { count: number; };
     return row.count;
 }
 
@@ -1222,7 +1268,7 @@ function parseJsonObject(input: unknown, label: string): Record<string, unknown>
     return input as Record<string, unknown>;
 }
 
-export function parseLimitOffset(url: URL): { limit: number; offset: number } {
+export function parseLimitOffset(url: URL): { limit: number; offset: number; } {
     const rawLimit = Number(url.searchParams.get("limit") ?? 20);
     const rawOffset = Number(url.searchParams.get("offset") ?? 0);
     const limit = Number.isNaN(rawLimit) ? 20 : Math.min(Math.max(rawLimit, 0), 50);
@@ -1246,7 +1292,7 @@ function isCoverAudioMime(mime: string): boolean {
         "audio/m4a",
         "audio/x-m4a",
         "audio/wav",
-        "audio/x-wav",
+        "audio/x-wav"
     ].includes(mime);
 }
 
@@ -1255,22 +1301,24 @@ function profileAvatarPrompt(profile: ReturnType<typeof getUserProfile>): string
         profile.username ? `username: ${profile.username}` : "kid gamer creator",
         profile.interests ? `topics: ${profile.interests}` : "gaming and YouTube",
         profile.favorites ? `style ingredients: ${profile.favorites}` : "fun bright mascot",
-        profile.hates ? `avoid: ${profile.hates}` : "",
+        profile.hates ? `avoid: ${profile.hates}` : ""
     ].filter(Boolean);
-    return `Square friendly gaming avatar for a kid creator. ${parts.join(". ")}. Clean icon, expressive, safe for YouTube profile picture.`.slice(
+    return `Square friendly gaming avatar for a kid creator. ${
+        parts.join(". ")
+    }. Clean icon, expressive, safe for YouTube profile picture.`.slice(
         0,
-        1500,
+        1500
     );
 }
 
 function saveProfileAvatar(
     database: Database,
     profileInput: unknown,
-    assetId: string,
+    assetId: string
 ): ReturnType<typeof getUserProfile> {
     const profile = saveUserProfile(database, {
         ...parseJsonObject(profileInput, "profile"),
-        avatar: { type: "asset", value: assetId },
+        avatar: { type: "asset", value: assetId }
     });
     return profile;
 }
@@ -1281,10 +1329,12 @@ async function handleProfileAvatarUpload(req: Request, database: Database): Prom
         const form = await req.formData();
         const file = form.get("avatar");
         if (!(file instanceof File)) return jsonResponse({ error: "avatar file required" }, 400);
-        if (!isAllowedImageMime(file.type, AVATAR_IMAGE_MIMES))
+        if (!isAllowedImageMime(file.type, AVATAR_IMAGE_MIMES)) {
             return jsonResponse({ error: "avatar image type invalid" }, 400);
-        if (file.size > 2 * 1024 * 1024)
+        }
+        if (file.size > 2 * 1024 * 1024) {
             return jsonResponse({ error: "avatar image too large" }, 400);
+        }
         const profileJson = String(form.get("profile") ?? "{}");
         const profileInput = JSON.parse(profileJson) as unknown;
         const saved = saveAssetBuffer(
@@ -1294,7 +1344,7 @@ async function handleProfileAvatarUpload(req: Request, database: Database): Prom
             sessionId,
             "profile_avatar",
             "Uploaded profile avatar",
-            { source: "upload" },
+            { source: "upload" }
         );
         const assetId = assetIdFromToolResult(saved);
         if (!assetId) throw new Error("avatar asset save failed");
@@ -1311,8 +1361,9 @@ async function handleAnalyzeImageUpload(req: Request, database: Database): Promi
         const form = await req.formData();
         const file = form.get("image");
         if (!(file instanceof File)) return jsonResponse({ error: "image file required" }, 400);
-        if (!isAllowedImageMime(file.type, ANALYZE_IMAGE_MIMES))
+        if (!isAllowedImageMime(file.type, ANALYZE_IMAGE_MIMES)) {
             return jsonResponse({ error: "image type must be PNG, JPG, GIF, or WebP" }, 400);
+        }
         if (file.size > 20 * 1024 * 1024) return jsonResponse({ error: "image too large" }, 400);
         const saved = saveAssetBuffer(
             "image",
@@ -1321,7 +1372,7 @@ async function handleAnalyzeImageUpload(req: Request, database: Database): Promi
             sessionId,
             "analyze_image",
             "Uploaded image for analysis",
-            { source: "upload" },
+            { source: "upload" }
         );
         const assetId = assetIdFromToolResult(saved);
         if (!assetId) throw new Error("analyze image asset save failed");
@@ -1336,12 +1387,15 @@ async function handleReferenceImageUpload(req: Request, database: Database): Pro
         const sessionId = resolveSessionId(req, database);
         const form = await req.formData();
         const file = form.get("image");
-        if (!(file instanceof File))
+        if (!(file instanceof File)) {
             return jsonResponse({ error: "reference image required" }, 400);
-        if (!isAllowedImageMime(file.type, REFERENCE_IMAGE_MIMES))
+        }
+        if (!isAllowedImageMime(file.type, REFERENCE_IMAGE_MIMES)) {
             return jsonResponse({ error: "reference image must be PNG or JPG" }, 400);
-        if (file.size > 20 * 1024 * 1024)
+        }
+        if (file.size > 20 * 1024 * 1024) {
             return jsonResponse({ error: "reference image too large" }, 400);
+        }
         const saved = saveAssetBuffer(
             "image",
             Buffer.from(await file.arrayBuffer()),
@@ -1349,7 +1403,7 @@ async function handleReferenceImageUpload(req: Request, database: Database): Pro
             sessionId,
             "reference_image",
             "Uploaded character reference",
-            { source: "upload" },
+            { source: "upload" }
         );
         const assetId = assetIdFromToolResult(saved);
         if (!assetId) throw new Error("reference image asset save failed");
@@ -1360,18 +1414,20 @@ async function handleReferenceImageUpload(req: Request, database: Database): Pro
 }
 
 async function coverSourceFromSidecar(
-    url: string,
-): Promise<{ audio_url?: string; audio_base64?: string }> {
+    url: string
+): Promise<{ audio_url?: string; audio_base64?: string; }> {
     const sidecar = process.env.COVER_EXTRACTOR_URL;
     if (!sidecar) throw new Error("Cover extractor is not configured.");
     const resp = await fetch(sidecar, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ url }),
+        body: JSON.stringify({ url })
     });
     if (!resp.ok) throw new Error(`cover extractor failed: ${resp.status}`);
-    const data = (await resp.json()) as { audio_url?: string; audio_base64?: string };
-    if (!data.audio_url && !data.audio_base64) throw new Error("cover extractor returned no audio");
+    const data = (await resp.json()) as { audio_url?: string; audio_base64?: string; };
+    if (!data.audio_url && !data.audio_base64) {
+        throw new Error("cover extractor returned no audio");
+    }
     return data;
 }
 
@@ -1380,13 +1436,13 @@ async function handleMusicCoverPreprocess(req: Request, apiKey: string): Promise
     try {
         const form = await req.formData();
         sourceKind = String(form.get("source_kind") ?? "direct");
-        let source: { audio_url?: string; audio_base64?: string };
+        let source: { audio_url?: string; audio_base64?: string; };
         if (sourceKind === "direct") {
             const audioUrl = String(form.get("audio_url") ?? "").trim();
             if (!/^https?:\/\//i.test(audioUrl)) {
                 log.warn("music cover preprocess rejected", {
                     sourceKind,
-                    error: "audio_url required",
+                    error: "audio_url required"
                 });
                 return jsonResponse({ error: "audio URL required" }, 400);
             }
@@ -1396,7 +1452,7 @@ async function handleMusicCoverPreprocess(req: Request, apiKey: string): Promise
             if (!(file instanceof File)) {
                 log.warn("music cover preprocess rejected", {
                     sourceKind,
-                    error: "audio file required",
+                    error: "audio file required"
                 });
                 return jsonResponse({ error: "audio file required" }, 400);
             }
@@ -1404,14 +1460,14 @@ async function handleMusicCoverPreprocess(req: Request, apiKey: string): Promise
             if (!isCoverAudioMime(file.type)) {
                 log.warn("music cover preprocess rejected", {
                     ...metadata,
-                    error: "audio type invalid",
+                    error: "audio type invalid"
                 });
                 return jsonResponse({ error: "audio type must be MP3, M4A, MP4, or WAV" }, 400);
             }
             if (file.size > 50 * 1024 * 1024) {
                 log.warn("music cover preprocess rejected", {
                     ...metadata,
-                    error: "audio too large",
+                    error: "audio too large"
                 });
                 return jsonResponse({ error: "audio too large: max 50 MB" }, 400);
             }
@@ -1421,7 +1477,7 @@ async function handleMusicCoverPreprocess(req: Request, apiKey: string): Promise
             if (!/^https?:\/\//i.test(url)) {
                 log.warn("music cover preprocess rejected", {
                     sourceKind,
-                    error: "youtube url required",
+                    error: "youtube url required"
                 });
                 return jsonResponse({ error: "YouTube URL required" }, 400);
             }
@@ -1429,7 +1485,7 @@ async function handleMusicCoverPreprocess(req: Request, apiKey: string): Promise
         } else {
             log.warn("music cover preprocess rejected", {
                 sourceKind,
-                error: "source_kind invalid",
+                error: "source_kind invalid"
             });
             return jsonResponse({ error: "source kind invalid" }, 400);
         }
@@ -1454,7 +1510,7 @@ async function handleProfileAvatarGenerate(req: Request, database: Database): Pr
         const args = { prompt: profileAvatarPrompt(profile), aspect_ratio: "1:1" };
         const result = safeToolResultForUser(
             "generate_image",
-            await executeToolSafely("generate_image", args, apiKey),
+            await executeToolSafely("generate_image", args, apiKey)
         );
         const saved = await saveAssetFile(result, sessionId, "generate_image", args.prompt, args);
         if (saved.type === "error") {
@@ -1494,7 +1550,7 @@ export async function handleRequest(req: Request): Promise<Response> {
         }
         try {
             const resp = await fetch(`${MINIMAX_BASE}/v1/token_plan/remains`, {
-                headers: { Authorization: `Bearer ${apiKey}`, "User-Agent": `hallucygenie/1.0` },
+                headers: { Authorization: `Bearer ${apiKey}`, "User-Agent": `hallucygenie/1.0` }
             });
             if (!resp.ok) {
                 log.warn("quota api error", { status: resp.status });
@@ -1523,7 +1579,7 @@ export async function handleRequest(req: Request): Promise<Response> {
                 image: quotaEntry(image),
                 music: quotaEntry(music),
                 lyrics: quotaEntry(lyrics),
-                video: quotaEntry(video),
+                video: quotaEntry(video)
             });
         } catch (err) {
             log.error("quota api error", { error: String(err) });
@@ -1542,9 +1598,9 @@ export async function handleRequest(req: Request): Promise<Response> {
                 activeSession: {
                     id: activeSession.id,
                     name: activeSession.name,
-                    nameSource: activeSession.name_source,
+                    nameSource: activeSession.name_source
                 },
-                ui: { maxMessageLength: 2000 },
+                ui: { maxMessageLength: 2000 }
             });
         }
 
@@ -1570,7 +1626,7 @@ export async function handleRequest(req: Request): Promise<Response> {
 
         if (path === "/api/async-tts-tasks" && method === "GET") {
             return jsonResponse({
-                tasks: listAsyncTtsTasks(database, resolveSessionId(req, database)),
+                tasks: listAsyncTtsTasks(database, resolveSessionId(req, database))
             });
         }
 
@@ -1592,7 +1648,7 @@ export async function handleRequest(req: Request): Promise<Response> {
             } catch (err) {
                 return jsonResponse(
                     { error: String(err instanceof Error ? err.message : err) },
-                    400,
+                    400
                 );
             }
         }
@@ -1628,12 +1684,12 @@ export async function handleRequest(req: Request): Promise<Response> {
                 const obj = parseJsonObject(body, "session");
                 if (typeof obj.name !== "string") throw new Error("name must be a string");
                 return jsonResponse({
-                    session: renameSession(database, sessionMatch[1]!, obj.name),
+                    session: renameSession(database, sessionMatch[1]!, obj.name)
                 });
             } catch (err) {
                 return jsonResponse(
                     { error: String(err instanceof Error ? err.message : err) },
-                    400,
+                    400
                 );
             }
         }
@@ -1665,14 +1721,14 @@ export async function handleRequest(req: Request): Promise<Response> {
                             database,
                             resolveSessionId(req, database),
                             draftKind(path)!,
-                            value,
-                        ).value_json,
-                    ),
+                            value
+                        ).value_json
+                    )
                 });
             } catch (err) {
                 return jsonResponse(
                     { error: String(err instanceof Error ? err.message : err) },
-                    400,
+                    400
                 );
             }
         }
@@ -1689,7 +1745,7 @@ export async function handleRequest(req: Request): Promise<Response> {
             const items = listToolInputHistory(database, resolveSessionId(req, database), {
                 kind,
                 limit,
-                offset,
+                offset
             }).map((item) => ({ ...item, input: JSON.parse(item.input_json) }));
             return jsonResponse({ items });
         }
@@ -1709,9 +1765,10 @@ export async function handleRequest(req: Request): Promise<Response> {
             if (!apiKey) {
                 return jsonResponse(
                     {
-                        error: "Server is missing the API key. Ask whoever set this up to add MINIMAX_API_KEY to the environment.",
+                        error:
+                            "Server is missing the API key. Ask whoever set this up to add MINIMAX_API_KEY to the environment."
                     },
-                    503,
+                    503
                 );
             }
             return handleCreateTool(req, apiKey, database);
@@ -1722,9 +1779,10 @@ export async function handleRequest(req: Request): Promise<Response> {
             if (!apiKey) {
                 return jsonResponse(
                     {
-                        error: "Server is missing the API key. Ask whoever set this up to add MINIMAX_API_KEY to the environment.",
+                        error:
+                            "Server is missing the API key. Ask whoever set this up to add MINIMAX_API_KEY to the environment."
                     },
-                    503,
+                    503
                 );
             }
             return handleChat(req, apiKey, resolveSessionId(req, database));
@@ -1738,15 +1796,15 @@ export async function handleRequest(req: Request): Promise<Response> {
                 return jsonResponse({ error: "Invalid JSON in request body" }, 400);
             }
             if (
-                !parsed ||
-                typeof parsed !== "object" ||
-                !("message" in parsed) ||
-                typeof (parsed as { message: unknown }).message !== "string"
+                !parsed
+                || typeof parsed !== "object"
+                || !("message" in parsed)
+                || typeof (parsed as { message: unknown; }).message !== "string"
             ) {
                 return jsonResponse({ error: "Missing required field: message" }, 400);
             }
             const queue = getOrCreateSteerQueue(resolveSessionId(req, database));
-            queueSteer(queue, (parsed as { message: string }).message);
+            queueSteer(queue, (parsed as { message: string; }).message);
             return jsonResponse({ ok: true });
         }
 
@@ -1788,16 +1846,17 @@ export async function handleRequest(req: Request): Promise<Response> {
 
         const assetId = path.slice("/asset/".length);
         const asset = getAsset(database, assetId);
-        if (!asset || asset.session_id !== sessionId)
+        if (!asset || asset.session_id !== sessionId) {
             return jsonResponse({ error: "Not found" }, 404);
+        }
         const filePath = `data/assets/${asset.session_id}/${asset.filename}`;
         try {
             const file = await readFile(filePath);
             return new Response(file, {
                 headers: {
                     "Content-Type": asset.mime_type,
-                    "Cache-Control": "public, max-age=31536000",
-                },
+                    "Cache-Control": "public, max-age=31536000"
+                }
             });
         } catch {
             return jsonResponse({ error: "File not found" }, 404);
@@ -1928,7 +1987,7 @@ function assetApiRow(asset: AssetRow): AssetApiRow {
         ...row,
         params: parseAssetParams(paramsJson),
         url,
-        download_url: url,
+        download_url: url
     };
 }
 
@@ -1954,6 +2013,28 @@ function assetIdFromToolResult(result: ToolResult): string | null {
     return match?.[1] ?? null;
 }
 
+function publicToolResult(result: ToolResult): ToolResult {
+    const { provider: _provider, ...publicResult } = result;
+    return publicResult;
+}
+
+function providerColumns(provider: ToolResult["provider"]): Record<string, unknown> {
+    return {
+        provider_stage: provider?.stage ?? null,
+        provider_status_code: provider?.status_code ?? null,
+        provider_status_msg: provider?.status_msg ?? null,
+        provider_file_id: provider?.file_id ?? null
+    };
+}
+
+function providerTaskColumns(provider: ToolResult["provider"]): Record<string, unknown> {
+    return {
+        ...providerColumns(provider),
+        ...(provider?.task_id ? { provider_task_id: provider.task_id } : {}),
+        ...(provider?.file_id ? { file_id: provider.file_id } : {})
+    };
+}
+
 function extensionForMime(mime: string): string {
     if (mime === "image/jpeg") return "jpg";
     if (mime === "image/png") return "png";
@@ -1977,13 +2058,13 @@ function numberParam(args: Record<string, unknown> | undefined, key: string): nu
 function assetParamsJson(
     toolName: string,
     prompt: string | null,
-    args?: Record<string, unknown>,
+    args?: Record<string, unknown>
 ): string | null {
     if (toolName === "generate_image") {
         const params: Record<string, unknown> = {
             model: "image-01",
             prompt: prompt ?? stringParam(args, "prompt") ?? null,
-            aspect_ratio: stringParam(args, "aspect_ratio") ?? null,
+            aspect_ratio: stringParam(args, "aspect_ratio") ?? null
         };
         const referenceAssetId = stringParam(args, "reference_asset_id");
         if (referenceAssetId) params.reference_asset_id = referenceAssetId;
@@ -1996,7 +2077,7 @@ function assetParamsJson(
             voice_id: stringParam(args, "voice_id") ?? null,
             speed: numberParam(args, "speed") ?? null,
             volume: numberParam(args, "volume") ?? null,
-            pitch: numberParam(args, "pitch") ?? null,
+            pitch: numberParam(args, "pitch") ?? null
         });
     }
     if (toolName === "generate_long_speech") {
@@ -2009,7 +2090,7 @@ function assetParamsJson(
             voice_id: stringParam(args, "voice_id") ?? null,
             speed: numberParam(args, "speed") ?? null,
             volume: numberParam(args, "volume") ?? null,
-            pitch: numberParam(args, "pitch") ?? null,
+            pitch: numberParam(args, "pitch") ?? null
         });
     }
     if (toolName === "generate_music") {
@@ -2019,7 +2100,7 @@ function assetParamsJson(
             prompt: prompt ?? stringParam(args, "prompt") ?? null,
             lyrics_present: lyrics.length > 0,
             lyrics_excerpt: lyrics ? lyrics.slice(0, 200) : null,
-            is_instrumental: lyrics.length === 0,
+            is_instrumental: lyrics.length === 0
         });
     }
     if (toolName === "generate_music_cover") {
@@ -2029,7 +2110,7 @@ function assetParamsJson(
             prompt: prompt ?? stringParam(args, "prompt") ?? null,
             cover_feature_id_present: Boolean(stringParam(args, "cover_feature_id")),
             lyrics_present: lyrics.length > 0,
-            lyrics_excerpt: lyrics ? lyrics.slice(0, 200) : null,
+            lyrics_excerpt: lyrics ? lyrics.slice(0, 200) : null
         });
     }
     if (toolName === "generate_lyrics") {
@@ -2038,7 +2119,7 @@ function assetParamsJson(
             mode: stringParam(args, "mode") ?? null,
             prompt: prompt ?? stringParam(args, "prompt") ?? null,
             title: stringParam(args, "title") ?? null,
-            lyrics_present: Boolean(stringParam(args, "lyrics")),
+            lyrics_present: Boolean(stringParam(args, "lyrics"))
         });
     }
     if (toolName === "generate_video") {
@@ -2046,7 +2127,7 @@ function assetParamsJson(
             model: "MiniMax-Hailuo-02",
             prompt: prompt ?? stringParam(args, "prompt") ?? null,
             duration: numberParam(args, "duration") ?? 6,
-            resolution: stringParam(args, "resolution") ?? "768p",
+            resolution: stringParam(args, "resolution") ?? "768p"
         });
     }
     return null;
@@ -2059,7 +2140,7 @@ function saveAssetBuffer(
     sessionId: string,
     toolName: string,
     prompt: string | null,
-    args?: Record<string, unknown>,
+    args?: Record<string, unknown>
 ): ToolResult {
     const assetId = `asset_${randomUUID()}`;
     const filename = `${assetId}.${extensionForMime(mime)}`;
@@ -2071,20 +2152,19 @@ function saveAssetBuffer(
     saveAsset(db, {
         id: assetId,
         session_id: sessionId,
-        type:
-            resultType === "image"
-                ? "image"
-                : resultType === "video"
-                  ? "video"
-                  : toolName === "generate_music" || toolName === "generate_music_cover"
-                    ? "music"
-                    : "audio",
+        type: resultType === "image"
+            ? "image"
+            : resultType === "video"
+            ? "video"
+            : toolName === "generate_music" || toolName === "generate_music_cover"
+            ? "music"
+            : "audio",
         filename,
         mime_type: mime,
         prompt,
         tool_name: toolName,
         size_bytes: buf.byteLength,
-        params_json: assetParamsJson(toolName, prompt, args),
+        params_json: assetParamsJson(toolName, prompt, args)
     });
 
     return { type: resultType, content: `/asset/${assetId}` };
@@ -2100,7 +2180,7 @@ const GENERATED_AUDIO_MIMES = new Set([
     "audio/wav",
     "audio/x-wav",
     "audio/flac",
-    "audio/opus",
+    "audio/opus"
 ]);
 const GENERATED_AUDIO_BUNDLE_MIMES = new Set(["application/x-tar", "application/tar"]);
 const GENERATED_VIDEO_MIMES = new Set(["video/mp4"]);
@@ -2125,7 +2205,7 @@ async function readResponseBytesCapped(resp: Response, maxBytes: number): Promis
     return Buffer.concat(chunks.map((chunk) => Buffer.from(chunk)));
 }
 
-async function downloadImageAsset(url: string): Promise<{ buf: Buffer; mime: string }> {
+async function downloadImageAsset(url: string): Promise<{ buf: Buffer; mime: string; }> {
     const parsed = new URL(url);
     if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
         throw new Error("image asset URL must be http(s)");
@@ -2144,7 +2224,7 @@ async function downloadImageAsset(url: string): Promise<{ buf: Buffer; mime: str
     return { buf: await readResponseBytesCapped(resp, MAX_GENERATED_IMAGE_BYTES), mime };
 }
 
-async function downloadVideoAsset(url: string): Promise<{ buf: Buffer; mime: string }> {
+async function downloadVideoAsset(url: string): Promise<{ buf: Buffer; mime: string; }> {
     const parsed = new URL(url);
     if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
         throw new Error("video asset URL must be http(s)");
@@ -2177,7 +2257,7 @@ function parseTarSize(raw: string): number {
     return clean ? Number.parseInt(clean, 8) : 0;
 }
 
-function extractAudioFromTar(buf: Buffer): { buf: Buffer; mime: string } {
+function extractAudioFromTar(buf: Buffer): { buf: Buffer; mime: string; } {
     let offset = 0;
     while (offset + 512 <= buf.byteLength) {
         const header = buf.subarray(offset, offset + 512);
@@ -2194,7 +2274,7 @@ function extractAudioFromTar(buf: Buffer): { buf: Buffer; mime: string } {
     throw new Error("audio bundle had no generated audio");
 }
 
-async function downloadAudioAsset(url: string): Promise<{ buf: Buffer; mime: string }> {
+async function downloadAudioAsset(url: string): Promise<{ buf: Buffer; mime: string; }> {
     const parsed = new URL(url);
     if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
         throw new Error("audio asset URL must be http(s)");
@@ -2223,13 +2303,15 @@ async function saveAssetFile(
     sessionId: string,
     toolName: string,
     prompt: string | null,
-    args?: Record<string, unknown>,
+    args?: Record<string, unknown>
 ): Promise<ToolResult> {
     try {
         if (result.type === "image" && result.urls?.some((url) => /^https?:\/\//i.test(url))) {
             const saved: string[] = [];
             for (const url of result.urls) {
-                if (!/^https?:\/\//i.test(url)) throw new Error("image asset URL must be http(s)");
+                if (!/^https?:\/\//i.test(url)) {
+                    throw new Error("image asset URL must be http(s)");
+                }
                 const downloaded = await downloadImageAsset(url);
                 saved.push(
                     saveAssetBuffer(
@@ -2239,8 +2321,8 @@ async function saveAssetFile(
                         sessionId,
                         toolName,
                         prompt,
-                        args,
-                    ).content,
+                        args
+                    ).content
                 );
             }
             return { type: "image", content: saved[0], urls: saved };
@@ -2255,7 +2337,7 @@ async function saveAssetFile(
                 sessionId,
                 toolName,
                 prompt,
-                args,
+                args
             );
         }
 
@@ -2268,7 +2350,7 @@ async function saveAssetFile(
                 sessionId,
                 toolName,
                 prompt,
-                args,
+                args
             );
         }
 
@@ -2281,7 +2363,7 @@ async function saveAssetFile(
                 sessionId,
                 toolName,
                 prompt,
-                args,
+                args
             );
         }
 

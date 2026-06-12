@@ -9,10 +9,19 @@ export interface ToolDefinition {
     input_schema: Record<string, unknown>;
 }
 
+export interface ProviderDiagnostic {
+    stage?: string;
+    status_code?: number;
+    status_msg?: string;
+    task_id?: string;
+    file_id?: string;
+}
+
 export interface ToolResult {
     type: "image" | "audio" | "video" | "text" | "error";
     content: string;
     urls?: string[];
+    provider?: ProviderDiagnostic;
 }
 
 export interface GenerateImageOptions {
@@ -23,7 +32,7 @@ export interface GenerateImageOptions {
     width?: number;
     height?: number;
     prompt_optimizer?: boolean;
-    subject_reference?: { type: "character"; image_file: string }[];
+    subject_reference?: { type: "character"; image_file: string; }[];
 }
 
 export interface TextToSpeechOptions {
@@ -117,31 +126,31 @@ export function getToolDefinitions(): ToolDefinition[] {
                     prompt: {
                         type: "string",
                         maxLength: IMAGE_PROMPT_MAX,
-                        description: "Text description of the image to generate",
+                        description: "Text description of the image to generate"
                     },
                     aspect_ratio: {
                         type: "string",
                         enum: ["1:1", "16:9", "4:3", "3:2", "2:3", "3:4", "9:16", "21:9"],
-                        description: "Output aspect ratio. Defaults to 16:9 for Create UI.",
+                        description: "Output aspect ratio. Defaults to 16:9 for Create UI."
                     },
                     n: {
                         type: "number",
                         minimum: 1,
                         maximum: 9,
                         description:
-                            "Number of images. If n is greater than 1, omit seed so images differ.",
+                            "Number of images. If n is greater than 1, omit seed so images differ."
                     },
                     seed: {
                         type: "number",
                         description:
-                            "Optional reproducibility seed. Use only when generating one image; omit when n is greater than 1.",
+                            "Optional reproducibility seed. Use only when generating one image; omit when n is greater than 1."
                     },
                     width: { type: "number", minimum: 512, maximum: 2048 },
                     height: { type: "number", minimum: 512, maximum: 2048 },
-                    prompt_optimizer: { type: "boolean" },
+                    prompt_optimizer: { type: "boolean" }
                 },
-                required: ["prompt"],
-            },
+                required: ["prompt"]
+            }
         },
         {
             name: "text_to_speech",
@@ -153,34 +162,33 @@ export function getToolDefinitions(): ToolDefinition[] {
                     text: {
                         type: "string",
                         maxLength: TTS_TEXT_MAX,
-                        description: "The text to convert to speech",
+                        description: "The text to convert to speech"
                     },
                     voice_id: {
                         type: "string",
-                        description: 'Voice ID to use. Defaults to "English_expressive_narrator".',
+                        description: "Voice ID to use. Defaults to \"English_expressive_narrator\"."
                     },
                     speed: {
                         type: "number",
                         minimum: 0.5,
                         maximum: 2,
-                        description: "Speech speed multiplier. Defaults to 1.",
+                        description: "Speech speed multiplier. Defaults to 1."
                     },
                     volume: {
                         type: "number",
                         exclusiveMinimum: 0,
                         maximum: 10,
-                        description: "Speech volume. Defaults to MiniMax service default.",
+                        description: "Speech volume. Defaults to MiniMax service default."
                     },
                     pitch: {
                         type: "number",
                         minimum: -12,
                         maximum: 12,
-                        description:
-                            "Speech pitch adjustment. Defaults to MiniMax service default.",
-                    },
+                        description: "Speech pitch adjustment. Defaults to MiniMax service default."
+                    }
                 },
-                required: ["text"],
-            },
+                required: ["text"]
+            }
         },
         {
             name: "generate_long_speech",
@@ -192,18 +200,18 @@ export function getToolDefinitions(): ToolDefinition[] {
                     text: {
                         type: "string",
                         maxLength: LONG_TTS_TEXT_MAX,
-                        description: "Long narration text to convert to speech",
+                        description: "Long narration text to convert to speech"
                     },
                     voice_id: {
                         type: "string",
-                        description: 'Voice ID to use. Defaults to "English_expressive_narrator".',
+                        description: "Voice ID to use. Defaults to \"English_expressive_narrator\"."
                     },
                     speed: { type: "number", minimum: 0.5, maximum: 2 },
                     volume: { type: "number", exclusiveMinimum: 0, maximum: 10 },
-                    pitch: { type: "number", minimum: -12, maximum: 12 },
+                    pitch: { type: "number", minimum: -12, maximum: 12 }
                 },
-                required: ["text"],
-            },
+                required: ["text"]
+            }
         },
         {
             name: "generate_lyrics",
@@ -216,26 +224,26 @@ export function getToolDefinitions(): ToolDefinition[] {
                         type: "string",
                         maxLength: LYRICS_PROMPT_MAX,
                         description:
-                            "Description or topic for the lyrics (e.g., 'a happy birthday song', 'an adventure theme').",
+                            "Description or topic for the lyrics (e.g., 'a happy birthday song', 'an adventure theme')."
                     },
                     mode: {
                         type: "string",
                         enum: ["write_full_song", "edit"],
                         description:
-                            "Generation mode. Defaults to write_full_song unless existing lyrics are provided.",
+                            "Generation mode. Defaults to write_full_song unless existing lyrics are provided."
                     },
                     lyrics: {
                         type: "string",
                         maxLength: LYRICS_EXISTING_MAX,
-                        description: "Existing lyrics to edit or continue when mode is edit.",
+                        description: "Existing lyrics to edit or continue when mode is edit."
                     },
                     title: {
                         type: "string",
-                        description: "Optional song title to preserve in the generated output.",
-                    },
+                        description: "Optional song title to preserve in the generated output."
+                    }
                 },
-                required: ["prompt"],
-            },
+                required: ["prompt"]
+            }
         },
         {
             name: "generate_music",
@@ -247,16 +255,16 @@ export function getToolDefinitions(): ToolDefinition[] {
                     prompt: {
                         type: "string",
                         maxLength: MUSIC_PROMPT_MAX,
-                        description: "Description of the music to generate",
+                        description: "Description of the music to generate"
                     },
                     lyrics: {
                         type: "string",
                         maxLength: MUSIC_LYRICS_MAX,
-                        description: "Optional lyrics. Omit or leave empty for instrumental music.",
-                    },
+                        description: "Optional lyrics. Omit or leave empty for instrumental music."
+                    }
                 },
-                required: ["prompt"],
-            },
+                required: ["prompt"]
+            }
         },
         {
             name: "generate_video",
@@ -268,21 +276,21 @@ export function getToolDefinitions(): ToolDefinition[] {
                     prompt: {
                         type: "string",
                         maxLength: VIDEO_PROMPT_MAX,
-                        description: "Text description of the video to generate",
+                        description: "Text description of the video to generate"
                     },
                     duration: {
                         type: "number",
                         enum: [6, 10],
-                        description: "Video length preset in seconds. Defaults to 6.",
+                        description: "Video length preset in seconds. Defaults to 6."
                     },
                     resolution: {
                         type: "string",
                         enum: ["768p", "1080p"],
-                        description: "Video quality preset. Defaults to 768p.",
-                    },
+                        description: "Video quality preset. Defaults to 768p."
+                    }
                 },
-                required: ["prompt"],
-            },
+                required: ["prompt"]
+            }
         },
         {
             name: "analyze_image",
@@ -293,16 +301,16 @@ export function getToolDefinitions(): ToolDefinition[] {
                 properties: {
                     image_url: {
                         type: "string",
-                        description: "HTTPS URL of a JPG, PNG, GIF, or WebP image to analyze.",
+                        description: "HTTPS URL of a JPG, PNG, GIF, or WebP image to analyze."
                     },
                     prompt: {
                         type: "string",
                         description:
-                            "Question or instruction about the image. Defaults to a concise description.",
-                    },
+                            "Question or instruction about the image. Defaults to a concise description."
+                    }
                 },
-                required: ["image_url"],
-            },
+                required: ["image_url"]
+            }
         },
         {
             name: "web_search",
@@ -312,12 +320,12 @@ export function getToolDefinitions(): ToolDefinition[] {
                 properties: {
                     query: {
                         type: "string",
-                        description: "The search query",
-                    },
+                        description: "The search query"
+                    }
                 },
-                required: ["query"],
-            },
-        },
+                required: ["query"]
+            }
+        }
     ];
 }
 
@@ -330,7 +338,7 @@ export function getToolDefinitions(): ToolDefinition[] {
 export async function executeTool(
     name: string,
     args: Record<string, unknown>,
-    apiKey: string,
+    apiKey: string
 ): Promise<ToolResult> {
     switch (name) {
         case "generate_image":
@@ -345,9 +353,9 @@ export async function executeTool(
                     prompt_optimizer: args.prompt_optimizer as boolean | undefined,
                     subject_reference: Array.isArray(args.subject_reference)
                         ? (args.subject_reference as GenerateImageOptions["subject_reference"])
-                        : undefined,
+                        : undefined
                 },
-                apiKey,
+                apiKey
             );
         case "text_to_speech":
             return textToSpeech(
@@ -356,9 +364,9 @@ export async function executeTool(
                     voice_id: args.voice_id as string | undefined,
                     speed: clampAudioParam(args.speed, 0.5, 2),
                     volume: validateVolume(args.volume),
-                    pitch: clampAudioParam(args.pitch, -12, 12),
+                    pitch: clampAudioParam(args.pitch, -12, 12)
                 },
-                apiKey,
+                apiKey
             );
         case "generate_long_speech":
             return generateLongSpeech(
@@ -367,9 +375,9 @@ export async function executeTool(
                     voice_id: args.voice_id as string | undefined,
                     speed: clampAudioParam(args.speed, 0.5, 2),
                     volume: validateVolume(args.volume),
-                    pitch: clampAudioParam(args.pitch, -12, 12),
+                    pitch: clampAudioParam(args.pitch, -12, 12)
                 },
-                apiKey,
+                apiKey
             );
         case "generate_lyrics":
             return generateLyrics(
@@ -377,44 +385,44 @@ export async function executeTool(
                     prompt: args.prompt as string,
                     mode: validateLyricsMode(args.mode),
                     lyrics: args.lyrics as string | undefined,
-                    title: args.title as string | undefined,
+                    title: args.title as string | undefined
                 },
-                apiKey,
+                apiKey
             );
         case "generate_music":
             return generateMusic(
                 {
                     prompt: args.prompt as string,
-                    lyrics: args.lyrics as string | undefined,
+                    lyrics: args.lyrics as string | undefined
                 },
-                apiKey,
+                apiKey
             );
         case "generate_video":
             return generateVideo(
                 {
                     prompt: args.prompt as string,
                     duration: validateVideoDuration(args.duration),
-                    resolution: validateVideoResolution(args.resolution),
+                    resolution: validateVideoResolution(args.resolution)
                 },
-                apiKey,
+                apiKey
             );
         case "generate_music_cover":
             return generateMusicCover(
                 {
                     prompt: args.prompt as string,
                     lyrics: args.lyrics as string,
-                    cover_feature_id: args.cover_feature_id as string,
+                    cover_feature_id: args.cover_feature_id as string
                 },
-                apiKey,
+                apiKey
             );
         case "analyze_image":
             return analyzeImage(
                 {
                     image_url: args.image_url as string,
                     prompt: args.prompt as string | undefined,
-                    allow_data_url: args.allow_data_url === true,
+                    allow_data_url: args.allow_data_url === true
                 },
-                apiKey,
+                apiKey
             );
         case "web_search":
             return webSearch(args.query as string, apiKey);
@@ -427,14 +435,14 @@ export async function executeTool(
 // ── Tool implementations ─────────────────────────────────────────────
 
 function validateAspectRatio(value: unknown): GenerateImageOptions["aspect_ratio"] | undefined {
-    return value === "1:1" ||
-        value === "16:9" ||
-        value === "4:3" ||
-        value === "3:2" ||
-        value === "2:3" ||
-        value === "3:4" ||
-        value === "9:16" ||
-        value === "21:9"
+    return value === "1:1"
+            || value === "16:9"
+            || value === "4:3"
+            || value === "3:2"
+            || value === "2:3"
+            || value === "3:4"
+            || value === "9:16"
+            || value === "21:9"
         ? value
         : undefined;
 }
@@ -456,13 +464,20 @@ function validateVolume(value: unknown): number | undefined {
 }
 
 function baseRespError(
-    data: { base_resp?: { status_code?: number; status_msg?: string } },
+    data: { base_resp?: { status_code?: number; status_msg?: string; }; },
     label: string,
+    stage = label
 ): ToolResult | null {
     if (!data.base_resp || data.base_resp.status_code === 0) return null;
+    const statusMsg = data.base_resp.status_msg ?? "unknown error";
     return {
         type: "error",
-        content: `${label} failed: ${data.base_resp.status_msg ?? "unknown error"}`,
+        content: `${label} failed: ${statusMsg}`,
+        provider: {
+            stage,
+            status_code: data.base_resp.status_code,
+            status_msg: statusMsg
+        }
     };
 }
 
@@ -483,7 +498,7 @@ function validateVideoResolution(value: unknown): GenerateVideoOptions["resoluti
 }
 
 function providerVideoResolution(
-    value: GenerateVideoOptions["resolution"] | undefined,
+    value: GenerateVideoOptions["resolution"] | undefined
 ): "768P" | "1080P" {
     return value === "1080p" ? "1080P" : "768P";
 }
@@ -500,7 +515,11 @@ function boundedText(value: unknown, label: string, maxLength: number): string {
     return text;
 }
 
-function optionalBoundedText(value: unknown, label: string, maxLength: number): string | undefined {
+function optionalBoundedText(
+    value: unknown,
+    label: string,
+    maxLength: number
+): string | undefined {
     if (value === undefined || value === null) return undefined;
     if (typeof value !== "string") throw new Error(`${label} must be text`);
     const text = value.trim();
@@ -513,7 +532,7 @@ function boundedTextRange(
     value: unknown,
     label: string,
     minLength: number,
-    maxLength: number,
+    maxLength: number
 ): string {
     const text = boundedText(value, label, maxLength);
     if (text.length < minLength) throw new Error(`${label} too short`);
@@ -526,7 +545,7 @@ function boundedTextRange(
  */
 export async function generateImage(
     input: string | GenerateImageOptions,
-    apiKey: string,
+    apiKey: string
 ): Promise<ToolResult> {
     const options = (isObject(input) ? input : { prompt: input }) as GenerateImageOptions;
     try {
@@ -534,20 +553,19 @@ export async function generateImage(
         const payload: Record<string, unknown> = {
             model: "image-01",
             prompt,
-            response_format: "url",
+            response_format: "url"
         };
         const aspectRatio = validateAspectRatio(options.aspect_ratio);
         if (aspectRatio) payload.aspect_ratio = aspectRatio;
         const n = clampIntegerParam(options.n, 1, 9);
-        const seed =
-            typeof options.seed === "number" && Number.isInteger(options.seed)
-                ? options.seed
-                : undefined;
+        const seed = typeof options.seed === "number" && Number.isInteger(options.seed)
+            ? options.seed
+            : undefined;
         if (n !== undefined && n > 1 && seed !== undefined) {
             return {
                 type: "error",
                 content:
-                    "Invalid generate_image parameters: omit seed when n is greater than 1, or set n to 1. MiniMax returns duplicate images when one seed is used for multiple images.",
+                    "Invalid generate_image parameters: omit seed when n is greater than 1, or set n to 1. MiniMax returns duplicate images when one seed is used for multiple images."
             };
         }
         if (n !== undefined) payload.n = n;
@@ -558,12 +576,13 @@ export async function generateImage(
             payload.width = width - (width % 8);
             payload.height = height - (height % 8);
         }
-        if (typeof options.prompt_optimizer === "boolean")
+        if (typeof options.prompt_optimizer === "boolean") {
             payload.prompt_optimizer = options.prompt_optimizer;
+        }
         if (Array.isArray(options.subject_reference) && options.subject_reference.length > 0) {
             payload.subject_reference = options.subject_reference.map((ref) => ({
                 type: "character",
-                image_file: boundedText(ref.image_file, "reference image", 30_000_000),
+                image_file: boundedText(ref.image_file, "reference image", 30_000_000)
             }));
         }
 
@@ -571,22 +590,22 @@ export async function generateImage(
             method: "POST",
             headers: {
                 "Content-Type": "application/json",
-                Authorization: `Bearer ${apiKey}`,
+                Authorization: `Bearer ${apiKey}`
             },
-            body: JSON.stringify(payload),
+            body: JSON.stringify(payload)
         });
 
         if (!resp.ok) {
             const errorText = await resp.text();
             return {
                 type: "error",
-                content: `Image generation API error: ${resp.status} — ${errorText}`,
+                content: `Image generation API error: ${resp.status} — ${errorText}`
             };
         }
 
         const data = (await resp.json()) as {
-            data?: { image_urls?: string[] };
-            base_resp?: { status_code?: number; status_msg?: string };
+            data?: { image_urls?: string[]; };
+            base_resp?: { status_code?: number; status_msg?: string; };
         };
         const baseResp = baseRespError(data, "Image generation");
         if (baseResp) return baseResp;
@@ -595,7 +614,7 @@ export async function generateImage(
         if (!urls || urls.length === 0) {
             return {
                 type: "error",
-                content: "Image generation returned no image URLs",
+                content: "Image generation returned no image URLs"
             };
         }
 
@@ -605,7 +624,7 @@ export async function generateImage(
     } catch (err) {
         return {
             type: "error",
-            content: `Image generation failed: ${String(err)}`,
+            content: `Image generation failed: ${String(err)}`
         };
     }
 }
@@ -618,7 +637,7 @@ export async function generateImage(
 export async function textToSpeech(
     input: string | TextToSpeechOptions,
     apiKey: string,
-    voiceId?: string,
+    voiceId?: string
 ): Promise<ToolResult> {
     const options = (
         isObject(input) ? input : { text: input, voice_id: voiceId }
@@ -639,28 +658,28 @@ export async function textToSpeech(
             method: "POST",
             headers: {
                 "Content-Type": "application/json",
-                Authorization: `Bearer ${apiKey}`,
+                Authorization: `Bearer ${apiKey}`
             },
             body: JSON.stringify({
                 model: TTS_MODEL,
                 text,
                 output_format: "hex",
                 voice_setting: voiceSetting,
-                audio_setting: { format: "mp3" },
-            }),
+                audio_setting: { format: "mp3" }
+            })
         });
 
         if (!resp.ok) {
             const errorText = await resp.text();
             return {
                 type: "error",
-                content: `TTS API error: ${resp.status} — ${errorText}`,
+                content: `TTS API error: ${resp.status} — ${errorText}`
             };
         }
 
         const data = (await resp.json()) as {
-            data?: { audio?: string };
-            base_resp?: { status_code?: number; status_msg?: string };
+            data?: { audio?: string; };
+            base_resp?: { status_code?: number; status_msg?: string; };
         };
         const baseResp = baseRespError(data, "TTS");
         if (baseResp) return baseResp;
@@ -670,19 +689,19 @@ export async function textToSpeech(
         if (!hex) {
             return {
                 type: "error",
-                content: "TTS returned empty audio data",
+                content: "TTS returned empty audio data"
             };
         }
 
         const base64 = hexToBase64(hex);
         return {
             type: "audio",
-            content: `data:audio/mp3;base64,${base64}`,
+            content: `data:audio/mp3;base64,${base64}`
         };
     } catch (err) {
         return {
             type: "error",
-            content: `TTS failed: ${String(err)}`,
+            content: `TTS failed: ${String(err)}`
         };
     }
 }
@@ -694,8 +713,8 @@ export interface GenerateLongSpeechRuntimeOptions {
 
 type AsyncTtsCreateResponse = {
     task_id?: string;
-    data?: { task_id?: string };
-    base_resp?: { status_code?: number; status_msg?: string };
+    data?: { task_id?: string; };
+    base_resp?: { status_code?: number; status_msg?: string; };
 };
 
 type AsyncTtsQueryResponse = {
@@ -713,11 +732,11 @@ type AsyncTtsQueryResponse = {
         output_file_id?: string;
         message?: string;
     };
-    base_resp?: { status_code?: number; status_msg?: string };
+    base_resp?: { status_code?: number; status_msg?: string; };
 };
 
 function asyncTtsQueryValue(
-    data: AsyncTtsQueryResponse,
+    data: AsyncTtsQueryResponse
 ): AsyncTtsQueryResponse["data"] & AsyncTtsQueryResponse {
     return { ...data, ...(data.data ?? {}) };
 }
@@ -725,13 +744,13 @@ function asyncTtsQueryValue(
 export async function generateLongSpeech(
     input: string | GenerateLongSpeechOptions,
     apiKey: string,
-    runtime: GenerateLongSpeechRuntimeOptions = {},
+    runtime: GenerateLongSpeechRuntimeOptions = {}
 ): Promise<ToolResult> {
     const options = (isObject(input) ? input : { text: input }) as GenerateLongSpeechOptions;
     try {
         const text = boundedText(options.text, "long speech text", LONG_TTS_TEXT_MAX);
         const voiceSetting: Record<string, unknown> = {
-            voice_id: options.voice_id || "English_expressive_narrator",
+            voice_id: options.voice_id || "English_expressive_narrator"
         };
         const speed = clampAudioParam(options.speed, 0.5, 2);
         const volume = validateVolume(options.volume);
@@ -744,19 +763,24 @@ export async function generateLongSpeech(
             method: "POST",
             headers: {
                 "Content-Type": "application/json",
-                Authorization: `Bearer ${apiKey}`,
+                Authorization: `Bearer ${apiKey}`
             },
             body: JSON.stringify({
                 model: TTS_MODEL,
                 text,
                 voice_setting: voiceSetting,
-                audio_setting: { format: "mp3", audio_sample_rate: 32000, channel: 2 },
-            }),
+                audio_setting: { format: "mp3", audio_sample_rate: 32000, channel: 2 }
+            })
         });
-        if (!createResp.ok)
-            return { type: "error", content: `Long TTS API error: ${createResp.status}` };
+        if (!createResp.ok) {
+            return {
+                type: "error",
+                content: `Long TTS API error: ${createResp.status}`,
+                provider: { stage: "create", status_code: createResp.status }
+            };
+        }
         const created = (await createResp.json()) as AsyncTtsCreateResponse;
-        const createBaseResp = baseRespError(created, "Long TTS");
+        const createBaseResp = baseRespError(created, "Long TTS", "create");
         if (createBaseResp) return createBaseResp;
         const taskId = created.task_id ?? created.data?.task_id;
         if (!taskId) return { type: "error", content: "Long TTS returned no task_id" };
@@ -769,13 +793,21 @@ export async function generateLongSpeech(
             const queryUrl = new URL(`${MINIMAX_BASE}/v1/query/t2a_async_query_v2`);
             queryUrl.searchParams.set("task_id", taskId);
             const queryResp = await fetch(queryUrl, {
-                headers: { Authorization: `Bearer ${apiKey}` },
+                headers: { Authorization: `Bearer ${apiKey}` }
             });
-            if (!queryResp.ok)
-                return { type: "error", content: `Long TTS query API error: ${queryResp.status}` };
+            if (!queryResp.ok) {
+                return {
+                    type: "error",
+                    content: `Long TTS query API error: ${queryResp.status}`,
+                    provider: { stage: "query", status_code: queryResp.status, task_id: taskId }
+                };
+            }
             const queried = (await queryResp.json()) as AsyncTtsQueryResponse;
-            const queryBaseResp = baseRespError(queried, "Long TTS query");
-            if (queryBaseResp) return queryBaseResp;
+            const queryBaseResp = baseRespError(queried, "Long TTS query", "query");
+            if (queryBaseResp) {
+                queryBaseResp.provider = { ...queryBaseResp.provider, task_id: taskId };
+                return queryBaseResp;
+            }
             const q = asyncTtsQueryValue(queried);
             const status = String(q.status ?? q.task_status ?? "").toLowerCase();
             if (status === "success" || status === "succeeded") {
@@ -783,25 +815,63 @@ export async function generateLongSpeech(
                 break;
             }
             if (status === "fail" || status === "failed" || status === "error") {
-                return { type: "error", content: `Long TTS failed: ${q.message ?? status}` };
+                const statusMsg = q.message ?? status;
+                return {
+                    type: "error",
+                    content: `Long TTS failed: ${statusMsg}`,
+                    provider: { stage: "query", status_msg: statusMsg, task_id: taskId }
+                };
             }
         }
-        if (!fileId) return { type: "error", content: "Long TTS timed out" };
+        if (!fileId) {
+            return {
+                type: "error",
+                content: "Long TTS timed out",
+                provider: { stage: "query", status_msg: "timeout", task_id: taskId }
+            };
+        }
 
         const fileUrl = new URL(`${MINIMAX_BASE}/v1/files/retrieve`);
         fileUrl.searchParams.set("file_id", fileId);
         const fileResp = await fetch(fileUrl, {
-            headers: { Authorization: `Bearer ${apiKey}` },
+            headers: { Authorization: `Bearer ${apiKey}` }
         });
-        if (!fileResp.ok)
-            return { type: "error", content: `Long TTS file API error: ${fileResp.status}` };
+        if (!fileResp.ok) {
+            return {
+                type: "error",
+                content: `Long TTS file API error: ${fileResp.status}`,
+                provider: {
+                    stage: "file",
+                    status_code: fileResp.status,
+                    task_id: taskId,
+                    file_id: fileId
+                }
+            };
+        }
         const file = (await fileResp.json()) as FileRetrieveResponse;
-        const fileBaseResp = baseRespError(file, "Long TTS file retrieve");
-        if (fileBaseResp) return fileBaseResp;
+        const fileBaseResp = baseRespError(file, "Long TTS file retrieve", "file");
+        if (fileBaseResp) {
+            fileBaseResp.provider = { ...fileBaseResp.provider, task_id: taskId, file_id: fileId };
+            return fileBaseResp;
+        }
         const downloadUrl = fileDownloadUrl(file);
-        if (!downloadUrl)
-            return { type: "error", content: "Long TTS file retrieve returned no download_url" };
-        return { type: "audio", content: downloadUrl };
+        if (!downloadUrl) {
+            return {
+                type: "error",
+                content: "Long TTS file retrieve returned no download_url",
+                provider: {
+                    stage: "file",
+                    status_msg: "missing download_url",
+                    task_id: taskId,
+                    file_id: fileId
+                }
+            };
+        }
+        return {
+            type: "audio",
+            content: downloadUrl,
+            provider: { stage: "file", task_id: taskId, file_id: fileId }
+        };
     } catch (err) {
         return { type: "error", content: `Long TTS failed: ${String(err)}` };
     }
@@ -814,26 +884,26 @@ export async function generateLongSpeech(
  */
 export async function generateMusicCover(
     input: GenerateMusicCoverOptions,
-    apiKey: string,
+    apiKey: string
 ): Promise<ToolResult> {
     try {
         const prompt = boundedTextRange(
             input.prompt,
             "music cover prompt",
             MUSIC_COVER_PROMPT_MIN,
-            MUSIC_COVER_PROMPT_MAX,
+            MUSIC_COVER_PROMPT_MAX
         );
         const lyrics = boundedTextRange(
             input.lyrics,
             "music cover lyrics",
             MUSIC_COVER_LYRICS_MIN,
-            MUSIC_COVER_LYRICS_MAX,
+            MUSIC_COVER_LYRICS_MAX
         );
         const resp = await fetch(`${MINIMAX_BASE}/v1/music_generation`, {
             method: "POST",
             headers: {
                 "Content-Type": "application/json",
-                Authorization: `Bearer ${apiKey}`,
+                Authorization: `Bearer ${apiKey}`
             },
             body: JSON.stringify({
                 model: "music-cover",
@@ -841,13 +911,13 @@ export async function generateMusicCover(
                 lyrics,
                 cover_feature_id: input.cover_feature_id,
                 output_format: "hex",
-                audio_setting: { format: "mp3" },
-            }),
+                audio_setting: { format: "mp3" }
+            })
         });
         if (!resp.ok) return { type: "error", content: `Music cover API error: ${resp.status}` };
         const data = (await resp.json()) as {
-            data?: { audio?: string };
-            base_resp?: { status_code?: number; status_msg?: string };
+            data?: { audio?: string; };
+            base_resp?: { status_code?: number; status_msg?: string; };
         };
         const baseResp = baseRespError(data, "Music cover");
         if (baseResp) return baseResp;
@@ -862,11 +932,12 @@ export async function generateMusicCover(
 
 export async function musicCoverPreprocess(
     input: MusicCoverPreprocessOptions,
-    apiKey: string,
+    apiKey: string
 ): Promise<MusicCoverPreprocessResult> {
     if (!input.audio_url && !input.audio_base64) throw new Error("cover source required");
-    if (input.audio_url && input.audio_base64)
+    if (input.audio_url && input.audio_base64) {
         throw new Error("audio_url and audio_base64 are mutually exclusive");
+    }
     const payload: Record<string, unknown> = { model: "music-cover" };
     if (input.audio_url) payload.audio_url = input.audio_url;
     if (input.audio_base64) payload.audio_base64 = input.audio_base64;
@@ -874,17 +945,17 @@ export async function musicCoverPreprocess(
         method: "POST",
         headers: {
             "Content-Type": "application/json",
-            Authorization: `Bearer ${apiKey}`,
+            Authorization: `Bearer ${apiKey}`
         },
-        body: JSON.stringify(payload),
+        body: JSON.stringify(payload)
     });
     if (!resp.ok) throw new Error(`music cover preprocess API error: ${resp.status}`);
     const data = (await resp.json()) as {
         cover_feature_id?: string;
         lyrics?: string;
         formatted_lyrics?: string;
-        data?: { cover_feature_id?: string; lyrics?: string; formatted_lyrics?: string };
-        base_resp?: { status_code?: number; status_msg?: string };
+        data?: { cover_feature_id?: string; lyrics?: string; formatted_lyrics?: string; };
+        base_resp?: { status_code?: number; status_msg?: string; };
     };
     const baseResp = baseRespError(data, "Music cover preprocess");
     if (baseResp) throw new Error(baseResp.content);
@@ -893,13 +964,13 @@ export async function musicCoverPreprocess(
     if (!coverFeatureId) throw new Error("music cover preprocess returned no cover_feature_id");
     return {
         cover_feature_id: coverFeatureId,
-        lyrics: body.formatted_lyrics ?? body.lyrics ?? "",
+        lyrics: body.formatted_lyrics ?? body.lyrics ?? ""
     };
 }
 
 export async function generateLyrics(
     input: string | GenerateLyricsOptions,
-    apiKey: string,
+    apiKey: string
 ): Promise<ToolResult> {
     const options = typeof input === "string" ? { prompt: input } : input;
     try {
@@ -907,12 +978,12 @@ export async function generateLyrics(
         const existingLyrics = optionalBoundedText(
             options.lyrics,
             "existing lyrics",
-            LYRICS_EXISTING_MAX,
+            LYRICS_EXISTING_MAX
         );
         const mode = options.mode ?? (existingLyrics ? "edit" : "write_full_song");
         const payload: Record<string, unknown> = {
             mode,
-            prompt,
+            prompt
         };
         if (existingLyrics) payload.lyrics = existingLyrics;
         if (options.title?.trim()) payload.title = options.title.trim();
@@ -921,16 +992,16 @@ export async function generateLyrics(
             method: "POST",
             headers: {
                 "Content-Type": "application/json",
-                Authorization: `Bearer ${apiKey}`,
+                Authorization: `Bearer ${apiKey}`
             },
-            body: JSON.stringify(payload),
+            body: JSON.stringify(payload)
         });
 
         if (!resp.ok) {
             const errorText = await resp.text();
             return {
                 type: "error",
-                content: `Lyrics generation API error: ${resp.status} — ${errorText}`,
+                content: `Lyrics generation API error: ${resp.status} — ${errorText}`
             };
         }
 
@@ -938,7 +1009,7 @@ export async function generateLyrics(
             song_title?: string;
             style_tags?: string;
             lyrics?: string;
-            base_resp?: { status_code?: number; status_msg?: string };
+            base_resp?: { status_code?: number; status_msg?: string; };
         };
         const baseResp = baseRespError(data, "Lyrics generation");
         if (baseResp) return baseResp;
@@ -963,20 +1034,20 @@ export async function generateLyrics(
 export async function generateMusic(
     input: string | GenerateMusicOptions,
     apiKey: string,
-    lyrics?: string,
+    lyrics?: string
 ): Promise<ToolResult> {
     const options = (isObject(input) ? input : { prompt: input, lyrics }) as GenerateMusicOptions;
     try {
         const prompt = boundedText(options.prompt, "music prompt", MUSIC_PROMPT_MAX);
-        const lyricsText =
-            optionalBoundedText(options.lyrics, "music lyrics", MUSIC_LYRICS_MAX) ?? "";
+        const lyricsText = optionalBoundedText(options.lyrics, "music lyrics", MUSIC_LYRICS_MAX)
+            ?? "";
         const isInstrumental = lyricsText.length === 0;
         const payload: Record<string, unknown> = {
             model: "music-2.6",
             prompt,
             is_instrumental: isInstrumental,
             output_format: "hex",
-            audio_setting: { format: "mp3" },
+            audio_setting: { format: "mp3" }
         };
         if (!isInstrumental) {
             payload.lyrics = lyricsText;
@@ -986,22 +1057,22 @@ export async function generateMusic(
             method: "POST",
             headers: {
                 "Content-Type": "application/json",
-                Authorization: `Bearer ${apiKey}`,
+                Authorization: `Bearer ${apiKey}`
             },
-            body: JSON.stringify(payload),
+            body: JSON.stringify(payload)
         });
 
         if (!resp.ok) {
             const errorText = await resp.text();
             return {
                 type: "error",
-                content: `Music generation API error: ${resp.status} — ${errorText}`,
+                content: `Music generation API error: ${resp.status} — ${errorText}`
             };
         }
 
         const data = (await resp.json()) as {
-            data?: { audio?: string } | null;
-            base_resp?: { status_code?: number; status_msg?: string };
+            data?: { audio?: string; } | null;
+            base_resp?: { status_code?: number; status_msg?: string; };
         };
         const baseResp = baseRespError(data, "Music generation");
         if (baseResp) return baseResp;
@@ -1011,19 +1082,19 @@ export async function generateMusic(
         if (!hex) {
             return {
                 type: "error",
-                content: "Music generation returned empty audio data",
+                content: "Music generation returned empty audio data"
             };
         }
 
         const base64 = hexToBase64(hex);
         return {
             type: "audio",
-            content: `data:audio/mp3;base64,${base64}`,
+            content: `data:audio/mp3;base64,${base64}`
         };
     } catch (err) {
         return {
             type: "error",
-            content: `Music generation failed: ${String(err)}`,
+            content: `Music generation failed: ${String(err)}`
         };
     }
 }
@@ -1037,8 +1108,8 @@ export interface GenerateVideoRuntimeOptions {
 
 type VideoCreateResponse = {
     task_id?: string;
-    data?: { task_id?: string };
-    base_resp?: { status_code?: number; status_msg?: string };
+    data?: { task_id?: string; };
+    base_resp?: { status_code?: number; status_msg?: string; };
 };
 
 type VideoQueryResponse = {
@@ -1046,15 +1117,15 @@ type VideoQueryResponse = {
     task_status?: string;
     file_id?: string;
     message?: string;
-    data?: { status?: string; task_status?: string; file_id?: string; message?: string };
-    base_resp?: { status_code?: number; status_msg?: string };
+    data?: { status?: string; task_status?: string; file_id?: string; message?: string; };
+    base_resp?: { status_code?: number; status_msg?: string; };
 };
 
 type FileRetrieveResponse = {
     download_url?: string;
-    file?: { download_url?: string };
-    data?: { download_url?: string; file?: { download_url?: string } };
-    base_resp?: { status_code?: number; status_msg?: string };
+    file?: { download_url?: string; };
+    data?: { download_url?: string; file?: { download_url?: string; }; };
+    base_resp?: { status_code?: number; status_msg?: string; };
 };
 
 function sleep(ms: number): Promise<void> {
@@ -1067,17 +1138,17 @@ function queryValue(data: VideoQueryResponse): VideoQueryResponse["data"] & Vide
 
 function fileDownloadUrl(data: FileRetrieveResponse): string | undefined {
     return (
-        data.download_url ??
-        data.file?.download_url ??
-        data.data?.download_url ??
-        data.data?.file?.download_url
+        data.download_url
+            ?? data.file?.download_url
+            ?? data.data?.download_url
+            ?? data.data?.file?.download_url
     );
 }
 
 export async function generateVideo(
     input: string | GenerateVideoOptions,
     apiKey: string,
-    runtime: GenerateVideoRuntimeOptions = {},
+    runtime: GenerateVideoRuntimeOptions = {}
 ): Promise<ToolResult> {
     const options = (isObject(input) ? input : { prompt: input }) as GenerateVideoOptions;
     try {
@@ -1086,20 +1157,25 @@ export async function generateVideo(
             model: VIDEO_MODEL,
             prompt,
             duration: validateVideoDuration(options.duration) ?? 6,
-            resolution: providerVideoResolution(validateVideoResolution(options.resolution)),
+            resolution: providerVideoResolution(validateVideoResolution(options.resolution))
         };
         const createResp = await fetch(`${MINIMAX_BASE}/v1/video_generation`, {
             method: "POST",
             headers: {
                 "Content-Type": "application/json",
-                Authorization: `Bearer ${apiKey}`,
+                Authorization: `Bearer ${apiKey}`
             },
-            body: JSON.stringify(payload),
+            body: JSON.stringify(payload)
         });
-        if (!createResp.ok)
-            return { type: "error", content: `Video generation API error: ${createResp.status}` };
+        if (!createResp.ok) {
+            return {
+                type: "error",
+                content: `Video generation API error: ${createResp.status}`,
+                provider: { stage: "create", status_code: createResp.status }
+            };
+        }
         const created = (await createResp.json()) as VideoCreateResponse;
-        const createBaseResp = baseRespError(created, "Video generation");
+        const createBaseResp = baseRespError(created, "Video generation", "create");
         if (createBaseResp) return createBaseResp;
         const taskId = created.task_id ?? created.data?.task_id;
         if (!taskId) return { type: "error", content: "Video generation returned no task_id" };
@@ -1112,13 +1188,21 @@ export async function generateVideo(
             const queryUrl = new URL(`${MINIMAX_BASE}/v1/query/video_generation`);
             queryUrl.searchParams.set("task_id", taskId);
             const queryResp = await fetch(queryUrl, {
-                headers: { Authorization: `Bearer ${apiKey}` },
+                headers: { Authorization: `Bearer ${apiKey}` }
             });
-            if (!queryResp.ok)
-                return { type: "error", content: `Video query API error: ${queryResp.status}` };
+            if (!queryResp.ok) {
+                return {
+                    type: "error",
+                    content: `Video query API error: ${queryResp.status}`,
+                    provider: { stage: "query", status_code: queryResp.status, task_id: taskId }
+                };
+            }
             const queried = (await queryResp.json()) as VideoQueryResponse;
-            const queryBaseResp = baseRespError(queried, "Video query");
-            if (queryBaseResp) return queryBaseResp;
+            const queryBaseResp = baseRespError(queried, "Video query", "query");
+            if (queryBaseResp) {
+                queryBaseResp.provider = { ...queryBaseResp.provider, task_id: taskId };
+                return queryBaseResp;
+            }
             const q = queryValue(queried);
             const status = String(q.status ?? q.task_status ?? "").toLowerCase();
             if (status === "success" || status === "succeeded") {
@@ -1126,28 +1210,63 @@ export async function generateVideo(
                 break;
             }
             if (status === "fail" || status === "failed" || status === "error") {
+                const statusMsg = q.message ?? status;
                 return {
                     type: "error",
-                    content: `Video generation failed: ${q.message ?? status}`,
+                    content: `Video generation failed: ${statusMsg}`,
+                    provider: { stage: "query", status_msg: statusMsg, task_id: taskId }
                 };
             }
         }
-        if (!fileId) return { type: "error", content: "Video generation timed out" };
+        if (!fileId) {
+            return {
+                type: "error",
+                content: "Video generation timed out",
+                provider: { stage: "query", status_msg: "timeout", task_id: taskId }
+            };
+        }
 
         const fileUrl = new URL(`${MINIMAX_BASE}/v1/files/retrieve`);
         fileUrl.searchParams.set("file_id", fileId);
         const fileResp = await fetch(fileUrl, {
-            headers: { Authorization: `Bearer ${apiKey}` },
+            headers: { Authorization: `Bearer ${apiKey}` }
         });
-        if (!fileResp.ok)
-            return { type: "error", content: `Video file API error: ${fileResp.status}` };
+        if (!fileResp.ok) {
+            return {
+                type: "error",
+                content: `Video file API error: ${fileResp.status}`,
+                provider: {
+                    stage: "file",
+                    status_code: fileResp.status,
+                    task_id: taskId,
+                    file_id: fileId
+                }
+            };
+        }
         const file = (await fileResp.json()) as FileRetrieveResponse;
-        const fileBaseResp = baseRespError(file, "Video file retrieve");
-        if (fileBaseResp) return fileBaseResp;
+        const fileBaseResp = baseRespError(file, "Video file retrieve", "file");
+        if (fileBaseResp) {
+            fileBaseResp.provider = { ...fileBaseResp.provider, task_id: taskId, file_id: fileId };
+            return fileBaseResp;
+        }
         const downloadUrl = fileDownloadUrl(file);
-        if (!downloadUrl)
-            return { type: "error", content: "Video file retrieve returned no download_url" };
-        return { type: "video", content: downloadUrl };
+        if (!downloadUrl) {
+            return {
+                type: "error",
+                content: "Video file retrieve returned no download_url",
+                provider: {
+                    stage: "file",
+                    status_msg: "missing download_url",
+                    task_id: taskId,
+                    file_id: fileId
+                }
+            };
+        }
+        return {
+            type: "video",
+            content: downloadUrl,
+            provider: { stage: "file", task_id: taskId, file_id: fileId }
+        };
     } catch (err) {
         return { type: "error", content: `Video generation failed: ${String(err)}` };
     }
@@ -1157,9 +1276,9 @@ export async function generateVideo(
 
 const YOUTUBE_OEMBED_LIMIT = 2;
 
-type SearchResult = { title: string; link: string; snippet: string };
-type RawSearchResult = { title?: string; link?: string; url?: string; snippet?: string };
-type SearchResponse = { organic?: RawSearchResult[]; data?: { results?: RawSearchResult[] } };
+type SearchResult = { title: string; link: string; snippet: string; };
+type RawSearchResult = { title?: string; link?: string; url?: string; snippet?: string; };
+type SearchResponse = { organic?: RawSearchResult[]; data?: { results?: RawSearchResult[]; }; };
 type YouTubeMetadata = {
     source: string;
     title: string;
@@ -1167,7 +1286,7 @@ type YouTubeMetadata = {
     thumbnailUrl: string;
 };
 
-function youtubeVideoRef(raw: string): { id: string; source: string } | null {
+function youtubeVideoRef(raw: string): { id: string; source: string; } | null {
     let url: URL;
     try {
         url = new URL(raw);
@@ -1186,25 +1305,25 @@ function youtubeVideoRef(raw: string): { id: string; source: string } | null {
     if (/^[A-Za-z0-9_-]{11}$/.test(watchId)) return { id: watchId, source: raw };
     const parts = url.pathname.split("/").filter(Boolean);
     if (
-        (parts[0] === "shorts" || parts[0] === "embed") &&
-        /^[A-Za-z0-9_-]{11}$/.test(parts[1] ?? "")
+        (parts[0] === "shorts" || parts[0] === "embed")
+        && /^[A-Za-z0-9_-]{11}$/.test(parts[1] ?? "")
     ) {
         return { id: parts[1]!, source: raw };
     }
     return null;
 }
 
-function youtubeRefsFromText(text: string): Array<{ id: string; source: string }> {
+function youtubeRefsFromText(text: string): Array<{ id: string; source: string; }> {
     return [...text.matchAll(/https?:\/\/[^\s<>)"]+/g)]
         .map((match) => match[0]!.replace(/[.,!?;:]+$/g, ""))
         .map(youtubeVideoRef)
-        .filter((ref): ref is { id: string; source: string } => ref !== null);
+        .filter((ref): ref is { id: string; source: string; } => ref !== null);
 }
 
 function youtubeUrls(query: string, results: SearchResult[]): string[] {
     const refs = [
         ...youtubeRefsFromText(query),
-        ...results.flatMap((result) => youtubeRefsFromText(result.link)),
+        ...results.flatMap((result) => youtubeRefsFromText(result.link))
     ];
     const sourcesById = new Map<string, string>();
     for (const ref of refs) {
@@ -1229,7 +1348,7 @@ async function fetchYouTubeMetadata(source: string): Promise<YouTubeMetadata | n
         source,
         title: data.title,
         authorName: data.author_name,
-        thumbnailUrl: data.thumbnail_url,
+        thumbnailUrl: data.thumbnail_url
     };
 }
 
@@ -1237,7 +1356,7 @@ function formatYouTubeMetadata(items: YouTubeMetadata[]): string {
     return items
         .map(
             (item) =>
-                `YouTube metadata:\n   Title: ${item.title}\n   Author: ${item.authorName}\n   Thumbnail: ${item.thumbnailUrl}\n   Source: ${item.source}`,
+                `YouTube metadata:\n   Title: ${item.title}\n   Author: ${item.authorName}\n   Thumbnail: ${item.thumbnailUrl}\n   Source: ${item.source}`
         )
         .join("\n\n");
 }
@@ -1248,7 +1367,7 @@ function normalizeSearchResults(data: SearchResponse): SearchResult[] {
         .map((item) => ({
             title: item.title ?? "Untitled",
             link: item.link ?? item.url ?? "",
-            snippet: item.snippet ?? "",
+            snippet: item.snippet ?? ""
         }))
         .filter((item) => item.link);
 }
@@ -1259,9 +1378,9 @@ export async function webSearch(query: string, apiKey: string): Promise<ToolResu
             method: "POST",
             headers: {
                 Authorization: `Bearer ${apiKey}`,
-                "Content-Type": "application/json",
+                "Content-Type": "application/json"
             },
-            body: JSON.stringify({ q: query }),
+            body: JSON.stringify({ q: query })
         });
         if (!resp.ok) {
             return { type: "error", content: `Search failed: HTTP ${resp.status}` };
@@ -1269,7 +1388,9 @@ export async function webSearch(query: string, apiKey: string): Promise<ToolResu
         const data = (await resp.json()) as SearchResponse;
         const results = normalizeSearchResults(data).slice(0, 5);
         const metadata = (
-            await Promise.all(youtubeUrls(query, results).map((url) => fetchYouTubeMetadata(url)))
+            await Promise.all(
+                youtubeUrls(query, results).map((url) => fetchYouTubeMetadata(url))
+            )
         ).filter((item): item is YouTubeMetadata => item !== null);
         const lines = results.map((r, i) => `${i + 1}. ${r.title}\n   ${r.link}\n   ${r.snippet}`);
         if (metadata.length > 0) lines.push(formatYouTubeMetadata(metadata));
@@ -1320,12 +1441,13 @@ function validateAnalyzeDataUrl(value: string): string {
 
 export async function analyzeImage(
     input: string | AnalyzeImageOptions,
-    apiKey: string,
+    apiKey: string
 ): Promise<ToolResult> {
     const options = typeof input === "string" ? { image_url: input } : input;
     try {
-        if (/^data:/i.test(options.image_url) && !options.allow_data_url)
+        if (/^data:/i.test(options.image_url) && !options.allow_data_url) {
             throw new Error("image data URLs are not allowed");
+        }
         const dataUrl = /^data:/i.test(options.image_url)
             ? validateAnalyzeDataUrl(options.image_url)
             : await imageUrlToDataUrl(options.image_url);
@@ -1333,25 +1455,25 @@ export async function analyzeImage(
             method: "POST",
             headers: {
                 Authorization: `Bearer ${apiKey}`,
-                "Content-Type": "application/json",
+                "Content-Type": "application/json"
             },
             body: JSON.stringify({
                 prompt: options.prompt?.trim() || "Describe this image in detail.",
-                image_url: dataUrl,
-            }),
+                image_url: dataUrl
+            })
         });
         if (!resp.ok) {
             return { type: "error", content: `Image analysis failed: HTTP ${resp.status}` };
         }
         const data = (await resp.json()) as {
             content?: string;
-            choices?: { message?: { content?: string } }[];
-            base_resp?: { status_code: number; status_msg: string };
+            choices?: { message?: { content?: string; }; }[];
+            base_resp?: { status_code: number; status_msg: string; };
         };
         if (data.base_resp && data.base_resp.status_code !== 0) {
             return {
                 type: "error",
-                content: `Image analysis failed: ${data.base_resp.status_msg}`,
+                content: `Image analysis failed: ${data.base_resp.status_msg}`
             };
         }
         const content = data.content ?? data.choices?.[0]?.message?.content ?? "";

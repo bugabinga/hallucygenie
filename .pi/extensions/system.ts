@@ -13,9 +13,9 @@
  * instruction. The tool filter is a safety net, not a security boundary.
  */
 
+import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
 import fs from "node:fs";
 import path from "node:path";
-import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
 
 // ---------------------------------------------------------------------------
 // Config
@@ -112,7 +112,7 @@ function validateFrontmatter(meta: unknown): {
         errors.push("status must be a string");
     } else if (!VALID_STATUSES.has(obj.status.toLowerCase())) {
         errors.push(
-            `invalid status "${obj.status}". Must be one of: ${[...VALID_STATUSES].join(", ")}`,
+            `invalid status "${obj.status}". Must be one of: ${[...VALID_STATUSES].join(", ")}`
         );
     }
 
@@ -134,9 +134,9 @@ function validateFrontmatter(meta: unknown): {
     return {
         valid: {
             status: (obj.status as string).toLowerCase(),
-            specs: obj.specs as string[],
+            specs: obj.specs as string[]
         },
-        errors: [],
+        errors: []
     };
 }
 
@@ -144,7 +144,7 @@ function validateFrontmatter(meta: unknown): {
 // Spec ref checker
 // ---------------------------------------------------------------------------
 
-function checkSpecRefs(specs: string[], cwd: string): { missing: string[] } {
+function checkSpecRefs(specs: string[], cwd: string): { missing: string[]; } {
     const specsDir = path.join(systemDir(cwd), "specs");
     const missing: string[] = [];
     for (const ref of specs) {
@@ -180,7 +180,7 @@ function clearAdvisory(issueFile: string): void {
 // Extension
 // ---------------------------------------------------------------------------
 
-export default function (pi: ExtensionAPI) {
+export default function(pi: ExtensionAPI) {
     // -------------------------------------------------------------------------
     // before_agent_start: inject MISSION + RULES
     // -------------------------------------------------------------------------
@@ -191,7 +191,7 @@ export default function (pi: ExtensionAPI) {
         const files: [string, string][] = [
             ["SYSTEM.md", "System"],
             ["MISSION.md", "Mission"],
-            ["RULES.md", "Rules"],
+            ["RULES.md", "Rules"]
         ];
 
         for (const [name, heading] of files) {
@@ -216,12 +216,12 @@ export default function (pi: ExtensionAPI) {
             if (!ctx.hasUI) {
                 return {
                     block: true,
-                    reason: `${rel} human approval required, but no UI is available.`,
+                    reason: `${rel} human approval required, but no UI is available.`
                 };
             }
             const choice = await ctx.ui.select(
                 `Human approval required\n\nAllow ${action} to ${rel}?`,
-                ["Yes", "No", "Custom"],
+                ["Yes", "No", "Custom"]
             );
             if (choice === "Yes") return undefined;
             if (choice === "Custom") {
@@ -232,7 +232,7 @@ export default function (pi: ExtensionAPI) {
                     pi.sendUserMessage(custom, { deliverAs: "steer" });
                     return {
                         block: true,
-                        reason: `${rel} blocked by human approval gate; custom steering queued.`,
+                        reason: `${rel} blocked by human approval gate; custom steering queued.`
                     };
                 }
             }
@@ -260,7 +260,7 @@ export default function (pi: ExtensionAPI) {
                 const protectedPath = path.join(sysDir, name);
                 const rel = path.relative(cwd, protectedPath);
                 const pattern = new RegExp(
-                    `(>>|>|tee\\s).*${rel.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}`,
+                    `(>>|>|tee\\s).*${rel.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}`
                 );
                 if (pattern.test(cmd)) return { block: true, reason: `${rel} is readonly.` };
             }
@@ -268,7 +268,7 @@ export default function (pi: ExtensionAPI) {
                 const approvalPath = path.join(sysDir, dir);
                 const rel = path.relative(cwd, approvalPath);
                 const pattern = new RegExp(
-                    `(>>|>|tee\\s).*${rel.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}`,
+                    `(>>|>|tee\\s).*${rel.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}`
                 );
                 if (pattern.test(cmd)) {
                     const approval = await requireHumanApproval(approvalPath, "bash write");
@@ -283,10 +283,9 @@ export default function (pi: ExtensionAPI) {
             if (!targetPath || !isIssuePath(targetPath, cwd)) return;
 
             // Get the content to validate
-            const content =
-                event.toolName === "write"
-                    ? (event.input.content as string | undefined)
-                    : undefined;
+            const content = event.toolName === "write"
+                ? (event.input.content as string | undefined)
+                : undefined;
 
             // For edit, we need to reconstruct content from patches —
             // read the existing file and apply the edits
@@ -302,7 +301,8 @@ export default function (pi: ExtensionAPI) {
             if (parseError) {
                 return {
                     block: true,
-                    reason: `Issue frontmatter error: ${parseError}\n\nExpected format:\n---\n{ "status": "open", "specs": ["HG-SPEC-NNN"] }\n---`,
+                    reason:
+                        `Issue frontmatter error: ${parseError}\n\nExpected format:\n---\n{ "status": "open", "specs": ["HG-SPEC-NNN"] }\n---`
                 };
             }
 
@@ -311,7 +311,9 @@ export default function (pi: ExtensionAPI) {
             if (validationErrors.length > 0) {
                 return {
                     block: true,
-                    reason: `Issue validation failed:\n${validationErrors.map((e) => `- ${e}`).join("\n")}`,
+                    reason: `Issue validation failed:\n${
+                        validationErrors.map((e) => `- ${e}`).join("\n")
+                    }`
                 };
             }
 
@@ -328,7 +330,7 @@ export default function (pi: ExtensionAPI) {
                 addAdvisory(issueRel, problem);
                 ctx.ui.notify(
                     `⚠ ${issueRel}: ${problem}\nSpec may have been deleted, renamed, or merged. Run /system issues to review.`,
-                    "warning",
+                    "warning"
                 );
             }
         }
@@ -366,6 +368,6 @@ export default function (pi: ExtensionAPI) {
             }
 
             ctx.ui.notify("Usage: /system issues — list collected advisory problems", "info");
-        },
+        }
     });
 }

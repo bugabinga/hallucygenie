@@ -2,9 +2,9 @@
 // Full agent loop implementation: streaming, tool execution, event emission
 // Uses Anthropic-compatible API endpoint
 
-import type { ChatMessage } from "./server.ts";
 import type { UserProfile } from "./db.ts";
 import { createLogger } from "./log.ts";
+import type { ChatMessage } from "./server.ts";
 import { executeTool, getToolDefinitions, MINIMAX_BASE } from "./tools.ts";
 export { MINIMAX_BASE };
 import type { ToolResult } from "./tools.ts";
@@ -13,7 +13,8 @@ const log = createLogger({ service: "agent" });
 
 // ── System Prompt ────────────────────────────────────────────────────
 
-export const SYSTEM_PROMPT = `You are HallucyGenie, a creative buddy for an 11-year-old gaming YouTuber.
+export const SYSTEM_PROMPT =
+    `You are HallucyGenie, a creative buddy for an 11-year-old gaming YouTuber.
 
 Rules:
 - Be extremely concise. Short sentences. No filler. No "Sure!" or "I'd be happy to help!". Answer directly.
@@ -41,9 +42,9 @@ Tool rules:
 
 Product help:
 - HallucyGenie has Chat, Create, Assets, Profile, and Sessions.
-- Create has Image, Music, Video, Voice, Narration, Analyze, Search, and Assets tabs.
+- Create has Image, Music, Video, Voice, Analyze, Search, and Assets tabs.
 - Image makes thumbnails, avatars, logos, and game art; count controls how many pictures.
-- Music makes new songs from prompt/lyrics. Voice makes narration. Analyze explains an uploaded image or image URL. Search finds web facts.
+- Music makes new songs from prompt/lyrics. Voice makes short speech or long narration. Analyze explains an uploaded image or image URL. Search finds web facts.
 - Assets keeps generated/downloaded media. Tool cards show previews, input details, and Tweak to reopen Create with the same params.
 - Profile stores name, interests, dislikes, style ingredients, and avatar. Sessions separate projects.
 - Quota can run out for image, speech, and music.
@@ -61,7 +62,7 @@ function buildProfileContext(profile?: UserProfile): string {
         quotedProfileLine("Name", profile.username),
         quotedProfileLine("Interests", profile.interests),
         quotedProfileLine("Dislikes", profile.hates),
-        quotedProfileLine("Style ingredients", profile.favorites),
+        quotedProfileLine("Style ingredients", profile.favorites)
     ].filter((line): line is string => Boolean(line));
     if (lines.length === 0) return "";
 
@@ -78,7 +79,7 @@ function buildProfileContext(profile?: UserProfile): string {
  */
 export function buildSystemPrompt(
     preferences?: Record<string, string>,
-    profile?: UserProfile,
+    profile?: UserProfile
 ): string {
     const chunks = [SYSTEM_PROMPT];
     if (preferences && Object.keys(preferences).length > 0) {
@@ -112,7 +113,7 @@ export interface AgentEvent {
 export type OnBeforeTool = (
     name: string,
     args: Record<string, unknown>,
-    id?: string,
+    id?: string
 ) => ToolResult | null;
 
 export function safeToolResultForUser(toolName: string, result: ToolResult): ToolResult {
@@ -128,10 +129,14 @@ export function safeToolResultForUser(toolName: string, result: ToolResult): Too
         generate_music: "Couldn't generate music. Try a shorter prompt or lyrics.",
         generate_lyrics: "Couldn't generate lyrics. Try a different topic.",
         analyze_image: "Couldn't analyze the image. Try a direct JPG, PNG, GIF, or WebP URL.",
-        generate_video: "Couldn't generate the video. Try a shorter, clearer prompt.",
+        generate_video: "Couldn't generate the video. Try a shorter, clearer prompt."
     };
     const msg = ERROR_MESSAGES[toolName] ?? "Tool failed. Try again.";
-    return { type: "error", content: msg };
+    return {
+        type: "error",
+        content: msg,
+        provider: result.provider ?? { status_msg: result.content }
+    };
 }
 
 export interface SteerQueue {
@@ -156,7 +161,7 @@ export async function executeToolSafely(
     name: string,
     args: Record<string, unknown>,
     apiKey: string,
-    executor = executeTool,
+    executor = executeTool
 ): Promise<ToolResult> {
     try {
         return await executor(name, args, apiKey);
@@ -164,7 +169,7 @@ export async function executeToolSafely(
         log.warn("tool execution failed", { toolName: name, error: String(err) });
         return {
             type: "error",
-            content: `Tool execution failed: ${String(err)}`,
+            content: `Tool execution failed: ${String(err)}`
         };
     }
 }
@@ -222,7 +227,7 @@ export function estimateTokens(message: ChatMessage): number {
  */
 export function buildContext(
     messages: ChatMessage[],
-    maxTokens = DEFAULT_MAX_CONTEXT_TOKENS,
+    maxTokens = DEFAULT_MAX_CONTEXT_TOKENS
 ): ChatMessage[] {
     if (messages.length === 0) return [];
 
@@ -294,8 +299,8 @@ export function buildContext(
             const toolResultIndices: number[] = [];
             for (let j = i + 1; j < messages.length; j++) {
                 if (
-                    messages[j].role === "tool" &&
-                    toolCallIds.includes(messages[j].tool_call_id ?? "")
+                    messages[j].role === "tool"
+                    && toolCallIds.includes(messages[j].tool_call_id ?? "")
                 ) {
                     toolResultIndices.push(j);
                 }
@@ -395,9 +400,9 @@ export function compactToolResultForModel(toolName: string, result: ToolResult):
  */
 export function toAnthropicPayload(
     messages: ChatMessage[],
-    tools: AnthropicTool[],
+    tools: AnthropicTool[]
 ): Record<string, unknown> {
-    const system: Array<{ type: string; text: string; cache_control?: { type: string } }> = [];
+    const system: Array<{ type: string; text: string; cache_control?: { type: string; }; }> = [];
     const anthropicMessages: Array<{
         role: string;
         content: string | Array<Record<string, unknown>>;
@@ -414,7 +419,7 @@ export function toAnthropicPayload(
                 content.push({
                     type: "thinking",
                     thinking: msg.thinking,
-                    signature: msg.thinking_signature,
+                    signature: msg.thinking_signature
                 });
             }
             if (msg.content) {
@@ -426,7 +431,7 @@ export function toAnthropicPayload(
                         type: "tool_use",
                         id: tc.id,
                         name: tc.name,
-                        input: tc.input,
+                        input: tc.input
                     });
                 }
             }
@@ -438,21 +443,21 @@ export function toAnthropicPayload(
             const toolResult = {
                 type: "tool_result",
                 tool_use_id: msg.tool_call_id,
-                content: msg.content,
+                content: msg.content
             };
             // Group consecutive tool results into one user message
             const lastMsg = anthropicMessages[anthropicMessages.length - 1];
             if (
-                lastMsg &&
-                lastMsg.role === "user" &&
-                Array.isArray(lastMsg.content) &&
-                lastMsg.content.some((c) => c.type === "tool_result")
+                lastMsg
+                && lastMsg.role === "user"
+                && Array.isArray(lastMsg.content)
+                && lastMsg.content.some((c) => c.type === "tool_result")
             ) {
                 (lastMsg.content as Array<Record<string, unknown>>).push(toolResult);
             } else {
                 anthropicMessages.push({
                     role: "user",
-                    content: [toolResult],
+                    content: [toolResult]
                 });
             }
         }
@@ -464,7 +469,7 @@ export function toAnthropicPayload(
 
     // Add cache_control to last tool for prompt caching
     const cachedTools = tools.map((t, i) =>
-        i === tools.length - 1 ? { ...t, cache_control: { type: "ephemeral" } } : t,
+        i === tools.length - 1 ? { ...t, cache_control: { type: "ephemeral" } } : t
     );
 
     const payload: Record<string, unknown> = {
@@ -473,7 +478,7 @@ export function toAnthropicPayload(
         messages: anthropicMessages,
         tools: cachedTools,
         stream: true,
-        thinking: { type: "adaptive" },
+        thinking: { type: "adaptive" }
     };
     if (system.length > 0) {
         payload.system = system;
@@ -497,7 +502,7 @@ export async function runAgentLoop(
     apiKey: string,
     onEvent: (event: AgentEvent) => void | Promise<void>,
     steerQueue?: SteerQueue,
-    onBeforeTool?: OnBeforeTool,
+    onBeforeTool?: OnBeforeTool
 ): Promise<ChatMessage[]> {
     const localMessages = [...messages];
     const tools = getToolDefinitions() as unknown as AnthropicTool[];
@@ -514,14 +519,14 @@ export async function runAgentLoop(
                 method: "POST",
                 headers: {
                     "Content-Type": "application/json",
-                    "X-Api-Key": apiKey,
+                    "X-Api-Key": apiKey
                 },
-                body: JSON.stringify(payload),
+                body: JSON.stringify(payload)
             });
         } catch (err) {
             await onEvent({
                 type: "text",
-                content: `[Error: Failed to connect to API: ${String(err)}]`,
+                content: `[Error: Failed to connect to API: ${String(err)}]`
             });
             await onEvent({ type: "done" });
             return localMessages;
@@ -532,7 +537,7 @@ export async function runAgentLoop(
             if (isToolResultIdError(resp.status, errorText)) {
                 log.warn("minimax rejected tool result id", {
                     status: resp.status,
-                    error: truncateLogText(errorText),
+                    error: truncateLogText(errorText)
                 });
 
                 // Preserve tool result context for future turns.
@@ -559,18 +564,18 @@ export async function runAgentLoop(
             if (isContextWindowError(resp.status, errorText)) {
                 log.warn("minimax context window exceeded", {
                     status: resp.status,
-                    error: truncateLogText(errorText),
+                    error: truncateLogText(errorText)
                 });
                 await onEvent({ type: "done" });
                 return localMessages;
             }
             log.warn("minimax api error", {
                 status: resp.status,
-                error: truncateLogText(errorText),
+                error: truncateLogText(errorText)
             });
             await onEvent({
                 type: "text",
-                content: apiErrorMessageForUser(resp.status),
+                content: apiErrorMessageForUser(resp.status)
             });
             await onEvent({ type: "done" });
             return localMessages;
@@ -580,7 +585,7 @@ export async function runAgentLoop(
             log.warn("minimax api response has null body");
             await onEvent({
                 type: "text",
-                content: "I got an empty response from the server. Please try again.",
+                content: "I got an empty response from the server. Please try again."
             });
             await onEvent({ type: "done" });
             return localMessages;
@@ -726,8 +731,8 @@ export async function runAgentLoop(
                 tool_calls: calls.map((tc) => ({
                     id: tc.id,
                     name: tc.name,
-                    input: parseToolArguments(tc.input),
-                })),
+                    input: parseToolArguments(tc.input)
+                }))
             });
 
             // Execute each tool
@@ -737,31 +742,32 @@ export async function runAgentLoop(
                 await onEvent({
                     type: "tool_start",
                     id: tc.id,
-                    name: tc.name,
+                    name: tc.name
                 });
 
                 const substituted = onBeforeTool?.(tc.name, args, tc.id) ?? null;
-                const result =
-                    substituted ??
-                    safeToolResultForUser(tc.name, await executeToolSafely(tc.name, args, apiKey));
+                const result = substituted
+                    ?? safeToolResultForUser(
+                        tc.name,
+                        await executeToolSafely(tc.name, args, apiKey)
+                    );
 
                 await onEvent({
                     type: "tool_result",
                     id: tc.id,
                     name: tc.name,
                     result,
-                    prompt:
-                        (args.prompt as string | undefined) ??
-                        (args.text as string | undefined) ??
-                        (args.topic as string | undefined),
-                    args,
+                    prompt: (args.prompt as string | undefined)
+                        ?? (args.text as string | undefined)
+                        ?? (args.topic as string | undefined),
+                    args
                 });
 
                 // Append compact tool result to model context. Never feed raw media bytes back.
                 localMessages.push({
                     role: "tool",
                     content: compactToolResultForModel(tc.name, result),
-                    tool_call_id: tc.id,
+                    tool_call_id: tc.id
                 });
             }
 
@@ -794,7 +800,7 @@ export async function runAgentLoop(
                         role: "assistant",
                         content: textContent,
                         thinking: thinkingContent || undefined,
-                        thinking_signature: thinkingSignature || undefined,
+                        thinking_signature: thinkingSignature || undefined
                     });
                 }
                 for (const msg of steerMessages) {
@@ -809,7 +815,7 @@ export async function runAgentLoop(
                 role: "assistant",
                 content: textContent,
                 thinking: thinkingContent || undefined,
-                thinking_signature: thinkingSignature || undefined,
+                thinking_signature: thinkingSignature || undefined
             });
         }
 
