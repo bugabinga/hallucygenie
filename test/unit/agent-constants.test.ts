@@ -3,7 +3,7 @@
  */
 
 import { describe, it, expect } from "bun:test";
-import { MAX_AGENT_ITERATIONS } from "../../src/agent.ts";
+import { MAX_AGENT_ITERATIONS, checkIterationGuard } from "../../src/agent.ts";
 
 describe("MAX_AGENT_ITERATIONS", () => {
     it("has a reasonable cap of 50 iterations", () => {
@@ -15,5 +15,12 @@ describe("MAX_AGENT_ITERATIONS", () => {
         // runaway consumption
         expect(MAX_AGENT_ITERATIONS).toBeGreaterThan(10);
         expect(MAX_AGENT_ITERATIONS).toBeLessThan(100);
+    });
+
+    it("guard blocks at exactly 50 iterations", () => {
+        // Exactly at cap: allowed
+        expect(checkIterationGuard(50)).toBeNull();
+        // One over: blocked
+        expect(checkIterationGuard(51)).not.toBeNull();
     });
 });

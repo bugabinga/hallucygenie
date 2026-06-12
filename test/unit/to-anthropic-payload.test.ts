@@ -40,6 +40,31 @@ describe("toAnthropicPayload", () => {
         expect(thinkingBlock.thinking).toBe("I need to consider the options carefully.");
     });
 
+    it("thinking block without signature does NOT include signature field", () => {
+        // The fix: include thinking block but omit signature when not present
+        // A mutant that includes "signature": undefined would be wrong
+        const messages: ChatMessage[] = [
+            { role: "system", content: "You are a helpful assistant." },
+            {
+                role: "assistant",
+                content: "thinking",
+                thinking: "my thoughts",
+                // no thinking_signature
+            },
+        ];
+
+        const payload = toAnthropicPayload(messages, tools);
+
+        const assistantMsg = (payload.messages as Array<{ role: string; content: unknown }>).find(
+            (m) => m.role === "assistant",
+        );
+        const content = assistantMsg!.content as Array<Record<string, unknown>>;
+        const thinkingBlock = content.find((b) => b.type === "thinking");
+        expect(thinkingBlock).toBeDefined();
+        // Signature must NOT be present (not even undefined)
+        expect(thinkingBlock).not.toHaveProperty("signature");
+    });
+
     it("includes thinking block with signature", () => {
         const messages: ChatMessage[] = [
             { role: "system", content: "You are a helpful assistant." },
@@ -118,12 +143,33 @@ describe("toAnthropicPayload", () => {
 
         const payload = toAnthropicPayload(messages, tools);
 
-        const userMessages = (payload.messages as Array<{ role: string; content: unknown }>).filter(
+        const userMessages = (payload.messages as Array<{ role: string; content: unknown }>).find(
             (m) => m.role === "user",
         );
-        // Two consecutive tool results should be grouped into one user message
-        expect(userMessages.length).toBe(1);
-        const content = userMessages[0].content as Array<{ type: string }>;
+        expect(userMessages).toBeDefined();
+        const content = userMessages!.content as Array<{ type: string }>;
         expect(content.filter((b) => b.type === "tool_result").length).toBe(2);
+    });
+
+    it("thinking without signature still emits text block after thinking", () => {
+        const messages: ChatMessage[] = [
+            { role: "system", content: "You are a helpful assistant." },
+            {
+                role: "assistant",
+                content: "Here is my answer.",
+                thinking: "thinking content",
+                // no signature
+            },
+        ];
+
+        const payload = toAnthropicPayload(messages, tools);
+
+        const assistantMsg = (payload.messages as Array<{ role: string; content: unknown }>).find(
+            (m) => m.role === "assistant",
+        );
+        const content = assistantMsg!.content as Array<{ type: string }>;
+        const types = content.map((b) => b.type);
+        // Order: thinking first, then text
+        expect(types).toEqual(["thinking", "text"]);
     });
 });

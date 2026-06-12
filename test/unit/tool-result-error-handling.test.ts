@@ -3,8 +3,7 @@
  * Uses globalThis.fetch override pattern for Bun.
  */
 
-import { describe, it, expect, beforeEach, afterEach } from "bun:test";
-import { MINIMAX_BASE } from "../../src/tools.ts";
+import { describe, it, expect, afterEach } from "bun:test";
 
 describe("runAgentLoop tool result ID error handling", () => {
     const originalFetch = globalThis.fetch;
@@ -64,7 +63,7 @@ describe("runAgentLoop tool result ID error handling", () => {
         ];
 
         const events: string[] = [];
-        const result = await runAgentLoop(initialMessages, "fake-key", async (event) => {
+        await runAgentLoop(initialMessages, "fake-key", async (event) => {
             events.push(event.type);
         });
 
@@ -72,5 +71,24 @@ describe("runAgentLoop tool result ID error handling", () => {
         expect(events).toContain("done");
         // Should have emitted text (the summary)
         expect(events).toContain("text");
+    });
+});
+
+describe("isToolResultIdError", () => {
+    it("returns true for tool result id error", () => {
+        const { isToolResultIdError } = require("../../src/agent.ts");
+        expect(
+            isToolResultIdError(400, "tool result's tool id(tc1) not found in the conversation"),
+        ).toBe(true);
+    });
+
+    it("returns false for status != 400", () => {
+        const { isToolResultIdError } = require("../../src/agent.ts");
+        expect(isToolResultIdError(500, "tool result's tool id(tc1) not found")).toBe(false);
+    });
+
+    it("returns false for unrelated error text", () => {
+        const { isToolResultIdError } = require("../../src/agent.ts");
+        expect(isToolResultIdError(400, "something else went wrong")).toBe(false);
     });
 });

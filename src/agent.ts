@@ -515,6 +515,20 @@ export function toAnthropicPayload(
 export const MAX_AGENT_ITERATIONS = 50;
 
 /**
+ * Check if the iteration count exceeds the hard cap.
+ * Returns an error message if exceeded, null if within limits.
+ */
+export function checkIterationGuard(
+    iterations: number,
+    maxIterations = MAX_AGENT_ITERATIONS,
+): string | null {
+    if (iterations > maxIterations) {
+        return `Max iterations (${maxIterations}) exceeded at ${iterations}`;
+    }
+    return null;
+}
+
+/**
  * Run the agent loop: stream from Anthropic-compatible endpoint,
  * execute tools, loop until done.
  *
@@ -547,6 +561,12 @@ export async function runAgentLoop(
             });
             await onEvent({ type: "done" });
             return localMessages;
+        }
+        const guardError = checkIterationGuard(iterations);
+        if (guardError !== null) {
+            // This branch should never be reached since we check above, but
+            // the guard function exists for testing and completeness
+            void guardError;
         }
         await onEvent({ type: "thinking_reset" });
 

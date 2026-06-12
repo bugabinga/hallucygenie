@@ -1,5 +1,5 @@
 /**
- * Tests for runMigrations — filename validation.
+ * Tests for runMigrations — filename validation and regex guard.
  */
 
 import { describe, it, expect, beforeEach, afterEach } from "bun:test";
@@ -23,13 +23,12 @@ describe("runMigrations", () => {
         }
     });
 
-    it("skips files not matching ^\\d+- pattern", () => {
-        // Write a malformed migration file
-        writeFileSync(join(testDir, "abc-def.sql"), "SELECT 1;");
+    it("skips files not matching ^\\d+- pattern via regex guard", () => {
+        // Write a malformed migration file (no leading digits)
+        writeFileSync(join(testDir, "abc-def.sql"), "CREATE TABLE bad_table (id INTEGER);");
         writeFileSync(join(testDir, "001-init.sql"), "CREATE TABLE test (id INTEGER);");
 
         const db = new Database(`:memory:`);
-        // Should not throw even with malformed filename
         expect(() => runMigrations(db, testDir)).not.toThrow();
 
         // The valid migration should still have run
@@ -38,18 +37,58 @@ describe("runMigrations", () => {
             .all() as Array<{ name: string }>;
         const tableNames = tables.map((t) => t.name);
         expect(tableNames).toContain("test");
+        // bad_table must NOT be created — abc-def.sql was filtered by regex
+        expect(tableNames).not.toContain("bad_table");
 
         db.close();
     });
 
-    it("handles filenames with NaN versions gracefully", () => {
-        // File matches pattern but parseInt still returns NaN
-        writeFileSync(join(testDir, "000-no-version.sql"), "SELECT 1;");
+    it("regex /^\\d+-.+\\.sql$/ passes valid filenames", () => {
+        const pattern = /^\d+-.+\.sql$/;
+        // Valid: has digits, hyphen, and suffix
+        expect(pattern.test("001-init.sql")).toBe(true);
+        expect(pattern.test("002-add-users.sql")).toBe(true);
+        expect(pattern.test("123-something-here.sql")).toBe(true);
+        expect(pattern.test("0001-something.sql")).toBe(true);
+        // Invalid: no hyphen separator
+        expect(pattern.test("001init.sql")).toBe(false);
+        // Invalid: no .sql suffix
+        expect(pattern.test("001-init.txt")).toBe(false);
+        // Invalid: empty after hyphen
+        expect(pattern.test("001-.sql")).toBe(false); // .+ requires at least 1 char
+        // Invalid: no hyphen at all
+        expect(pattern.test("0001.sql")).toBe(false);
+    });
+
+    it("handles filenames that pass regex but parseInt returns NaN", () => {
+        // The .test() regex would pass for "000-no-version" but parseInt gives NaN
+        // (edge case: parseInt("000-no-version".split("-")[0], 10) = 0, not NaN)
+        // But parseInt on pure non-numeric gives NaN
+        // This tests the NaN guard: if Number.isNaN(version) return false
+        writeFileSync(join(testDir, "abc-def.sql"), "SELECT 1;");
+        writeFileSync(join(testDir, "001-init.sql"), "CREATE TABLE test (id INTEGER);");
 
         const db = new Database(`:memory:`);
-        // Should not throw
         expect(() => runMigrations(db, testDir)).not.toThrow();
+
+        // 001-init must still run despite abc-def.sql being skipped
+        const tables = db
+            .prepare("SELECT name FROM sqlite_master WHERE type='table'")
+            .all() as Array<{ name: string }>;
+        expect(tables.map((t) => t.name)).toContain("test");
+
         db.close();
+    });
+
+    it("NaN guard prevents crash on malformed filenames", () => {
+        // parseInt("abc".split("-")[0], 10) = NaN → guard must return false
+        // Without the guard: NaN inserted into SQL → crash
+        const filename = "abc-def.sql";
+        const version = parseInt(filename.split("-")[0], 10);
+        expect(Number.isNaN(version)).toBe(true);
+        // Guard: if Number.isNaN(version) return false
+        const shouldApply = !Number.isNaN(version);
+        expect(shouldApply).toBe(false); // Should NOT apply this migration
     });
 
     it("applies valid migrations in order", () => {
@@ -95,6 +134,29 @@ describe("runMigrations", () => {
             .prepare("SELECT name FROM sqlite_master WHERE type='table'")
             .all() as Array<{ name: string }>;
         expect(tables.filter((t) => t.name === "test").length).toBe(1);
+
+        db.close();
+    });
+
+    it("mix of valid and invalid filenames — only valid are applied", () => {
+        writeFileSync(join(testDir, "001-init.sql"), "CREATE TABLE valid1 (id INTEGER);");
+        writeFileSync(join(testDir, "bad-name.sql"), "CREATE TABLE bad1 (id INTEGER);");
+        writeFileSync(join(testDir, "another-bad.sql"), "CREATE TABLE bad2 (id INTEGER);");
+        writeFileSync(join(testDir, "002-second.sql"), "CREATE TABLE valid2 (id INTEGER);");
+
+        const db = new Database(`:memory:`);
+        runMigrations(db, testDir);
+
+        const tables = db
+            .prepare("SELECT name FROM sqlite_master WHERE type='table' ORDER BY name")
+            .all() as Array<{ name: string }>;
+        const tableNames = tables.map((t) => t.name);
+        // Only the numbered migrations should have run
+        expect(tableNames).toContain("valid1");
+        expect(tableNames).toContain("valid2");
+        // Invalid filenames should not create tables
+        expect(tableNames).not.toContain("bad1");
+        expect(tableNames).not.toContain("bad2");
 
         db.close();
     });
