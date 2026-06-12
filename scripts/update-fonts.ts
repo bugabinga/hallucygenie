@@ -118,10 +118,10 @@ function findFile(
     files: GithubContent[],
     predicate: (file: GithubContent) => boolean,
     label: string
-): GithubContent {
+): GithubContent & { download_url: string; } {
     const file = files.find((item) => item.type === "file" && predicate(item));
     if (!file?.download_url) fail(`missing ${label}`);
-    return file;
+    return { ...file, download_url: file.download_url };
 }
 
 function sha256(bytes: Uint8Array): string {
@@ -196,11 +196,11 @@ async function downloadFont(spec: FontSpec, commit: string, tmpRoot: string) {
     const outputPath = join(spec.outputDir, spec.outputFile);
     const licensePath = join(spec.outputDir, "OFL.txt");
 
-    const sourceBytes = await fetchBytes(sourceFont.download_url!);
+    const sourceBytes = await fetchBytes(sourceFont.download_url);
     writeFileSync(tmpFontPath, sourceBytes);
     convertToWoff2(tmpFontPath, outputPath);
 
-    const licenseBytes = await fetchBytes(license.download_url!);
+    const licenseBytes = await fetchBytes(license.download_url);
     writeFileSync(licensePath, licenseBytes);
 
     const outputBytes = readFileSync(outputPath);

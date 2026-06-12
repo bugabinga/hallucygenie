@@ -2,20 +2,23 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import systemExtension from "../../.pi/extensions/system.ts";
 
+type ToolCallHandler = Parameters<Parameters<typeof systemExtension>[0]["on"]>[1];
+
 function captureToolCallHandler() {
-    let handler: ((event: any, ctx: any) => Promise<any>) | null = null;
+    let handler: ToolCallHandler | null = null;
     const sent: Array<{ content: string; options?: Record<string, unknown>; }> = [];
-    systemExtension({
-        on(name: string, fn: (event: any, ctx: any) => Promise<any>) {
+    const host: Parameters<typeof systemExtension>[0] = {
+        on(name, fn) {
             if (name === "tool_call") handler = fn;
         },
         registerCommand() {},
         sendUserMessage(content: string, options?: Record<string, unknown>) {
             sent.push({ content, options });
         }
-    } as any);
+    };
+    systemExtension(host);
     assert.ok(handler, "tool_call handler registered");
-    return { handler: handler!, sent };
+    return { handler, sent };
 }
 
 describe("system extension approval gate", () => {

@@ -283,7 +283,7 @@ export function setupMinimaxMocks(): void {
                 headers: { "Content-Type": "image/png" }
             });
         }
-        return previousFetch!(input, init);
+        return previousFetch?.(input, init);
     };
 }
 

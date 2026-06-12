@@ -1308,14 +1308,16 @@ function youtubeVideoRef(raw: string): { id: string; source: string; } | null {
         (parts[0] === "shorts" || parts[0] === "embed")
         && /^[A-Za-z0-9_-]{11}$/.test(parts[1] ?? "")
     ) {
-        return { id: parts[1]!, source: raw };
+        const id = parts[1];
+        if (!id) return null;
+        return { id, source: raw };
     }
     return null;
 }
 
 function youtubeRefsFromText(text: string): Array<{ id: string; source: string; }> {
     return [...text.matchAll(/https?:\/\/[^\s<>)"]+/g)]
-        .map((match) => match[0]!.replace(/[.,!?;:]+$/g, ""))
+        .map((match) => match[0]?.replace(/[.,!?;:]+$/g, ""))
         .map(youtubeVideoRef)
         .filter((ref): ref is { id: string; source: string; } => ref !== null);
 }
@@ -1408,7 +1410,7 @@ export async function webSearch(query: string, apiKey: string): Promise<ToolResu
 const MAX_ANALYZE_IMAGE_BYTES = 20 * 1024 * 1024;
 
 function vlmMime(contentType: string): "jpeg" | "png" | "webp" | "gif" {
-    const mime = contentType.split(";")[0]!.trim().toLowerCase();
+    const mime = contentType.split(";")[0]?.trim().toLowerCase();
     if (mime === "image/jpeg" || mime === "image/jpg") return "jpeg";
     if (mime === "image/png") return "png";
     if (mime === "image/webp") return "webp";
@@ -1434,7 +1436,9 @@ async function imageUrlToDataUrl(imageUrl: string): Promise<string> {
 function validateAnalyzeDataUrl(value: string): string {
     const match = value.match(/^data:image\/(jpeg|png|webp|gif);base64,([A-Za-z0-9+/=]+)$/);
     if (!match) throw new Error("unsupported image data URL");
-    const bytes = Buffer.from(match[2]!, "base64");
+    const base64 = match[2];
+    if (!base64) throw new Error("unsupported image data URL");
+    const bytes = Buffer.from(base64, "base64");
     if (bytes.byteLength > MAX_ANALYZE_IMAGE_BYTES) throw new Error("image too large");
     return value;
 }

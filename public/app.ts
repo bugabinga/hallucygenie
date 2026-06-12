@@ -113,7 +113,7 @@ export { renderMarkdown };
 
 export function renderThinkingBlock(text: string): string {
     const lines = text.trim().split("\n").length;
-    const preview = text.trim().split("\n")[0]?.slice(0, 60) ?? "";
+    const _preview = text.trim().split("\n")[0]?.slice(0, 60) ?? "";
     return `<details class="thinking-block"><summary>💭 Thinking${
         lines > 1 ? ` (${lines} lines)` : ""
     }…</summary><div class="thinking-content">${renderMarkdown(text)}</div></details>`;
@@ -719,7 +719,7 @@ function formatAssetDate(timestamp: number): string {
 }
 
 function getModelName(params: Record<string, unknown>): string {
-    const model = params["model"];
+    const model = params.model;
     if (typeof model === "string" && model) {
         // Strip MiniMax prefix if present
         return model.replace(/^MiniMax\//i, "");
@@ -730,32 +730,32 @@ function getModelName(params: Record<string, unknown>): string {
 function renderAssetParams(params: Record<string, unknown>): string {
     const parts: string[] = [];
 
-    const aspectRatio = params["aspect_ratio"];
+    const aspectRatio = params.aspect_ratio;
     if (typeof aspectRatio === "string" && aspectRatio) {
         parts.push(aspectRatio);
     }
 
-    const speed = params["speed"];
+    const speed = params.speed;
     if (typeof speed === "string" && speed) {
         parts.push(`${speed}x`);
     } else if (typeof speed === "number" && speed !== 1) {
         parts.push(`${speed}x`);
     }
 
-    const lyrics = params["lyrics"];
+    const lyrics = params.lyrics;
     if (typeof lyrics === "string" && lyrics) {
         parts.push(lyrics.slice(0, 20) + (lyrics.length > 20 ? "…" : ""));
     }
 
-    const voiceId = params["voice_id"];
+    const voiceId = params.voice_id;
     if (typeof voiceId === "string" && voiceId) {
-        parts.push(voiceId.slice(0, 8) + "…");
+        parts.push(`${voiceId.slice(0, 8)}…`);
     }
 
-    const duration = params["duration"];
+    const duration = params.duration;
     if (typeof duration === "number") parts.push(`${duration}s`);
 
-    const resolution = params["resolution"];
+    const resolution = params.resolution;
     if (typeof resolution === "string" && resolution) parts.push(resolution);
 
     return parts.join(" · ");
@@ -847,7 +847,7 @@ function renderAssetCard(asset: Asset): HTMLElement {
         details.className = "asset-prompt-details";
         const summary = document.createElement("summary");
         summary.className = "asset-prompt-summary";
-        summary.textContent = prompt.slice(0, ASSET_PROMPT_PREVIEW_CHARS) + "…";
+        summary.textContent = `${prompt.slice(0, ASSET_PROMPT_PREVIEW_CHARS)}…`;
         const fullPrompt = document.createElement("div");
         fullPrompt.className = "asset-prompt-full";
         fullPrompt.textContent = prompt;
@@ -951,9 +951,9 @@ export function showError(message: string, duration = 4000): void {
 // ── Chat State ───────────────────────────────────────────────────────
 
 let isStreaming = false;
-let currentAssistantEl: HTMLElement | null = null;
+let _currentAssistantEl: HTMLElement | null = null;
 let currentAssistantContent: HTMLElement | null = null;
-let activeToolCards = new Map<string, HTMLElement>();
+const activeToolCards = new Map<string, HTMLElement>();
 let renderedStreamTextLength = 0;
 let rawTextBuffer = ""; // raw text for markdown re-rendering
 let thinkingBuffer = ""; // accumulated thinking text from thinking events
@@ -1018,7 +1018,7 @@ async function streamSseRequest(
         buffer = parts.pop() ?? "";
 
         for (const part of parts) {
-            const events = [...parseSSEChunk(part + "\n\n")];
+            const events = [...parseSSEChunk(`${part}\n\n`)];
             for (const event of events) {
                 onEvent?.(event);
                 handleSSEEvent(event);
@@ -1058,7 +1058,7 @@ function ensureAssistantContent(): HTMLElement {
     const messageList = $("#message-list");
     const { container, contentEl } = renderAssistantMessage();
     messageList.appendChild(container);
-    currentAssistantEl = container;
+    _currentAssistantEl = container;
     currentAssistantContent = contentEl;
     return contentEl;
 }
@@ -1068,7 +1068,7 @@ function handleSSEEvent(event: SSEEvent): void {
 
     if (eventType === "assistant_turn_start") {
         if (currentAssistantContent && currentAssistantContent.childNodes.length > 0) {
-            currentAssistantEl = null;
+            _currentAssistantEl = null;
             currentAssistantContent = null;
             activeToolCards.clear();
             rawTextBuffer = "";
@@ -1215,7 +1215,8 @@ function animateRenderedTextTail(textNodes: Text[], charCount: number): void {
 
     let remaining = charCount;
     for (let i = textNodes.length - 1; i >= 0 && remaining > 0; i--) {
-        const node = textNodes[i]!;
+        const node = textNodes[i];
+        if (!node) continue;
         const text = node.textContent ?? "";
         const take = Math.min(remaining, text.length);
         const start = text.length - take;
@@ -1313,9 +1314,11 @@ function finishStreaming(): void {
     );
     document
         .querySelectorAll(".message--steer")
-        .forEach((el) => el.classList.remove("message--steer"));
+        .forEach((el) => {
+            el.classList.remove("message--steer");
+        });
     isStreaming = false;
-    currentAssistantEl = null;
+    _currentAssistantEl = null;
     currentAssistantContent = null;
     activeToolCards.clear();
     rawTextBuffer = "";
@@ -1389,7 +1392,7 @@ export async function sendMessage(
     // Prepare assistant message container
     const { container: assistantEl, contentEl: assistantContent } = renderAssistantMessage();
     messageList.appendChild(assistantEl);
-    currentAssistantEl = assistantEl;
+    _currentAssistantEl = assistantEl;
     currentAssistantContent = assistantContent;
 
     // Clear input
@@ -1404,7 +1407,7 @@ export async function sendMessage(
 
     try {
         await streamChat([{ role: "user", content }]);
-    } catch (err) {
+    } catch (_err) {
         streamHadError = true;
         showError("Connection lost. Check your internet? 📡");
         finishStreaming();
@@ -1425,7 +1428,7 @@ export async function sendCreateTool(
 
     const { container: assistantEl, contentEl: assistantContent } = renderAssistantMessage();
     messageList.appendChild(assistantEl);
-    currentAssistantEl = assistantEl;
+    _currentAssistantEl = assistantEl;
     currentAssistantContent = assistantContent;
 
     clearDraftAfterDone = clearDraftOnSuccess ? "create" : null;
@@ -1580,7 +1583,7 @@ export function autoResizeInput(): void {
     const maxHeight = 120;
     input.style.height = "auto";
     const clamped = input.scrollHeight > maxHeight;
-    input.style.height = Math.min(input.scrollHeight, maxHeight) + "px";
+    input.style.height = `${Math.min(input.scrollHeight, maxHeight)}px`;
     input.classList.toggle("is-overflowing", clamped);
     input.setAttribute("aria-multiline", "true");
 }
@@ -1847,14 +1850,16 @@ export async function updateQuotaBadge(): Promise<void> {
             const type = item.dataset.type as keyof QuotaData;
             const q = data[type];
             const label = item.title || QUOTA_LABELS[type] || type;
+            const used = item.querySelector(".quota-used");
+            if (!used) continue;
             if (!q) {
-                item.querySelector(".quota-used")!.textContent = "—";
+                used.textContent = "—";
                 item.className = "quota-item";
                 labels.push(`${label} quota unavailable`);
                 continue;
             }
             if (q.total === 0) {
-                item.querySelector(".quota-used")!.textContent = "?";
+                used.textContent = "?";
                 item.className = "quota-item";
                 labels.push(`${label} quota exact count unknown`);
                 continue;
@@ -1862,7 +1867,7 @@ export async function updateQuotaBadge(): Promise<void> {
             const remaining = q.total - q.used;
             const pct = q.used / q.total;
             const state = pct >= 0.95 ? "critical" : pct >= 0.8 ? "warning" : "ok";
-            item.querySelector(".quota-used")!.textContent = `${remaining}`;
+            used.textContent = `${remaining}`;
             item.className = pct >= 0.95
                 ? "quota-item critical"
                 : pct >= 0.8
@@ -1881,7 +1886,7 @@ export async function updateQuotaBadge(): Promise<void> {
 export function init(): void {
     const form = $("#chat-form") as HTMLFormElement;
     const input = $("#chat-input") as HTMLTextAreaElement;
-    const sendBtn = $("#send-button") as HTMLButtonElement;
+    const _sendBtn = $("#send-button") as HTMLButtonElement;
     const lightbox = $("#lightbox");
     const lightboxClose = lightbox.querySelector(".lightbox-close") as HTMLElement;
     const lightboxBackdrop = lightbox.querySelector(".lightbox-backdrop") as HTMLElement;
@@ -2201,7 +2206,7 @@ export function init(): void {
         currentSlide = idx;
     }
 
-    function getOnboardingFocusable(): HTMLElement[] {
+    function _getOnboardingFocusable(): HTMLElement[] {
         return focusableIn(onboarding);
     }
 

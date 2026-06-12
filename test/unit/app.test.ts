@@ -15,7 +15,6 @@ import {
     imageSurpriseCode,
     renderMarkdown
 } from "../../public/app.ts";
-import type { SSEEvent } from "../../public/app.ts";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const SNAPSHOTS_DIR = join(__dirname, "__snapshots__");
@@ -105,30 +104,6 @@ const TOOL_EMOJIS: Record<string, string> = {
 
 function getToolEmoji(name: string): string {
     return TOOL_EMOJIS[name] ?? "🔧";
-}
-
-// ── Mock localStorage ──────────────────────────────────────────────────
-
-class LocalStorageMock {
-    private store = new Map<string, string>();
-    getItem(key: string): string | null {
-        return this.store.get(key) ?? null;
-    }
-    setItem(key: string, value: string): void {
-        this.store.set(key, value);
-    }
-    removeItem(key: string): void {
-        this.store.delete(key);
-    }
-    clear(): void {
-        this.store.clear();
-    }
-    get length(): number {
-        return this.store.size;
-    }
-    key(index: number): string | null {
-        return [...this.store.keys()][index] ?? null;
-    }
 }
 
 // ═══════════════════════════════════════════════════════════════════════
@@ -320,12 +295,12 @@ describe("Tool Emojis", () => {
 
 describe("DOM Rendering", () => {
     let doc: Document;
-    let happyDOMRef: any;
+    let _happyDOMRef: unknown;
 
     before(async () => {
         const win = createTestWindow({ url: "http://localhost:3000" });
         doc = win.document as unknown as Document;
-        happyDOMRef = win;
+        _happyDOMRef = win;
     });
 
     after(() => {
@@ -452,9 +427,9 @@ describe("DOM Rendering", () => {
         const msg = renderUserMessage("Hello!");
         assert.equal(msg.classList.contains("message"), true);
         assert.equal(msg.classList.contains("message--user"), true);
-        assert.equal(msg.querySelector(".message-avatar")!.textContent, "🎮");
+        assert.equal(msg.querySelector(".message-avatar")?.textContent, "🎮");
         assert.ok(msg.querySelector(".message-bubble"));
-        assert.equal(msg.querySelector(".message-content")!.textContent, "Hello!");
+        assert.equal(msg.querySelector(".message-content")?.textContent, "Hello!");
     });
 
     it("assistant message starts with empty content", () => {
@@ -462,7 +437,7 @@ describe("DOM Rendering", () => {
         assert.equal(container.classList.contains("message--assistant"), true);
         assert.equal(contentEl.textContent, "");
         assert.ok(container.querySelector(".message-avatar"));
-        assert.equal(container.querySelector(".message-avatar")!.textContent, "🧞");
+        assert.equal(container.querySelector(".message-avatar")?.textContent, "🧞");
     });
 
     it("assistant message content can be updated", () => {
@@ -474,21 +449,21 @@ describe("DOM Rendering", () => {
     it("steer message has distinct class", () => {
         const msg = renderSteerMessage("Change the color");
         assert.equal(msg.classList.contains("message--steer"), true);
-        assert.equal(msg.querySelector(".message-content")!.textContent, "Change the color");
-        assert.equal(msg.querySelector(".message-avatar")!.textContent, "💡");
+        assert.equal(msg.querySelector(".message-content")?.textContent, "Change the color");
+        assert.equal(msg.querySelector(".message-avatar")?.textContent, "💡");
     });
 
     it("tool loading card shows spinner and tool name", () => {
         const card = renderToolCardLoading("generate_image");
         assert.ok(card.classList.contains("tool-card"));
         assert.ok(card.querySelector(".spinner"));
-        assert.ok(card.textContent!.includes("generate image"));
-        assert.ok(card.querySelector(".tool-emoji")!.textContent!.includes("🎨"));
+        assert.ok(card.textContent?.includes("generate image"));
+        assert.ok(card.querySelector(".tool-emoji")?.textContent?.includes("🎨"));
     });
 
     it("tool loading card formats tool name with spaces", () => {
         const card = renderToolCardLoading("text_to_speech");
-        assert.ok(card.textContent!.includes("text to speech"));
+        assert.ok(card.textContent?.includes("text to speech"));
     });
 
     it("tool result image card has img element", () => {
@@ -498,8 +473,8 @@ describe("DOM Rendering", () => {
         });
         const img = card.querySelector("img");
         assert.ok(img);
-        assert.equal(img!.getAttribute("src"), "http://example.com/img.png");
-        assert.equal(img!.getAttribute("class"), "tool-result-image");
+        assert.equal(img?.getAttribute("src"), "http://example.com/img.png");
+        assert.equal(img?.getAttribute("class"), "tool-result-image");
     });
 
     it("tool result audio card has audio element", () => {
@@ -509,8 +484,8 @@ describe("DOM Rendering", () => {
         });
         const audio = card.querySelector("audio");
         assert.ok(audio);
-        assert.equal(audio!.getAttribute("src"), "http://example.com/audio.mp3");
-        assert.equal(audio!.getAttribute("controls"), "");
+        assert.equal(audio?.getAttribute("src"), "http://example.com/audio.mp3");
+        assert.equal(audio?.getAttribute("controls"), "");
     });
 
     it("tool result music card has audio element", () => {
@@ -520,7 +495,7 @@ describe("DOM Rendering", () => {
         });
         const audio = card.querySelector("audio");
         assert.ok(audio);
-        assert.equal(audio!.getAttribute("src"), "http://example.com/music.mp3");
+        assert.equal(audio?.getAttribute("src"), "http://example.com/music.mp3");
     });
 
     it("tool result video card has video element", () => {
@@ -530,8 +505,8 @@ describe("DOM Rendering", () => {
         });
         const video = card.querySelector("video");
         assert.ok(video);
-        assert.equal(video!.getAttribute("src"), "/asset/asset_video");
-        assert.equal(video!.getAttribute("controls"), "");
+        assert.equal(video?.getAttribute("src"), "/asset/asset_video");
+        assert.equal(video?.getAttribute("controls"), "");
     });
 
     it("tool result error card shows friendly error", () => {
@@ -539,8 +514,8 @@ describe("DOM Rendering", () => {
             type: "error",
             content: "Rate limited"
         });
-        assert.ok(card.textContent!.includes("😕"));
-        assert.ok(card.textContent!.includes("Rate limited"));
+        assert.ok(card.textContent?.includes("😕"));
+        assert.ok(card.textContent?.includes("Rate limited"));
     });
 });
 
@@ -548,12 +523,12 @@ describe("DOM Rendering", () => {
 
 describe("Snapshot Tests - Message Bubbles", () => {
     let doc: Document;
-    let happyDOMRef: any;
+    let _happyDOMRef: unknown;
 
     before(async () => {
         const win = createTestWindow({ url: "http://localhost:3000" });
         doc = win.document as unknown as Document;
-        happyDOMRef = win;
+        _happyDOMRef = win;
     });
 
     after(() => {
@@ -1033,14 +1008,11 @@ function createTestWindow(options?: ConstructorParameters<typeof Window>[0]): Wi
 }
 
 import {
-    $,
     autoResizeInput,
     closeLightbox,
-    createElement,
     deleteProfile,
     fetchHistory,
     fetchProfile,
-    handleInputChange,
     init,
     loadAssets,
     loadHistory,
@@ -1057,7 +1029,6 @@ import {
     sendCreateTool,
     sendMessage,
     sendSteer,
-    sendSteerMessage,
     showError,
     streamChat,
     updateQuotaBadge
@@ -1069,7 +1040,7 @@ import {
  * Creates a full DOM environment with all elements that app.ts expects.
  * Sets globalThis.document, window, localStorage, etc.
  */
-function setupDOM(): { win: any; doc: any; errors: string[]; } {
+function setupDOM(): { win: Window; doc: Document; errors: string[]; } {
     const win = createTestWindow();
     const doc = win.document;
 
@@ -1280,18 +1251,18 @@ function setupDOM(): { win: any; doc: any; errors: string[]; } {
         CustomEvent: win.CustomEvent
     });
     const localStore = new Map<string, string>();
-    (globalThis as any).localStorage = {
+    globalThis.localStorage = {
         getItem: (key: string) => localStore.get(key) ?? null,
         setItem: (key: string, value: string) => localStore.set(key, value),
         removeItem: (key: string) => localStore.delete(key)
     };
-    (globalThis as any).requestAnimationFrame = (cb: () => void) => {
+    globalThis.requestAnimationFrame = (cb: () => void) => {
         cb();
         return 1;
     };
 
     const errors: string[] = [];
-    (globalThis as any).fetch = () => {
+    globalThis.fetch = () => {
         return Promise.resolve(new Response(null, { status: 500 }));
     };
 
@@ -1303,7 +1274,7 @@ function setupDOM(): { win: any; doc: any; errors: string[]; } {
  */
 function createSSEResponse(
     chunks: string[],
-    options: { status?: number; json?: any; } = {}
+    options: { status?: number; json?: unknown; } = {}
 ): Response {
     const status = options.status ?? 200;
     if (status !== 200) {
@@ -1410,7 +1381,7 @@ describe("renderThinkingBlock (imported)", () => {
 // ═══════════════════════════════════════════════════════════════════════
 
 describe("streamChat error paths", () => {
-    let doc: any;
+    let doc: Document;
 
     before(() => {
         const { doc: d } = setupDOM();
@@ -1418,7 +1389,7 @@ describe("streamChat error paths", () => {
     });
 
     it("400 response → showError with session expired message", async () => {
-        (globalThis as any).fetch = () =>
+        globalThis.fetch = () =>
             Promise.resolve(
                 new Response(JSON.stringify({ error: "Bad request" }), {
                     status: 400,
@@ -1432,8 +1403,7 @@ describe("streamChat error paths", () => {
     });
 
     it("400 with unparseable JSON → shows default message", async () => {
-        (globalThis as any).fetch = () =>
-            Promise.resolve(new Response("not json", { status: 400 }));
+        globalThis.fetch = () => Promise.resolve(new Response("not json", { status: 400 }));
 
         await streamChat([{ role: "user", content: "hi" }]);
         const msg = doc.querySelector("#error-toast-message").textContent;
@@ -1441,7 +1411,7 @@ describe("streamChat error paths", () => {
     });
 
     it("503 response → showError with error message", async () => {
-        (globalThis as any).fetch = () =>
+        globalThis.fetch = () =>
             Promise.resolve(
                 new Response(JSON.stringify({ error: "Service unavailable" }), {
                     status: 503,
@@ -1455,8 +1425,7 @@ describe("streamChat error paths", () => {
     });
 
     it("503 with unparseable JSON → shows status code message", async () => {
-        (globalThis as any).fetch = () =>
-            Promise.resolve(new Response("not json", { status: 503 }));
+        globalThis.fetch = () => Promise.resolve(new Response("not json", { status: 503 }));
 
         await streamChat([{ role: "user", content: "hi" }]);
         const msg = doc.querySelector("#error-toast-message").textContent;
@@ -1464,7 +1433,7 @@ describe("streamChat error paths", () => {
     });
 
     it("200 with null body → showError 'No response'", async () => {
-        (globalThis as any).fetch = () => Promise.resolve(new Response(null, { status: 200 }));
+        globalThis.fetch = () => Promise.resolve(new Response(null, { status: 200 }));
 
         await streamChat([{ role: "user", content: "hi" }]);
         const msg = doc.querySelector("#error-toast-message").textContent;
@@ -1472,7 +1441,7 @@ describe("streamChat error paths", () => {
     });
 
     it("network error (fetch throws) → rejects with error", async () => {
-        (globalThis as any).fetch = () => Promise.reject(new Error("Network error"));
+        globalThis.fetch = () => Promise.reject(new Error("Network error"));
 
         // streamChat doesn't catch — it propagates. sendMessage catches.
         await assert.rejects(
@@ -1483,8 +1452,7 @@ describe("streamChat error paths", () => {
 
     it("onEvent callback receives events", async () => {
         const events: SSEEvent[] = [];
-        (globalThis as any).fetch = () =>
-            Promise.resolve(createSSEResponse([sseText("hello"), sseDone()]));
+        globalThis.fetch = () => Promise.resolve(createSSEResponse([sseText("hello"), sseDone()]));
 
         await streamChat([{ role: "user", content: "hi" }], (e) => events.push(e));
         assert.ok(events.length > 0);
@@ -1493,13 +1461,13 @@ describe("streamChat error paths", () => {
 
     it("posts chat without X-Session-Id header", async () => {
         let request: RequestInit | undefined;
-        (globalThis as any).fetch = (_url: string, init?: RequestInit) => {
+        globalThis.fetch = (_url: string, init?: RequestInit) => {
             request = init;
             return Promise.resolve(createSSEResponse([sseDone()]));
         };
 
         await streamChat([{ role: "user", content: "hi" }]);
-        assert.equal((request!.headers as Record<string, string>)["X-Session-Id"], undefined);
+        assert.equal((request?.headers as Record<string, string>)["X-Session-Id"], undefined);
     });
 });
 
@@ -1508,7 +1476,7 @@ describe("streamChat error paths", () => {
 // ═══════════════════════════════════════════════════════════════════════
 
 describe("streamChat SSE processing", () => {
-    let doc: any;
+    let doc: Document;
 
     before(() => {
         const { doc: d } = setupDOM();
@@ -1518,12 +1486,12 @@ describe("streamChat SSE processing", () => {
     it("text events → content accumulated via appendText", async () => {
         const events: SSEEvent[] = [];
         const chunks = [sseText("Hello "), sseText("world"), sseDone()];
-        (globalThis as any).fetch = () => Promise.resolve(createSSEResponse(chunks));
+        globalThis.fetch = () => Promise.resolve(createSSEResponse(chunks));
 
         // Need to set up currentAssistantContent for appendText to work
         // We do this by creating an assistant message container and appending it
         const messageList = doc.querySelector("#message-list");
-        const { container, contentEl } = renderAssistantMessage();
+        const { container } = renderAssistantMessage();
         messageList.appendChild(container);
 
         await streamChat([{ role: "user", content: "hi" }], (e) => events.push(e));
@@ -1544,7 +1512,7 @@ describe("streamChat SSE processing", () => {
                 controller = c;
             }
         });
-        (globalThis as any).fetch = () =>
+        globalThis.fetch = () =>
             Promise.resolve(
                 new Response(stream, { headers: { "Content-Type": "text/event-stream" } })
             );
@@ -1604,7 +1572,7 @@ describe("streamChat SSE processing", () => {
             sseText("done"),
             sseDone()
         ];
-        (globalThis as any).fetch = () => Promise.resolve(createSSEResponse(chunks));
+        globalThis.fetch = () => Promise.resolve(createSSEResponse(chunks));
 
         await sendMessage("make image");
 
@@ -1615,7 +1583,7 @@ describe("streamChat SSE processing", () => {
         assert.ok(doc.querySelector(".assistant-text-region")?.innerHTML.includes("done"));
         writeSnapshot(
             "assistant-tool-text-mixed",
-            doc.querySelector(".message--assistant:last-child")!.outerHTML
+            doc.querySelector(".message--assistant:last-child")?.outerHTML
         );
     });
 
@@ -1638,7 +1606,7 @@ describe("streamChat SSE processing", () => {
             ),
             sseDone()
         ];
-        (globalThis as any).fetch = (url: string, init?: RequestInit) => {
+        globalThis.fetch = (url: string, init?: RequestInit) => {
             calls.push({ url: String(url), method: init?.method ?? "GET" });
             if (String(url) === "/api/chat") return Promise.resolve(createSSEResponse(chunks));
             return Promise.resolve(new Response("{}", { status: 200 }));
@@ -1672,7 +1640,7 @@ describe("streamChat SSE processing", () => {
             ),
             sseDone()
         ];
-        (globalThis as any).fetch = (url: string, init?: RequestInit) => {
+        globalThis.fetch = (url: string, init?: RequestInit) => {
             calls.push({
                 url: String(url),
                 method: init?.method ?? "GET",
@@ -1726,7 +1694,7 @@ describe("streamChat SSE processing", () => {
             ),
             sseDone()
         ];
-        (globalThis as any).fetch = (url: string, init?: RequestInit) => {
+        globalThis.fetch = (url: string, init?: RequestInit) => {
             calls.push({
                 url: String(url),
                 method: init?.method ?? "GET",
@@ -1754,7 +1722,7 @@ describe("streamChat SSE processing", () => {
         sessionSelect.id = "session-select";
         doc.body.appendChild(sessionSelect);
         const calls: Array<{ url: string; method: string; }> = [];
-        (globalThis as any).fetch = (url: string, init?: RequestInit) => {
+        globalThis.fetch = (url: string, init?: RequestInit) => {
             calls.push({ url: String(url), method: init?.method ?? "GET" });
             if (String(url) === "/api/chat") {
                 return Promise.resolve(createSSEResponse([sseText("no tool"), sseDone()]));
@@ -1790,7 +1758,7 @@ describe("streamChat SSE processing", () => {
             ),
             sseDone()
         ];
-        (globalThis as any).fetch = (url: string, init?: RequestInit) => {
+        globalThis.fetch = (url: string, init?: RequestInit) => {
             calls.push({ url: String(url), method: init?.method ?? "GET" });
             if (String(url) === "/api/chat") return Promise.resolve(createSSEResponse(chunks));
             return Promise.resolve(new Response("{}", { status: 200 }));
@@ -1825,7 +1793,7 @@ describe("streamChat SSE processing", () => {
             sseEvent("thinking", JSON.stringify({ content: "checking result" })),
             sseDone()
         ];
-        (globalThis as any).fetch = () => Promise.resolve(createSSEResponse(chunks));
+        globalThis.fetch = () => Promise.resolve(createSSEResponse(chunks));
 
         await sendMessage("make image");
 
@@ -1852,7 +1820,7 @@ describe("streamChat SSE processing", () => {
             sseText("still works"),
             sseDone()
         ];
-        (globalThis as any).fetch = () => Promise.resolve(createSSEResponse(chunks));
+        globalThis.fetch = () => Promise.resolve(createSSEResponse(chunks));
 
         await sendMessage("orphan result");
 
@@ -1867,10 +1835,10 @@ describe("streamChat SSE processing", () => {
         const events: SSEEvent[] = [];
         const toolStartData = JSON.stringify({ id: "tool-1", name: "generate_image" });
         const chunks = [sseEvent("tool_start", toolStartData), sseDone()];
-        (globalThis as any).fetch = () => Promise.resolve(createSSEResponse(chunks));
+        globalThis.fetch = () => Promise.resolve(createSSEResponse(chunks));
 
         const messageList = doc.querySelector("#message-list");
-        const { container, contentEl } = renderAssistantMessage();
+        const { container } = renderAssistantMessage();
         messageList.appendChild(container);
 
         await streamChat([{ role: "user", content: "hi" }], (e) => events.push(e));
@@ -1890,10 +1858,10 @@ describe("streamChat SSE processing", () => {
             sseEvent("tool_result", toolResultData),
             sseDone()
         ];
-        (globalThis as any).fetch = () => Promise.resolve(createSSEResponse(chunks));
+        globalThis.fetch = () => Promise.resolve(createSSEResponse(chunks));
 
         const messageList = doc.querySelector("#message-list");
-        const { container, contentEl } = renderAssistantMessage();
+        const { container } = renderAssistantMessage();
         messageList.appendChild(container);
 
         await streamChat([{ role: "user", content: "draw" }], (e) => events.push(e));
@@ -1928,7 +1896,7 @@ describe("streamChat SSE processing", () => {
             ),
             sseDone()
         ];
-        (globalThis as any).fetch = () => Promise.resolve(createSSEResponse(chunks));
+        globalThis.fetch = () => Promise.resolve(createSSEResponse(chunks));
 
         await streamChat([{ role: "user", content: "draw" }]);
         assert.equal(scrollTop, 1000);
@@ -1963,7 +1931,7 @@ describe("streamChat SSE processing", () => {
             ),
             sseDone()
         ];
-        (globalThis as any).fetch = () => Promise.resolve(createSSEResponse(chunks));
+        globalThis.fetch = () => Promise.resolve(createSSEResponse(chunks));
 
         await streamChat([{ role: "user", content: "draw" }]);
         doc.querySelector(".tool-result-image")?.dispatchEvent(new Event("load"));
@@ -1974,7 +1942,7 @@ describe("streamChat SSE processing", () => {
     it("[DONE] signal → stream finishes", async () => {
         const events: SSEEvent[] = [];
         const chunks = [sseText("hi"), sseEvent("message", "[DONE]")];
-        (globalThis as any).fetch = () => Promise.resolve(createSSEResponse(chunks));
+        globalThis.fetch = () => Promise.resolve(createSSEResponse(chunks));
 
         await streamChat([{ role: "user", content: "hi" }], (e) => events.push(e));
         // Stream should complete without error
@@ -1984,7 +1952,7 @@ describe("streamChat SSE processing", () => {
     it("closed stream without DONE removes streaming caret state", async () => {
         const { doc: newDoc } = setupDOM();
         doc = newDoc;
-        (globalThis as any).fetch = () => Promise.resolve(createSSEResponse([sseText("**hi**")]));
+        globalThis.fetch = () => Promise.resolve(createSSEResponse([sseText("**hi**")]));
 
         await sendMessage("stream closes early");
 
@@ -1999,7 +1967,7 @@ describe("streamChat SSE processing", () => {
         const messageList = doc.querySelector("#message-list");
         messageList.innerHTML =
             `<div class="message message--assistant"><div class="message-bubble"><div class="message-content"><div class="assistant-text-region is-streaming"><span class="stream-chunk">old done</span></div></div></div></div>`;
-        (globalThis as any).fetch = () => Promise.resolve(createSSEResponse([sseDone()]));
+        globalThis.fetch = () => Promise.resolve(createSSEResponse([sseDone()]));
 
         await sendMessage("next turn");
 
@@ -2015,7 +1983,7 @@ describe("streamChat SSE processing", () => {
         doc = newDoc;
         const messageList = doc.querySelector("#message-list");
         messageList.appendChild(renderSteerMessage("late steer"));
-        (globalThis as any).fetch = () => Promise.resolve(createSSEResponse([sseDone()]));
+        globalThis.fetch = () => Promise.resolve(createSSEResponse([sseDone()]));
 
         await streamChat([{ role: "user", content: "hi" }]);
 
@@ -2025,7 +1993,7 @@ describe("streamChat SSE processing", () => {
 
     it("error event → showError called", async () => {
         const chunks = [sseEvent("error", JSON.stringify({ error: "Server error" }))];
-        (globalThis as any).fetch = () => Promise.resolve(createSSEResponse(chunks));
+        globalThis.fetch = () => Promise.resolve(createSSEResponse(chunks));
 
         await streamChat([{ role: "user", content: "hi" }]);
         const msg = doc.querySelector("#error-toast-message").textContent;
@@ -2034,7 +2002,7 @@ describe("streamChat SSE processing", () => {
 
     it("error event with unparseable JSON → shows default error", async () => {
         const chunks = [sseEvent("error", "not json")];
-        (globalThis as any).fetch = () => Promise.resolve(createSSEResponse(chunks));
+        globalThis.fetch = () => Promise.resolve(createSSEResponse(chunks));
 
         await streamChat([{ role: "user", content: "hi" }]);
         const msg = doc.querySelector("#error-toast-message").textContent;
@@ -2047,7 +2015,7 @@ describe("streamChat SSE processing", () => {
 // ═══════════════════════════════════════════════════════════════════════
 
 describe("appendText with thinking blocks (via sendMessage)", () => {
-    let doc: any;
+    let doc: Document;
 
     before(() => {
         const { doc: d } = setupDOM();
@@ -2055,7 +2023,7 @@ describe("appendText with thinking blocks (via sendMessage)", () => {
     });
 
     it("plain text → renders via markdown", async () => {
-        (globalThis as any).fetch = () =>
+        globalThis.fetch = () =>
             Promise.resolve(createSSEResponse([sseText("Hello world"), sseDone()]));
 
         await sendMessage("test plain text");
@@ -2074,7 +2042,7 @@ describe("appendText with thinking blocks (via sendMessage)", () => {
             sseText("Here is my answer."),
             sseDone()
         ];
-        (globalThis as any).fetch = () => Promise.resolve(createSSEResponse(chunks));
+        globalThis.fetch = () => Promise.resolve(createSSEResponse(chunks));
 
         await sendMessage("test thinking");
 
@@ -2092,7 +2060,7 @@ describe("appendText with thinking blocks (via sendMessage)", () => {
             sseText("The answer is 42."),
             sseDone()
         ];
-        (globalThis as any).fetch = () => Promise.resolve(createSSEResponse(chunks));
+        globalThis.fetch = () => Promise.resolve(createSSEResponse(chunks));
 
         await sendMessage("test mixed");
 
@@ -2107,7 +2075,7 @@ describe("appendText with thinking blocks (via sendMessage)", () => {
 describe("profile frontend helpers", () => {
     it("normalizes profile form without localStorage", () => {
         setupDOM();
-        const before = (globalThis as any).localStorage.length;
+        const before = globalThis.localStorage.length;
         const profile = normalizedProfileFromForm({
             username: "  GamerKid  ",
             interests: " Minecraft ",
@@ -2118,7 +2086,7 @@ describe("profile frontend helpers", () => {
         assert.equal(profile.username, "GamerKid");
         assert.equal(profile.interests, "Minecraft");
         assert.deepEqual(profile.avatar, { type: "asset", value: "" });
-        assert.equal((globalThis as any).localStorage.length, before);
+        assert.equal(globalThis.localStorage.length, before);
     });
 
     it("rejects invalid avatar asset ids before save", () => {
@@ -2177,7 +2145,7 @@ describe("profile frontend helpers", () => {
     it("profile API helpers use DB routes", async () => {
         setupDOM();
         const calls: Array<{ url: string; method: string; }> = [];
-        (globalThis as any).fetch = (url: string, init?: RequestInit) => {
+        globalThis.fetch = (url: string, init?: RequestInit) => {
             calls.push({ url, method: init?.method ?? "GET" });
             return Promise.resolve(
                 new Response(
@@ -2219,7 +2187,7 @@ describe("profile frontend helpers", () => {
 // ═══════════════════════════════════════════════════════════════════════
 
 describe("sendMessage", () => {
-    let doc: any;
+    let doc: Document;
 
     before(() => {
         const { doc: d } = setupDOM();
@@ -2237,8 +2205,7 @@ describe("sendMessage", () => {
     it("creates user message element", async () => {
         setupDOM();
         doc = globalThis.document;
-        (globalThis as any).fetch = () =>
-            Promise.resolve(createSSEResponse([sseText("reply"), sseDone()]));
+        globalThis.fetch = () => Promise.resolve(createSSEResponse([sseText("reply"), sseDone()]));
 
         await sendMessage("Hello bot");
 
@@ -2250,7 +2217,7 @@ describe("sendMessage", () => {
     it("creates assistant message element", async () => {
         setupDOM();
         doc = globalThis.document;
-        (globalThis as any).fetch = () =>
+        globalThis.fetch = () =>
             Promise.resolve(createSSEResponse([sseText("I am here"), sseDone()]));
 
         await sendMessage("Hi");
@@ -2264,8 +2231,7 @@ describe("sendMessage", () => {
         doc = globalThis.document;
         const input = doc.querySelector("#chat-input");
         input.value = "test message";
-        (globalThis as any).fetch = () =>
-            Promise.resolve(createSSEResponse([sseText("reply"), sseDone()]));
+        globalThis.fetch = () => Promise.resolve(createSSEResponse([sseText("reply"), sseDone()]));
 
         await sendMessage("test message");
 
@@ -2279,7 +2245,7 @@ describe("sendMessage", () => {
         // First send: start streaming and keep the stream open until this test closes it.
         const encoder = new TextEncoder();
         let streamController!: ReadableStreamDefaultController<Uint8Array>;
-        (globalThis as any).fetch = () => {
+        globalThis.fetch = () => {
             const stream = new ReadableStream<Uint8Array>({
                 start(controller) {
                     streamController = controller;
@@ -2297,7 +2263,7 @@ describe("sendMessage", () => {
 
         // Mock steer endpoint
         let steerCalled = false;
-        (globalThis as any).fetch = () => {
+        globalThis.fetch = () => {
             steerCalled = true;
             return Promise.resolve(new Response(null, { status: 200 }));
         };
@@ -2319,7 +2285,7 @@ describe("sendMessage", () => {
 // ═══════════════════════════════════════════════════════════════════════
 
 describe("loadHistory", () => {
-    let doc: any;
+    let doc: Document;
 
     before(() => {
         const { doc: d } = setupDOM();
@@ -2337,7 +2303,7 @@ describe("loadHistory", () => {
         welcome.textContent = "Welcome!";
         messageList.appendChild(welcome);
 
-        (globalThis as any).fetch = () =>
+        globalThis.fetch = () =>
             Promise.resolve(
                 new Response(JSON.stringify({ messages: [] }), {
                     status: 200,
@@ -2360,7 +2326,7 @@ describe("loadHistory", () => {
         welcome.className = "message--welcome";
         messageList.appendChild(welcome);
 
-        (globalThis as any).fetch = () =>
+        globalThis.fetch = () =>
             Promise.resolve(
                 new Response(
                     JSON.stringify({
@@ -2391,7 +2357,7 @@ describe("loadHistory", () => {
         setupDOM();
         doc = globalThis.document;
 
-        (globalThis as any).fetch = () =>
+        globalThis.fetch = () =>
             Promise.resolve(
                 new Response(
                     JSON.stringify({
@@ -2432,7 +2398,7 @@ describe("loadHistory", () => {
         setupDOM();
         doc = globalThis.document;
 
-        (globalThis as any).fetch = () =>
+        globalThis.fetch = () =>
             Promise.resolve(
                 new Response(
                     JSON.stringify({
@@ -2467,7 +2433,7 @@ describe("loadHistory", () => {
         setupDOM();
         doc = globalThis.document;
 
-        (globalThis as any).fetch = () => Promise.reject(new Error("Network error"));
+        globalThis.fetch = () => Promise.reject(new Error("Network error"));
 
         // Should not throw
         await loadHistory();
@@ -2478,7 +2444,7 @@ describe("loadHistory", () => {
         setupDOM();
         doc = globalThis.document;
 
-        (globalThis as any).fetch = () => Promise.resolve(new Response(null, { status: 500 }));
+        globalThis.fetch = () => Promise.resolve(new Response(null, { status: 500 }));
 
         await loadHistory();
         assert.ok(true, "should not crash");
@@ -2490,8 +2456,8 @@ describe("loadHistory", () => {
 // ═══════════════════════════════════════════════════════════════════════
 
 describe("init event binding", () => {
-    let doc: any;
-    let win: any;
+    let doc: Document;
+    let win: Window;
 
     function setupFullDOM(): void {
         const result = setupDOM();
@@ -2503,8 +2469,8 @@ describe("init event binding", () => {
         setupFullDOM();
 
         let sendMessageCalled = false;
-        const origFetch = (globalThis as any).fetch;
-        (globalThis as any).fetch = () => {
+        const _origFetch = globalThis.fetch;
+        globalThis.fetch = () => {
             sendMessageCalled = true;
             return Promise.resolve(createSSEResponse([sseText("reply"), sseDone()]));
         };
@@ -2529,7 +2495,7 @@ describe("init event binding", () => {
         setupFullDOM();
 
         let fetchCalled = false;
-        (globalThis as any).fetch = () => {
+        globalThis.fetch = () => {
             fetchCalled = true;
             return Promise.resolve(createSSEResponse([sseText("reply"), sseDone()]));
         };
@@ -2551,7 +2517,7 @@ describe("init event binding", () => {
         setupFullDOM();
 
         let chatFetchCalled = false;
-        (globalThis as any).fetch = (url: string, opts: any) => {
+        globalThis.fetch = (url: string, _opts: RequestInit | undefined) => {
             if (url === "/api/chat") {
                 chatFetchCalled = true;
             }
@@ -2589,7 +2555,7 @@ describe("init event binding", () => {
         const input = doc.querySelector("#chat-input");
         input.value = "browser restored stale draft";
 
-        (globalThis as any).fetch = (url: string) => {
+        globalThis.fetch = (url: string) => {
             if (url === "/api/draft/chat") {
                 return Promise.resolve(
                     new Response(JSON.stringify({ draft: null }), {
@@ -2771,7 +2737,7 @@ describe("init event binding", () => {
     it("pasted chat image uploads asset and starts analyze tool", async () => {
         setupFullDOM();
         const calls: Array<{ url: string; method: string; body: unknown; }> = [];
-        (globalThis as any).fetch = (url: string, init?: RequestInit) => {
+        globalThis.fetch = (url: string, init?: RequestInit) => {
             calls.push({ url: String(url), method: init?.method ?? "GET", body: init?.body });
             if (url === "/api/analyze-image") {
                 return Promise.resolve(
@@ -2828,7 +2794,7 @@ describe("init event binding", () => {
     it("Voice sends async TTS for long text transparently", async () => {
         setupFullDOM();
         const calls: Array<{ url: string; body: string; }> = [];
-        (globalThis as any).fetch = (url: string, init?: RequestInit) => {
+        globalThis.fetch = (url: string, init?: RequestInit) => {
             calls.push({ url: String(url), body: String(init?.body ?? "") });
             if (url === "/api/create-tool") {
                 return Promise.resolve(createSSEResponse([sseDone()]));
@@ -2892,7 +2858,7 @@ describe("init event binding", () => {
             ),
             sseDone()
         ];
-        (globalThis as any).fetch = (url: string, init?: RequestInit) => {
+        globalThis.fetch = (url: string, init?: RequestInit) => {
             calls.push({ url: String(url), body: String(init?.body ?? "") });
             if (url === "/api/create-tool") return Promise.resolve(createSSEResponse(chunks));
             if (url === "/api/profile") {
@@ -2937,7 +2903,7 @@ describe("init event binding", () => {
     it("cover prepare prefers selected file over source dropdown", async () => {
         setupFullDOM();
         let body: FormData | null = null;
-        (globalThis as any).fetch = (url: string, init?: RequestInit) => {
+        globalThis.fetch = (url: string, init?: RequestInit) => {
             if (url === "/api/music-cover/preprocess") {
                 body = init?.body as FormData;
                 return Promise.resolve(
@@ -3019,7 +2985,7 @@ describe("init event binding", () => {
 // ═══════════════════════════════════════════════════════════════════════
 
 describe("showError", () => {
-    let doc: any;
+    let doc: Document;
 
     before(() => {
         const { doc: d } = setupDOM();
@@ -3062,14 +3028,13 @@ describe("showError", () => {
 });
 
 describe("setStreamingUI (via sendMessage)", () => {
-    let doc: any;
+    let doc: Document;
 
     it("sets typing indicator visible during streaming", async () => {
         setupDOM();
         doc = globalThis.document;
 
-        (globalThis as any).fetch = () =>
-            Promise.resolve(createSSEResponse([sseText("reply"), sseDone()]));
+        globalThis.fetch = () => Promise.resolve(createSSEResponse([sseText("reply"), sseDone()]));
 
         await sendMessage("test");
 
@@ -3087,7 +3052,7 @@ describe("setStreamingUI (via sendMessage)", () => {
         const pending = new Promise<void>((resolve) => {
             releaseStream = resolve;
         });
-        (globalThis as any).fetch = () =>
+        globalThis.fetch = () =>
             Promise.resolve(
                 new Response(
                     new ReadableStream({
@@ -3118,8 +3083,7 @@ describe("setStreamingUI (via sendMessage)", () => {
         setupDOM();
         doc = globalThis.document;
 
-        (globalThis as any).fetch = () =>
-            Promise.resolve(createSSEResponse([sseText("reply"), sseDone()]));
+        globalThis.fetch = () => Promise.resolve(createSSEResponse([sseText("reply"), sseDone()]));
 
         await sendMessage("test");
 
@@ -3131,8 +3095,7 @@ describe("setStreamingUI (via sendMessage)", () => {
         setupDOM();
         doc = globalThis.document;
 
-        (globalThis as any).fetch = () =>
-            Promise.resolve(createSSEResponse([sseText("reply"), sseDone()]));
+        globalThis.fetch = () => Promise.resolve(createSSEResponse([sseText("reply"), sseDone()]));
 
         await sendMessage("test");
 
@@ -3141,7 +3104,7 @@ describe("setStreamingUI (via sendMessage)", () => {
 });
 
 describe("openLightbox / closeLightbox", () => {
-    let doc: any;
+    let doc: Document;
 
     before(() => {
         const { doc: d } = setupDOM();
@@ -3165,7 +3128,7 @@ describe("openLightbox / closeLightbox", () => {
 });
 
 describe("autoResizeInput", () => {
-    let doc: any;
+    let doc: Document;
 
     before(() => {
         const { doc: d } = setupDOM();
@@ -3205,11 +3168,11 @@ describe("autoResizeInput", () => {
 });
 
 describe("renderToolCardLoading", () => {
-    let doc: any;
+    let _doc: Document;
 
     before(() => {
         const { doc: d } = setupDOM();
-        doc = d;
+        _doc = d;
     });
 
     it("creates tool card with name and emoji", () => {
@@ -3225,11 +3188,11 @@ describe("renderToolCardLoading", () => {
 });
 
 describe("renderToolResult", () => {
-    let doc: any;
+    let _doc: Document;
 
     before(() => {
         const { doc: d } = setupDOM();
-        doc = d;
+        _doc = d;
     });
 
     it("renders image result", () => {
@@ -3310,17 +3273,17 @@ describe("renderToolResult", () => {
 describe("sendSteer", () => {
     it("sends steer request without X-Session-Id header", async () => {
         let request: RequestInit | undefined;
-        (globalThis as any).fetch = (_url: string, init?: RequestInit) => {
+        globalThis.fetch = (_url: string, init?: RequestInit) => {
             request = init;
             return Promise.resolve(new Response(null, { status: 200 }));
         };
 
         await sendSteer("steer message");
-        assert.equal((request!.headers as Record<string, string>)["X-Session-Id"], undefined);
+        assert.equal((request?.headers as Record<string, string>)["X-Session-Id"], undefined);
     });
 
     it("throws on non-OK response", async () => {
-        (globalThis as any).fetch = () => Promise.resolve(new Response(null, { status: 500 }));
+        globalThis.fetch = () => Promise.resolve(new Response(null, { status: 500 }));
 
         await assert.rejects(() => sendSteer("steer"), /Steer failed/);
     });
@@ -3329,7 +3292,7 @@ describe("sendSteer", () => {
 describe("fetchHistory", () => {
     it("returns messages from API without request headers", async () => {
         let request: RequestInit | undefined;
-        (globalThis as any).fetch = (_url: string, init?: RequestInit) => {
+        globalThis.fetch = (_url: string, init?: RequestInit) => {
             request = init;
             return Promise.resolve(
                 new Response(JSON.stringify({ messages: [{ role: "user", content: "hi" }] }), {
@@ -3347,18 +3310,18 @@ describe("fetchHistory", () => {
     });
 
     it("throws on non-OK response", async () => {
-        (globalThis as any).fetch = () => Promise.resolve(new Response(null, { status: 500 }));
+        globalThis.fetch = () => Promise.resolve(new Response(null, { status: 500 }));
 
         await assert.rejects(() => fetchHistory(), /Failed to load history/);
     });
 });
 
 describe("renderSteerMessage", () => {
-    let doc: any;
+    let _doc: Document;
 
     before(() => {
         const { doc: d } = setupDOM();
-        doc = d;
+        _doc = d;
     });
 
     it("creates steer message element", () => {
@@ -3411,7 +3374,7 @@ describe("init accessibility behavior", () => {
             avatar: { type: "asset", value: "" },
             updatedAt: 1
         };
-        (globalThis as any).fetch = (input: string | Request) => {
+        globalThis.fetch = (input: string | Request) => {
             const url = input.toString();
             if (url.includes("/api/profile/avatar/generate")) {
                 return new Promise<Response>((resolve) => {
@@ -3481,7 +3444,7 @@ describe("init accessibility behavior", () => {
             avatar: { type: "asset", value: "asset_12345678-1234-1234-1234-123456789abc" },
             updatedAt: 2
         };
-        (globalThis as any).fetch = (input: string | Request, init?: RequestInit) => {
+        globalThis.fetch = (input: string | Request, init?: RequestInit) => {
             const url = input.toString();
             if (url.includes("/api/profile") && init?.method === "PUT") {
                 return Promise.resolve(
@@ -3536,7 +3499,7 @@ describe("init accessibility behavior", () => {
     it("clears avatar generation pending state on error", async () => {
         const { doc } = setupDOM();
         let resolveGenerate: ((response: Response) => void) | undefined;
-        (globalThis as any).fetch = (input: string | Request) => {
+        globalThis.fetch = (input: string | Request) => {
             const url = input.toString();
             if (url.includes("/api/profile/avatar/generate")) {
                 return new Promise<Response>((resolve) => {
@@ -3688,11 +3651,11 @@ describe("init accessibility behavior", () => {
         let newSessionPosts = 0;
         let confirmCalls = 0;
         let resolveChat!: (response: Response) => void;
-        (globalThis as any).confirm = () => {
+        globalThis.confirm = () => {
             confirmCalls += 1;
             return false;
         };
-        (globalThis as any).fetch = (input: string | Request, init?: RequestInit) => {
+        globalThis.fetch = (input: string | Request, init?: RequestInit) => {
             const url = input.toString();
             if (url === "/api/chat") {
                 return new Promise<Response>((resolve) => {
@@ -3775,8 +3738,8 @@ describe("renderToolResult asset URLs", () => {
         });
         const img = card.querySelector("img");
         assert.ok(img, "should have img element");
-        assert.equal(img!.src.endsWith("/asset/abc123"), true);
-        assert.equal(img!.src.includes("?s="), false);
+        assert.equal(img?.src.endsWith("/asset/abc123"), true);
+        assert.equal(img?.src.includes("?s="), false);
     });
 
     it("audio result src omits session query", () => {
@@ -3787,15 +3750,15 @@ describe("renderToolResult asset URLs", () => {
         });
         const audio = card.querySelector("audio");
         assert.ok(audio, "should have audio element");
-        assert.equal(audio!.src.endsWith("/asset/def456"), true);
-        assert.equal(audio!.src.includes("?s="), false);
+        assert.equal(audio?.src.endsWith("/asset/def456"), true);
+        assert.equal(audio?.src.includes("?s="), false);
     });
 });
 
 describe("updateQuotaBadge", () => {
     it("fetches /api/quota and updates badge text", async () => {
         const { doc } = setupDOM();
-        (globalThis as any).fetch = () =>
+        globalThis.fetch = () =>
             Promise.resolve(
                 new Response(
                     JSON.stringify({
@@ -3812,18 +3775,18 @@ describe("updateQuotaBadge", () => {
 
         const imageItem = doc.querySelector(".quota-item[data-type=\"image\"]");
         assert.ok(imageItem, "image quota item exists");
-        const imageUsed = imageItem!.querySelector(".quota-used");
-        assert.equal(imageUsed!.textContent, "90"); // 100 - 10
+        const imageUsed = imageItem?.querySelector(".quota-used");
+        assert.equal(imageUsed?.textContent, "90"); // 100 - 10
 
         const speechItem = doc.querySelector(".quota-item[data-type=\"speech\"]");
         assert.ok(speechItem, "speech quota item exists");
-        const speechUsed = speechItem!.querySelector(".quota-used");
-        assert.equal(speechUsed!.textContent, "95"); // 100 - 5
-        const label = doc.querySelector("#quota-badge")!.getAttribute("aria-label") ?? "";
+        const speechUsed = speechItem?.querySelector(".quota-used");
+        assert.equal(speechUsed?.textContent, "95"); // 100 - 5
+        const label = doc.querySelector("#quota-badge")?.getAttribute("aria-label") ?? "";
         const videoItem = doc.querySelector(".quota-item[data-type=\"video\"]");
         assert.ok(videoItem, "video quota item exists");
-        const videoUsed = videoItem!.querySelector(".quota-used");
-        assert.equal(videoUsed!.textContent, "4");
+        const videoUsed = videoItem?.querySelector(".quota-used");
+        assert.equal(videoUsed?.textContent, "4");
         assert.match(label, /Images: 90 of 100 remaining, ok/);
         assert.match(label, /Voice: 95 of 100 remaining, ok/);
         assert.match(label, /Video: 4 of 5 remaining, ok/);
@@ -3831,7 +3794,7 @@ describe("updateQuotaBadge", () => {
 
     it("shows unknown instead of broken dashes when MiniMax only reports general quota", async () => {
         const { doc } = setupDOM();
-        (globalThis as any).fetch = () =>
+        globalThis.fetch = () =>
             Promise.resolve(
                 new Response(
                     JSON.stringify({
@@ -3847,14 +3810,14 @@ describe("updateQuotaBadge", () => {
         await updateQuotaBadge();
 
         assert.equal(
-            doc.querySelector(".quota-item[data-type=\"image\"] .quota-used")!.textContent,
+            doc.querySelector(".quota-item[data-type=\"image\"] .quota-used")?.textContent,
             "?"
         );
         assert.equal(
-            doc.querySelector(".quota-item[data-type=\"video\"] .quota-used")!.textContent,
+            doc.querySelector(".quota-item[data-type=\"video\"] .quota-used")?.textContent,
             "?"
         );
-        const label = doc.querySelector("#quota-badge")!.getAttribute("aria-label") ?? "";
+        const label = doc.querySelector("#quota-badge")?.getAttribute("aria-label") ?? "";
         assert.match(label, /Images quota exact count unknown/);
         assert.match(label, /Video quota exact count unknown/);
         assert.equal(label.includes("unavailable"), false);
@@ -3862,7 +3825,7 @@ describe("updateQuotaBadge", () => {
 
     it("does not crash on fetch failure", async () => {
         setupDOM();
-        (globalThis as any).fetch = () => Promise.reject(new Error("network fail"));
+        globalThis.fetch = () => Promise.reject(new Error("network fail"));
         await updateQuotaBadge();
         assert.ok(true, "should not throw");
     });
@@ -3873,7 +3836,7 @@ describe("loadAssets", () => {
         const { doc } = setupDOM();
         let requestOpts: RequestInit | undefined;
 
-        (globalThis as any).fetch = (url: string, opts?: RequestInit) => {
+        globalThis.fetch = (url: string, opts?: RequestInit) => {
             requestOpts = opts;
             if (url.includes("/assets")) {
                 return Promise.resolve(
@@ -3943,22 +3906,22 @@ describe("loadAssets", () => {
 
         const img = doc.querySelector(".asset-thumb");
         assert.ok(img, "should have image thumbnail");
-        if (img!.tagName === "IMG") {
+        if (img?.tagName === "IMG") {
             assert.equal((img as HTMLImageElement).src.includes("?s="), false);
         }
 
         const audio = doc.querySelector("audio.asset-audio") as HTMLAudioElement | null;
         assert.ok(audio, "audio assets should use native controls");
-        assert.equal(audio!.controls, true);
-        assert.equal(audio!.preload, "metadata");
-        assert.equal(audio!.src.includes("?s="), false);
-        assert.equal(audio!.src.includes("/asset/aud-1"), true);
+        assert.equal(audio?.controls, true);
+        assert.equal(audio?.preload, "metadata");
+        assert.equal(audio?.src.includes("?s="), false);
+        assert.equal(audio?.src.includes("/asset/aud-1"), true);
 
         const video = doc.querySelector("video.asset-video") as HTMLVideoElement | null;
         assert.ok(video, "video assets should use native controls");
-        assert.equal(video!.controls, true);
-        assert.equal(video!.preload, "metadata");
-        assert.equal(video!.src.includes("/asset/vid-1"), true);
+        assert.equal(video?.controls, true);
+        assert.equal(video?.preload, "metadata");
+        assert.equal(video?.src.includes("/asset/vid-1"), true);
 
         const downloads = doc.querySelectorAll(".asset-download");
         assert.equal(downloads.length, 3, "every asset should have a download link");
@@ -3969,7 +3932,7 @@ describe("loadAssets", () => {
 
         // No 20-item cap — all assets rendered
         const grid = doc.querySelector("#assets-grid");
-        assert.equal(grid!.children.length, 3, "no slice cap");
+        assert.equal(grid?.children.length, 3, "no slice cap");
     });
 
     it("lets an existing image asset become the Create Image reference", async () => {
@@ -3978,7 +3941,7 @@ describe("loadAssets", () => {
         doc.addEventListener("hallucygenie:use-reference-asset", (event) => {
             selected = (event as CustomEvent).detail;
         });
-        (globalThis as any).fetch = () =>
+        globalThis.fetch = () =>
             Promise.resolve(
                 new Response(
                     JSON.stringify({
@@ -4017,7 +3980,7 @@ describe("loadAssets", () => {
         const { doc } = setupDOM();
         const timestamp = new Date("2025-03-15").getTime();
 
-        (globalThis as any).fetch = () =>
+        globalThis.fetch = () =>
             Promise.resolve(
                 new Response(
                     JSON.stringify({
@@ -4050,21 +4013,21 @@ describe("loadAssets", () => {
 
         const toolEl = doc.querySelector(".asset-tool");
         assert.ok(toolEl, "should have tool name element");
-        assert.equal(toolEl!.textContent, "generate image");
+        assert.equal(toolEl?.textContent, "generate image");
 
         const modelEl = doc.querySelector(".asset-model");
         assert.ok(modelEl, "should have model name element");
-        assert.equal(modelEl!.textContent, "Image-01");
+        assert.equal(modelEl?.textContent, "Image-01");
 
         const dateEl = doc.querySelector(".asset-date");
         assert.ok(dateEl, "should have date element");
-        assert.equal(dateEl!.textContent, "Mar 15");
+        assert.equal(dateEl?.textContent, "Mar 15");
     });
 
     it("renders generation params from API params", async () => {
         const { doc } = setupDOM();
 
-        (globalThis as any).fetch = () =>
+        globalThis.fetch = () =>
             Promise.resolve(
                 new Response(
                     JSON.stringify({
@@ -4097,13 +4060,13 @@ describe("loadAssets", () => {
 
         const paramsEl = doc.querySelector(".asset-params");
         assert.ok(paramsEl, "should have params element");
-        assert.equal(paramsEl!.textContent, "16:9");
+        assert.equal(paramsEl?.textContent, "16:9");
     });
 
     it("renders music params including lyrics excerpt", async () => {
         const { doc } = setupDOM();
 
-        (globalThis as any).fetch = () =>
+        globalThis.fetch = () =>
             Promise.resolve(
                 new Response(
                     JSON.stringify({
@@ -4135,14 +4098,14 @@ describe("loadAssets", () => {
 
         const paramsEl = doc.querySelector(".asset-params");
         assert.ok(paramsEl, "should have params element with lyrics excerpt");
-        assert.equal(paramsEl!.textContent, "This is a long lyric…");
+        assert.equal(paramsEl?.textContent, "This is a long lyric…");
     });
 
     it("renders collapsible prompt for long prompts", async () => {
         const { doc } = setupDOM();
         const longPrompt = "A".repeat(50);
 
-        (globalThis as any).fetch = () =>
+        globalThis.fetch = () =>
             Promise.resolve(
                 new Response(
                     JSON.stringify({
@@ -4175,17 +4138,17 @@ describe("loadAssets", () => {
 
         const summary = doc.querySelector(".asset-prompt-summary");
         assert.ok(summary, "should have prompt summary");
-        assert.equal(summary!.textContent, "A".repeat(30) + "…");
+        assert.equal(summary?.textContent, `${"A".repeat(30)}…`);
 
         const fullPrompt = doc.querySelector(".asset-prompt-full");
         assert.ok(fullPrompt, "should have full prompt content");
-        assert.equal(fullPrompt!.textContent, longPrompt);
+        assert.equal(fullPrompt?.textContent, longPrompt);
     });
 
     it("renders short prompt without collapse mechanism", async () => {
         const { doc } = setupDOM();
 
-        (globalThis as any).fetch = () =>
+        globalThis.fetch = () =>
             Promise.resolve(
                 new Response(
                     JSON.stringify({
@@ -4218,13 +4181,13 @@ describe("loadAssets", () => {
 
         const meta = doc.querySelector(".asset-meta");
         assert.ok(meta, "short prompts should render in asset-meta");
-        assert.equal(meta!.textContent, "short prompt");
+        assert.equal(meta?.textContent, "short prompt");
     });
 
     it("handles voice params with speed", async () => {
         const { doc } = setupDOM();
 
-        (globalThis as any).fetch = () =>
+        globalThis.fetch = () =>
             Promise.resolve(
                 new Response(
                     JSON.stringify({
@@ -4257,17 +4220,17 @@ describe("loadAssets", () => {
 
         const paramsEl = doc.querySelector(".asset-params");
         assert.ok(paramsEl, "should have params element");
-        assert.equal(paramsEl!.textContent, "1.5x · hunter…");
+        assert.equal(paramsEl?.textContent, "1.5x · hunter…");
     });
 
     it("audio asset card click does not create hidden autoplay", async () => {
         const { doc } = setupDOM();
         let hiddenAudioCreated = false;
-        (globalThis as any).Audio = function() {
+        globalThis.Audio = () => {
             hiddenAudioCreated = true;
             return { play: () => Promise.resolve() };
         };
-        (globalThis as any).fetch = () =>
+        globalThis.fetch = () =>
             Promise.resolve(
                 new Response(
                     JSON.stringify({
@@ -4294,7 +4257,7 @@ describe("loadAssets", () => {
 
         loadAssets();
         await new Promise((r) => setTimeout(r, 50));
-        doc.querySelector(".asset-card")!.dispatchEvent(new Event("click", { bubbles: true }));
+        doc.querySelector(".asset-card")?.dispatchEvent(new Event("click", { bubbles: true }));
 
         assert.equal(hiddenAudioCreated, false);
     });

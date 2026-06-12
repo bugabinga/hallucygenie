@@ -46,6 +46,49 @@ type IssueComment = {
     user?: { login: string; };
 };
 
+type StatusCheck = {
+    name?: string;
+    status?: string;
+    conclusion?: string;
+    detailsUrl?: string;
+};
+
+type PrFile = {
+    path?: string;
+    additions?: number;
+    deletions?: number;
+};
+
+type PrReview = {
+    author?: { login?: string; };
+    state?: string;
+    commit?: { oid?: string; };
+    body?: string;
+};
+
+type PrLabel = { name?: string; };
+
+type PrDetail = {
+    number?: number;
+    title?: string;
+    body?: string;
+    author?: { login?: string; };
+    headRefName?: string;
+    headRefOid?: string;
+    baseRefName?: string;
+    isDraft?: boolean;
+    mergeStateStatus?: string;
+    reviewDecision?: string;
+    comments?: unknown[];
+    reviews?: PrReview[];
+    files?: PrFile[];
+    commits?: unknown[];
+    statusCheckRollup?: StatusCheck[];
+    labels?: PrLabel[];
+    updatedAt?: string;
+    createdAt?: string;
+};
+
 export type ExistingPrContext = {
     number: number;
     branch: string;
@@ -141,7 +184,7 @@ function buildExistingPrContext(
     pr: ExistingPrListItem,
     comments: IssueComment[]
 ) {
-    const detail = ghJson<any>([
+    const detail = ghJson<PrDetail>([
         "pr",
         "view",
         String(pr.number),
@@ -151,18 +194,18 @@ function buildExistingPrContext(
     const checks = detail.statusCheckRollup ?? [];
     const checksSummary = checks
         .map(
-            (check: any) =>
+            (check) =>
                 `- ${check.name}: status=${check.status || ""} conclusion=${
                     check.conclusion || ""
                 } url=${check.detailsUrl || ""}`
         )
         .join("\n");
     const files = (detail.files ?? [])
-        .map((file: any) => `- ${file.path} +${file.additions} -${file.deletions}`)
+        .map((file) => `- ${file.path} +${file.additions} -${file.deletions}`)
         .join("\n");
     const reviews = (detail.reviews ?? [])
         .map(
-            (review: any) =>
+            (review) =>
                 `- ${review.author?.login || "unknown"} state=${review.state} commit=${
                     review.commit?.oid || ""
                 }\n  ${String(review.body || "").replace(/\n/g, "\n  ")}`
@@ -193,7 +236,7 @@ Base: ${detail.baseRefName}
 Draft: ${detail.isDraft}
 Merge state: ${detail.mergeStateStatus}
 Review decision: ${detail.reviewDecision || "none"}
-Labels: ${(detail.labels ?? []).map((label: any) => label.name).join(", ") || "none"}
+Labels: ${(detail.labels ?? []).map((label) => label.name).join(", ") || "none"}
 
 ## Goal
 Repair this existing PR. Do not create unrelated work. Fix only unchecked janitor checklist items and actionable review/comment findings that are still in scope.

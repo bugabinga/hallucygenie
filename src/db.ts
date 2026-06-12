@@ -17,6 +17,11 @@ export const QUOTAS: Record<string, number> = {
 
 const QUOTA_WARNING_THRESHOLD = 0.8;
 
+function expectRow<T>(row: T | null, message: string): T {
+    if (!row) throw new Error(message);
+    return row;
+}
+
 // ── Database Initialization ─────────────────────────────────────────
 
 /**
@@ -276,7 +281,7 @@ export function createSession(
         `INSERT INTO sessions (id, name, name_source, created_at, updated_at)
          VALUES (?, ?, ?, datetime('now'), datetime('now'))`
     ).run(id, normalized, DEFAULT_SESSION_NAME_SOURCE);
-    return getSession(db, id)!;
+    return expectRow(getSession(db, id), `session not found after create: ${id}`);
 }
 
 function ensureSession(db: Database, id: string): SessionRow {
@@ -321,7 +326,7 @@ export function renameSession(db: Database, id: string, name: string): SessionRo
         )
         .run(normalized, id);
     if (result.changes !== 1) throw new Error(`session not found: ${id}`);
-    return getSession(db, id)!;
+    return expectRow(getSession(db, id), `session not found after rename: ${id}`);
 }
 
 export function archiveSession(db: Database, id: string): void {
@@ -345,7 +350,7 @@ export function autoNameSession(db: Database, id: string, name: string): Session
         )
         .run(normalized, id);
     if (result.changes !== 1) throw new Error(`session not auto-nameable: ${id}`);
-    return getSession(db, id)!;
+    return expectRow(getSession(db, id), `session not found after auto-name: ${id}`);
 }
 
 // ── Drafts ─────────────────────────────────────────────────────────
@@ -388,7 +393,10 @@ export function saveDraft(
          VALUES (?, ?, ?, datetime('now'))
          ON CONFLICT(session_id, kind) DO UPDATE SET value_json = excluded.value_json, updated_at = datetime('now')`
     ).run(sessionId, validKind, valueJson);
-    return getDraft(db, sessionId, validKind)!;
+    return expectRow(
+        getDraft(db, sessionId, validKind),
+        `draft not found after save: ${sessionId}/${validKind}`
+    );
 }
 
 export function deleteDraft(db: Database, sessionId: string, kind: "chat" | "create"): void {
@@ -480,7 +488,7 @@ export function recordToolInputHistory(
         input.provider?.task_id ?? null,
         input.provider?.file_id ?? null
     );
-    return getToolInputHistory(db, id)!;
+    return expectRow(getToolInputHistory(db, id), `tool input history not found after save: ${id}`);
 }
 
 export function getToolInputHistory(db: Database, id: string): ToolInputHistoryRow | null {

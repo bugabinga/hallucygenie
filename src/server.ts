@@ -615,7 +615,7 @@ export async function handleChat(
 
 export function sanitizeAssistantMediaMarkup(content: string): string {
     const cleaned = content
-        .replace(/!\[[^\]\n]*\]\([^\)\n]+\)/g, "")
+        .replace(/!\[[^\]\n]*\]\([^)\n]+\)/g, "")
         .replace(/<img\b[^>]*>/gi, "")
         .replace(/<audio\b[\s\S]*?<\/audio>/gi, "")
         .replace(/<video\b[\s\S]*?<\/video>/gi, "")
@@ -637,10 +637,10 @@ function parseToolParams(raw: string | undefined, allowed: Set<string>): Record<
     for (const part of raw.split(/[\n,]+/)) {
         const match = part.trim().match(/^([a-z_]+)\s*=\s*(.+)$/i);
         if (!match) continue;
-        const key = match[1]!;
-        if (!allowed.has(key)) continue;
+        const key = match[1];
+        if (!key || !allowed.has(key)) continue;
 
-        const value = match[2]!.trim().replace(/^['\"]|['\"]$/g, "");
+        const value = match[2]?.trim().replace(/^['"]|['"]$/g, "");
         if (value === "true") {
             params[key] = true;
         } else if (value === "false") {
@@ -660,9 +660,9 @@ export function parseExplicitToolDirective(content: string): ExplicitToolDirecti
     );
     if (!match) return null;
 
-    const name = match[1]!.toLowerCase() as ExplicitToolDirective["name"];
-    const field = match[2]!.toLowerCase();
-    const value = match[3]!.trim();
+    const name = match[1]?.toLowerCase() as ExplicitToolDirective["name"];
+    const field = match[2]?.toLowerCase();
+    const value = match[3]?.trim();
     if (!value) return null;
 
     const allowedParams: Record<ExplicitToolDirective["name"], Set<string>> = {
@@ -744,7 +744,9 @@ async function localAnalyzeAssetDataUrl(
 ): Promise<string> {
     const match = imageUrl.match(/^\/asset\/(asset_[0-9a-f-]+)$/i);
     if (!match) return imageUrl;
-    const asset = getAsset(database, match[1]!);
+    const assetId = match[1];
+    if (!assetId) return imageUrl;
+    const asset = getAsset(database, assetId);
     if (!asset || asset.session_id !== sessionId) throw new Error("analyze image asset not found");
     if (!isAllowedImageMime(asset.mime_type, ANALYZE_IMAGE_MIMES)) {
         throw new Error("analyze image type invalid");
@@ -1247,7 +1249,7 @@ function sessionNameFromPrompt(prompt: string): string {
     if (words.length === 0) return "New idea";
     return words
         .slice(0, Math.max(2, Math.min(5, words.length)))
-        .map((word) => word[0]!.toUpperCase() + word.slice(1).toLowerCase())
+        .map((word) => word[0]?.toUpperCase() + word.slice(1).toLowerCase())
         .join(" ");
 }
 
@@ -1669,22 +1671,24 @@ export async function handleRequest(req: Request): Promise<Response> {
         }
 
         const activateMatch = path.match(/^\/api\/sessions\/([^/]+)\/activate$/);
-        if (activateMatch && method === "POST") {
-            const session = getSession(database, decodeURIComponent(activateMatch[1]!));
+        const activateSessionId = activateMatch?.[1];
+        if (activateSessionId && method === "POST") {
+            const session = getSession(database, decodeURIComponent(activateSessionId));
             if (!session || session.archived_at) return jsonResponse({ error: "Not found" }, 404);
             setActiveSessionId(database, session.id);
             return jsonResponse({ session });
         }
 
         const sessionMatch = path.match(/^\/api\/sessions\/([^/]+)$/);
-        if (sessionMatch && method === "PATCH") {
+        const matchedSessionId = sessionMatch?.[1];
+        if (matchedSessionId && method === "PATCH") {
             let body: unknown;
             try {
                 body = await req.json();
                 const obj = parseJsonObject(body, "session");
                 if (typeof obj.name !== "string") throw new Error("name must be a string");
                 return jsonResponse({
-                    session: renameSession(database, sessionMatch[1]!, obj.name)
+                    session: renameSession(database, matchedSessionId, obj.name)
                 });
             } catch (err) {
                 return jsonResponse(
@@ -1694,9 +1698,9 @@ export async function handleRequest(req: Request): Promise<Response> {
             }
         }
 
-        if (sessionMatch && method === "DELETE") {
+        if (matchedSessionId && method === "DELETE") {
             try {
-                const id = sessionMatch[1]!;
+                const id = matchedSessionId;
                 const activeId = getOrCreateActiveSessionId(database);
                 archiveSession(database, id);
                 if (activeId === id) setActiveSessionId(database, createSession(database).id);
@@ -1706,13 +1710,13 @@ export async function handleRequest(req: Request): Promise<Response> {
             }
         }
 
-        if (draftKind(path) && method === "GET") {
-            const kind = draftKind(path)!;
-            const row = getDraft(database, resolveSessionId(req, database), kind);
+        const matchedDraftKind = draftKind(path);
+        if (matchedDraftKind && method === "GET") {
+            const row = getDraft(database, resolveSessionId(req, database), matchedDraftKind);
             return jsonResponse({ draft: row ? JSON.parse(row.value_json) : null });
         }
 
-        if (draftKind(path) && method === "PUT") {
+        if (matchedDraftKind && method === "PUT") {
             try {
                 const value = await req.json();
                 return jsonResponse({
@@ -1720,7 +1724,7 @@ export async function handleRequest(req: Request): Promise<Response> {
                         saveDraft(
                             database,
                             resolveSessionId(req, database),
-                            draftKind(path)!,
+                            matchedDraftKind,
                             value
                         ).value_json
                     )
@@ -1733,8 +1737,8 @@ export async function handleRequest(req: Request): Promise<Response> {
             }
         }
 
-        if (draftKind(path) && method === "DELETE") {
-            deleteDraft(database, resolveSessionId(req, database), draftKind(path)!);
+        if (matchedDraftKind && method === "DELETE") {
+            deleteDraft(database, resolveSessionId(req, database), matchedDraftKind);
             return jsonResponse({ ok: true });
         }
 
@@ -1753,7 +1757,9 @@ export async function handleRequest(req: Request): Promise<Response> {
         const historyMatch = path.match(/^\/api\/create-history\/([^/]+)$/);
         if (historyMatch && method === "DELETE") {
             try {
-                hideToolInputHistory(database, resolveSessionId(req, database), historyMatch[1]!);
+                const historyId = historyMatch[1];
+                if (!historyId) return jsonResponse({ error: "Not found" }, 404);
+                hideToolInputHistory(database, resolveSessionId(req, database), historyId);
                 return jsonResponse({ ok: true });
             } catch {
                 return jsonResponse({ error: "Not found" }, 404);
@@ -1929,8 +1935,9 @@ export async function handleNodeRequest(req: IncomingMessage, res: ServerRespons
         });
 
         if (webRes.body) {
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            const readable = Readable.fromWeb(webRes.body as any);
+            const readable = Readable.fromWeb(
+                webRes.body as unknown as import("node:stream/web").ReadableStream<Uint8Array>
+            );
 
             // Propagate stream errors to the error handler below
             readable.on("error", (err: Error) => {
@@ -2370,8 +2377,10 @@ async function saveAssetFile(
         const match = result.content.match(/^data:([^;]+);base64,(.+)$/);
         if (!match) return result;
 
-        const mime = match[1]!;
-        const buf = Buffer.from(match[2]!, "base64");
+        const mime = match[1];
+        const base64 = match[2];
+        if (!mime || !base64) return result;
+        const buf = Buffer.from(base64, "base64");
         return saveAssetBuffer(result.type, buf, mime, sessionId, toolName, prompt, args);
     } catch (err) {
         log.warn("asset save failed", { toolName, error: String(err) });

@@ -2144,7 +2144,7 @@ textarea,
 /* ── Utility ────────────────────────────────────────────────────────── */
 
 [hidden] {
-    display: none !important;
+    display: none;
 }
 
 /* Reduce motion for accessibility */
@@ -2152,9 +2152,9 @@ textarea,
     *,
     *::before,
     *::after {
-        animation-duration: 0.01ms !important;
-        animation-iteration-count: 1 !important;
-        transition-duration: 0.01ms !important;
+        animation-duration: 0.01ms;
+        animation-iteration-count: 1;
+        transition-duration: 0.01ms;
     }
 
     .profile-avatar-spinner {

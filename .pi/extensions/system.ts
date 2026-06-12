@@ -197,7 +197,7 @@ export default function(pi: ExtensionAPI) {
         for (const [name, heading] of files) {
             const p = path.join(sysDir, name);
             if (fs.existsSync(p)) {
-                section += `\n\n## ${heading}\n\n` + fs.readFileSync(p, "utf-8");
+                section += `\n\n## ${heading}\n\n${fs.readFileSync(p, "utf-8")}`;
             }
         }
         if (!section) return;
@@ -319,11 +319,11 @@ export default function(pi: ExtensionAPI) {
 
             // Check spec refs (advisory, not blocking)
             clearAdvisory(path.resolve(targetPath));
-            if (valid!.specs.length === 0) {
+            if (valid?.specs.length === 0) {
                 const issueRel = path.relative(cwd, path.resolve(targetPath));
                 addAdvisory(issueRel, "no spec refs — consider linking to a relevant spec");
             }
-            const { missing } = checkSpecRefs(valid!.specs, cwd);
+            const { missing } = checkSpecRefs(valid?.specs, cwd);
             if (missing.length > 0) {
                 const issueRel = path.relative(cwd, path.resolve(targetPath));
                 const problem = `dangling spec refs: ${missing.join(", ")}`;

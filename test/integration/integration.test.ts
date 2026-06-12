@@ -45,6 +45,10 @@ type FontManifest = {
     fonts: Array<{ id: string; file: string; sha256: string; }>;
 };
 
+function bodyAs<T>(body: unknown): T {
+    return body as T;
+}
+
 async function api(
     method: string,
     path: string,
@@ -151,7 +155,7 @@ describe("GET /api/health", () => {
     it("returns 200 + ok", async () => {
         const r = await api("GET", "/api/health");
         assert.equal(r.status, 200);
-        assert.equal((r.body as any).status, "ok");
+        assert.equal(bodyAs<Record<string, unknown>>(r.body).status, "ok");
     });
 });
 
@@ -163,9 +167,9 @@ describe("GET /", () => {
         (win as unknown as { SyntaxError: typeof SyntaxError; }).SyntaxError = SyntaxError;
         win.document.write(await r.text());
         const offenders = Array.from(win.document.querySelectorAll("input, textarea, select"))
-            .filter((el: any) => el.type !== "hidden")
-            .filter((el: any) => (el.labels?.length ?? 0) === 0)
-            .map((el: any) => el.id || el.outerHTML);
+            .filter((el) => (el as HTMLInputElement).type !== "hidden")
+            .filter((el) => ((el as HTMLInputElement).labels?.length ?? 0) === 0)
+            .map((el) => (el as HTMLElement).id || (el as HTMLElement).outerHTML);
         assert.deepEqual(offenders, []);
     });
 
@@ -234,7 +238,8 @@ describe("GET /fonts", () => {
     });
 
     it("serves cache-busted font URLs with query params", async () => {
-        const font = loadFontManifest().fonts.find((item) => item.id === "roboto-flex")!;
+        const font = loadFontManifest().fonts.find((item) => item.id === "roboto-flex");
+        assert.ok(font);
         const urlPath = `${font.file.replace(/^public/, "")}?v=${font.sha256.slice(0, 12)}`;
         const r = await httpGet(urlPath);
         assert.equal(r.status, 200);
@@ -244,7 +249,8 @@ describe("GET /fonts", () => {
     });
 
     it("supports HEAD for container smoke checks", async () => {
-        const font = loadFontManifest().fonts.find((item) => item.id === "pixelify-sans")!;
+        const font = loadFontManifest().fonts.find((item) => item.id === "pixelify-sans");
+        assert.ok(font);
         const r = await httpHead(font.file.replace(/^public/, ""));
         assert.equal(r.status, 200);
         assert.equal(r.headers.get("content-type"), "font/woff2");
@@ -298,8 +304,16 @@ describe("GET /api/quota", () => {
         try {
             const r = await api("GET", "/api/quota");
             assert.equal(r.status, 200);
-            assert.deepEqual((r.body as any).image, { used: 7, total: 100, resetsInMs: 1000 });
-            assert.deepEqual((r.body as any).music, { used: 3, total: 100, resetsInMs: 1000 });
+            assert.deepEqual(bodyAs<Record<string, unknown>>(r.body).image, {
+                used: 7,
+                total: 100,
+                resetsInMs: 1000
+            });
+            assert.deepEqual(bodyAs<Record<string, unknown>>(r.body).music, {
+                used: 3,
+                total: 100,
+                resetsInMs: 1000
+            });
         } finally {
             globalThis.fetch = oldFetch;
             if (oldKey) process.env.MINIMAX_API_KEY = oldKey;
@@ -319,7 +333,7 @@ describe("GET /api/quota", () => {
         try {
             const r = await api("GET", "/api/quota");
             assert.equal(r.status, 502);
-            assert.equal((r.body as any).error, "Failed to fetch quota");
+            assert.equal(bodyAs<Record<string, unknown>>(r.body).error, "Failed to fetch quota");
         } finally {
             globalThis.fetch = oldFetch;
             if (oldKey) process.env.MINIMAX_API_KEY = oldKey;
@@ -335,7 +349,7 @@ describe("Music cover HTTP flow", () => {
         try {
             const r = await api("GET", "/api/music-cover/status");
             assert.equal(r.status, 200);
-            assert.equal((r.body as any).youtubeEnabled, false);
+            assert.equal(bodyAs<Record<string, unknown>>(r.body).youtubeEnabled, false);
         } finally {
             if (oldExtractor) process.env.COVER_EXTRACTOR_URL = oldExtractor;
             else delete process.env.COVER_EXTRACTOR_URL;
@@ -424,7 +438,7 @@ describe("Music cover HTTP flow", () => {
 
             const assets = await api("GET", "/assets", undefined, { "X-Session-Id": sessionId });
             assert.equal(assets.status, 200);
-            const cover = (assets.body as any).assets.find(
+            const cover = bodyAs<Record<string, unknown>>(assets.body).assets.find(
                 (asset: { tool_name: string; }) => asset.tool_name === "generate_music_cover"
             );
             assert.ok(cover);
@@ -495,8 +509,14 @@ describe("POST /api/create-tool web_search", () => {
                 "X-Session-Id": sessionId
             });
             assert.equal(history.status, 200);
-            assert.equal((history.body as any).items[0].tool_name, "web_search");
-            assert.equal((history.body as any).items[0].status, "succeeded");
+            assert.equal(
+                bodyAs<Record<string, unknown>>(history.body).items[0].tool_name,
+                "web_search"
+            );
+            assert.equal(
+                bodyAs<Record<string, unknown>>(history.body).items[0].status,
+                "succeeded"
+            );
         } finally {
             globalThis.fetch = oldFetch;
             if (oldKey) process.env.MINIMAX_API_KEY = oldKey;
@@ -509,10 +529,10 @@ describe("GET /api/state", () => {
     it("returns active session metadata", async () => {
         const r = await api("GET", "/api/state");
         assert.equal(r.status, 200);
-        assert.match((r.body as any).activeSession.id, /^[0-9a-f-]{36}$/);
-        assert.equal((r.body as any).activeSession.name, "New Chat");
-        assert.equal((r.body as any).activeSession.nameSource, "default");
-        assert.equal((r.body as any).ui.maxMessageLength, 2000);
+        assert.match(bodyAs<Record<string, unknown>>(r.body).activeSession.id, /^[0-9a-f-]{36}$/);
+        assert.equal(bodyAs<Record<string, unknown>>(r.body).activeSession.name, "New Chat");
+        assert.equal(bodyAs<Record<string, unknown>>(r.body).activeSession.nameSource, "default");
+        assert.equal(bodyAs<Record<string, unknown>>(r.body).ui.maxMessageLength, 2000);
     });
 });
 
@@ -523,7 +543,7 @@ describe("GET /assets (no session)", () => {
         const r = await api("GET", "/assets");
         assert.equal(r.status, 200);
         assert.ok(
-            (r.body as any).assets.some(
+            bodyAs<Record<string, unknown>>(r.body).assets.some(
                 (asset: { id: string; }) => asset.id === "integration-active-list"
             )
         );
@@ -537,7 +557,7 @@ describe("GET /assets (no session)", () => {
 
         const r = await api("GET", "/assets");
         assert.equal(r.status, 200);
-        const asset = (r.body as any).assets.find(
+        const asset = bodyAs<Record<string, unknown>>(r.body).assets.find(
             (item: { id: string; }) => item.id === "integration-active-details"
         );
 
@@ -559,7 +579,7 @@ describe("GET /assets (no session)", () => {
 
         const r = await api("GET", "/assets");
         assert.equal(r.status, 500);
-        assert.equal((r.body as any).error, "Invalid asset metadata");
+        assert.equal(bodyAs<Record<string, unknown>>(r.body).error, "Invalid asset metadata");
     });
 });
 
@@ -614,7 +634,8 @@ describe("POST /api/chat (no session)", () => {
             assert.equal(resp.status, 200);
             assert.match(await resp.text(), /active reply/);
 
-            const db = getDb()!;
+            const db = getDb();
+            assert.ok(db);
             const rows = getMessages(db, getOrCreateActiveSessionId(db));
             assert.ok(rows.some((row) => row.role === "user" && row.content === "active chat"));
             assert.ok(
@@ -639,6 +660,6 @@ describe("GET /api/history (no session)", () => {
     it("uses active session without X-Session-Id", async () => {
         const r = await api("GET", "/api/history");
         assert.equal(r.status, 200);
-        assert.ok(Array.isArray((r.body as any).messages));
+        assert.ok(Array.isArray(bodyAs<Record<string, unknown>>(r.body).messages));
     });
 });

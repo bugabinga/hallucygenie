@@ -66,6 +66,83 @@ type IssueComment = {
     user?: { login: string; };
 };
 
+type StatusCheck = {
+    name?: string;
+    status?: string;
+    conclusion?: string;
+    detailsUrl?: string;
+};
+
+type PrFile = {
+    path?: string;
+    additions?: number;
+    deletions?: number;
+};
+
+type PrReview = {
+    author?: { login?: string; };
+    state?: string;
+    commit?: { oid?: string; };
+    body?: string;
+};
+
+type PrComment = {
+    author?: { login?: string; };
+    createdAt?: string;
+    body?: string;
+};
+
+type PrLabel = { name?: string; };
+
+type PrDetail = {
+    number?: number;
+    title?: string;
+    body?: string;
+    author?: { login?: string; };
+    headRefName?: string;
+    headRefOid?: string;
+    baseRefName?: string;
+    isDraft?: boolean;
+    mergeStateStatus?: string;
+    reviewDecision?: string;
+    comments?: PrComment[];
+    reviews?: PrReview[];
+    files?: PrFile[];
+    commits?: unknown[];
+    statusCheckRollup?: StatusCheck[];
+    labels?: PrLabel[];
+    updatedAt?: string;
+    createdAt?: string;
+};
+
+type ReviewThread = {
+    id?: string;
+    isResolved?: boolean;
+    isOutdated?: boolean;
+    path?: string;
+    line?: number;
+    comments?: {
+        nodes?: Array<{
+            author?: { login?: string; };
+            body?: string;
+            createdAt?: string;
+            url?: string;
+            path?: string;
+            line?: number;
+        }>;
+    };
+};
+
+type ReviewThreadsResponse = {
+    data?: {
+        repository?: {
+            pullRequest?: {
+                reviewThreads?: { nodes?: ReviewThread[]; };
+            };
+        };
+    };
+};
+
 function run(
     command: string,
     args: string[],
@@ -129,7 +206,7 @@ function listOpenBotPrs() {
     );
 }
 
-function failedRunLogs(statusCheckRollup: any[]) {
+function failedRunLogs(statusCheckRollup: StatusCheck[]) {
     const urls = statusCheckRollup
         .filter((check) =>
             ["FAILURE", "TIMED_OUT", "CANCELLED", "ACTION_REQUIRED"].includes(
@@ -204,14 +281,14 @@ function reviewThreads(number: number) {
     if (result.status !== 0) {
         return `Could not fetch review threads:\n${result.stderr}`;
     }
-    const parsed = JSON.parse(result.stdout);
-    const nodes = parsed?.data?.repository?.pullRequest?.reviewThreads?.nodes ?? [];
+    const parsed = JSON.parse(result.stdout) as ReviewThreadsResponse;
+    const nodes = parsed.data?.repository?.pullRequest?.reviewThreads?.nodes ?? [];
     if (nodes.length === 0) return "No review threads.";
     return nodes
-        .map((thread: any) => {
+        .map((thread) => {
             const comments = (thread.comments?.nodes ?? [])
                 .map(
-                    (comment: any) =>
+                    (comment) =>
                         `- ${comment.author?.login || "unknown"} ${comment.path || thread.path}:${
                             comment.line || thread.line || "?"
                         } ${comment.createdAt}\n  ${
@@ -395,7 +472,7 @@ function requestHumanReview(number: number, status: JanitorStatus | undefined) {
 }
 
 function buildContext(pr: PrListItem) {
-    const detail = ghJson<any>([
+    const detail = ghJson<PrDetail>([
         "pr",
         "view",
         String(pr.number),
@@ -405,18 +482,18 @@ function buildContext(pr: PrListItem) {
     const checks = detail.statusCheckRollup ?? [];
     const checksSummary = checks
         .map(
-            (check: any) =>
+            (check) =>
                 `- ${check.name}: status=${check.status || ""} conclusion=${
                     check.conclusion || ""
                 } url=${check.detailsUrl || ""}`
         )
         .join("\n");
     const files = (detail.files ?? [])
-        .map((file: any) => `- ${file.path} +${file.additions} -${file.deletions}`)
+        .map((file) => `- ${file.path} +${file.additions} -${file.deletions}`)
         .join("\n");
     const reviews = (detail.reviews ?? [])
         .map(
-            (review: any) =>
+            (review) =>
                 `- ${review.author?.login || "unknown"} state=${review.state} commit=${
                     review.commit?.oid || ""
                 }\n  ${String(review.body || "").replace(/\n/g, "\n  ")}`
@@ -424,7 +501,7 @@ function buildContext(pr: PrListItem) {
         .join("\n\n");
     const comments = (detail.comments ?? [])
         .map(
-            (comment: any) =>
+            (comment) =>
                 `- ${comment.author?.login || "unknown"} ${comment.createdAt}\n  ${
                     String(comment.body || "").replace(/\n/g, "\n  ")
                 }`
@@ -450,7 +527,7 @@ Base: ${detail.baseRefName}
 Draft: ${detail.isDraft}
 Merge state: ${detail.mergeStateStatus}
 Review decision: ${detail.reviewDecision || "none"}
-Labels: ${(detail.labels ?? []).map((label: any) => label.name).join(", ") || "none"}
+Labels: ${(detail.labels ?? []).map((label) => label.name).join(", ") || "none"}
 
 ## PR body
 ${detail.body || "(empty)"}

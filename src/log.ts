@@ -85,7 +85,7 @@ function ringFlush(filePath: string): void {
     ringCount = 0;
     if (chunks.length === 0) return;
     try {
-        appendFileSync(filePath, chunks.join("\n") + "\n");
+        appendFileSync(filePath, `${chunks.join("\n")}\n`);
     } catch {
         // If file write fails, silently drop. Don't block the app.
     }
@@ -113,7 +113,7 @@ function prettyContext(ctx: Record<string, unknown>): string {
     const parts = Object.entries(ctx)
         .filter(([, v]) => v !== undefined && v !== null && v !== "")
         .map(([k, v]) => `${DIM}${k}${RESET}=${DIM}${v}${RESET}`);
-    return parts.length > 0 ? parts.join(" ") + " " : "";
+    return parts.length > 0 ? `${parts.join(" ")} ` : "";
 }
 
 function pretty(entry: LogEntry): string {
@@ -171,12 +171,12 @@ export function createLogger(context: Record<string, unknown> = {}): Logger {
 
         if (isDev) {
             // Pretty print to stderr
-            process.stderr.write(pretty(entry) + "\n");
+            process.stderr.write(`${pretty(entry)}\n`);
             // Queue for file (non-blocking)
             ringPush(toJson(entry));
         } else {
             // JSON to stdout (container captures it)
-            process.stdout.write(toJson(entry) + "\n");
+            process.stdout.write(`${toJson(entry)}\n`);
         }
     }
 

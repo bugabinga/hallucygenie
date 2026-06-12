@@ -39,7 +39,7 @@ function mockFetch(response: Response): void {
     globalThis.fetch = async () => response;
 }
 
-function mockFetchWithHandler(handler: (url: string, init?: RequestInit) => Response): void {
+function _mockFetchWithHandler(handler: (url: string, init?: RequestInit) => Response): void {
     globalThis.fetch = async (url: string | URL | Request, init?: RequestInit) =>
         handler(url.toString(), init);
 }
@@ -576,18 +576,18 @@ describe("generateImage", () => {
         assert.ok(capturedUrl.includes("/v1/image_generation"));
         assert.equal(capturedInit?.method, "POST");
 
-        const body = JSON.parse(capturedInit!.body as string);
+        const body = JSON.parse(capturedInit?.body as string);
         assert.equal(body.model, "image-01");
         assert.equal(body.prompt, "a sunset over mountains");
 
-        const headers = capturedInit!.headers as Record<string, string>;
-        assert.equal(headers["Authorization"], `Bearer ${API_KEY}`);
+        const headers = capturedInit?.headers as Record<string, string>;
+        assert.equal(headers.Authorization, `Bearer ${API_KEY}`);
     });
 
     it("passes supported aspect ratio option", async () => {
         let capturedBody = "";
         globalThis.fetch = async (_url: string | URL | Request, init?: RequestInit) => {
-            capturedBody = init!.body as string;
+            capturedBody = init?.body as string;
             return jsonResponse({ data: { image_urls: ["https://example.com/wide.png"] } });
         };
 
@@ -599,7 +599,7 @@ describe("generateImage", () => {
     it("passes and clamps optional image generation params", async () => {
         let capturedBody = "";
         globalThis.fetch = async (_url: string | URL | Request, init?: RequestInit) => {
-            capturedBody = init!.body as string;
+            capturedBody = init?.body as string;
             return jsonResponse({ data: { image_urls: ["https://example.com/custom.png"] } });
         };
 
@@ -626,7 +626,7 @@ describe("generateImage", () => {
     it("passes internal subject reference payload", async () => {
         let capturedBody = "";
         globalThis.fetch = async (_url: string | URL | Request, init?: RequestInit) => {
-            capturedBody = init!.body as string;
+            capturedBody = init?.body as string;
             return jsonResponse({ data: { image_urls: ["https://example.com/ref.png"] } });
         };
 
@@ -753,7 +753,7 @@ describe("textToSpeech", () => {
         assert.ok(capturedUrl.includes("/v1/t2a_v2"));
         assert.equal(capturedInit?.method, "POST");
 
-        const body = JSON.parse(capturedInit!.body as string);
+        const body = JSON.parse(capturedInit?.body as string);
         assert.equal(body.model, "speech-2.8-hd");
         assert.equal(body.text, "Hello world");
         assert.equal(body.voice_setting.voice_id, "English_expressive_narrator");
@@ -817,8 +817,8 @@ describe("textToSpeech", () => {
         };
 
         await textToSpeech("hello", API_KEY);
-        const headers = capturedInit!.headers as Record<string, string>;
-        assert.equal(headers["Authorization"], `Bearer ${API_KEY}`);
+        const headers = capturedInit?.headers as Record<string, string>;
+        assert.equal(headers.Authorization, `Bearer ${API_KEY}`);
     });
 
     it("handles API error response", async () => {
@@ -914,7 +914,7 @@ describe("generateMusic", () => {
         assert.ok(capturedUrl.includes("/v1/music_generation"));
         assert.equal(capturedInit?.method, "POST");
 
-        const body = JSON.parse(capturedInit!.body as string);
+        const body = JSON.parse(capturedInit?.body as string);
         assert.equal(body.model, "music-2.6");
         assert.equal(body.prompt, "upbeat electronic");
         assert.equal("lyrics" in body, false);
@@ -958,8 +958,8 @@ describe("generateMusic", () => {
         };
 
         await generateMusic("test", API_KEY);
-        const headers = capturedInit!.headers as Record<string, string>;
-        assert.equal(headers["Authorization"], `Bearer ${API_KEY}`);
+        const headers = capturedInit?.headers as Record<string, string>;
+        assert.equal(headers.Authorization, `Bearer ${API_KEY}`);
     });
 
     it("handles API error response", async () => {
@@ -1080,7 +1080,7 @@ describe("music cover", () => {
             content: `data:audio/mp3;base64,${expectedBase64}`
         });
         assert.ok(capturedUrl.endsWith("/v1/music_generation"));
-        assert.equal(capturedInit!.method, "POST");
+        assert.equal(capturedInit?.method, "POST");
         const body = JSON.parse(capturedBody);
         assert.deepEqual(body, {
             model: "music-cover",
@@ -1092,8 +1092,8 @@ describe("music cover", () => {
         });
         assert.equal(body.output_format, "hex");
         assert.deepEqual(body.audio_setting, { format: "mp3" });
-        const headers = capturedInit!.headers as Record<string, string>;
-        assert.equal(headers["Authorization"], `Bearer ${API_KEY}`);
+        const headers = capturedInit?.headers as Record<string, string>;
+        assert.equal(headers.Authorization, `Bearer ${API_KEY}`);
         assert.equal(headers["Content-Type"], "application/json");
     });
 
@@ -1171,13 +1171,13 @@ describe("music cover", () => {
 
         assert.deepEqual(result, { cover_feature_id: "cover-2", lyrics: "formatted" });
         assert.ok(capturedUrl.endsWith("/v1/music_cover_preprocess"));
-        assert.equal(capturedInit!.method, "POST");
+        assert.equal(capturedInit?.method, "POST");
         assert.deepEqual(JSON.parse(capturedBody), {
             model: "music-cover",
             audio_base64: "QUJD"
         });
-        const headers = capturedInit!.headers as Record<string, string>;
-        assert.equal(headers["Authorization"], `Bearer ${API_KEY}`);
+        const headers = capturedInit?.headers as Record<string, string>;
+        assert.equal(headers.Authorization, `Bearer ${API_KEY}`);
         assert.equal(headers["Content-Type"], "application/json");
     });
 
@@ -1290,13 +1290,13 @@ describe("generateLyrics", () => {
         assert.ok(capturedUrl.includes("/v1/lyrics_generation"));
         assert.equal(capturedInit?.method, "POST");
 
-        const body = JSON.parse(capturedInit!.body as string);
+        const body = JSON.parse(capturedInit?.body as string);
         assert.equal(body.mode, "write_full_song");
         assert.equal(body.prompt, "a happy birthday song");
         assert.equal("model" in body, false);
 
-        const headers = capturedInit!.headers as Record<string, string>;
-        assert.equal(headers["Authorization"], `Bearer ${API_KEY}`);
+        const headers = capturedInit?.headers as Record<string, string>;
+        assert.equal(headers.Authorization, `Bearer ${API_KEY}`);
     });
 
     it("includes optional title and edit lyrics fields", async () => {
@@ -1355,8 +1355,8 @@ describe("generateLyrics", () => {
         };
 
         await generateLyrics("test", API_KEY);
-        const headers = capturedInit!.headers as Record<string, string>;
-        assert.equal(headers["Authorization"], `Bearer ${API_KEY}`);
+        const headers = capturedInit?.headers as Record<string, string>;
+        assert.equal(headers.Authorization, `Bearer ${API_KEY}`);
     });
 
     it("handles API error response", async () => {
@@ -1762,7 +1762,7 @@ describe("generateMusic HTTP request structure", () => {
         );
         assert.equal(capturedInit?.method, "POST", "should use POST method");
 
-        const body = JSON.parse(capturedInit!.body as string);
+        const body = JSON.parse(capturedInit?.body as string);
         assert.equal(body.model, "music-2.6", "should specify music-2.6 model");
         assert.equal(body.prompt, "epic gaming theme", "should include prompt in body");
     });
@@ -1777,11 +1777,11 @@ describe("generateMusic HTTP request structure", () => {
         await generateMusic("test", API_KEY);
 
         assert.ok(
-            capturedHeaders["Authorization"]?.startsWith("Bearer "),
+            capturedHeaders.Authorization?.startsWith("Bearer "),
             "should have Authorization Bearer header"
         );
         assert.ok(
-            capturedHeaders["Authorization"]?.includes(API_KEY),
+            capturedHeaders.Authorization?.includes(API_KEY),
             "Authorization header should contain API key"
         );
         assert.equal(
@@ -1862,7 +1862,7 @@ describe("webSearch HTTP request structure", () => {
         await webSearch("test", API_KEY);
 
         assert.ok(
-            capturedHeaders["Authorization"]?.includes(API_KEY),
+            capturedHeaders.Authorization?.includes(API_KEY),
             "Authorization header should contain API key"
         );
     });
@@ -2125,7 +2125,7 @@ describe("analyzeImage HTTP request structure", () => {
         await analyzeImage("https://example.com/img.jpg", API_KEY);
 
         assert.ok(
-            capturedHeaders["Authorization"]?.includes(API_KEY),
+            capturedHeaders.Authorization?.includes(API_KEY),
             "Authorization header should contain API key"
         );
     });

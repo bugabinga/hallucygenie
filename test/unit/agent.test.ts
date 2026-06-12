@@ -27,6 +27,20 @@ import {
 import type { AgentEvent, OnBeforeTool } from "../../src/agent.ts";
 import { getToolDefinitions } from "../../src/tools.ts";
 
+type ProviderDiagnosticResult = { provider?: { status_msg?: string; }; };
+type ContextToolMessage = {
+    role?: string;
+    tool_call_id?: string;
+    tool_calls?: unknown;
+    content?: unknown;
+};
+type AnthropicPayloadForTest = {
+    tools: Array<{ cache_control?: { type?: string; }; }>;
+    system: Array<{ cache_control?: { type?: string; }; }>;
+    messages: ContextToolMessage[];
+};
+type AnthropicTextBlock = { type?: string; text?: string; };
+
 // ── Test helpers ─────────────────────────────────────────────────────
 
 let originalFetch: typeof globalThis.fetch;
@@ -337,7 +351,7 @@ describe("runAgentLoop", () => {
         const secondResponse = anthropicResponse(textResponse(["Here's your image!"]));
 
         let fetchCallCount = 0;
-        globalThis.fetch = async (url: string | URL | Request, init?: RequestInit) => {
+        globalThis.fetch = async (url: string | URL | Request, _init?: RequestInit) => {
             fetchCallCount++;
             const urlStr = url.toString();
             if (urlStr.includes("/anthropic/v1/messages")) {
@@ -402,7 +416,7 @@ describe("runAgentLoop", () => {
         const secondResponse = anthropicResponse(textResponse(["Done!"]));
 
         let fetchCallCount = 0;
-        globalThis.fetch = async (url: string | URL | Request, init?: RequestInit) => {
+        globalThis.fetch = async (url: string | URL | Request, _init?: RequestInit) => {
             fetchCallCount++;
             const urlStr = url.toString();
             if (urlStr.includes("/anthropic/v1/messages")) {
@@ -464,7 +478,7 @@ describe("runAgentLoop", () => {
         const response3 = anthropicResponse(textResponse(["All done!"]));
 
         let fetchCallCount = 0;
-        globalThis.fetch = async (url: string | URL | Request, init?: RequestInit) => {
+        globalThis.fetch = async (url: string | URL | Request, _init?: RequestInit) => {
             fetchCallCount++;
             const urlStr = url.toString();
             if (urlStr.includes("/anthropic/v1/messages")) {
@@ -582,7 +596,7 @@ describe("runAgentLoop", () => {
         mockAnthropic([new Response("Internal Server Error", { status: 500 })]);
 
         const { events, onEvent } = collectEvents();
-        const messages = await runAgentLoop(
+        const _messages = await runAgentLoop(
             [{ role: "user", content: "hi" }],
             "test-key",
             onEvent
@@ -773,7 +787,7 @@ describe("runAgentLoop", () => {
         );
         assert.ok(summaryMsg, "should have assistant summary");
         assert.ok(
-            summaryMsg!.content!.includes("Generated audio"),
+            summaryMsg?.content?.includes("Generated audio"),
             "summary should include audio tool result"
         );
     });
@@ -804,7 +818,7 @@ describe("runAgentLoop", () => {
             );
         };
 
-        const { events, onEvent } = collectEvents();
+        const { onEvent } = collectEvents();
         const messages = await runAgentLoop(
             [{ role: "user", content: "make sparkles" }],
             "test-key",
@@ -820,9 +834,9 @@ describe("runAgentLoop", () => {
         // Verify it would survive DB round-trip:
         // - no tool_calls → tool_calls_json will be null → not skipped on load
         // - no tool_call_id → not a tool row → not skipped on load
-        assert.equal(summary!.tool_calls, undefined);
-        assert.equal(summary!.tool_call_id, undefined);
-        assert.ok(summary!.content!.length > 0, "summary content must not be empty");
+        assert.equal(summary?.tool_calls, undefined);
+        assert.equal(summary?.tool_call_id, undefined);
+        assert.ok(summary?.content?.length > 0, "summary content must not be empty");
     });
 
     it("detects MiniMax tool result id errors", () => {
@@ -939,7 +953,7 @@ describe("runAgentLoop", () => {
             assert.equal(result.type, "error");
             assert.equal(result.content.includes("provider_specific_reason"), false);
             assert.equal(
-                (result as any).provider?.status_msg,
+                (result as ProviderDiagnosticResult).provider?.status_msg,
                 `${toolName} failed: provider_specific_reason`
             );
         }
@@ -1047,8 +1061,8 @@ describe("runAgentLoop", () => {
         );
 
         assert.equal(capturedAnthropicBodies.length, 2);
-        assert.equal(capturedAnthropicBodies[1]!.includes("data:audio"), false);
-        assert.ok(capturedAnthropicBodies[1]!.includes("Generated audio with text_to_speech"));
+        assert.equal(capturedAnthropicBodies[1]?.includes("data:audio"), false);
+        assert.ok(capturedAnthropicBodies[1]?.includes("Generated audio with text_to_speech"));
         const toolMsg = messages.find((m) => m.role === "tool");
         assert.ok(toolMsg);
         assert.equal(toolMsg.content.includes("data:audio"), false);
@@ -1069,7 +1083,7 @@ describe("runAgentLoop", () => {
         const secondResponse = anthropicResponse(textResponse(["Image created!"]));
 
         let fetchCallCount = 0;
-        globalThis.fetch = async (url: string | URL | Request, init?: RequestInit) => {
+        globalThis.fetch = async (url: string | URL | Request, _init?: RequestInit) => {
             fetchCallCount++;
             const urlStr = url.toString();
             if (urlStr.includes("/anthropic/v1/messages")) {
@@ -1099,7 +1113,7 @@ describe("runAgentLoop", () => {
         const secondResponse = anthropicResponse(textResponse(["Done"]));
 
         let fetchCallCount = 0;
-        globalThis.fetch = async (url: string | URL | Request, init?: RequestInit) => {
+        globalThis.fetch = async (url: string | URL | Request, _init?: RequestInit) => {
             fetchCallCount++;
             const urlStr = url.toString();
             if (urlStr.includes("/anthropic/v1/messages")) {
@@ -1114,7 +1128,7 @@ describe("runAgentLoop", () => {
         };
 
         const { events, onEvent } = collectEvents();
-        const messages = await runAgentLoop(
+        const _messages = await runAgentLoop(
             [{ role: "user", content: "test" }],
             "test-key",
             onEvent
@@ -1167,7 +1181,7 @@ describe("runAgentLoop", () => {
         ]);
 
         const { events, onEvent } = collectEvents();
-        const messages = await runAgentLoop(
+        const _messages = await runAgentLoop(
             [{ role: "user", content: "test" }],
             "test-key",
             onEvent
@@ -1189,9 +1203,9 @@ describe("runAgentLoop", () => {
         const { onEvent } = collectEvents();
         await runAgentLoop([{ role: "user", content: "hi" }], "my-secret-key", onEvent);
 
-        const headers = capturedInit!.headers as Record<string, string>;
+        const headers = capturedInit?.headers as Record<string, string>;
         assert.equal(headers["X-Api-Key"], "my-secret-key");
-        assert.equal(headers["Authorization"], undefined);
+        assert.equal(headers.Authorization, undefined);
     });
 
     it("sends Anthropic-format request body", async () => {
@@ -1472,7 +1486,7 @@ describe("runAgentLoop", () => {
         const assistant = secondBody.messages.find(
             (m) => m.role === "assistant" && Array.isArray(m.content)
         );
-        const content = assistant!.content as Array<Record<string, unknown>>;
+        const content = assistant?.content as Array<Record<string, unknown>>;
         assert.equal(content[0].type, "thinking");
         assert.equal(content[0].thinking, "plan tool");
         assert.equal(content[0].signature, "sig_123");
@@ -1518,7 +1532,7 @@ describe("Agent event sequence snapshots", () => {
         const secondResponse = anthropicResponse(textResponse(["Here it is!"]));
 
         let fetchCallCount = 0;
-        globalThis.fetch = async (url: string | URL | Request, init?: RequestInit) => {
+        globalThis.fetch = async (url: string | URL | Request, _init?: RequestInit) => {
             fetchCallCount++;
             const urlStr = url.toString();
             if (urlStr.includes("/anthropic/v1/messages")) {
@@ -1564,7 +1578,7 @@ describe("Agent event sequence snapshots", () => {
         const secondResponse = anthropicResponse(textResponse(["Done!"]));
 
         let fetchCallCount = 0;
-        globalThis.fetch = async (url: string | URL | Request, init?: RequestInit) => {
+        globalThis.fetch = async (url: string | URL | Request, _init?: RequestInit) => {
             fetchCallCount++;
             const urlStr = url.toString();
             if (urlStr.includes("/anthropic/v1/messages")) {
@@ -1590,8 +1604,8 @@ describe("Agent event sequence snapshots", () => {
         assert.equal(messages[0].role, "user");
         assert.equal(messages[1].role, "assistant");
         assert.ok(messages[1].tool_calls, "assistant message should have tool_calls");
-        assert.equal(messages[1].tool_calls!.length, 1);
-        assert.equal(messages[1].tool_calls![0].id, "call_1");
+        assert.equal(messages[1].tool_calls?.length, 1);
+        assert.equal(messages[1].tool_calls?.[0].id, "call_1");
         assert.equal(messages[2].role, "tool");
         assert.equal(messages[2].tool_call_id, "call_1");
         assert.equal(messages[3].role, "assistant");
@@ -1655,7 +1669,7 @@ describe("Steering in agent loop", () => {
         const response2 = anthropicResponse(textResponse(["Steered response!"]));
 
         let fetchCallCount = 0;
-        globalThis.fetch = async (url: string | URL | Request, init?: RequestInit) => {
+        globalThis.fetch = async (url: string | URL | Request, _init?: RequestInit) => {
             fetchCallCount++;
             const urlStr = url.toString();
             if (urlStr.includes("/anthropic/v1/messages")) {
@@ -1700,7 +1714,7 @@ describe("Steering in agent loop", () => {
         const sq = createSteerQueue();
         queueSteer(sq, "talk about space");
 
-        const { events, onEvent } = collectEvents();
+        const { onEvent } = collectEvents();
         const messages = await runAgentLoop(
             [{ role: "user", content: "hi" }],
             "test-key",
@@ -1731,7 +1745,7 @@ describe("Steering in agent loop", () => {
         queueSteer(sq, "steer 2");
         queueSteer(sq, "steer 3");
 
-        const { events, onEvent } = collectEvents();
+        const { onEvent } = collectEvents();
         const messages = await runAgentLoop(
             [{ role: "user", content: "hi" }],
             "test-key",
@@ -1749,15 +1763,15 @@ describe("Steering in agent loop", () => {
     it("steer after done (no effect)", async () => {
         const response1 = anthropicResponse(textResponse(["Hello!"]));
 
-        let fetchCallCount = 0;
+        let _fetchCallCount = 0;
         globalThis.fetch = async () => {
-            fetchCallCount++;
+            _fetchCallCount++;
             return response1;
         };
 
         const sq = createSteerQueue();
 
-        const { events, onEvent } = collectEvents();
+        const { onEvent } = collectEvents();
         const messages = await runAgentLoop(
             [{ role: "user", content: "hi" }],
             "test-key",
@@ -1779,7 +1793,7 @@ describe("Steering in agent loop", () => {
         const response2 = anthropicResponse(textResponse(["Responding to steer!"]));
 
         let fetchCallCount = 0;
-        globalThis.fetch = async (url: string | URL | Request, init?: RequestInit) => {
+        globalThis.fetch = async (url: string | URL | Request, _init?: RequestInit) => {
             fetchCallCount++;
             const urlStr = url.toString();
             if (urlStr.includes("/anthropic/v1/messages")) {
@@ -1796,7 +1810,7 @@ describe("Steering in agent loop", () => {
         const sq = createSteerQueue();
         queueSteer(sq, "steer during tool");
 
-        const { events, onEvent } = collectEvents();
+        const { onEvent } = collectEvents();
         const messages = await runAgentLoop(
             [{ role: "user", content: "draw" }],
             "test-key",
@@ -1975,7 +1989,7 @@ describe("System Prompt", () => {
             + `- Name: "${"x".repeat(348)}"\n`
             + "Interests: \"";
         const truncated = expected.slice(0, 500).trimEnd();
-        const expectedResult = truncated + "…";
+        const expectedResult = `${truncated}…`;
 
         // Verify exact content and that character 500 is present and specific.
         assert.equal(
@@ -2289,7 +2303,7 @@ describe("buildContext tool edge cases", () => {
         const result = buildContext(messages, 1000);
         assert.equal(result.length, 2);
         assert.equal(result[1].role, "tool");
-        assert.equal((result[1] as any).tool_call_id, "nonexistent");
+        assert.equal((result[1] as ContextToolMessage).tool_call_id, "nonexistent");
     });
 
     it("assistant with tool_calls but no tool results included", () => {
@@ -2303,7 +2317,9 @@ describe("buildContext tool edge cases", () => {
         ];
         // Should include the assistant message even with empty tool_results
         const result = buildContext(messages, 1000);
-        assert.ok(result.some((m) => m.role === "assistant" && (m as any).tool_calls));
+        assert.ok(
+            result.some((m) => m.role === "assistant" && (m as ContextToolMessage).tool_calls)
+        );
     });
 
     it("assistant with tool_calls skipped when turn exceeds budget", () => {
@@ -2321,7 +2337,9 @@ describe("buildContext tool edge cases", () => {
         ];
         const result = buildContext(messages, 6); // system(1) + remaining(5) = 6, but assistant turn ≈20 → exceeds
         // Assistant with tool_calls should be skipped
-        assert.ok(!result.some((m) => m.role === "assistant" && (m as any).tool_calls));
+        assert.ok(
+            !result.some((m) => m.role === "assistant" && (m as ContextToolMessage).tool_calls)
+        );
     });
 });
 
@@ -2389,7 +2407,7 @@ describe("buildContext tool pair boundary conditions", () => {
         assert.ok(result.some((m) => m.role === "system"));
         assert.ok(result.some((m) => m.role === "user"));
         assert.ok(
-            !result.some((m) => m.role === "assistant" && (m as any).tool_calls),
+            !result.some((m) => m.role === "assistant" && (m as ContextToolMessage).tool_calls),
             "assistant with tool_calls should be skipped when turn exceeds budget"
         );
         assert.ok(!result.some((m) => m.role === "tool"));
@@ -2410,8 +2428,8 @@ describe("toAnthropicPayload edge cases", () => {
         // Assistant with empty content → should have content: [{type: "text", text: ""}]
         const assistantMsg = msgs.find((m) => m.role === "assistant");
         assert.ok(assistantMsg);
-        assert.equal((assistantMsg!.content as any[])[0].type, "text");
-        assert.equal((assistantMsg!.content as any[])[0].text, "");
+        assert.equal((assistantMsg?.content as AnthropicTextBlock[])[0]?.type, "text");
+        assert.equal((assistantMsg?.content as AnthropicTextBlock[])[0]?.text, "");
     });
 
     it("consecutive tool results coalesce into single user message", () => {
@@ -2484,12 +2502,12 @@ describe("toAnthropicPayload edge cases", () => {
         const payload = toAnthropicPayload(messages, []);
         const msgs = payload.messages as Array<{ role: string; content: unknown; }>;
         const assistantMsg = msgs.find((m) => m.role === "assistant");
-        const contents = assistantMsg!.content as Array<Record<string, unknown>>;
+        const contents = assistantMsg?.content as Array<Record<string, unknown>>;
         const toolUse = contents.find((c) => c.type === "tool_use");
-        assert.equal(toolUse!.type, "tool_use");
-        assert.equal(toolUse!.id, "tu_99");
-        assert.equal(toolUse!.name, "generate_image");
-        assert.deepEqual(toolUse!.input, { prompt: "cat" });
+        assert.equal(toolUse?.type, "tool_use");
+        assert.equal(toolUse?.id, "tu_99");
+        assert.equal(toolUse?.name, "generate_image");
+        assert.deepEqual(toolUse?.input, { prompt: "cat" });
     });
 
     it("tool_result has correct tool_use_id field", () => {
@@ -2534,9 +2552,9 @@ describe("toAnthropicPayload edge cases", () => {
         const tools = [
             { name: "tool1", description: "d1", input_schema: {} },
             { name: "tool2", description: "d2", input_schema: {} }
-        ] as any[];
+        ] as Parameters<typeof toAnthropicPayload>[1];
         const messages: ChatMessage[] = [{ role: "user" as const, content: "hi" }];
-        const payload = toAnthropicPayload(messages, tools) as any;
+        const payload = toAnthropicPayload(messages, tools) as AnthropicPayloadForTest;
         assert.equal(payload.tools[0].cache_control, undefined);
         assert.equal(payload.tools[1].cache_control?.type, "ephemeral");
     });
@@ -2547,7 +2565,7 @@ describe("toAnthropicPayload edge cases", () => {
             { role: "system" as const, content: "second" },
             { role: "user" as const, content: "hi" }
         ];
-        const payload = toAnthropicPayload(messages, []) as any;
+        const payload = toAnthropicPayload(messages, []) as AnthropicPayloadForTest;
         assert.equal(payload.system[0].cache_control, undefined);
         assert.equal(payload.system[1].cache_control?.type, "ephemeral");
     });
@@ -2566,7 +2584,7 @@ describe("toAnthropicPayload edge cases", () => {
                 tool_call_id: "tc_err"
             }
         ];
-        const payload = toAnthropicPayload(messages, []) as any;
+        const payload = toAnthropicPayload(messages, []) as AnthropicPayloadForTest;
         const msgs = payload.messages;
         const lastMsg = msgs[msgs.length - 1];
         const toolContent = lastMsg.content[0];
@@ -2580,8 +2598,8 @@ describe("toAnthropicPayload edge cases", () => {
             { role: "assistant" as const, content: "answer one" },
             { role: "user" as const, content: "second question" }
         ];
-        const payload = toAnthropicPayload(messages, []) as any;
-        const userMsgs = payload.messages.filter((m: any) => m.role === "user");
+        const payload = toAnthropicPayload(messages, []) as AnthropicPayloadForTest;
+        const userMsgs = payload.messages.filter((m) => m.role === "user");
         assert.equal(userMsgs.length, 2);
         assert.equal(userMsgs[0].content, "first question");
         assert.equal(userMsgs[1].content, "second question");
@@ -2602,7 +2620,7 @@ describe("SSE parser error paths", () => {
     });
 
     // Build SSE streams programmatically to avoid literal newlines in string literals
-    function buildSseStream(
+    function _buildSseStream(
         chunks: Array<{ kind: "event" | "done" | "comment" | "raw"; value: string; }>
     ): ReadableStream {
         const enc = new TextEncoder();
@@ -2612,7 +2630,7 @@ describe("SSE parser error paths", () => {
                     if (chunk.kind === "done") {
                         controller.enqueue(enc.encode("data: [DONE]\n\n"));
                     } else if (chunk.kind === "comment") {
-                        controller.enqueue(enc.encode(": " + chunk.value + "\n"));
+                        controller.enqueue(enc.encode(`: ${chunk.value}\n`));
                     } else if (chunk.kind === "raw") {
                         controller.enqueue(enc.encode(chunk.value));
                     } else {
@@ -2635,24 +2653,24 @@ describe("SSE parser error paths", () => {
     // Simpler helper: encode a single SSE event
     function sseEvent(eventName: string, data: unknown): Uint8Array {
         const enc = new TextEncoder();
-        const eventLine = "event: " + eventName + "\n";
-        const dataLine = "data: " + JSON.stringify(data) + "\n";
-        return enc.encode(eventLine + dataLine + "\n");
+        const eventLine = `event: ${eventName}\n`;
+        const dataLine = `data: ${JSON.stringify(data)}\n`;
+        return enc.encode(`${eventLine + dataLine}\n`);
     }
 
     // Encode a raw data-only SSE line
-    function sseData(line: string): Uint8Array {
+    function _sseData(line: string): Uint8Array {
         return new TextEncoder().encode(line);
     }
 
     // Build a complete SSE response stream with events
-    function makeStream(events: Array<{ type: string; data?: unknown; }>): ReadableStream {
+    function _makeStream(events: Array<{ type: string; data?: unknown; }>): ReadableStream {
         const enc = new TextEncoder();
         const parts: Uint8Array[] = [];
         for (const ev of events) {
-            parts.push(enc.encode("event: " + ev.type + "\n"));
+            parts.push(enc.encode(`event: ${ev.type}\n`));
             if (ev.data !== undefined) {
-                parts.push(enc.encode("data: " + JSON.stringify(ev.data) + "\n"));
+                parts.push(enc.encode(`data: ${JSON.stringify(ev.data)}\n`));
             }
             parts.push(enc.encode("\n"));
         }
@@ -3123,7 +3141,7 @@ describe("SSE parser error paths", () => {
     it("tool call with malformed JSON defaults to empty object", async () => {
         const stream = new ReadableStream({
             start(controller) {
-                const enc = new TextEncoder();
+                const _enc = new TextEncoder();
                 controller.enqueue(
                     sseEvent("content_block_start", {
                         type: "content_block_start",
@@ -3194,11 +3212,11 @@ describe("SSE parser error paths", () => {
                 headers: { "Content-Type": "application/json" }
             });
         };
-        const { events: evK1, onEvent: onK1 } = collectEvents();
+        const { onEvent: onK1 } = collectEvents();
         const msgs = await runAgentLoop([{ role: "user", content: "search" }], "test-key", onK1);
         const assistant = msgs.find((m) => m.role === "assistant");
         assert.ok(assistant);
-        assert.equal(assistant!.content as string, "");
+        assert.equal(assistant?.content as string, "");
     });
 
     it("tool_result event prompt field uses first defined arg (prompt > text > topic)", async () => {

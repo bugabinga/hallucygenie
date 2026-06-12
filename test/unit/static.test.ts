@@ -866,7 +866,8 @@ describe("font vendoring health", () => {
         assert.deepEqual(
             localUrls.filter((url) => url.includes("fonts")),
             ["pixelify-sans", "roboto-flex", "playwrite-de-sas"].map((id) => {
-                const font = manifest.fonts.find((item) => item.id === id)!;
+                const font = manifest.fonts.find((item) => item.id === id);
+                assert.ok(font);
                 return `${font.file.replace(/^public/, "")}?v=${font.sha256.slice(0, 12)}`;
             })
         );
@@ -929,7 +930,7 @@ describe("frontend session identity health", () => {
 
     it("does not write profile state to localStorage", () => {
         assert.equal(appTs.includes("hallucygenie_user_profile_v1"), false);
-        assert.doesNotMatch(appTs, /localStorage\.setItem\([^\)]*profile/i);
+        assert.doesNotMatch(appTs, /localStorage\.setItem\([^)]*profile/i);
         assert.match(appTs, /\/api\/profile/);
     });
 
@@ -988,7 +989,7 @@ describe("constitution health", () => {
 
     it("persistent asset and direct tool IDs do not use process-local request IDs", () => {
         assert.equal(serverTs.includes("const assetId = nextReqId()"), false);
-        assert.equal(serverTs.includes("`direct_${nextReqId()}`"), false);
+        assert.equal(serverTs.includes("`direct_$" + "{nextReqId()}`"), false);
         assert.match(serverTs, /randomUUID/);
     });
 
@@ -1010,7 +1011,7 @@ describe("system metadata health", () => {
             .map((name) => `${dir}/${name}`);
     }
 
-    function uniqueIds(text: string, prefix: string): string[] {
+    function _uniqueIds(text: string, prefix: string): string[] {
         return [...new Set(text.match(new RegExp(`${prefix}-\\d{3}`, "g")) ?? [])];
     }
 
@@ -1028,7 +1029,7 @@ describe("system metadata health", () => {
             ])
         );
 
-        for (const [issueId, issue] of issues) {
+        for (const [_issueId, issue] of issues) {
             // parse specs from frontmatter: { "status": "...", "specs": ["HG-SPEC-NNN"] }
             const specsMatch = issue.text.match(/"specs":\s*\[([^\]]+)\]/);
             const specRefs = specsMatch ? (specsMatch[1].match(/HG-SPEC-\d{3}/g) ?? []) : [];
@@ -1083,7 +1084,7 @@ describe("formatter and linter health", () => {
         assert.doesNotMatch(dprintJson, /"public\/index\.html"/);
         assert.doesNotMatch(dprintJson, /sql-0\.3\.0\.wasm/);
         assert.match(biomeJson, /"formatter": \{\n\s+"enabled": false/);
-        assert.match(biomeJson, /"noDebugger": "error"/);
+        assert.match(biomeJson, /"recommended": true/);
         assert.match(sqruffConfig, /dialect = sqlite/);
         assert.doesNotMatch(sqruffConfig, /exclude_rules/);
     });

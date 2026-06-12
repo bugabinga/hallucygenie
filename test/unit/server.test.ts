@@ -1,8 +1,8 @@
 // HallucyGenie -- Server tests
 
 import assert from "node:assert/strict";
-import { existsSync, mkdirSync, rmSync } from "node:fs";
-import http from "node:http";
+import { existsSync, rmSync } from "node:fs";
+import type { AddressInfo } from "node:net";
 import { join } from "node:path";
 import { after, before, beforeEach, describe, it } from "node:test";
 import { MINIMAX_MODEL } from "../../src/agent.ts";
@@ -94,7 +94,7 @@ function tarWithFile(filename: string, bytes: Uint8Array): Buffer {
     header.write("0000777\0", 100, "ascii");
     header.write("0000000\0", 108, "ascii");
     header.write("0000000\0", 116, "ascii");
-    header.write(data.byteLength.toString(8).padStart(11, "0") + "\0", 124, "ascii");
+    header.write(`${data.byteLength.toString(8).padStart(11, "0")}\0`, 124, "ascii");
     header.write("00000000000\0", 136, "ascii");
     header.fill(0x20, 148, 156);
     header[156] = 48;
@@ -102,7 +102,7 @@ function tarWithFile(filename: string, bytes: Uint8Array): Buffer {
     header.write("00", 263, "ascii");
     let sum = 0;
     for (const byte of header) sum += byte;
-    header.write(sum.toString(8).padStart(6, "0") + "\0 ", 148, "ascii");
+    header.write(`${sum.toString(8).padStart(6, "0")}\0 `, 148, "ascii");
     const pad = Buffer.alloc(Math.ceil(data.byteLength / 512) * 512 - data.byteLength);
     return Buffer.concat([header, data, pad, Buffer.alloc(1024)]);
 }
@@ -121,6 +121,18 @@ before(() => {
 
 function ensureTestDb(): void {
     if (!getDb()) initDatabase(testDbPath);
+}
+
+function requireDb(): NonNullable<ReturnType<typeof getDb>> {
+    const database = getDb();
+    assert.ok(database);
+    return database;
+}
+
+function serverPort(server: { address(): string | AddressInfo | null; }): number {
+    const address = server.address();
+    assert.ok(address && typeof address !== "string");
+    return address.port;
 }
 
 after(() => {
@@ -292,7 +304,7 @@ describe("Explicit Create directives", () => {
     });
 
     it("uploads local analyze image files as assets", async () => {
-        const db = getDb()!;
+        const db = requireDb();
         const session = createSession(db);
         setActiveSessionId(db, session.id);
         const body = new FormData();
@@ -313,7 +325,7 @@ describe("Explicit Create directives", () => {
     });
 
     it("accepts GIF uploads for analyze image", async () => {
-        const db = getDb()!;
+        const db = requireDb();
         const session = createSession(db);
         setActiveSessionId(db, session.id);
         const body = new FormData();
@@ -349,7 +361,7 @@ describe("Explicit Create directives", () => {
     it("analyzes uploaded assets without storing raw data URLs", async () => {
         const originalKey = process.env.MINIMAX_API_KEY;
         process.env.MINIMAX_API_KEY = "test-key";
-        const db = getDb()!;
+        const db = requireDb();
         const session = createSession(db);
         setActiveSessionId(db, session.id);
         const body = new FormData();
@@ -892,7 +904,7 @@ describe("SSE streaming from Anthropic endpoint", () => {
         };
 
         try {
-            saveUserProfile(getDb()!, {
+            saveUserProfile(requireDb(), {
                 username: "GamerKid",
                 interests: "Minecraft",
                 avatar: { type: "asset", value: "asset_123abc" }
@@ -982,7 +994,7 @@ describe("SSE streaming from Anthropic endpoint", () => {
             assert.equal(body.includes("https://example.com/direct-cat-1.png"), false);
             assert.equal(body.includes("https://example.com/direct-cat-2.png"), false);
 
-            const db = getDb()!;
+            const db = requireDb();
             const rows = getMessages(db, "explicit-direct-session");
             // User message should be persisted for explicit tool directives
             assert.ok(
@@ -998,8 +1010,10 @@ describe("SSE streaming from Anthropic endpoint", () => {
                 (asset) => asset.type === "image" && asset.tool_name === "generate_image"
             );
             assert.ok(assets.length >= 2);
-            const asset = assets.find((item) => item.prompt === "cat")!;
-            assert.deepEqual(JSON.parse(asset.params_json!), {
+            const asset = assets.find((item) => item.prompt === "cat");
+            assert.ok(asset);
+            assert.ok(asset.params_json);
+            assert.deepEqual(JSON.parse(asset.params_json), {
                 model: "image-01",
                 prompt: "cat",
                 aspect_ratio: "16:9"
@@ -1051,7 +1065,7 @@ describe("SSE streaming from Anthropic endpoint", () => {
 
     it("executes Create tool endpoint with origin=create and exact multiline params", async () => {
         const sessionId = "create-tool-multiline-session";
-        const db = getDb()!;
+        const db = requireDb();
         createSession(db, sessionId, "Create Tool Multiline");
         const lyrics = "Verse one, with comma\nChorus line, still here";
         const previousApiKey = process.env.MINIMAX_API_KEY;
@@ -1090,7 +1104,7 @@ describe("SSE streaming from Anthropic endpoint", () => {
             );
             const history = listToolInputHistory(db, sessionId, { kind: "music" });
             assert.equal(history[0]?.origin, "create");
-            assert.equal(JSON.parse(history[0]!.input_json).lyrics, lyrics);
+            assert.equal(JSON.parse(history[0]?.input_json).lyrics, lyrics);
         } finally {
             globalThis.fetch = REAL_FETCH;
             if (previousApiKey === undefined) delete process.env.MINIMAX_API_KEY;
@@ -1100,7 +1114,7 @@ describe("SSE streaming from Anthropic endpoint", () => {
 
     it("rejects invalid reference image uploads before provider use", async () => {
         const sessionId = "bad-reference-upload-session";
-        const database = getDb()!;
+        const database = requireDb();
         createSession(database, sessionId, "Bad Reference Upload");
         const form = new FormData();
         form.set("image", new File([new Uint8Array([1])], "bad.txt", { type: "text/plain" }));
@@ -1120,7 +1134,7 @@ describe("SSE streaming from Anthropic endpoint", () => {
 
     it("executes Create image with uploaded subject reference without storing raw reference", async () => {
         const sessionId = "create-image-reference-session";
-        const database = getDb()!;
+        const database = requireDb();
         createSession(database, sessionId, "Create Image Reference");
         const previousApiKey = process.env.MINIMAX_API_KEY;
         process.env.MINIMAX_API_KEY = "test-key";
@@ -1201,7 +1215,7 @@ describe("SSE streaming from Anthropic endpoint", () => {
 
     it("executes long narration async TTS, extracts bundle audio, and stores compact history", async () => {
         const sessionId = "long-tts-session";
-        const database = getDb()!;
+        const database = requireDb();
         createSession(database, sessionId, "Long TTS");
         const previousApiKey = process.env.MINIMAX_API_KEY;
         process.env.MINIMAX_API_KEY = "test-key";
@@ -1290,7 +1304,7 @@ describe("SSE streaming from Anthropic endpoint", () => {
 
     it("executes Create video, downloads asset, and keeps provider URL out of history", async () => {
         const sessionId = "create-video-session";
-        const database = getDb()!;
+        const database = requireDb();
         createSession(database, sessionId, "Create Video");
         const previousApiKey = process.env.MINIMAX_API_KEY;
         process.env.MINIMAX_API_KEY = "test-key";
@@ -1348,17 +1362,17 @@ describe("SSE streaming from Anthropic endpoint", () => {
             assert.ok(body.includes("/asset/asset_"));
             assert.equal(body.includes("https://cdn.example/output.mp4"), false);
             assert.equal(assets.length, 1);
-            assert.equal(assets[0]!.type, "video");
-            assert.equal(assets[0]!.mime_type, "video/mp4");
-            assert.equal(assets[0]!.size_bytes, 4);
+            assert.equal(assets[0]?.type, "video");
+            assert.equal(assets[0]?.mime_type, "video/mp4");
+            assert.equal(assets[0]?.size_bytes, 4);
             assert.equal(
                 rows.some((row) => row.content.includes("https://cdn.example/output.mp4")),
                 false
             );
             const tasks = listVideoTasks(database, sessionId);
             assert.equal(tasks.length, 1);
-            assert.equal(tasks[0]!.status, "succeeded");
-            assert.equal(tasks[0]!.asset_id, assets[0]!.id);
+            assert.equal(tasks[0]?.status, "succeeded");
+            assert.equal(tasks[0]?.asset_id, assets[0]?.id);
             assert.ok(calls.some((url) => url.includes("task_id=video-task-1")));
         } finally {
             globalThis.fetch = REAL_FETCH;
@@ -1369,7 +1383,7 @@ describe("SSE streaming from Anthropic endpoint", () => {
 
     it("persists provider diagnostics for failed Create video", async () => {
         const sessionId = "create-video-sensitive-session";
-        const database = getDb()!;
+        const database = requireDb();
         createSession(database, sessionId, "Create Video Sensitive");
         const previousApiKey = process.env.MINIMAX_API_KEY;
         process.env.MINIMAX_API_KEY = "test-key";
@@ -1407,18 +1421,18 @@ describe("SSE streaming from Anthropic endpoint", () => {
                 )
             );
             const body = await readBody(resp);
-            const tasks = listVideoTasks(database, sessionId) as any[];
-            const history = listToolInputHistory(database, sessionId, { kind: "video" }) as any[];
+            const tasks = listVideoTasks(database, sessionId);
+            const history = listToolInputHistory(database, sessionId, { kind: "video" });
             const rows = getMessages(database, sessionId);
 
             assert.ok(body.includes("Couldn't generate the video"));
             assert.equal(body.includes("new_sensitive"), false);
-            assert.equal(tasks[0]!.status, "failed");
-            assert.equal(tasks[0]!.provider_task_id, "video-task-sensitive");
-            assert.equal(tasks[0]!.provider_stage, "query");
-            assert.equal(tasks[0]!.provider_status_msg, "output new_sensitive");
-            assert.equal(history[0]!.provider_stage, "query");
-            assert.equal(history[0]!.provider_status_msg, "output new_sensitive");
+            assert.equal(tasks[0]?.status, "failed");
+            assert.equal(tasks[0]?.provider_task_id, "video-task-sensitive");
+            assert.equal(tasks[0]?.provider_stage, "query");
+            assert.equal(tasks[0]?.provider_status_msg, "output new_sensitive");
+            assert.equal(history[0]?.provider_stage, "query");
+            assert.equal(history[0]?.provider_status_msg, "output new_sensitive");
             assert.equal(JSON.stringify(rows).includes("new_sensitive"), false);
         } finally {
             globalThis.fetch = REAL_FETCH;
@@ -1506,7 +1520,7 @@ describe("SSE streaming from Anthropic endpoint", () => {
 
     it("executes Create music cover generation and saves asset", async () => {
         const sessionId = "create-tool-cover-session";
-        const db = getDb()!;
+        const db = requireDb();
         createSession(db, sessionId, "Create Tool Cover");
         let payload: Record<string, unknown> | null = null;
         const originalFetch = globalThis.fetch;
@@ -1541,10 +1555,12 @@ describe("SSE streaming from Anthropic endpoint", () => {
             assert.equal(payload?.model, "music-cover");
             assert.equal(payload?.cover_feature_id, "cover-1");
             assert.ok(body.includes("tool_result"));
-            const asset = getAssets(db, sessionId).at(-1)!;
+            const asset = getAssets(db, sessionId).at(-1);
+            assert.ok(asset);
             assert.equal(asset.type, "music");
             assert.equal(asset.tool_name, "generate_music_cover");
-            const params = JSON.parse(asset.params_json!);
+            assert.ok(asset.params_json);
+            const params = JSON.parse(asset.params_json);
             assert.equal(params.cover_feature_id_present, true);
             const history = listToolInputHistory(db, sessionId, { kind: "cover" });
             assert.equal(history[0]?.tool_name, "generate_music_cover");
@@ -1557,7 +1573,7 @@ describe("SSE streaming from Anthropic endpoint", () => {
 
     it("preserves create draft after successful Create lyrics helper", async () => {
         const sessionId = "create-tool-lyrics-draft-session";
-        const db = getDb()!;
+        const db = requireDb();
         createSession(db, sessionId, "Create Lyrics Draft");
         saveDraft(db, sessionId, "create", {
             selectedTab: "music",
@@ -1584,7 +1600,7 @@ describe("SSE streaming from Anthropic endpoint", () => {
             const body = await readBody(resp);
 
             assert.ok(body.includes("tool_result"));
-            assert.deepEqual(JSON.parse(getDraft(db, sessionId, "create")!.value_json), {
+            assert.deepEqual(JSON.parse(getDraft(db, sessionId, "create")?.value_json), {
                 selectedTab: "music",
                 music: { prompt: "boss", lyrics: "" }
             });
@@ -1600,7 +1616,7 @@ describe("SSE streaming from Anthropic endpoint", () => {
 
     it("rejects generated image downloads over the byte cap before buffering", async () => {
         const sessionId = "create-tool-image-too-large-session";
-        const db = getDb()!;
+        const db = requireDb();
         createSession(db, sessionId, "Create Image Too Large");
         const previousApiKey = process.env.MINIMAX_API_KEY;
         process.env.MINIMAX_API_KEY = "test-key";
@@ -1646,7 +1662,7 @@ describe("SSE streaming from Anthropic endpoint", () => {
 
     it("clears create draft after successful explicit tool directive", async () => {
         const sessionId = "explicit-create-draft-success-session";
-        const db = getDb()!;
+        const db = requireDb();
         createSession(db, sessionId, "Draft Success");
         saveDraft(db, sessionId, "create", { selectedTab: "voice", voice: { text: "hello" } });
 
@@ -1675,7 +1691,7 @@ describe("SSE streaming from Anthropic endpoint", () => {
 
     it("preserves create draft after failed explicit tool directive", async () => {
         const sessionId = "explicit-create-draft-fail-session";
-        const db = getDb()!;
+        const db = requireDb();
         createSession(db, sessionId, "Draft Failure");
         saveDraft(db, sessionId, "create", { selectedTab: "voice", voice: { text: "hello" } });
 
@@ -1696,7 +1712,7 @@ describe("SSE streaming from Anthropic endpoint", () => {
             const body = await readBody(resp);
 
             assert.ok(body.includes("Couldn't generate voice audio"));
-            assert.deepEqual(JSON.parse(getDraft(db, sessionId, "create")!.value_json), {
+            assert.deepEqual(JSON.parse(getDraft(db, sessionId, "create")?.value_json), {
                 selectedTab: "voice",
                 voice: { text: "hello" }
             });
@@ -1707,7 +1723,7 @@ describe("SSE streaming from Anthropic endpoint", () => {
 
     it("consumes exactly one quota unit for successful explicit tool directives", async () => {
         const sessionId = "explicit-quota-once-session";
-        const db = getDb()!;
+        const db = requireDb();
         const existing = db
             .prepare(
                 "SELECT count FROM daily_usage WHERE date = date('now') AND feature = 'image'"
@@ -1762,7 +1778,7 @@ describe("SSE streaming from Anthropic endpoint", () => {
 
     it("consumes speech quota by text character count for explicit TTS", async () => {
         const sessionId = "explicit-speech-char-quota-session";
-        const db = getDb()!;
+        const db = requireDb();
         const existing = db
             .prepare(
                 "SELECT count FROM daily_usage WHERE date = date('now') AND feature = 'speech'"
@@ -1806,7 +1822,7 @@ describe("SSE streaming from Anthropic endpoint", () => {
 
     it("releases speech character quota after failed explicit TTS", async () => {
         const sessionId = "explicit-speech-char-release-session";
-        const db = getDb()!;
+        const db = requireDb();
         const existing = db
             .prepare(
                 "SELECT count FROM daily_usage WHERE date = date('now') AND feature = 'speech'"
@@ -1850,7 +1866,7 @@ describe("SSE streaming from Anthropic endpoint", () => {
 
     it("preserves quota-blocked error for explicit tool directives", async () => {
         const sessionId = "quota-blocked-session";
-        const db = getDb()!;
+        const db = requireDb();
         const existing = db
             .prepare(
                 "SELECT count FROM daily_usage WHERE date = date('now') AND feature = 'image'"
@@ -1955,7 +1971,9 @@ describe("SSE streaming from Anthropic endpoint", () => {
             const assistantRows = getMessages(database, sessionId).filter(
                 (row) => row.role === "assistant"
             );
-            const lastToolCall = JSON.parse(assistantRows.at(-1)!.tool_calls_json!)[0] as {
+            const lastAssistant = assistantRows.at(-1);
+            assert.ok(lastAssistant?.tool_calls_json);
+            const lastToolCall = JSON.parse(lastAssistant.tool_calls_json)[0] as {
                 id: string;
             };
 
@@ -1967,8 +1985,8 @@ describe("SSE streaming from Anthropic endpoint", () => {
                 assets.some((asset) => asset.id === "000008"),
                 true
             );
-            assert.match(newAsset!.id, /^asset_[0-9a-f-]{36}$/);
-            assert.match(toolRows.at(-1)!.content, /^\/asset\/asset_[0-9a-f-]{36}$/);
+            assert.match(newAsset?.id, /^asset_[0-9a-f-]{36}$/);
+            assert.match(toolRows.at(-1)?.content, /^\/asset\/asset_[0-9a-f-]{36}$/);
             assert.match(lastToolCall.id, /^direct_[0-9a-f-]{36}$/);
         } finally {
             globalThis.fetch = REAL_FETCH;
@@ -2542,7 +2560,7 @@ describe("Integration: chat with agent loop + persistence", () => {
             await new Promise((r) => setTimeout(r, 100));
 
             // Verify messages saved to DB
-            const dbMessages = getMessages(getDb()!, "test-session-123");
+            const dbMessages = getMessages(requireDb(), "test-session-123");
             // Should have the user message and the assistant message
             const userMsgs = dbMessages.filter((m) => m.role === "user");
             const assistantMsgs = dbMessages.filter((m) => m.role === "assistant");
@@ -2555,7 +2573,7 @@ describe("Integration: chat with agent loop + persistence", () => {
     });
 
     it("persists fallback instead of empty thinking-only assistant response", async () => {
-        const sessionId = "thinking-only-session-" + Date.now();
+        const sessionId = `thinking-only-session-${Date.now()}`;
         const sseChunks = [
             "event: message_start\ndata: {\"type\":\"message_start\",\"message\":{}}\n\n",
             "event: content_block_start\ndata: {\"type\":\"content_block_start\",\"index\":0,\"content_block\":{\"type\":\"thinking\",\"thinking\":\"\"}}\n\n",
@@ -2578,7 +2596,7 @@ describe("Integration: chat with agent loop + persistence", () => {
             const body = await readBody(resp);
             await new Promise((r) => setTimeout(r, 100));
 
-            const assistantRows = getMessages(getDb()!, sessionId).filter(
+            const assistantRows = getMessages(requireDb(), sessionId).filter(
                 (row) => row.role === "assistant"
             );
             assert.ok(body.includes("event: thinking"));
@@ -2614,9 +2632,10 @@ describe("Integration: chat with agent loop + persistence", () => {
             );
             const resp = await handleChat(req, "test-key", "thinking-history-session");
             const body = await readBody(resp);
-            const assistant = getMessages(getDb()!, "thinking-history-session")
+            const assistant = getMessages(requireDb(), "thinking-history-session")
                 .filter((row) => row.role === "assistant")
-                .at(-1)!;
+                .at(-1);
+            assert.ok(assistant);
 
             assert.ok(body.includes("event: thinking"));
             assert.equal(assistant.content, "Answer.");
@@ -2630,9 +2649,9 @@ describe("Integration: chat with agent loop + persistence", () => {
         // Regression test: finalMessages is built from contextMessages, not the full
         // untrimmed messages array. If the save loop uses messages.length here, it
         // starts past finalMessages.length and silently drops the assistant response.
-        const sessionId = "context-trim-session-" + Date.now();
+        const sessionId = `context-trim-session-${Date.now()}`;
         const oversizedHistoryMessage = "old history ".repeat(400_000);
-        saveMessage(getDb()!, sessionId, "user", oversizedHistoryMessage);
+        saveMessage(requireDb(), sessionId, "user", oversizedHistoryMessage);
 
         globalThis.fetch = async (_url, init) => {
             const payload = JSON.parse(String(init?.body)) as {
@@ -2654,7 +2673,7 @@ describe("Integration: chat with agent loop + persistence", () => {
             await readBody(resp); // Must read stream for async DB writes to complete
             await new Promise((r) => setTimeout(r, 100));
 
-            const msgsAfterRequest = getMessages(getDb()!, sessionId);
+            const msgsAfterRequest = getMessages(requireDb(), sessionId);
             assert.ok(
                 msgsAfterRequest.some(
                     (m) => m.role === "assistant" && m.content.includes("Second response")
@@ -2709,7 +2728,7 @@ describe("Integration: chat with agent loop + persistence", () => {
             assert.equal(body.includes("https://example.com/thumb.png"), false);
             assert.ok(body.includes("Here is your image!"));
             assert.equal(
-                getAssets(getDb()!, "test-session-123").some((a) => a.type === "image"),
+                getAssets(requireDb(), "test-session-123").some((a) => a.type === "image"),
                 true
             );
         } finally {
@@ -2719,7 +2738,7 @@ describe("Integration: chat with agent loop + persistence", () => {
 
     it("agent-loop tool call consumes exactly one quota unit", async () => {
         const sessionId = "agent-quota-once-session";
-        const db = getDb()!;
+        const db = requireDb();
         const existing = db
             .prepare(
                 "SELECT count FROM daily_usage WHERE date = date('now') AND feature = 'image'"
@@ -2788,7 +2807,7 @@ describe("Integration: chat with agent loop + persistence", () => {
 
     it("agent-loop failed tool result releases reserved quota", async () => {
         const sessionId = "agent-quota-failed-session";
-        const db = getDb()!;
+        const db = requireDb();
         const existing = db
             .prepare(
                 "SELECT count FROM daily_usage WHERE date = date('now') AND feature = 'image'"
@@ -2857,7 +2876,7 @@ describe("Integration: chat with agent loop + persistence", () => {
 
     it("agent-loop tool call blocks before API when quota is exhausted", async () => {
         const sessionId = "agent-quota-blocked-session";
-        const db = getDb()!;
+        const db = requireDb();
         const existing = db
             .prepare(
                 "SELECT count FROM daily_usage WHERE date = date('now') AND feature = 'image'"
@@ -2950,12 +2969,12 @@ describe("Integration: chat with agent loop + persistence", () => {
             assert.ok(body.includes("tool_result"));
             assert.ok(body.includes("/asset/"));
             assert.equal(body.includes("data:audio"), false);
-            assert.equal(capturedAnthropicBodies[1]!.includes("data:audio"), false);
+            assert.equal(capturedAnthropicBodies[1]?.includes("data:audio"), false);
             assert.ok(
-                capturedAnthropicBodies[1]!.includes("Generated audio with text_to_speech")
+                capturedAnthropicBodies[1]?.includes("Generated audio with text_to_speech")
             );
 
-            const rows = getMessages(getDb()!, "media-compact-session");
+            const rows = getMessages(requireDb(), "media-compact-session");
             assert.equal(
                 rows.some((row) => row.content.includes("data:audio")),
                 false
@@ -3026,7 +3045,7 @@ describe("POST /api/steer integration", () => {
 describe("/api/profile", () => {
     beforeEach(() => {
         ensureTestDb();
-        getDb()!.prepare("DELETE FROM app_state WHERE key = 'user_profile_json'").run();
+        getDb()?.prepare("DELETE FROM app_state WHERE key = 'user_profile_json'").run();
     });
 
     it("GET returns default profile", async () => {
@@ -3081,7 +3100,7 @@ describe("/api/profile", () => {
     });
 
     it("DELETE resets profile", async () => {
-        saveUserProfile(getDb()!, {
+        saveUserProfile(requireDb(), {
             username: "GamerKid",
             avatar: { type: "asset", value: "asset_123abc" }
         });
@@ -3120,7 +3139,7 @@ describe("GET /api/history", () => {
     });
 
     it("returns saved messages for a session", async () => {
-        const database = getDb()!;
+        const database = requireDb();
         saveMessage(database, "test-session-123", "user", "hello");
         saveMessage(database, "test-session-123", "assistant", "hi there");
 
@@ -3191,7 +3210,7 @@ describe("GET /api/usage", () => {
     });
 
     it("returns tracked usage counts", async () => {
-        const database = getDb()!;
+        const database = requireDb();
         trackUsage(database, "image");
         trackUsage(database, "image");
         trackUsage(database, "speech");
@@ -3270,7 +3289,7 @@ describe("Coverage: History loading in handleChat", () => {
     });
 
     it("does not replay saved tool protocol messages to MiniMax", async () => {
-        const database = getDb()!;
+        const database = requireDb();
         saveMessage(database, "tool-history-session", "user", "draw a cat");
         saveMessage(
             database,
@@ -3288,7 +3307,7 @@ describe("Coverage: History loading in handleChat", () => {
             "call_function_old_1"
         );
 
-        let capturedPayload: any = null;
+        let capturedPayload: Record<string, unknown> | null = null;
         globalThis.fetch = async (_url: string | URL | Request, init?: RequestInit) => {
             capturedPayload = JSON.parse(init?.body as string);
             return anthropicResponse(anthropicTextSse(["safe reply"]));
@@ -3313,7 +3332,7 @@ describe("Coverage: History loading in handleChat", () => {
     });
 
     it("sanitizes assistant media markup when replaying history", async () => {
-        const database = getDb()!;
+        const database = requireDb();
         saveMessage(
             database,
             "poison-history-session",
@@ -3321,7 +3340,7 @@ describe("Coverage: History loading in handleChat", () => {
             "Here's your image:\n\n![cat](https://hailuo-image.example/image_inference_output/cat.jpeg)"
         );
 
-        let capturedPayload: any = null;
+        let capturedPayload: Record<string, unknown> | null = null;
         globalThis.fetch = async (_url: string | URL | Request, init?: RequestInit) => {
             capturedPayload = JSON.parse(init?.body as string);
             return anthropicResponse(anthropicTextSse(["safe reply"]));
@@ -3344,7 +3363,7 @@ describe("Coverage: History loading in handleChat", () => {
 
     it("loads existing history from DB and includes in agent loop", async () => {
         // Pre-populate DB with history
-        const database = getDb()!;
+        const database = requireDb();
         saveMessage(database, "test-session-123", "user", "previous message");
         saveMessage(database, "test-session-123", "assistant", "previous reply");
 
@@ -3392,7 +3411,7 @@ describe("Node HTTP adapter and server lifecycle", () => {
         const { startServer } = await import("../../src/server.ts");
         const srv = startServer(0);
         await new Promise<void>((resolve) => srv.on("listening", resolve));
-        const port = (srv.address() as any).port;
+        const port = serverPort(srv);
         assert.ok(port > 0, "server should be listening");
 
         // Verify health endpoint through the real Node HTTP server
@@ -3414,7 +3433,7 @@ describe("Node HTTP adapter and server lifecycle", () => {
         const { startServer } = await import("../../src/server.ts");
         const srv = startServer(0);
         await new Promise<void>((resolve) => srv.on("listening", resolve));
-        const port = (srv.address() as any).port;
+        const port = serverPort(srv);
 
         const resp = await fetch(`http://localhost:${port}/api/chat`, {
             method: "POST",
@@ -3436,7 +3455,7 @@ describe("Node HTTP adapter and server lifecycle", () => {
         const { startServer } = await import("../../src/server.ts");
         const srv = startServer(0);
         await new Promise<void>((resolve) => srv.on("listening", resolve));
-        const port = (srv.address() as any).port;
+        const port = serverPort(srv);
 
         const resp = await fetch(`http://localhost:${port}/nonexistent`);
         assert.equal(resp.status, 404);
@@ -3636,8 +3655,8 @@ describe("Session, draft, and create-history APIs", () => {
         assert.equal(json.profile.avatar.type, "asset");
         assert.match(json.profile.avatar.value, /^asset_/);
         const assets = getAssets(
-            getDb()!,
-            resolveSessionId(new Request("http://localhost/api/state"), getDb()!)
+            requireDb(),
+            resolveSessionId(new Request("http://localhost/api/state"), requireDb())
         );
         assert.equal(
             assets.some((asset) => asset.id === json.profile.avatar.value),
@@ -3731,7 +3750,7 @@ describe("Session, draft, and create-history APIs", () => {
     });
 
     it("lists and soft-deletes create history", async () => {
-        const db = getDb()!;
+        const db = requireDb();
         const sessionId = resolveSessionId(new Request("http://localhost/api/state"), db);
         saveMessage(db, sessionId, "user", "seed");
         const row = db
@@ -3756,7 +3775,7 @@ describe("Session, draft, and create-history APIs", () => {
     });
 
     it("create-history API response includes origin field", async () => {
-        const db = getDb()!;
+        const db = requireDb();
         const sessionId = resolveSessionId(new Request("http://localhost/api/state"), db);
         saveMessage(db, sessionId, "user", "seed");
         db.prepare(
@@ -3780,7 +3799,7 @@ describe("Session, draft, and create-history APIs", () => {
     });
 
     it("records explicit tool directive in chat with origin=chat", async () => {
-        const db = getDb()!;
+        const db = requireDb();
         const sessionId = resolveSessionId(new Request("http://localhost/api/state"), db);
         saveMessage(db, sessionId, "user", "seed");
 
@@ -3841,7 +3860,7 @@ describe("Session, draft, and create-history APIs", () => {
     });
 
     it("persists user message for explicit tool directive", async () => {
-        const db = getDb()!;
+        const db = requireDb();
         const sessionId = resolveSessionId(new Request("http://localhost/api/state"), db);
 
         const prevKey = process.env.MINIMAX_API_KEY;

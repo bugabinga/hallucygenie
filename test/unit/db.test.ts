@@ -83,7 +83,7 @@ describe("runMigrations", () => {
         const tables = db
             .prepare("SELECT name FROM sqlite_master WHERE type='table' ORDER BY name")
             .all()
-            .map((r: any) => r.name);
+            .map((r) => (r as { name: string; }).name);
         assert.ok(tables.includes("schema_migrations"));
         assert.ok(tables.includes("messages"));
         assert.ok(tables.includes("preferences"));
@@ -95,26 +95,26 @@ describe("runMigrations", () => {
         const videoTaskColumns = db
             .prepare("PRAGMA table_info(video_tasks)")
             .all()
-            .map((r: any) => r.name);
+            .map((r) => (r as { name: string; }).name);
         assert.ok(videoTaskColumns.includes("provider_status_msg"));
 
         const toolHistoryColumns = db
             .prepare("PRAGMA table_info(tool_input_history)")
             .all()
-            .map((r: any) => r.name);
+            .map((r) => (r as { name: string; }).name);
         assert.ok(toolHistoryColumns.includes("provider_status_msg"));
 
         const assetColumns = db
             .prepare("PRAGMA table_info(assets)")
             .all()
-            .map((r: any) => r.name);
+            .map((r) => (r as { name: string; }).name);
         assert.ok(assetColumns.includes("params_json"));
 
         // Verify all migrations recorded
         const versions = db
             .prepare("SELECT version FROM schema_migrations ORDER BY version")
             .all()
-            .map((r: any) => r.version);
+            .map((r) => (r as { version: number; }).version);
         assert.deepEqual(versions, [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14]);
 
         db.close();
@@ -144,7 +144,7 @@ describe("runMigrations", () => {
         const versions = db
             .prepare("SELECT version FROM schema_migrations ORDER BY version")
             .all()
-            .map((r: any) => r.version);
+            .map((r) => (r as { version: number; }).version);
         assert.deepEqual(versions, [1, 2]);
 
         // Verify t2 exists
@@ -171,7 +171,7 @@ describe("runMigrations", () => {
         const versions = db
             .prepare("SELECT version FROM schema_migrations ORDER BY version")
             .all()
-            .map((r: any) => r.version);
+            .map((r) => (r as { version: number; }).version);
         assert.deepEqual(versions, [], "No migrations should be recorded after rollback");
 
         db.close();
@@ -223,7 +223,7 @@ describe("runMigrations", () => {
         const versions = db
             .prepare("SELECT version FROM schema_migrations ORDER BY version")
             .all()
-            .map((r: any) => r.version);
+            .map((r) => (r as { version: number; }).version);
         assert.deepEqual(versions, [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14]);
         assert.ok(getOrCreateActiveSession(db));
         db.close();
@@ -265,7 +265,7 @@ describe("initDb", () => {
         const tables = db
             .prepare("SELECT name FROM sqlite_master WHERE type='table' ORDER BY name")
             .all()
-            .map((r: any) => r.name);
+            .map((r) => (r as { name: string; }).name);
         assert.ok(tables.includes("messages"));
         assert.ok(tables.includes("preferences"));
         assert.ok(tables.includes("daily_usage"));
@@ -282,10 +282,10 @@ describe("initDb", () => {
         const db = initDb(":memory:");
         const sessionId = getActiveSessionId(db);
         assert.ok(sessionId, "active session ID must be set after initDb");
-        const session = getSession(db, sessionId!);
+        const session = getSession(db, sessionId);
         assert.ok(session, "active session row must exist in sessions table after initDb");
-        assert.equal(session!.name, "New Chat");
-        assert.equal(session!.name_source, "default");
+        assert.equal(session?.name, "New Chat");
+        assert.equal(session?.name_source, "default");
         db.close();
     });
 
@@ -310,7 +310,7 @@ describe("initDb", () => {
         const db = initDb(join(dir, "legacy.db"), migrationsDir);
         const sessionId = getActiveSessionId(db);
         assert.ok(sessionId, "active session ID must be set even without sessions table");
-        assert.match(sessionId!, /^[0-9a-f-]{36}$/);
+        assert.match(sessionId, /^[0-9a-f-]{36}$/);
 
         // sessions table should NOT exist
         const tables = db
@@ -502,7 +502,7 @@ describe("Draft CRUD", () => {
     it("saves, reads, and deletes chat drafts scoped by session", () => {
         const session = createSession(db);
         saveDraft(db, session.id, "chat", { text: "unfinished prompt" });
-        assert.deepEqual(JSON.parse(getDraft(db, session.id, "chat")!.value_json), {
+        assert.deepEqual(JSON.parse(getDraft(db, session.id, "chat")?.value_json), {
             text: "unfinished prompt"
         });
         deleteDraft(db, session.id, "chat");
@@ -1046,8 +1046,10 @@ describe("saveAsset + getAssets + getAsset", () => {
                 is_instrumental: true
             })
         });
-        const asset = getAsset(db, id)!;
-        assert.equal(JSON.parse(asset.params_json!).model, "music-2.6");
+        const asset = getAsset(db, id);
+        assert.ok(asset);
+        assert.ok(asset.params_json);
+        assert.equal(JSON.parse(asset.params_json).model, "music-2.6");
     });
 
     it("rejects raw media bytes in asset params", () => {
@@ -1082,8 +1084,8 @@ describe("saveAsset + getAssets + getAsset", () => {
         });
         const asset = getAsset(db, id);
         assert.notEqual(asset, undefined);
-        assert.equal(asset!.filename, "song.mp3");
-        assert.equal(asset!.session_id, "session-2");
+        assert.equal(asset?.filename, "song.mp3");
+        assert.equal(asset?.session_id, "session-2");
     });
 
     it("getAssets only returns assets for that session", () => {

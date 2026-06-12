@@ -20,7 +20,7 @@ import { writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { prepareExistingPr, readFindings, runPi } from "./lib.ts";
 
-const root = join(import.meta.dirname, "../..");
+const _root = join(import.meta.dirname, "../..");
 
 const piFlags = ["--no-session", "--no-prompt-templates"];
 const timeout = 8 * 60 * 1000;

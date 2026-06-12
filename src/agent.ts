@@ -371,7 +371,7 @@ export function stripModelControlPlaceholders(text: string): string {
 }
 
 export function compactToolResultForModel(toolName: string, result: ToolResult): string {
-    if (result.type === "error") return "Error: " + result.content;
+    if (result.type === "error") return `Error: ${result.content}`;
 
     if (result.type === "image") {
         const count = result.urls?.length ?? 1;
@@ -463,8 +463,9 @@ export function toAnthropicPayload(
         }
     }
 
-    if (system.length > 0) {
-        system[system.length - 1]!.cache_control = { type: "ephemeral" };
+    const lastSystem = system.at(-1);
+    if (lastSystem) {
+        lastSystem.cache_control = { type: "ephemeral" };
     }
 
     // Add cache_control to last tool for prompt caching
@@ -611,7 +612,7 @@ export async function runAgentLoop(
 
             buffer += decoder.decode(value, { stream: true });
             const lines = buffer.split("\n");
-            buffer = lines.pop()!;
+            buffer = lines.pop() ?? "";
 
             for (const line of lines) {
                 const trimmed = line.trim();
@@ -698,7 +699,6 @@ export async function runAgentLoop(
                     if (delta?.stop_reason) {
                         stopReason = delta.stop_reason as string;
                     }
-                    continue;
                 }
 
                 // message_start and message_stop — no special handling needed
