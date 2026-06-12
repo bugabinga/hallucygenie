@@ -209,7 +209,7 @@ function sseResponse(stream: ReadableStream<Uint8Array>): Response {
 
 // ── Request validation ───────────────────────────────────────────────
 
-function validateChatBody(body: unknown):
+export function validateChatBody(body: unknown):
     | {
           ok: true;
           body: ChatRequestBody;
@@ -246,6 +246,23 @@ function validateChatBody(body: unknown):
                 ok: false,
                 error: `messages[${i}].role must be a string`,
             };
+        }
+        // Only allow "system" role in the first message to prevent prompt injection.
+        // Anthropic/MiniMax APIs use system messages separately, not as chat history entries.
+        if (i === 0) {
+            if (msg.role !== "system" && msg.role !== "user" && msg.role !== "assistant") {
+                return {
+                    ok: false,
+                    error: `messages[0].role must be "system", "user", or "assistant"`,
+                };
+            }
+        } else {
+            if (msg.role !== "user" && msg.role !== "assistant") {
+                return {
+                    ok: false,
+                    error: `messages[${i}].role must be "user" or "assistant"`,
+                };
+            }
         }
         if (typeof msg.content !== "string") {
             return {
@@ -395,9 +412,13 @@ export async function handleChat(
 
     const explicitTool = parseExplicitToolDirective(lastUserMsg.content);
     if (explicitTool) {
+        // Save user message; if tool execution throws, delete it so we don't end up
+        // with a persisted user message that has no tool result.
+        let messageSaved = false;
         if (sessionId) {
             const userCount = countSessionUserMessages(database, sessionId);
             saveMessage(database, sessionId, "user", lastUserMsg.content);
+            messageSaved = true;
             if (userCount === 0) {
                 autoNameDefaultSession(
                     database,
@@ -406,7 +427,24 @@ export async function handleChat(
                 );
             }
         }
-        return handleExplicitToolDirective(explicitTool, apiKey, database, sessionId);
+        try {
+            return handleExplicitToolDirective(explicitTool, apiKey, database, sessionId);
+        } catch (err) {
+            // Tool execution threw — roll back the user message if it was saved
+            if (sessionId && messageSaved) {
+                // Delete the most recent user message for this session
+                database
+                    .prepare(
+                        `DELETE FROM messages
+                         WHERE session_id = ? AND id = (
+                           SELECT id FROM messages WHERE session_id = ? ORDER BY id DESC LIMIT 1
+                         )`,
+                    )
+                    .run(sessionId, sessionId);
+            }
+            log.warn("explicit tool directive threw", { error: String(err) });
+            return jsonResponse({ error: "Tool execution failed" }, 500);
+        }
     }
 
     // Save user message to DB
@@ -493,8 +531,11 @@ export async function handleChat(
                             if (event.id) {
                                 savedToolResults.set(event.id, saved);
                                 const consumed = consumedQuotaByToolId.get(event.id);
-                                if (consumed && saved.type === "error") {
-                                    releaseQuota(database, consumed.feature, consumed.amount);
+                                if (consumed) {
+                                    if (saved.type === "error") {
+                                        releaseQuota(database, consumed.feature, consumed.amount);
+                                    }
+                                    // Always delete after tool_result fires, regardless of outcome
                                     consumedQuotaByToolId.delete(event.id);
                                 }
                             }
@@ -587,6 +628,12 @@ export async function handleChat(
             const errorEvent = `event: error\ndata: ${JSON.stringify({ error: String(err) })}\n\n`;
             await writer.write(encoder.encode(errorEvent));
         } finally {
+            // Release any quota consumed for tools whose tool_result event never fired
+            // (e.g., SSE writer threw before we reached the tool_result case).
+            for (const [toolId, consumed] of consumedQuotaByToolId) {
+                releaseQuota(database, consumed.feature, consumed.amount);
+                consumedQuotaByToolId.delete(toolId);
+            }
             await writer.close();
         }
     })();
@@ -1278,6 +1325,11 @@ function saveProfileAvatar(
 async function handleProfileAvatarUpload(req: Request, database: Database): Promise<Response> {
     try {
         const sessionId = resolveSessionId(req, database);
+        // Guard against memory exhaustion: reject payloads > 5 MB before parsing
+        const contentLength = Number(req.headers.get("content-length") ?? "0");
+        if (contentLength > 5 * 1024 * 1024) {
+            return jsonResponse({ error: "Request body too large" }, 413);
+        }
         const form = await req.formData();
         const file = form.get("avatar");
         if (!(file instanceof File)) return jsonResponse({ error: "avatar file required" }, 400);
@@ -1308,6 +1360,11 @@ async function handleProfileAvatarUpload(req: Request, database: Database): Prom
 async function handleAnalyzeImageUpload(req: Request, database: Database): Promise<Response> {
     try {
         const sessionId = resolveSessionId(req, database);
+        // Guard against memory exhaustion: reject payloads > 25 MB before parsing
+        const contentLength = Number(req.headers.get("content-length") ?? "0");
+        if (contentLength > 25 * 1024 * 1024) {
+            return jsonResponse({ error: "Request body too large" }, 413);
+        }
         const form = await req.formData();
         const file = form.get("image");
         if (!(file instanceof File)) return jsonResponse({ error: "image file required" }, 400);
@@ -1334,6 +1391,11 @@ async function handleAnalyzeImageUpload(req: Request, database: Database): Promi
 async function handleReferenceImageUpload(req: Request, database: Database): Promise<Response> {
     try {
         const sessionId = resolveSessionId(req, database);
+        // Guard against memory exhaustion: reject payloads > 25 MB before parsing
+        const contentLength = Number(req.headers.get("content-length") ?? "0");
+        if (contentLength > 25 * 1024 * 1024) {
+            return jsonResponse({ error: "Request body too large" }, 413);
+        }
         const form = await req.formData();
         const file = form.get("image");
         if (!(file instanceof File))
@@ -1378,6 +1440,11 @@ async function coverSourceFromSidecar(
 async function handleMusicCoverPreprocess(req: Request, apiKey: string): Promise<Response> {
     let sourceKind = "direct";
     try {
+        // Guard against memory exhaustion: reject payloads > 60 MB before parsing
+        const contentLength = Number(req.headers.get("content-length") ?? "0");
+        if (contentLength > 60 * 1024 * 1024) {
+            return jsonResponse({ error: "Request body too large" }, 413);
+        }
         const form = await req.formData();
         sourceKind = String(form.get("source_kind") ?? "direct");
         let source: { audio_url?: string; audio_base64?: string };
@@ -1855,6 +1922,16 @@ export async function handleNodeRequest(req: IncomingMessage, res: ServerRespons
 
         let body: BodyInit | null = null;
         if (method !== "GET" && method !== "HEAD") {
+            // Guard against memory exhaustion: reject large bodies before reading
+            const contentLength = Number(headers.get("content-length") ?? "0");
+            const MAX_BODY_BYTES = 10 * 1024 * 1024; // 10 MB hard cap
+            if (contentLength > MAX_BODY_BYTES) {
+                res.statusCode = 413;
+                res.setHeader("Content-Type", "application/json");
+                res.end(JSON.stringify({ error: "Request body too large" }));
+                reqLog.info("response sent", { status: res.statusCode });
+                return;
+            }
             const chunks: Buffer[] = [];
             for await (const chunk of req) chunks.push(chunk);
             body = Buffer.concat(chunks);

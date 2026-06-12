@@ -46,7 +46,7 @@ export function runMigrations(db: Database, migrationsDir: string): void {
     let files: string[];
     try {
         files = readdirSync(migrationsDir)
-            .filter((f) => f.endsWith(".sql"))
+            .filter((f) => f.endsWith(".sql") && /^\d+-.+\.sql$/.test(f))
             .sort();
     } catch {
         // No migrations directory — nothing to do
@@ -62,6 +62,8 @@ export function runMigrations(db: Database, migrationsDir: string): void {
     // Run pending migrations in a transaction
     const pending = files.filter((f) => {
         const version = parseInt(f.split("-")[0], 10);
+        // Guard against malformed filenames that pass the regex but still produce NaN
+        if (Number.isNaN(version)) return false;
         return !applied.has(version);
     });
 

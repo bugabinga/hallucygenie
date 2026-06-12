@@ -203,7 +203,7 @@ export function estimateTokens(message: ChatMessage): number {
     if (message.tool_calls) {
         for (const tc of message.tool_calls) {
             chars += tc.name.length;
-            chars += JSON.stringify(tc.input).length;
+            chars += JSON.stringify(tc.input ?? {}).length;
             chars += tc.id.length;
         }
     }
@@ -269,8 +269,10 @@ export function buildContext(
                     break; // Would exceed budget — stop here
                 }
 
-                // Add the whole turn (we'll reverse at the end)
+                // Add the whole turn (we'll reverse at the end).
+                // Skip k===0 (system message) — it is prepended unconditionally below.
                 for (let k = pairedIndex; k <= i; k++) {
+                    if (k === 0) continue;
                     result.unshift(messages[k]);
                 }
                 usedTokens += turnTokens;
@@ -279,6 +281,12 @@ export function buildContext(
                 // Orphan tool result with no matching tool_use — treat as standalone
                 if (usedTokens + msgTokens > remainingBudget) {
                     // Budget exceeded — skip orphan and continue scanning older messages
+                    log.debug("buildContext: skipped orphan tool result (budget)", {
+                        index: i,
+                        msgTokens,
+                        usedTokens,
+                        remainingBudget,
+                    });
                     i--;
                     continue;
                 }
@@ -307,15 +315,21 @@ export function buildContext(
 
             if (usedTokens + turnTokens > remainingBudget) break;
 
-            // Add assistant message + tool results in order
-            result.unshift(msg, ...toolResultIndices.map((idx) => messages[idx]));
+            // Add assistant message + tool results in order. Skip i===0 (system).
+            if (i !== 0) result.unshift(msg);
+            for (const idx of toolResultIndices) {
+                result.unshift(messages[idx]);
+            }
             usedTokens += turnTokens;
             i--;
         } else {
             // Regular message (user, assistant text-only, etc.)
             if (usedTokens + msgTokens > remainingBudget) break;
-            result.unshift(msg);
-            usedTokens += msgTokens;
+            // Skip i===0 (system) — prepended unconditionally below
+            if (i !== 0) {
+                result.unshift(msg);
+                usedTokens += msgTokens;
+            }
             i--;
         }
     }
@@ -410,16 +424,30 @@ export function toAnthropicPayload(
             anthropicMessages.push({ role: "user", content: msg.content });
         } else if (msg.role === "assistant") {
             const content: Array<Record<string, unknown>> = [];
-            if (msg.thinking && msg.thinking_signature) {
-                content.push({
-                    type: "thinking",
-                    thinking: msg.thinking,
-                    signature: msg.thinking_signature,
-                });
+            // Include thinking block even without signature — the API may accept it.
+            // Log a warning if signature is missing so we can audit the pattern.
+            if (msg.thinking) {
+                if (msg.thinking_signature) {
+                    content.push({
+                        type: "thinking",
+                        thinking: msg.thinking,
+                        signature: msg.thinking_signature,
+                    });
+                } else {
+                    log.warn("toAnthropicPayload: thinking block missing signature", {
+                        contentLength: msg.thinking.length,
+                    });
+                    // Include the thinking block anyway per spec; omit signature field.
+                    content.push({
+                        type: "thinking",
+                        thinking: msg.thinking,
+                    });
+                }
             }
             if (msg.content) {
                 content.push({ type: "text", text: msg.content });
             }
+            // Anthropic API expects blocks in order: thinking?, text?, tool_use+
             if (msg.tool_calls && msg.tool_calls.length > 0) {
                 for (const tc of msg.tool_calls) {
                     content.push({
@@ -483,6 +511,9 @@ export function toAnthropicPayload(
 
 // ── Agent loop ───────────────────────────────────────────────────────
 
+/** Hard cap on agent loop iterations to prevent runaway tool-use loops. */
+export const MAX_AGENT_ITERATIONS = 50;
+
 /**
  * Run the agent loop: stream from Anthropic-compatible endpoint,
  * execute tools, loop until done.
@@ -501,8 +532,22 @@ export async function runAgentLoop(
 ): Promise<ChatMessage[]> {
     const localMessages = [...messages];
     const tools = getToolDefinitions() as unknown as AnthropicTool[];
+    let iterations = 0;
 
     while (true) {
+        iterations++;
+        if (iterations > MAX_AGENT_ITERATIONS) {
+            log.error("runAgentLoop: max iterations exceeded", {
+                iterations,
+                messageCount: localMessages.length,
+            });
+            await onEvent({
+                type: "text",
+                content: "I got stuck in a loop generating too many tool calls. Please try again.",
+            });
+            await onEvent({ type: "done" });
+            return localMessages;
+        }
         await onEvent({ type: "thinking_reset" });
 
         const loopMessages = buildContext(localMessages);
@@ -540,10 +585,28 @@ export async function runAgentLoop(
                 // rows (assistant+tool_calls, tool) will be skipped during DB replay.
                 // Append a plain assistant summary so the model knows tools ran.
                 const summaries: string[] = [];
-                for (let i = localMessages.length - 1; i >= 0; i--) {
-                    if (localMessages[i].role === "tool") {
-                        summaries.unshift(localMessages[i].content);
+
+                // Scan back to the last assistant message with tool_calls.
+                // Non-tool messages break the contiguous tail, but the summary should
+                // still capture all the tool results that followed the last tool_calls.
+                let scanIndex = localMessages.length - 1;
+                while (scanIndex >= 0) {
+                    const msg = localMessages[scanIndex];
+                    if (msg.role === "tool") {
+                        summaries.unshift(msg.content);
+                        scanIndex--;
+                    } else if (
+                        msg.role === "assistant" &&
+                        msg.tool_calls &&
+                        msg.tool_calls.length > 0
+                    ) {
+                        // Found the assistant message that issued the tool_calls.
+                        // Stop scanning — summaries now contains all tool results for this turn.
+                        break;
                     } else {
+                        // Non-tool, non-assistant-with-tool-calls message.
+                        // This shouldn't happen in normal flow, but stop anyway to avoid
+                        // accidentally including unrelated messages.
                         break;
                     }
                 }
