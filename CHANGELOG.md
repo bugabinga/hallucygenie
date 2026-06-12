@@ -1,29 +1,36 @@
 # Changelog
 
-## 1.0.0 - 2026-05-27
+## 1.0.0 - 2026-06-12
 
 First release.
 
 ### Kid notes
 
-• Create images, voices, music, lyrics, searches, and image analysis from one UI.
-• Save generated assets locally and reopen them from the Assets tab.
-• Switch chats without losing drafts.
-• Profile avatar and style notes personalize creative help.
+• Create images, voices, music, lyrics, searches, image analysis, videos, reference-image pictures, and long narrations from one UI.
+• Save generated images, audio, music, and videos locally and reopen them from the Assets tab.
+• Switch chats without losing drafts, Create inputs, history, pending tasks, or profile style notes.
+• Use friendlier Create controls: fixed choices, sliders, upload/drag-drop, clear tool cards, and edit/reuse actions.
 • “What’s new?” is available from the header.
 
 ### Parent notes
 
 • No built-in auth. Run on localhost or a trusted network only.
-• MiniMax calls use real quota when `MINIMAX_API_KEY` is set.
+• MiniMax calls use real quota when `MINIMAX_API_KEY` is set; image, voice, music, video, search, and analysis provider failures are shown and persisted.
 • Generated media is stored under `data/` and should be backed up before upgrades.
+• Long video/TTS tasks persist locally so reloads do not lose pending work.
 • YouTube cover extraction is disabled unless `COVER_EXTRACTOR_URL` is configured.
 
 ### Database
 
-• First release baseline is SQLite schema version 11.
+• First release baseline is SQLite schema version 14.
+• Baseline includes sessions, drafts, create history, assets, video tasks, async TTS tasks, and provider diagnostics.
 • Future schema changes must add numbered migrations and release notes.
 • No destructive migration exists in this release.
+
+### Fixed issues
+
+• Fixed 129 tracked release issues through HG-ISSUE-140, including MiniMax tool drift, media asset persistence, profile/avatar flows, session/draft persistence, accessibility, mobile layout, release automation, Podman smoke testing, video, subject-reference image generation, and async long TTS.
+• All `.system/issues/` release blockers are fixed or folded into the v1 baseline.
 
 ### Container
 

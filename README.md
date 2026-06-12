@@ -9,8 +9,9 @@
 >
 >> ~~ The Machine
 
-HallucyGenie is a kid-friendly MiniMax web UI for chat, images, voice, music,
-lyrics, image analysis, web search, and local generated assets.
+HallucyGenie is a kid-friendly MiniMax web UI for chat, images, reference-image
+pictures, voice, long narration, music, cover songs, lyrics, video, image
+analysis, web search, and local generated assets.
 
 ## Run locally
 
@@ -47,7 +48,7 @@ Then open <http://localhost:3000>.
 
 ## Data and backups
 
-• SQLite DB + generated assets live under `data/`.
+• SQLite DB, generated assets, and pending video/long-narration tasks live under `data/`.
 • Back up `data/` before upgrading.
 • Bind-mounted `data/` must be writable by container user `bun` (UID 1000).
 • Raw generated media stays in asset storage, not prompts or chat context.

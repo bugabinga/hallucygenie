@@ -177,6 +177,9 @@ describe("index.html health", () => {
         assert.equal(modal?.getAttribute("aria-modal"), "true");
         assert.equal(modal?.getAttribute("aria-labelledby"), "whats-new-title");
         assert.match(modal?.textContent ?? "", /What’s new in v1\.0/);
+        assert.match(modal?.textContent ?? "", /video/i);
+        assert.match(modal?.textContent ?? "", /reference/i);
+        assert.match(modal?.textContent ?? "", /long narration/i);
         assert.match(modal?.textContent ?? "", /No built-in\s+auth/);
         assert.match(appTs, /openWhatsNew/);
         assert.match(appTs, /trapFocus\(whatsNewModal/);
@@ -1291,10 +1294,11 @@ describe("project metadata health", () => {
     });
 
     it("ships first-release changelog and env example", () => {
-        assert.match(changelogMd, /^## 1\.0\.0 - 2026-05-27$/m);
+        assert.match(changelogMd, /^## 1\.0\.0 - 2026-06-12$/m);
         assert.match(changelogMd, /Kid notes/);
         assert.match(changelogMd, /Parent notes/);
         assert.match(changelogMd, /Database/);
+        assert.match(changelogMd, /schema version 14/);
         assert.match(changelogMd, /ghcr\.io\/bugabinga\/hallucygenie:v1\.0\.0/);
         assert.match(envExample, /^MINIMAX_API_KEY=$/m);
         assert.match(envExample, /^PORT=3000$/m);
