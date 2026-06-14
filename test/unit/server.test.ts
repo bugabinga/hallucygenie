@@ -25,6 +25,7 @@ import {
     trackUsage
 } from "../../src/db.ts";
 import {
+    generateSessionNameFromPrompt,
     getDb,
     handleChat,
     handleRequest,
@@ -3673,6 +3674,101 @@ describe("Session, draft, and create-history APIs", () => {
             })
         );
         assert.equal(activateMissingResp.status, 404);
+    });
+
+    it("generateSessionNameFromPrompt calls LLM and returns parsed name", async () => {
+        const prevFetch = globalThis.fetch;
+        const prevKey = process.env.MINIMAX_API_KEY;
+        process.env.MINIMAX_API_KEY = "test-api-key";
+
+        try {
+            // Test successful call with X-Api-Key header
+            let capturedHeaders: Headers | undefined;
+            globalThis.fetch = async (
+                url: URL | RequestInfo,
+                init?: RequestInit
+            ) => {
+                if (String(url).includes("/anthropic/v1/messages")) {
+                    capturedHeaders = new Headers(init?.headers as HeadersInit);
+                    return new Response(
+                        JSON.stringify({
+                            content: [{ type: "text", text: "  Dragon Game Art  " }]
+                        }),
+                        { status: 200, headers: { "Content-Type": "application/json" } }
+                    );
+                }
+                return prevFetch(url, init);
+            };
+
+            const name = await generateSessionNameFromPrompt(
+                "test-api-key",
+                "I want to make a dragon game"
+            );
+            assert.equal(name, "Dragon Game Art");
+            assert.equal(capturedHeaders?.get("X-Api-Key"), "test-api-key");
+
+            // Test non-2xx response throws
+            globalThis.fetch = async (url: URL | RequestInfo) => {
+                if (String(url).includes("/anthropic/v1/messages")) {
+                    return new Response("Internal Server Error", { status: 500 });
+                }
+                return prevFetch(url);
+            };
+            await assert.rejects(
+                () => generateSessionNameFromPrompt("test-api-key", "test"),
+                /LLM naming failed: 500/
+            );
+
+            // Test no text block throws
+            globalThis.fetch = async (url: URL | RequestInfo) => {
+                if (String(url).includes("/anthropic/v1/messages")) {
+                    return new Response(
+                        JSON.stringify({ content: [{ type: "image", source: {} }] }),
+                        { status: 200, headers: { "Content-Type": "application/json" } }
+                    );
+                }
+                return prevFetch(url);
+            };
+            await assert.rejects(
+                () => generateSessionNameFromPrompt("test-api-key", "test"),
+                /LLM returned no text block/
+            );
+
+            // Test empty trimmed name falls back to "New idea"
+            globalThis.fetch = async (url: URL | RequestInfo) => {
+                if (String(url).includes("/anthropic/v1/messages")) {
+                    return new Response(
+                        JSON.stringify({ content: [{ type: "text", text: "   " }] }),
+                        { status: 200, headers: { "Content-Type": "application/json" } }
+                    );
+                }
+                return prevFetch(url);
+            };
+            const emptyName = await generateSessionNameFromPrompt("test-api-key", "test");
+            assert.equal(emptyName, "New idea");
+
+            // Test > 5 words truncated to 5
+            globalThis.fetch = async (url: URL | RequestInfo) => {
+                if (String(url).includes("/anthropic/v1/messages")) {
+                    return new Response(
+                        JSON.stringify({
+                            content: [{
+                                type: "text",
+                                text: "  Super Cool Minecraft Build Ideas For You  "
+                            }]
+                        }),
+                        { status: 200, headers: { "Content-Type": "application/json" } }
+                    );
+                }
+                return prevFetch(url);
+            };
+            const truncatedName = await generateSessionNameFromPrompt("test-api-key", "test");
+            assert.equal(truncatedName, "Super Cool Minecraft Build Ideas");
+        } finally {
+            globalThis.fetch = prevFetch;
+            if (prevKey) process.env.MINIMAX_API_KEY = prevKey;
+            else delete process.env.MINIMAX_API_KEY;
+        }
     });
 
     it("uploads profile avatar images into asset storage", async () => {

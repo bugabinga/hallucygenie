@@ -1246,7 +1246,10 @@ function countSessionUserMessages(database: Database, sessionId: string): number
     return row.count;
 }
 
-async function generateSessionNameFromPrompt(apiKey: string, prompt: string): Promise<string> {
+export async function generateSessionNameFromPrompt(
+    apiKey: string,
+    prompt: string
+): Promise<string> {
     const systemPrompt =
         "You are a session namer. Given a user prompt, generate a short 2-5 word session name. "
         + "Return ONLY the name, nothing else. No quotes, no explanation. "
