@@ -39,6 +39,7 @@ import {
     shutdown,
     validateSessionId
 } from "../../src/server.ts";
+import { MINIMAX_BASE } from "../../src/tools.ts";
 
 // Capture the real (native) fetch at module load. Use getOwnPropertyDescriptor
 // so we reliably get the native fetch even if this file is loaded in a worker
@@ -3634,7 +3635,22 @@ describe("Session, draft, and create-history APIs", () => {
             new Request("http://localhost/api/sessions", { method: "POST" })
         );
         assert.equal(session2Resp.status, 201);
-        const session2 = (await session2Resp.json()) as { session: { id: string; }; };
+        const session2 = (await session2Resp.json()) as {
+            session: {
+                id: string;
+                name: string;
+                name_source: string;
+                created_at: string;
+                archived_at: string | null;
+            };
+        };
+
+        // Shape assertions on newly created session
+        assert.match(session2.session.id, /^[-0-9a-f]{36}$/);
+        assert.equal(typeof session2.session.name, "string");
+        assert.equal(session2.session.name_source, "default");
+        assert.equal(typeof session2.session.created_at, "string");
+        assert.equal(session2.session.archived_at, null);
 
         // Activate the second session
         const activateResp = await handleRequest(
@@ -3643,8 +3659,21 @@ describe("Session, draft, and create-history APIs", () => {
             })
         );
         assert.equal(activateResp.status, 200);
-        const activateData = (await activateResp.json()) as { session: { id: string; }; };
+        const activateData = (await activateResp.json()) as {
+            session: {
+                id: string;
+                name: string;
+                name_source: string;
+                created_at: string;
+                archived_at: string | null;
+            };
+        };
         assert.equal(activateData.session.id, session2.session.id);
+        // Shape assertions on activated session
+        assert.match(activateData.session.id, /^[-0-9a-f]{36}$/);
+        assert.equal(typeof activateData.session.name, "string");
+        assert.equal(typeof activateData.session.created_at, "string");
+        assert.equal(activateData.session.archived_at, null);
 
         // Verify active session changed via GET /api/sessions
         const listResp = await handleRequest(new Request("http://localhost/api/sessions"));
@@ -3666,6 +3695,8 @@ describe("Session, draft, and create-history APIs", () => {
             })
         );
         assert.equal(activateArchivedResp.status, 404);
+        const archivedBody = (await activateArchivedResp.json()) as { error: string; };
+        assert.equal(archivedBody.error, "Not found");
 
         // Activate non-existent session should return 404
         const activateMissingResp = await handleRequest(
@@ -3674,6 +3705,8 @@ describe("Session, draft, and create-history APIs", () => {
             })
         );
         assert.equal(activateMissingResp.status, 404);
+        const missingBody = (await activateMissingResp.json()) as { error: string; };
+        assert.equal(missingBody.error, "Not found");
     });
 
     it("generateSessionNameFromPrompt calls LLM and returns parsed name", async () => {
@@ -3682,14 +3715,23 @@ describe("Session, draft, and create-history APIs", () => {
         process.env.MINIMAX_API_KEY = "test-api-key";
 
         try {
-            // Test successful call with X-Api-Key header
+            // Test successful call: assert URL, body shape, header, and trimmed name
+            let capturedUrl: string | undefined;
+            let capturedBody: {
+                model: string;
+                max_tokens: number;
+                messages: Array<{ role: string; content: string; }>;
+            } | undefined;
             let capturedHeaders: Headers | undefined;
             globalThis.fetch = async (
                 url: URL | RequestInfo,
                 init?: RequestInit
             ) => {
-                if (String(url).includes("/anthropic/v1/messages")) {
+                const urlStr = String(url);
+                if (urlStr.includes("/anthropic/v1/messages")) {
+                    capturedUrl = urlStr;
                     capturedHeaders = new Headers(init?.headers as HeadersInit);
+                    capturedBody = JSON.parse(String(init?.body)) as typeof capturedBody;
                     return new Response(
                         JSON.stringify({
                             content: [{ type: "text", text: "  Dragon Game Art  " }]
@@ -3700,11 +3742,20 @@ describe("Session, draft, and create-history APIs", () => {
                 return prevFetch(url, init);
             };
 
-            const name = await generateSessionNameFromPrompt(
-                "test-api-key",
-                "I want to make a dragon game"
-            );
+            const prompt = "I want to make a dragon game";
+            const name = await generateSessionNameFromPrompt("test-api-key", prompt);
+
+            // URL exactly equals constructed endpoint
+            assert.equal(capturedUrl, `${MINIMAX_BASE}/anthropic/v1/messages`);
+            // Request body shape assertions
+            assert.equal(capturedBody?.model, MINIMAX_MODEL);
+            assert.equal(capturedBody?.max_tokens, 50);
+            assert.equal(capturedBody?.messages[0].role, "system");
+            assert.equal(capturedBody?.messages[1].role, "user");
+            assert.equal(capturedBody?.messages[1].content, prompt);
+            // Resolved name is correctly trimmed
             assert.equal(name, "Dragon Game Art");
+            // X-Api-Key header sent
             assert.equal(capturedHeaders?.get("X-Api-Key"), "test-api-key");
 
             // Test non-2xx response throws
