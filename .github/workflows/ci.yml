@@ -21,7 +21,7 @@ jobs:
                   path: ~/.bun/install/cache
                   key: ${{ runner.os }}-bun-${{ hashFiles('bun.lock') }}
                   restore-keys: ${{ runner.os }}-bun-
-            - uses: taiki-e/install-action@v2.81.8
+            - uses: taiki-e/install-action@v2.82.0
               with:
                   tool: just
             - name: Install sqruff
@@ -51,7 +51,7 @@ jobs:
                   path: ~/.bun/install/cache
                   key: ${{ runner.os }}-bun-${{ hashFiles('bun.lock') }}
                   restore-keys: ${{ runner.os }}-bun-
-            - uses: taiki-e/install-action@v2.81.8
+            - uses: taiki-e/install-action@v2.82.0
               with:
                   tool: just
             - name: Install deps
@@ -75,7 +75,7 @@ jobs:
             - uses: oven-sh/setup-bun@v2.2.0
               with:
                   bun-version: 1.3.14
-            - uses: taiki-e/install-action@v2.81.8
+            - uses: taiki-e/install-action@v2.82.0
               with:
                   tool: just
             - name: Build container
