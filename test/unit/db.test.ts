@@ -178,6 +178,28 @@ describe("runMigrations", () => {
         rmSync(dir, { recursive: true });
     });
 
+    it("ignores malformed sql filenames instead of crashing migration tracking", () => {
+        const dir = tempMigrationsDir({
+            "abc-def.sql": "THIS SHOULD NOT RUN;",
+            "001-good.sql": "CREATE TABLE good (id INTEGER PRIMARY KEY);"
+        });
+
+        const db = new Database(":memory:");
+        runMigrations(db, dir);
+
+        const versions = db
+            .prepare("SELECT version FROM schema_migrations ORDER BY version")
+            .all()
+            .map((r) => (r as { version: number; }).version);
+        assert.deepEqual(versions, [1]);
+        assert.ok(
+            db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='good'").get()
+        );
+
+        db.close();
+        rmSync(dir, { recursive: true });
+    });
+
     it("handles empty migrations directory gracefully", () => {
         const dir = tempMigrationsDir({});
 

@@ -208,7 +208,7 @@ export function estimateTokens(message: ChatMessage): number {
     if (message.tool_calls) {
         for (const tc of message.tool_calls) {
             chars += tc.name.length;
-            chars += JSON.stringify(tc.input).length;
+            chars += JSON.stringify(tc.input ?? {}).length;
             chars += tc.id.length;
         }
     }
@@ -519,6 +519,8 @@ export function toAnthropicPayload(
  * @param onEvent - Callback for agent events (text, thinking, tool_start, tool_result, done)
  * @returns Final message history including all tool results
  */
+export const MAX_AGENT_ITERATIONS = 50;
+
 export async function runAgentLoop(
     messages: ChatMessage[],
     apiKey: string,
@@ -528,8 +530,22 @@ export async function runAgentLoop(
 ): Promise<ChatMessage[]> {
     const localMessages = [...messages];
     const tools = getToolDefinitions() as unknown as AnthropicTool[];
+    let iterations = 0;
 
     while (true) {
+        if (iterations >= MAX_AGENT_ITERATIONS) {
+            log.error("runAgentLoop: max iterations exceeded", {
+                iterations,
+                messageCount: localMessages.length
+            });
+            await onEvent({
+                type: "text",
+                content: "I got stuck in a loop generating too many tool calls. Please try again."
+            });
+            await onEvent({ type: "done" });
+            return localMessages;
+        }
+        iterations++;
         await onEvent({ type: "thinking_reset" });
 
         const loopMessages = buildContext(localMessages);
