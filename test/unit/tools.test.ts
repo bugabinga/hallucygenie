@@ -1820,6 +1820,197 @@ describe("generateLongSpeech", () => {
 
         assert.equal(result.type, "error");
         assert.match(result.content, /timed out/);
+        assert.deepEqual(result.provider, {
+            stage: "query",
+            status_msg: "timeout",
+            task_id: "tts-task-1"
+        });
+    });
+
+    it("accepts nested MiniMax async TTS response shapes", async () => {
+        const calls: string[] = [];
+        let polls = 0;
+        globalThis.fetch = async (url: string | URL | Request) => {
+            const urlStr = url.toString();
+            calls.push(urlStr);
+            if (urlStr.endsWith("/v1/t2a_async_v2")) {
+                return jsonResponse({ data: { task_id: "nested-tts-task" } });
+            }
+            if (urlStr.includes("/v1/query/t2a_async_query_v2")) {
+                polls++;
+                return polls === 1
+                    ? jsonResponse({ task_status: "Processing" })
+                    : jsonResponse({
+                        data: { task_status: "Succeeded", audio_file_id: "audio-file-2" }
+                    });
+            }
+            if (urlStr.includes("/v1/files/retrieve")) {
+                return jsonResponse({ data: { download_url: "https://cdn.example/nested.mp3" } });
+            }
+            throw new Error(`unexpected fetch ${urlStr}`);
+        };
+
+        const result = await generateLongSpeech("Nested narration", API_KEY, {
+            pollDelayMs: 0,
+            maxPolls: 2
+        });
+
+        assert.equal(result.type, "audio");
+        assert.equal(result.content, "https://cdn.example/nested.mp3");
+        assert.equal(polls, 2);
+        assert.ok(calls[1].includes("task_id=nested-tts-task"));
+        assert.ok(calls[3].includes("file_id=audio-file-2"));
+        assert.deepEqual(result.provider, {
+            stage: "file",
+            task_id: "nested-tts-task",
+            file_id: "audio-file-2"
+        });
+    });
+
+    it("reports every MiniMax async TTS failure stage", async () => {
+        globalThis.fetch = async () => new Response("broken", { status: 503 });
+        assert.deepEqual(await generateLongSpeech("x", API_KEY), {
+            type: "error",
+            content: "Long TTS API error: 503",
+            provider: { stage: "create", status_code: 503 }
+        });
+
+        mockFetch(jsonResponse({ base_resp: { status_code: 1004, status_msg: "login fail" } }));
+        assert.deepEqual(await generateLongSpeech("x", API_KEY), {
+            type: "error",
+            content: "Long TTS failed: login fail",
+            provider: { stage: "create", status_code: 1004, status_msg: "login fail" }
+        });
+
+        mockFetch(jsonResponse({ data: {} }));
+        assert.deepEqual(await generateLongSpeech("x", API_KEY), {
+            type: "error",
+            content: "Long TTS returned no task_id"
+        });
+
+        globalThis.fetch = async (url: string | URL | Request) => {
+            const urlStr = url.toString();
+            if (urlStr.endsWith("/v1/t2a_async_v2")) {
+                return jsonResponse({ task_id: "task-q-http" });
+            }
+            if (urlStr.includes("/v1/query/t2a_async_query_v2")) {
+                return new Response("nope", { status: 502 });
+            }
+            throw new Error(`unexpected fetch ${urlStr}`);
+        };
+        assert.deepEqual(await generateLongSpeech("x", API_KEY, { pollDelayMs: 0, maxPolls: 1 }), {
+            type: "error",
+            content: "Long TTS query API error: 502",
+            provider: { stage: "query", status_code: 502, task_id: "task-q-http" }
+        });
+
+        globalThis.fetch = async (url: string | URL | Request) => {
+            const urlStr = url.toString();
+            if (urlStr.endsWith("/v1/t2a_async_v2")) {
+                return jsonResponse({ task_id: "task-q-base" });
+            }
+            if (urlStr.includes("/v1/query/t2a_async_query_v2")) {
+                return jsonResponse({ base_resp: { status_code: 2013, status_msg: "bad query" } });
+            }
+            throw new Error(`unexpected fetch ${urlStr}`);
+        };
+        assert.deepEqual(await generateLongSpeech("x", API_KEY, { pollDelayMs: 0, maxPolls: 1 }), {
+            type: "error",
+            content: "Long TTS query failed: bad query",
+            provider: {
+                stage: "query",
+                status_code: 2013,
+                status_msg: "bad query",
+                task_id: "task-q-base"
+            }
+        });
+
+        globalThis.fetch = async (url: string | URL | Request) => {
+            const urlStr = url.toString();
+            if (urlStr.endsWith("/v1/t2a_async_v2")) {
+                return jsonResponse({ task_id: "task-q-fail" });
+            }
+            if (urlStr.includes("/v1/query/t2a_async_query_v2")) {
+                return jsonResponse({ data: { status: "Error", message: "quota gone" } });
+            }
+            throw new Error(`unexpected fetch ${urlStr}`);
+        };
+        assert.deepEqual(await generateLongSpeech("x", API_KEY, { pollDelayMs: 0, maxPolls: 1 }), {
+            type: "error",
+            content: "Long TTS failed: quota gone",
+            provider: { stage: "query", status_msg: "quota gone", task_id: "task-q-fail" }
+        });
+
+        globalThis.fetch = async (url: string | URL | Request) => {
+            const urlStr = url.toString();
+            if (urlStr.endsWith("/v1/t2a_async_v2")) {
+                return jsonResponse({ task_id: "task-file-http" });
+            }
+            if (urlStr.includes("/v1/query/t2a_async_query_v2")) {
+                return jsonResponse({ data: { status: "Success", output_file_id: "file-http" } });
+            }
+            if (urlStr.includes("/v1/files/retrieve")) return new Response("nope", { status: 500 });
+            throw new Error(`unexpected fetch ${urlStr}`);
+        };
+        assert.deepEqual(await generateLongSpeech("x", API_KEY, { pollDelayMs: 0, maxPolls: 1 }), {
+            type: "error",
+            content: "Long TTS file API error: 500",
+            provider: {
+                stage: "file",
+                status_code: 500,
+                task_id: "task-file-http",
+                file_id: "file-http"
+            }
+        });
+
+        globalThis.fetch = async (url: string | URL | Request) => {
+            const urlStr = url.toString();
+            if (urlStr.endsWith("/v1/t2a_async_v2")) {
+                return jsonResponse({ task_id: "task-file-base" });
+            }
+            if (urlStr.includes("/v1/query/t2a_async_query_v2")) {
+                return jsonResponse({ data: { status: "Success", file_id: "file-base" } });
+            }
+            if (urlStr.includes("/v1/files/retrieve")) {
+                return jsonResponse({
+                    base_resp: { status_code: 3001, status_msg: "missing file" }
+                });
+            }
+            throw new Error(`unexpected fetch ${urlStr}`);
+        };
+        assert.deepEqual(await generateLongSpeech("x", API_KEY, { pollDelayMs: 0, maxPolls: 1 }), {
+            type: "error",
+            content: "Long TTS file retrieve failed: missing file",
+            provider: {
+                stage: "file",
+                status_code: 3001,
+                status_msg: "missing file",
+                task_id: "task-file-base",
+                file_id: "file-base"
+            }
+        });
+
+        globalThis.fetch = async (url: string | URL | Request) => {
+            const urlStr = url.toString();
+            if (urlStr.endsWith("/v1/t2a_async_v2")) {
+                return jsonResponse({ task_id: "task-file-empty" });
+            }
+            if (urlStr.includes("/v1/query/t2a_async_query_v2")) {
+                return jsonResponse({ status: "Succeeded", file_id: "file-empty" });
+            }
+            if (urlStr.includes("/v1/files/retrieve")) return jsonResponse({ data: { file: {} } });
+            throw new Error(`unexpected fetch ${urlStr}`);
+        };
+        assert.deepEqual(await generateLongSpeech("x", API_KEY, { pollDelayMs: 0, maxPolls: 1 }), {
+            type: "error",
+            content: "Long TTS file retrieve returned no download_url",
+            provider: {
+                stage: "file",
+                status_msg: "missing download_url",
+                task_id: "task-file-empty",
+                file_id: "file-empty"
+            }
+        });
     });
 
     it("accepts nested MiniMax async TTS response shapes", async () => {
@@ -2084,6 +2275,205 @@ describe("generateVideo", () => {
 
         assert.equal(result.type, "error");
         assert.match(result.content, /Video generation failed/);
+        assert.deepEqual(result.provider, {
+            stage: "query",
+            status_msg: "quota gone",
+            task_id: "task_1"
+        });
+    });
+
+    it("accepts nested MiniMax video response shapes and defaults invalid presets", async () => {
+        let polls = 0;
+        let createPayload: Record<string, unknown> | undefined;
+        globalThis.fetch = async (url: string | URL | Request, init?: RequestInit) => {
+            const urlStr = url.toString();
+            if (urlStr.endsWith("/v1/video_generation")) {
+                createPayload = JSON.parse(String(init?.body ?? "{}"));
+                return jsonResponse({ data: { task_id: "nested-video-task" } });
+            }
+            if (urlStr.includes("/v1/query/video_generation")) {
+                polls++;
+                return polls === 1
+                    ? jsonResponse({ data: { task_status: "Processing" } })
+                    : jsonResponse({
+                        data: { task_status: "Succeeded", file_id: "nested-video-file" }
+                    });
+            }
+            if (urlStr.includes("/v1/files/retrieve")) {
+                assert.ok(urlStr.includes("file_id=nested-video-file"));
+                return jsonResponse({
+                    data: { file: { download_url: "https://cdn.example/nested-video.mp4" } }
+                });
+            }
+            throw new Error(`unexpected fetch ${urlStr}`);
+        };
+
+        const result = await generateVideo(
+            { prompt: "Trailer", duration: 999 as 6, resolution: "4k" as "768p" },
+            API_KEY,
+            { pollDelayMs: 0, maxPolls: 2 }
+        );
+
+        assert.equal(result.type, "video");
+        assert.equal(result.content, "https://cdn.example/nested-video.mp4");
+        assert.equal(polls, 2);
+        assert.deepEqual(createPayload, {
+            model: "MiniMax-Hailuo-02",
+            prompt: "Trailer",
+            duration: 6,
+            resolution: "768P"
+        });
+        assert.deepEqual(result.provider, {
+            stage: "file",
+            task_id: "nested-video-task",
+            file_id: "nested-video-file"
+        });
+    });
+
+    it("reports every MiniMax video failure stage", async () => {
+        globalThis.fetch = async () => new Response("broken", { status: 503 });
+        assert.deepEqual(await generateVideo("x", API_KEY), {
+            type: "error",
+            content: "Video generation API error: 503",
+            provider: { stage: "create", status_code: 503 }
+        });
+
+        mockFetch(jsonResponse({ base_resp: { status_code: 1004, status_msg: "login fail" } }));
+        assert.deepEqual(await generateVideo("x", API_KEY), {
+            type: "error",
+            content: "Video generation failed: login fail",
+            provider: { stage: "create", status_code: 1004, status_msg: "login fail" }
+        });
+
+        mockFetch(jsonResponse({ data: {} }));
+        assert.deepEqual(await generateVideo("x", API_KEY), {
+            type: "error",
+            content: "Video generation returned no task_id"
+        });
+
+        globalThis.fetch = async (url: string | URL | Request) => {
+            const urlStr = url.toString();
+            if (urlStr.endsWith("/v1/video_generation")) {
+                return jsonResponse({ task_id: "video-q-http" });
+            }
+            if (urlStr.includes("/v1/query/video_generation")) {
+                return new Response("nope", { status: 502 });
+            }
+            throw new Error(`unexpected fetch ${urlStr}`);
+        };
+        assert.deepEqual(await generateVideo("x", API_KEY, { pollDelayMs: 0, maxPolls: 1 }), {
+            type: "error",
+            content: "Video query API error: 502",
+            provider: { stage: "query", status_code: 502, task_id: "video-q-http" }
+        });
+
+        globalThis.fetch = async (url: string | URL | Request) => {
+            const urlStr = url.toString();
+            if (urlStr.endsWith("/v1/video_generation")) {
+                return jsonResponse({ task_id: "video-q-base" });
+            }
+            if (urlStr.includes("/v1/query/video_generation")) {
+                return jsonResponse({ base_resp: { status_code: 2013, status_msg: "bad query" } });
+            }
+            throw new Error(`unexpected fetch ${urlStr}`);
+        };
+        assert.deepEqual(await generateVideo("x", API_KEY, { pollDelayMs: 0, maxPolls: 1 }), {
+            type: "error",
+            content: "Video query failed: bad query",
+            provider: {
+                stage: "query",
+                status_code: 2013,
+                status_msg: "bad query",
+                task_id: "video-q-base"
+            }
+        });
+
+        globalThis.fetch = async (url: string | URL | Request) => {
+            const urlStr = url.toString();
+            if (urlStr.endsWith("/v1/video_generation")) {
+                return jsonResponse({ task_id: "video-timeout" });
+            }
+            if (urlStr.includes("/v1/query/video_generation")) {
+                return jsonResponse({ data: { status: "Processing" } });
+            }
+            throw new Error(`unexpected fetch ${urlStr}`);
+        };
+        assert.deepEqual(await generateVideo("x", API_KEY, { pollDelayMs: 0, maxPolls: 1 }), {
+            type: "error",
+            content: "Video generation timed out",
+            provider: { stage: "query", status_msg: "timeout", task_id: "video-timeout" }
+        });
+
+        globalThis.fetch = async (url: string | URL | Request) => {
+            const urlStr = url.toString();
+            if (urlStr.endsWith("/v1/video_generation")) {
+                return jsonResponse({ task_id: "video-file-http" });
+            }
+            if (urlStr.includes("/v1/query/video_generation")) {
+                return jsonResponse({ data: { status: "Success", file_id: "file-http" } });
+            }
+            if (urlStr.includes("/v1/files/retrieve")) return new Response("nope", { status: 500 });
+            throw new Error(`unexpected fetch ${urlStr}`);
+        };
+        assert.deepEqual(await generateVideo("x", API_KEY, { pollDelayMs: 0, maxPolls: 1 }), {
+            type: "error",
+            content: "Video file API error: 500",
+            provider: {
+                stage: "file",
+                status_code: 500,
+                task_id: "video-file-http",
+                file_id: "file-http"
+            }
+        });
+
+        globalThis.fetch = async (url: string | URL | Request) => {
+            const urlStr = url.toString();
+            if (urlStr.endsWith("/v1/video_generation")) {
+                return jsonResponse({ task_id: "video-file-base" });
+            }
+            if (urlStr.includes("/v1/query/video_generation")) {
+                return jsonResponse({ data: { status: "Success", file_id: "file-base" } });
+            }
+            if (urlStr.includes("/v1/files/retrieve")) {
+                return jsonResponse({
+                    base_resp: { status_code: 3001, status_msg: "missing file" }
+                });
+            }
+            throw new Error(`unexpected fetch ${urlStr}`);
+        };
+        assert.deepEqual(await generateVideo("x", API_KEY, { pollDelayMs: 0, maxPolls: 1 }), {
+            type: "error",
+            content: "Video file retrieve failed: missing file",
+            provider: {
+                stage: "file",
+                status_code: 3001,
+                status_msg: "missing file",
+                task_id: "video-file-base",
+                file_id: "file-base"
+            }
+        });
+
+        globalThis.fetch = async (url: string | URL | Request) => {
+            const urlStr = url.toString();
+            if (urlStr.endsWith("/v1/video_generation")) {
+                return jsonResponse({ task_id: "video-file-empty" });
+            }
+            if (urlStr.includes("/v1/query/video_generation")) {
+                return jsonResponse({ status: "Succeeded", file_id: "file-empty" });
+            }
+            if (urlStr.includes("/v1/files/retrieve")) return jsonResponse({ data: { file: {} } });
+            throw new Error(`unexpected fetch ${urlStr}`);
+        };
+        assert.deepEqual(await generateVideo("x", API_KEY, { pollDelayMs: 0, maxPolls: 1 }), {
+            type: "error",
+            content: "Video file retrieve returned no download_url",
+            provider: {
+                stage: "file",
+                status_msg: "missing download_url",
+                task_id: "video-file-empty",
+                file_id: "file-empty"
+            }
+        });
     });
 
     it("accepts nested MiniMax video response shapes and defaults invalid presets", async () => {
