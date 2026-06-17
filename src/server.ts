@@ -250,12 +250,23 @@ function validateChatBody(body: unknown):
                 error: `messages[${i}].role must be a string`
             };
         }
+        if (msg.role !== "user" && msg.role !== "assistant") {
+            return {
+                ok: false,
+                error: `messages[${i}].role must be "user" or "assistant"`
+            };
+        }
         if (typeof msg.content !== "string") {
             return {
                 ok: false,
                 error: `messages[${i}].content must be a string`
             };
         }
+    }
+
+    const last = obj.messages.at(-1) as { role: string; };
+    if (last.role !== "user") {
+        return { ok: false, error: "last message role must be user" };
     }
 
     return {

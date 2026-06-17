@@ -51,7 +51,7 @@ export function runMigrations(db: Database, migrationsDir: string): void {
     let files: string[];
     try {
         files = readdirSync(migrationsDir)
-            .filter((f) => f.endsWith(".sql"))
+            .filter((f) => /^\d+-.+\.sql$/.test(f))
             .sort();
     } catch {
         // No migrations directory — nothing to do
