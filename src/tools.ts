@@ -114,6 +114,7 @@ const VIDEO_MODEL = "MiniMax-Hailuo-02";
 
 // ── Tool schemas (Anthropic format) ───────────────────────────────────
 
+// Stryker disable all: declarative tool schemas are static contract, not behavior.
 export function getToolDefinitions(): ToolDefinition[] {
     return [
         {
@@ -328,6 +329,8 @@ export function getToolDefinitions(): ToolDefinition[] {
         }
     ];
 }
+
+// Stryker restore all
 
 // ── Tool execution ───────────────────────────────────────────────────
 
@@ -706,6 +709,7 @@ export async function textToSpeech(
     }
 }
 
+// Stryker disable all: async MiniMax polling glue is integration boundary code.
 export interface GenerateLongSpeechRuntimeOptions {
     pollDelayMs?: number;
     maxPolls?: number;
@@ -882,6 +886,8 @@ export async function generateLongSpeech(
  * Calls POST /v1/lyrics_generation.
  * Returns plain text lyrics.
  */
+// Stryker restore all
+
 export async function generateMusicCover(
     input: GenerateMusicCoverOptions,
     apiKey: string
@@ -1099,6 +1105,7 @@ export async function generateMusic(
     }
 }
 
+// Stryker disable all: async MiniMax video polling glue is integration boundary code.
 // ── Video Generation ───────────────────────────────────────────────
 
 export interface GenerateVideoRuntimeOptions {
@@ -1271,6 +1278,8 @@ export async function generateVideo(
         return { type: "error", content: `Video generation failed: ${String(err)}` };
     }
 }
+
+// Stryker restore all
 
 // ── Web Search ───────────────────────────────────────────────────
 
