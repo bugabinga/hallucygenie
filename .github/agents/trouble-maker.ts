@@ -18,7 +18,7 @@
  */
 import { readdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { prepareExistingPr, readFindings, runPi } from "./lib.ts";
+import { AGENT_PASS_TIMEOUT_MS, prepareExistingPr, readFindings, runPi } from "./lib.ts";
 
 const root = join(import.meta.dirname, "../..");
 
@@ -35,6 +35,7 @@ try {
 }
 
 const piFlags = ["--no-session", "--no-prompt-templates"];
+const timeout = AGENT_PASS_TIMEOUT_MS;
 const existingPr = prepareExistingPr("trouble-maker", "agent/trouble-maker-");
 
 if (existingPr) {
@@ -66,7 +67,7 @@ Use /tmp/pi-agent-pr-body.md only for run summary/update notes.
 
 No talk. Repair. Test. Write notes. Done.`
         ],
-        0
+        timeout
     );
     try {
         writeFileSync(
@@ -107,7 +108,7 @@ If bugs: write one line per bug: "FILE:LINE — DESCRIPTION — FIX"
 
 Do not explain. Do not summarize. Just write the file.`
     ],
-    0
+    timeout
 );
 
 const findings = readFindings("trouble-maker");
@@ -141,7 +142,7 @@ ${findings}
 Fix each one. Add tests. Only touch src/ and test/. Never touch .system/.
 Write PR body to /tmp/pi-agent-pr-body.md.`
     ],
-    0
+    timeout
 );
 
 try {
