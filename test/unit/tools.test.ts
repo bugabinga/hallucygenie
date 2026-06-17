@@ -190,6 +190,225 @@ describe("getToolDefinitions", () => {
             assert.ok(def.description.length > 0);
         }
     });
+
+    it("keeps the full Anthropic tool schema contract stable", () => {
+        assert.deepEqual(getToolDefinitions(), [
+            {
+                name: "generate_image",
+                description:
+                    "Generate an image from a text prompt. Returns the URL of the generated image.",
+                input_schema: {
+                    type: "object",
+                    properties: {
+                        prompt: {
+                            type: "string",
+                            maxLength: 1500,
+                            description: "Text description of the image to generate"
+                        },
+                        aspect_ratio: {
+                            type: "string",
+                            enum: ["1:1", "16:9", "4:3", "3:2", "2:3", "3:4", "9:16", "21:9"],
+                            description: "Output aspect ratio. Defaults to 16:9 for Create UI."
+                        },
+                        n: {
+                            type: "number",
+                            minimum: 1,
+                            maximum: 9,
+                            description:
+                                "Number of images. If n is greater than 1, omit seed so images differ."
+                        },
+                        seed: {
+                            type: "number",
+                            description:
+                                "Optional reproducibility seed. Use only when generating one image; omit when n is greater than 1."
+                        },
+                        width: { type: "number", minimum: 512, maximum: 2048 },
+                        height: { type: "number", minimum: 512, maximum: 2048 },
+                        prompt_optimizer: { type: "boolean" }
+                    },
+                    required: ["prompt"]
+                }
+            },
+            {
+                name: "text_to_speech",
+                description:
+                    "Convert text to speech audio. Returns a base64-encoded MP3 audio data URL.",
+                input_schema: {
+                    type: "object",
+                    properties: {
+                        text: {
+                            type: "string",
+                            maxLength: 10000,
+                            description: "The text to convert to speech"
+                        },
+                        voice_id: {
+                            type: "string",
+                            description:
+                                "Voice ID to use. Defaults to \"English_expressive_narrator\"."
+                        },
+                        speed: {
+                            type: "number",
+                            minimum: 0.5,
+                            maximum: 2,
+                            description: "Speech speed multiplier. Defaults to 1."
+                        },
+                        volume: {
+                            type: "number",
+                            exclusiveMinimum: 0,
+                            maximum: 10,
+                            description: "Speech volume. Defaults to MiniMax service default."
+                        },
+                        pitch: {
+                            type: "number",
+                            minimum: -12,
+                            maximum: 12,
+                            description:
+                                "Speech pitch adjustment. Defaults to MiniMax service default."
+                        }
+                    },
+                    required: ["text"]
+                }
+            },
+            {
+                name: "generate_long_speech",
+                description:
+                    "Convert long narration text to speech with MiniMax async TTS. Returns a provider audio download URL that HallucyGenie saves as an audio asset.",
+                input_schema: {
+                    type: "object",
+                    properties: {
+                        text: {
+                            type: "string",
+                            maxLength: 50000,
+                            description: "Long narration text to convert to speech"
+                        },
+                        voice_id: {
+                            type: "string",
+                            description:
+                                "Voice ID to use. Defaults to \"English_expressive_narrator\"."
+                        },
+                        speed: { type: "number", minimum: 0.5, maximum: 2 },
+                        volume: { type: "number", exclusiveMinimum: 0, maximum: 10 },
+                        pitch: { type: "number", minimum: -12, maximum: 12 }
+                    },
+                    required: ["text"]
+                }
+            },
+            {
+                name: "generate_lyrics",
+                description:
+                    "Generate kid-friendly song lyrics from a music prompt. Returns plain text lyrics ready for editing or use in music generation.",
+                input_schema: {
+                    type: "object",
+                    properties: {
+                        prompt: {
+                            type: "string",
+                            maxLength: 2000,
+                            description:
+                                "Description or topic for the lyrics (e.g., 'a happy birthday song', 'an adventure theme')."
+                        },
+                        mode: {
+                            type: "string",
+                            enum: ["write_full_song", "edit"],
+                            description:
+                                "Generation mode. Defaults to write_full_song unless existing lyrics are provided."
+                        },
+                        lyrics: {
+                            type: "string",
+                            maxLength: 3500,
+                            description: "Existing lyrics to edit or continue when mode is edit."
+                        },
+                        title: {
+                            type: "string",
+                            description: "Optional song title to preserve in the generated output."
+                        }
+                    },
+                    required: ["prompt"]
+                }
+            },
+            {
+                name: "generate_music",
+                description:
+                    "Generate music from a prompt. If lyrics are omitted or empty, the song is instrumental. Returns a base64-encoded MP3 audio data URL.",
+                input_schema: {
+                    type: "object",
+                    properties: {
+                        prompt: {
+                            type: "string",
+                            maxLength: 2000,
+                            description: "Description of the music to generate"
+                        },
+                        lyrics: {
+                            type: "string",
+                            maxLength: 3500,
+                            description:
+                                "Optional lyrics. Omit or leave empty for instrumental music."
+                        }
+                    },
+                    required: ["prompt"]
+                }
+            },
+            {
+                name: "generate_video",
+                description:
+                    "Generate a short video from a text prompt. Returns a provider download URL that HallucyGenie saves as a video asset.",
+                input_schema: {
+                    type: "object",
+                    properties: {
+                        prompt: {
+                            type: "string",
+                            maxLength: 2000,
+                            description: "Text description of the video to generate"
+                        },
+                        duration: {
+                            type: "number",
+                            enum: [6, 10],
+                            description: "Video length preset in seconds. Defaults to 6."
+                        },
+                        resolution: {
+                            type: "string",
+                            enum: ["768p", "1080p"],
+                            description: "Video quality preset. Defaults to 768p."
+                        }
+                    },
+                    required: ["prompt"]
+                }
+            },
+            {
+                name: "analyze_image",
+                description:
+                    "Analyze an HTTPS image URL and answer a prompt about what is visible. Returns text only.",
+                input_schema: {
+                    type: "object",
+                    properties: {
+                        image_url: {
+                            type: "string",
+                            description: "HTTPS URL of a JPG, PNG, GIF, or WebP image to analyze."
+                        },
+                        prompt: {
+                            type: "string",
+                            description:
+                                "Question or instruction about the image. Defaults to a concise description."
+                        }
+                    },
+                    required: ["image_url"]
+                }
+            },
+            {
+                name: "web_search",
+                description: "Search the web for information. Returns formatted search results.",
+                input_schema: {
+                    type: "object",
+                    properties: {
+                        query: {
+                            type: "string",
+                            description: "The search query"
+                        }
+                    },
+                    required: ["query"]
+                }
+            }
+        ]);
+    });
 });
 
 // ── MiniMax parameter contract ───────────────────────────────────────
@@ -1601,6 +1820,197 @@ describe("generateLongSpeech", () => {
 
         assert.equal(result.type, "error");
         assert.match(result.content, /timed out/);
+        assert.deepEqual(result.provider, {
+            stage: "query",
+            status_msg: "timeout",
+            task_id: "tts-task-1"
+        });
+    });
+
+    it("accepts nested MiniMax async TTS response shapes", async () => {
+        const calls: string[] = [];
+        let polls = 0;
+        globalThis.fetch = async (url: string | URL | Request) => {
+            const urlStr = url.toString();
+            calls.push(urlStr);
+            if (urlStr.endsWith("/v1/t2a_async_v2")) {
+                return jsonResponse({ data: { task_id: "nested-tts-task" } });
+            }
+            if (urlStr.includes("/v1/query/t2a_async_query_v2")) {
+                polls++;
+                return polls === 1
+                    ? jsonResponse({ task_status: "Processing" })
+                    : jsonResponse({
+                        data: { task_status: "Succeeded", audio_file_id: "audio-file-2" }
+                    });
+            }
+            if (urlStr.includes("/v1/files/retrieve")) {
+                return jsonResponse({ data: { download_url: "https://cdn.example/nested.mp3" } });
+            }
+            throw new Error(`unexpected fetch ${urlStr}`);
+        };
+
+        const result = await generateLongSpeech("Nested narration", API_KEY, {
+            pollDelayMs: 0,
+            maxPolls: 2
+        });
+
+        assert.equal(result.type, "audio");
+        assert.equal(result.content, "https://cdn.example/nested.mp3");
+        assert.equal(polls, 2);
+        assert.ok(calls[1].includes("task_id=nested-tts-task"));
+        assert.ok(calls[3].includes("file_id=audio-file-2"));
+        assert.deepEqual(result.provider, {
+            stage: "file",
+            task_id: "nested-tts-task",
+            file_id: "audio-file-2"
+        });
+    });
+
+    it("reports every MiniMax async TTS failure stage", async () => {
+        globalThis.fetch = async () => new Response("broken", { status: 503 });
+        assert.deepEqual(await generateLongSpeech("x", API_KEY), {
+            type: "error",
+            content: "Long TTS API error: 503",
+            provider: { stage: "create", status_code: 503 }
+        });
+
+        mockFetch(jsonResponse({ base_resp: { status_code: 1004, status_msg: "login fail" } }));
+        assert.deepEqual(await generateLongSpeech("x", API_KEY), {
+            type: "error",
+            content: "Long TTS failed: login fail",
+            provider: { stage: "create", status_code: 1004, status_msg: "login fail" }
+        });
+
+        mockFetch(jsonResponse({ data: {} }));
+        assert.deepEqual(await generateLongSpeech("x", API_KEY), {
+            type: "error",
+            content: "Long TTS returned no task_id"
+        });
+
+        globalThis.fetch = async (url: string | URL | Request) => {
+            const urlStr = url.toString();
+            if (urlStr.endsWith("/v1/t2a_async_v2")) {
+                return jsonResponse({ task_id: "task-q-http" });
+            }
+            if (urlStr.includes("/v1/query/t2a_async_query_v2")) {
+                return new Response("nope", { status: 502 });
+            }
+            throw new Error(`unexpected fetch ${urlStr}`);
+        };
+        assert.deepEqual(await generateLongSpeech("x", API_KEY, { pollDelayMs: 0, maxPolls: 1 }), {
+            type: "error",
+            content: "Long TTS query API error: 502",
+            provider: { stage: "query", status_code: 502, task_id: "task-q-http" }
+        });
+
+        globalThis.fetch = async (url: string | URL | Request) => {
+            const urlStr = url.toString();
+            if (urlStr.endsWith("/v1/t2a_async_v2")) {
+                return jsonResponse({ task_id: "task-q-base" });
+            }
+            if (urlStr.includes("/v1/query/t2a_async_query_v2")) {
+                return jsonResponse({ base_resp: { status_code: 2013, status_msg: "bad query" } });
+            }
+            throw new Error(`unexpected fetch ${urlStr}`);
+        };
+        assert.deepEqual(await generateLongSpeech("x", API_KEY, { pollDelayMs: 0, maxPolls: 1 }), {
+            type: "error",
+            content: "Long TTS query failed: bad query",
+            provider: {
+                stage: "query",
+                status_code: 2013,
+                status_msg: "bad query",
+                task_id: "task-q-base"
+            }
+        });
+
+        globalThis.fetch = async (url: string | URL | Request) => {
+            const urlStr = url.toString();
+            if (urlStr.endsWith("/v1/t2a_async_v2")) {
+                return jsonResponse({ task_id: "task-q-fail" });
+            }
+            if (urlStr.includes("/v1/query/t2a_async_query_v2")) {
+                return jsonResponse({ data: { status: "Error", message: "quota gone" } });
+            }
+            throw new Error(`unexpected fetch ${urlStr}`);
+        };
+        assert.deepEqual(await generateLongSpeech("x", API_KEY, { pollDelayMs: 0, maxPolls: 1 }), {
+            type: "error",
+            content: "Long TTS failed: quota gone",
+            provider: { stage: "query", status_msg: "quota gone", task_id: "task-q-fail" }
+        });
+
+        globalThis.fetch = async (url: string | URL | Request) => {
+            const urlStr = url.toString();
+            if (urlStr.endsWith("/v1/t2a_async_v2")) {
+                return jsonResponse({ task_id: "task-file-http" });
+            }
+            if (urlStr.includes("/v1/query/t2a_async_query_v2")) {
+                return jsonResponse({ data: { status: "Success", output_file_id: "file-http" } });
+            }
+            if (urlStr.includes("/v1/files/retrieve")) return new Response("nope", { status: 500 });
+            throw new Error(`unexpected fetch ${urlStr}`);
+        };
+        assert.deepEqual(await generateLongSpeech("x", API_KEY, { pollDelayMs: 0, maxPolls: 1 }), {
+            type: "error",
+            content: "Long TTS file API error: 500",
+            provider: {
+                stage: "file",
+                status_code: 500,
+                task_id: "task-file-http",
+                file_id: "file-http"
+            }
+        });
+
+        globalThis.fetch = async (url: string | URL | Request) => {
+            const urlStr = url.toString();
+            if (urlStr.endsWith("/v1/t2a_async_v2")) {
+                return jsonResponse({ task_id: "task-file-base" });
+            }
+            if (urlStr.includes("/v1/query/t2a_async_query_v2")) {
+                return jsonResponse({ data: { status: "Success", file_id: "file-base" } });
+            }
+            if (urlStr.includes("/v1/files/retrieve")) {
+                return jsonResponse({
+                    base_resp: { status_code: 3001, status_msg: "missing file" }
+                });
+            }
+            throw new Error(`unexpected fetch ${urlStr}`);
+        };
+        assert.deepEqual(await generateLongSpeech("x", API_KEY, { pollDelayMs: 0, maxPolls: 1 }), {
+            type: "error",
+            content: "Long TTS file retrieve failed: missing file",
+            provider: {
+                stage: "file",
+                status_code: 3001,
+                status_msg: "missing file",
+                task_id: "task-file-base",
+                file_id: "file-base"
+            }
+        });
+
+        globalThis.fetch = async (url: string | URL | Request) => {
+            const urlStr = url.toString();
+            if (urlStr.endsWith("/v1/t2a_async_v2")) {
+                return jsonResponse({ task_id: "task-file-empty" });
+            }
+            if (urlStr.includes("/v1/query/t2a_async_query_v2")) {
+                return jsonResponse({ status: "Succeeded", file_id: "file-empty" });
+            }
+            if (urlStr.includes("/v1/files/retrieve")) return jsonResponse({ data: { file: {} } });
+            throw new Error(`unexpected fetch ${urlStr}`);
+        };
+        assert.deepEqual(await generateLongSpeech("x", API_KEY, { pollDelayMs: 0, maxPolls: 1 }), {
+            type: "error",
+            content: "Long TTS file retrieve returned no download_url",
+            provider: {
+                stage: "file",
+                status_msg: "missing download_url",
+                task_id: "task-file-empty",
+                file_id: "file-empty"
+            }
+        });
     });
 });
 
@@ -1679,6 +2089,205 @@ describe("generateVideo", () => {
 
         assert.equal(result.type, "error");
         assert.match(result.content, /Video generation failed/);
+        assert.deepEqual(result.provider, {
+            stage: "query",
+            status_msg: "quota gone",
+            task_id: "task_1"
+        });
+    });
+
+    it("accepts nested MiniMax video response shapes and defaults invalid presets", async () => {
+        let polls = 0;
+        let createPayload: Record<string, unknown> | undefined;
+        globalThis.fetch = async (url: string | URL | Request, init?: RequestInit) => {
+            const urlStr = url.toString();
+            if (urlStr.endsWith("/v1/video_generation")) {
+                createPayload = JSON.parse(String(init?.body ?? "{}"));
+                return jsonResponse({ data: { task_id: "nested-video-task" } });
+            }
+            if (urlStr.includes("/v1/query/video_generation")) {
+                polls++;
+                return polls === 1
+                    ? jsonResponse({ data: { task_status: "Processing" } })
+                    : jsonResponse({
+                        data: { task_status: "Succeeded", file_id: "nested-video-file" }
+                    });
+            }
+            if (urlStr.includes("/v1/files/retrieve")) {
+                assert.ok(urlStr.includes("file_id=nested-video-file"));
+                return jsonResponse({
+                    data: { file: { download_url: "https://cdn.example/nested-video.mp4" } }
+                });
+            }
+            throw new Error(`unexpected fetch ${urlStr}`);
+        };
+
+        const result = await generateVideo(
+            { prompt: "Trailer", duration: 999 as 6, resolution: "4k" as "768p" },
+            API_KEY,
+            { pollDelayMs: 0, maxPolls: 2 }
+        );
+
+        assert.equal(result.type, "video");
+        assert.equal(result.content, "https://cdn.example/nested-video.mp4");
+        assert.equal(polls, 2);
+        assert.deepEqual(createPayload, {
+            model: "MiniMax-Hailuo-02",
+            prompt: "Trailer",
+            duration: 6,
+            resolution: "768P"
+        });
+        assert.deepEqual(result.provider, {
+            stage: "file",
+            task_id: "nested-video-task",
+            file_id: "nested-video-file"
+        });
+    });
+
+    it("reports every MiniMax video failure stage", async () => {
+        globalThis.fetch = async () => new Response("broken", { status: 503 });
+        assert.deepEqual(await generateVideo("x", API_KEY), {
+            type: "error",
+            content: "Video generation API error: 503",
+            provider: { stage: "create", status_code: 503 }
+        });
+
+        mockFetch(jsonResponse({ base_resp: { status_code: 1004, status_msg: "login fail" } }));
+        assert.deepEqual(await generateVideo("x", API_KEY), {
+            type: "error",
+            content: "Video generation failed: login fail",
+            provider: { stage: "create", status_code: 1004, status_msg: "login fail" }
+        });
+
+        mockFetch(jsonResponse({ data: {} }));
+        assert.deepEqual(await generateVideo("x", API_KEY), {
+            type: "error",
+            content: "Video generation returned no task_id"
+        });
+
+        globalThis.fetch = async (url: string | URL | Request) => {
+            const urlStr = url.toString();
+            if (urlStr.endsWith("/v1/video_generation")) {
+                return jsonResponse({ task_id: "video-q-http" });
+            }
+            if (urlStr.includes("/v1/query/video_generation")) {
+                return new Response("nope", { status: 502 });
+            }
+            throw new Error(`unexpected fetch ${urlStr}`);
+        };
+        assert.deepEqual(await generateVideo("x", API_KEY, { pollDelayMs: 0, maxPolls: 1 }), {
+            type: "error",
+            content: "Video query API error: 502",
+            provider: { stage: "query", status_code: 502, task_id: "video-q-http" }
+        });
+
+        globalThis.fetch = async (url: string | URL | Request) => {
+            const urlStr = url.toString();
+            if (urlStr.endsWith("/v1/video_generation")) {
+                return jsonResponse({ task_id: "video-q-base" });
+            }
+            if (urlStr.includes("/v1/query/video_generation")) {
+                return jsonResponse({ base_resp: { status_code: 2013, status_msg: "bad query" } });
+            }
+            throw new Error(`unexpected fetch ${urlStr}`);
+        };
+        assert.deepEqual(await generateVideo("x", API_KEY, { pollDelayMs: 0, maxPolls: 1 }), {
+            type: "error",
+            content: "Video query failed: bad query",
+            provider: {
+                stage: "query",
+                status_code: 2013,
+                status_msg: "bad query",
+                task_id: "video-q-base"
+            }
+        });
+
+        globalThis.fetch = async (url: string | URL | Request) => {
+            const urlStr = url.toString();
+            if (urlStr.endsWith("/v1/video_generation")) {
+                return jsonResponse({ task_id: "video-timeout" });
+            }
+            if (urlStr.includes("/v1/query/video_generation")) {
+                return jsonResponse({ data: { status: "Processing" } });
+            }
+            throw new Error(`unexpected fetch ${urlStr}`);
+        };
+        assert.deepEqual(await generateVideo("x", API_KEY, { pollDelayMs: 0, maxPolls: 1 }), {
+            type: "error",
+            content: "Video generation timed out",
+            provider: { stage: "query", status_msg: "timeout", task_id: "video-timeout" }
+        });
+
+        globalThis.fetch = async (url: string | URL | Request) => {
+            const urlStr = url.toString();
+            if (urlStr.endsWith("/v1/video_generation")) {
+                return jsonResponse({ task_id: "video-file-http" });
+            }
+            if (urlStr.includes("/v1/query/video_generation")) {
+                return jsonResponse({ data: { status: "Success", file_id: "file-http" } });
+            }
+            if (urlStr.includes("/v1/files/retrieve")) return new Response("nope", { status: 500 });
+            throw new Error(`unexpected fetch ${urlStr}`);
+        };
+        assert.deepEqual(await generateVideo("x", API_KEY, { pollDelayMs: 0, maxPolls: 1 }), {
+            type: "error",
+            content: "Video file API error: 500",
+            provider: {
+                stage: "file",
+                status_code: 500,
+                task_id: "video-file-http",
+                file_id: "file-http"
+            }
+        });
+
+        globalThis.fetch = async (url: string | URL | Request) => {
+            const urlStr = url.toString();
+            if (urlStr.endsWith("/v1/video_generation")) {
+                return jsonResponse({ task_id: "video-file-base" });
+            }
+            if (urlStr.includes("/v1/query/video_generation")) {
+                return jsonResponse({ data: { status: "Success", file_id: "file-base" } });
+            }
+            if (urlStr.includes("/v1/files/retrieve")) {
+                return jsonResponse({
+                    base_resp: { status_code: 3001, status_msg: "missing file" }
+                });
+            }
+            throw new Error(`unexpected fetch ${urlStr}`);
+        };
+        assert.deepEqual(await generateVideo("x", API_KEY, { pollDelayMs: 0, maxPolls: 1 }), {
+            type: "error",
+            content: "Video file retrieve failed: missing file",
+            provider: {
+                stage: "file",
+                status_code: 3001,
+                status_msg: "missing file",
+                task_id: "video-file-base",
+                file_id: "file-base"
+            }
+        });
+
+        globalThis.fetch = async (url: string | URL | Request) => {
+            const urlStr = url.toString();
+            if (urlStr.endsWith("/v1/video_generation")) {
+                return jsonResponse({ task_id: "video-file-empty" });
+            }
+            if (urlStr.includes("/v1/query/video_generation")) {
+                return jsonResponse({ status: "Succeeded", file_id: "file-empty" });
+            }
+            if (urlStr.includes("/v1/files/retrieve")) return jsonResponse({ data: { file: {} } });
+            throw new Error(`unexpected fetch ${urlStr}`);
+        };
+        assert.deepEqual(await generateVideo("x", API_KEY, { pollDelayMs: 0, maxPolls: 1 }), {
+            type: "error",
+            content: "Video file retrieve returned no download_url",
+            provider: {
+                stage: "file",
+                status_msg: "missing download_url",
+                task_id: "video-file-empty",
+                file_id: "file-empty"
+            }
+        });
     });
 });
 
