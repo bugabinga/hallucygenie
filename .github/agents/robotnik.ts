@@ -14,13 +14,13 @@
  */
 import { existsSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { AGENT_PASS_TIMEOUT_MS, prepareExistingPr, runPi } from "./lib.ts";
+import { prepareExistingPr, runPi } from "./lib.ts";
 
 const root = join(import.meta.dirname, "../..");
 const ISSUES_DIR = join(root, ".system/issues");
 const SPECS_DIR = join(root, ".system/specs");
 const piFlags = ["--no-session", "--no-prompt-templates"];
-const timeout = AGENT_PASS_TIMEOUT_MS;
+const timeout = 10 * 60 * 1000;
 
 function issueIdFromName(name: string) {
     return name.match(/HG-ISSUE-\d{3}/)?.[0] || "";

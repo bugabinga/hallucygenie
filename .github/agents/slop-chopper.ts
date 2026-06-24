@@ -18,12 +18,12 @@
  */
 import { writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { AGENT_PASS_TIMEOUT_MS, prepareExistingPr, readFindings, runPi } from "./lib.ts";
+import { prepareExistingPr, readFindings, runPi } from "./lib.ts";
 
 const _root = join(import.meta.dirname, "../..");
 
 const piFlags = ["--no-session", "--no-prompt-templates"];
-const timeout = AGENT_PASS_TIMEOUT_MS;
+const timeout = 8 * 60 * 1000;
 const existingPr = prepareExistingPr("slop-chopper", "agent/slop-chopper-");
 
 if (existingPr) {
