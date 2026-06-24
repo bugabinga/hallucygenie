@@ -27,8 +27,6 @@ const BOT_AUTHORS = new Set([
     "app/github-actions"
 ]);
 const JANITOR_MARKER = "<!-- hallucygenie-janitor -->";
-export const AGENT_PASS_TIMEOUT_MS = 20 * 60 * 1000;
-const SOFT_FAIL_MARKER = "/tmp/pi-agent-soft-failed";
 
 type ExistingPrListItem = {
     number: number;
@@ -97,14 +95,6 @@ export type ExistingPrContext = {
     contextPath: string;
 };
 
-type ExistingPrCandidate = {
-    pr: ExistingPrListItem;
-    comments: IssueComment[];
-    sticky: string;
-    status: string;
-    owned: boolean;
-};
-
 function run(
     command: string,
     args: string[],
@@ -158,19 +148,6 @@ function janitorStatus(body: string) {
 
 function findJanitorComment(comments: IssueComment[]) {
     return comments.find((comment) => comment.body?.includes(JANITOR_MARKER));
-}
-
-function resetWorkingTree() {
-    run("git", ["reset", "--hard"], { allowFail: true });
-}
-
-function softFail(message: string): never {
-    const body = `SOFT_FAIL: ${message}\n`;
-    console.error(`\n${body}`);
-    resetWorkingTree();
-    writeFileSync(SOFT_FAIL_MARKER, body);
-    writeFileSync("/tmp/pi-agent-pr-body.md", body);
-    process.exit(0);
 }
 
 function checkoutBranch(branch: string) {
@@ -308,28 +285,19 @@ export function prepareExistingPr(
     ])
         .filter(
             (pr) =>
-                pr.headRefName.startsWith("agent/")
+                pr.headRefName.startsWith(branchPrefix)
                 && BOT_AUTHORS.has(pr.author.login)
         )
-        .map((pr): ExistingPrCandidate => {
+        .map((pr) => {
             const comments = ghJson<IssueComment[]>([
                 "api",
                 `/repos/${REPO}/issues/${pr.number}/comments`,
                 "--paginate"
             ]);
             const sticky = findJanitorComment(comments)?.body || "";
-            return {
-                pr,
-                comments,
-                sticky,
-                status: janitorStatus(sticky),
-                owned: pr.headRefName.startsWith(branchPrefix)
-            };
+            return { pr, comments, sticky, status: janitorStatus(sticky) };
         })
-        .sort((a, b) => {
-            if (a.owned !== b.owned) return a.owned ? -1 : 1;
-            return a.pr.updatedAt.localeCompare(b.pr.updatedAt);
-        });
+        .sort((a, b) => a.pr.updatedAt.localeCompare(b.pr.updatedAt));
 
     const repair = candidates.find((item) => item.status === "needs-fix");
     if (repair) {
@@ -358,7 +326,7 @@ export function prepareExistingPr(
     if (blocker) {
         const status = blocker.status || "awaiting-janitor";
         const message =
-            `${agentName}: open bot PR #${blocker.pr.number} (${blocker.pr.headRefName}) is ${status}; skipping new work so patrol agents cooperate on existing PRs.\n`;
+            `${agentName}: open PR #${blocker.pr.number} (${blocker.pr.headRefName}) is ${status}; skipping new work to keep one open PR per agent.\n`;
         console.log(message.trim());
         writeFileSync("/tmp/pi-agent-pr-body.md", message);
         process.exit(0);
@@ -367,7 +335,7 @@ export function prepareExistingPr(
     return undefined;
 }
 
-export function runPi(role: PiRole, args: string[], timeout = AGENT_PASS_TIMEOUT_MS): void {
+export function runPi(role: PiRole, args: string[], timeout: number): void {
     const label = role === "analyze" ? "Pass 1 (analyze)" : "Pass 2 (code)";
     const result = spawnSync("pi", args, {
         stdio: "inherit",
@@ -378,17 +346,24 @@ export function runPi(role: PiRole, args: string[], timeout = AGENT_PASS_TIMEOUT
     if (result.error) {
         const code = (result.error as NodeJS.ErrnoException).code;
         if (code === "ETIMEDOUT") {
-            softFail(`${label} TIMED OUT after ${timeout / 1000}s`);
+            console.error(`\n❌ ${label} TIMED OUT after ${timeout / 1000}s`);
+            console.error(
+                `   Model too slow or prompt too large. Bump timeout or simplify task.`
+            );
+        } else {
+            console.error(`\n❌ ${label} FAILED: ${code}`);
         }
-        softFail(`${label} FAILED: ${code || result.error.message}`);
+        process.exit(1);
     }
 
     if (result.signal) {
-        softFail(`${label} KILLED by signal ${result.signal}`);
+        console.error(`\n❌ ${label} KILLED by signal ${result.signal}`);
+        process.exit(1);
     }
 
     if (result.status && result.status !== 0) {
-        softFail(`${label} exited with code ${result.status}`);
+        console.error(`\n❌ ${label} exited with code ${result.status}`);
+        process.exit(result.status);
     }
 }
 
@@ -396,8 +371,12 @@ export function readFindings(context: string): string {
     try {
         return readFileSync("/tmp/pi-agent-findings.md", "utf-8").trim();
     } catch {
-        softFail(
-            `PASS 1 DID NOT WRITE FINDINGS for ${context}: missing /tmp/pi-agent-findings.md`
+        console.error(`\n❌ PASS 1 DID NOT WRITE FINDINGS`);
+        console.error(`   Model ran but did not write /tmp/pi-agent-findings.md`);
+        console.error(
+            `   Possible causes: model ignored instructions, tool call failed, or ran out of context.`
         );
+        process.exit(1);
+        return context; // unreachable, keeps TS happy
     }
 }

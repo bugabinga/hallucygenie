@@ -15,12 +15,12 @@
 import { randomInt } from "node:crypto";
 import { readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { AGENT_PASS_TIMEOUT_MS, prepareExistingPr, readFindings, runPi } from "./lib.ts";
+import { prepareExistingPr, readFindings, runPi } from "./lib.ts";
 
 const root = join(import.meta.dirname, "../..");
 const SPECS_DIR = join(root, ".system/specs");
 const piFlags = ["--no-session", "--no-prompt-templates"];
-const timeout = AGENT_PASS_TIMEOUT_MS;
+const timeout = 8 * 60 * 1000;
 const existingPr = prepareExistingPr("speck-ferkel", "agent/speck-ferkel-");
 
 if (existingPr) {

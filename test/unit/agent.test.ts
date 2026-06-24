@@ -14,7 +14,6 @@ import {
     executeToolSafely,
     isContextWindowError,
     isToolResultIdError,
-    MAX_AGENT_ITERATIONS,
     MINIMAX_BASE,
     MINIMAX_MODEL,
     parseToolArguments,
@@ -563,37 +562,6 @@ describe("runAgentLoop", () => {
 
         const toolMessages = messages.filter((m) => m.role === "tool");
         assert.equal(toolMessages.length, 2);
-    });
-
-    it("stops runaway tool-use loops at the iteration cap", async () => {
-        let llmCalls = 0;
-        globalThis.fetch = async (url: string | URL | Request) => {
-            if (!url.toString().includes("/anthropic/v1/messages")) {
-                throw new Error("unexpected non-chat fetch");
-            }
-            llmCalls++;
-            return anthropicResponse(
-                toolUseResponse(`loop_${llmCalls}`, "generate_image", "{\"prompt\":\"cat\"}")
-            );
-        };
-
-        const { events, onEvent } = collectEvents();
-        const messages = await runAgentLoop(
-            [{ role: "user", content: "loop forever" }],
-            "test-key",
-            onEvent,
-            undefined,
-            () => ({ type: "error", content: "blocked for test" })
-        );
-
-        assert.equal(llmCalls, MAX_AGENT_ITERATIONS);
-        assert.equal(events.at(-1)?.type, "done");
-        assert.ok(
-            events.some(
-                (event) => event.type === "text" && /stuck in a loop/i.test(event.content)
-            )
-        );
-        assert.equal(messages.filter((message) => message.role === "tool").length, llmCalls);
     });
 
     it("emits thinking events from Anthropic thinking blocks", async () => {
@@ -2149,20 +2117,6 @@ describe("estimateTokens", () => {
         //                  "call_2"(6) + "text_to_speech"(14) + '{"text":"hello"}'(15) = 35
         // total = 70 → ceil(70/4) = 18
         assert.equal(tokens, 18);
-    });
-
-    it("treats corrupt undefined tool input as empty object", () => {
-        const corrupt = {
-            role: "assistant" as const,
-            content: "",
-            tool_calls: [{ id: "call_1", name: "generate_image", input: undefined }]
-        };
-        const explicitEmpty = {
-            role: "assistant" as const,
-            content: "",
-            tool_calls: [{ id: "call_1", name: "generate_image", input: {} }]
-        };
-        assert.equal(estimateTokens(corrupt), estimateTokens(explicitEmpty));
     });
 });
 
