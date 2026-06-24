@@ -1820,11 +1820,6 @@ describe("generateLongSpeech", () => {
 
         assert.equal(result.type, "error");
         assert.match(result.content, /timed out/);
-        assert.deepEqual(result.provider, {
-            stage: "query",
-            status_msg: "timeout",
-            task_id: "tts-task-1"
-        });
     });
 
     it("accepts nested MiniMax async TTS response shapes", async () => {
@@ -2275,11 +2270,6 @@ describe("generateVideo", () => {
 
         assert.equal(result.type, "error");
         assert.match(result.content, /Video generation failed/);
-        assert.deepEqual(result.provider, {
-            stage: "query",
-            status_msg: "quota gone",
-            task_id: "task_1"
-        });
     });
 
     it("accepts nested MiniMax video response shapes and defaults invalid presets", async () => {

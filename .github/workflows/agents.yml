@@ -30,7 +30,7 @@ jobs:
         if: ${{ inputs.agent == 'speck-ferkel' || inputs.agent == 'all' || github.event.schedule == '17 */6 * * *' }}
         name: 🐖 speck ferkel
         runs-on: ubuntu-latest
-        timeout-minutes: 75
+        timeout-minutes: 15
         environment: AI api keys
         steps:
             - uses: actions/create-github-app-token@v3
@@ -62,10 +62,6 @@ jobs:
                   done
             - name: Create PR if changes
               run: |
-                  if [ -f /tmp/pi-agent-soft-failed ]; then
-                      cat /tmp/pi-agent-soft-failed
-                      exit 0
-                  fi
                   git config user.name "hallucygenie-agent-bot[bot]"
                   git config user.email "${{ secrets.AGENT_BOT_APP_ID }}+hallucygenie-agent-bot[bot]@users.noreply.github.com"
                   if [ -f /tmp/pi-agent-existing-pr-branch ]; then
@@ -111,7 +107,7 @@ jobs:
         if: ${{ inputs.agent == 'trouble-maker' || inputs.agent == 'all' || github.event.schedule == '17 */6 * * *' }}
         name: 🔥 trouble maker
         runs-on: ubuntu-latest
-        timeout-minutes: 75
+        timeout-minutes: 25
         environment: AI api keys
         steps:
             - uses: actions/create-github-app-token@v3
@@ -143,10 +139,6 @@ jobs:
                   done
             - name: Create PR if changes
               run: |
-                  if [ -f /tmp/pi-agent-soft-failed ]; then
-                      cat /tmp/pi-agent-soft-failed
-                      exit 0
-                  fi
                   git config user.name "hallucygenie-agent-bot[bot]"
                   git config user.email "${{ secrets.AGENT_BOT_APP_ID }}+hallucygenie-agent-bot[bot]@users.noreply.github.com"
                   if [ -f /tmp/pi-agent-existing-pr-branch ]; then
@@ -191,7 +183,7 @@ jobs:
         if: ${{ inputs.agent == 'slop-chopper' || inputs.agent == 'all' || github.event.schedule == '17 */6 * * *' }}
         name: 🪓 slop chopper
         runs-on: ubuntu-latest
-        timeout-minutes: 75
+        timeout-minutes: 15
         environment: AI api keys
         steps:
             - uses: actions/create-github-app-token@v3
@@ -223,10 +215,6 @@ jobs:
                   done
             - name: Create PR if changes
               run: |
-                  if [ -f /tmp/pi-agent-soft-failed ]; then
-                      cat /tmp/pi-agent-soft-failed
-                      exit 0
-                  fi
                   git config user.name "hallucygenie-agent-bot[bot]"
                   git config user.email "${{ secrets.AGENT_BOT_APP_ID }}+hallucygenie-agent-bot[bot]@users.noreply.github.com"
                   if [ -f /tmp/pi-agent-existing-pr-branch ]; then
@@ -271,7 +259,7 @@ jobs:
         if: ${{ inputs.agent == 'robotnik' || inputs.agent == 'all' || github.event.schedule == '17 */6 * * *' || github.event.schedule == '17 3,9,15,21 * * *' }}
         name: 🤖 robotnik
         runs-on: ubuntu-latest
-        timeout-minutes: 75
+        timeout-minutes: 20
         environment: AI api keys
         steps:
             - uses: actions/create-github-app-token@v3
@@ -303,10 +291,6 @@ jobs:
                   done
             - name: Create PR if changes
               run: |
-                  if [ -f /tmp/pi-agent-soft-failed ]; then
-                      cat /tmp/pi-agent-soft-failed
-                      exit 0
-                  fi
                   git config user.name "hallucygenie-agent-bot[bot]"
                   git config user.email "${{ secrets.AGENT_BOT_APP_ID }}+hallucygenie-agent-bot[bot]@users.noreply.github.com"
                   if [ -f /tmp/pi-agent-existing-pr-branch ]; then
@@ -353,7 +337,7 @@ jobs:
         if: ${{ inputs.agent == 'janitor' || inputs.agent == 'all' || github.event.schedule == '47 */2 * * *' }}
         name: 🧹 janitor
         runs-on: ubuntu-latest
-        timeout-minutes: 45
+        timeout-minutes: 20
         environment: AI api keys
         steps:
             - uses: actions/create-github-app-token@v3

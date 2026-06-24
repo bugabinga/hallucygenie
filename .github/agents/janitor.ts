@@ -16,7 +16,7 @@ import { spawnSync } from "node:child_process";
 import { existsSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { AGENT_PASS_TIMEOUT_MS, runPi } from "./lib.ts";
+import { runPi } from "./lib.ts";
 
 const OWNER = process.env.GITHUB_REPOSITORY_OWNER || "bugabinga";
 const REPO_NAME = (process.env.GITHUB_REPOSITORY || "bugabinga/hallucygenie").split("/")[1]
@@ -24,7 +24,7 @@ const REPO_NAME = (process.env.GITHUB_REPOSITORY || "bugabinga/hallucygenie").sp
 const REPO = `${OWNER}/${REPO_NAME}`;
 const MARKER = "<!-- hallucygenie-janitor -->";
 const HUMAN_REVIEWER = process.env.JANITOR_HUMAN_REVIEWER || OWNER;
-const timeout = AGENT_PASS_TIMEOUT_MS;
+const timeout = 8 * 60 * 1000;
 const tmp = mkdtempSync(join(tmpdir(), "hg-janitor-"));
 
 const JANITOR_LABELS = {

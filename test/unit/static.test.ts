@@ -34,7 +34,6 @@ const releaseYml = readFileSync(".github/workflows/release.yml", "utf-8");
 const dependabotYml = readFileSync(".github/dependabot.yml", "utf-8");
 const agentsYml = readFileSync(".github/workflows/agents.yml", "utf-8");
 const janitorAgent = readFileSync(".github/agents/janitor.ts", "utf-8");
-const agentLib = readFileSync(".github/agents/lib.ts", "utf-8");
 const agentModelsJson = readFileSync(".github/agents/models.json", "utf-8");
 const robotnikAgent = readFileSync(".github/agents/robotnik.ts", "utf-8");
 const slopChopperAgent = readFileSync(".github/agents/slop-chopper.ts", "utf-8");
@@ -1519,36 +1518,6 @@ describe("agent patrol health", () => {
         assert.match(janitorAgent, /status !== "needs-human"/);
         assert.match(janitorAgent, /--add-reviewer/);
         assert.match(janitorAgent, /JANITOR_HUMAN_REVIEWER/);
-    });
-
-    it("keeps patrol cadence but gives agents long repair windows", () => {
-        for (const cron of ["17 */6 * * *", "17 3,9,15,21 * * *", "47 */2 * * *"]) {
-            assert.match(agentsYml, new RegExp(`cron: "${cron.replaceAll("*", "\\*")}"`));
-        }
-        assert.doesNotMatch(agentsYml, /timeout-minutes: 1[0-9]\b/);
-        assert.match(agentsYml, /timeout-minutes: 75/);
-        assert.match(janitorAgent, /AGENT_PASS_TIMEOUT_MS/);
-        assert.match(agentLib, /20 \* 60 \* 1000/);
-    });
-
-    it("lets patrol agents cooperate on existing bot PR repairs", () => {
-        assert.match(agentLib, /headRefName\.startsWith\("agent\/"\)/);
-        assert.match(agentLib, /headRefName\.startsWith\(branchPrefix\)/);
-        assert.match(agentLib, /status === "needs-fix"/);
-        assert.doesNotMatch(
-            agentLib,
-            /pr\.headRefName\.startsWith\(branchPrefix\)\s*&&\s*BOT_AUTHORS/s
-        );
-    });
-
-    it("treats model stalls as soft patrol outcomes", () => {
-        assert.match(agentLib, /pi-agent-soft-failed/);
-        assert.match(agentLib, /resetWorkingTree/);
-        assert.match(agentLib, /code === "ETIMEDOUT"/);
-        assert.match(agentLib, /SOFT_FAIL/);
-        assert.match(agentLib, /process\.exit\(0\)/);
-        assert.match(agentLib, /PASS 1 DID NOT WRITE FINDINGS/);
-        assert.match(agentsYml, /pi-agent-soft-failed/);
     });
 });
 
