@@ -601,6 +601,32 @@ describe("POST /api/chat validation", () => {
         const body = (await readJson(resp)) as { error: string; };
         assert.ok(body.error.includes("JSON object"));
     });
+
+    it("rejects message with invalid role value", async () => {
+        const resp = await handleChat(
+            makeRequest("POST", "/api/chat", {
+                messages: [{ role: "evil", content: "x" }]
+            }),
+            "test-key"
+        );
+        assert.equal(resp.status, 400);
+        const body = (await readJson(resp)) as { error: string; };
+        assert.ok(body.error.includes("role must be one of"));
+    });
+
+    it("accepts all valid roles: system, user, assistant, tool", async () => {
+        const validRoles = ["system", "user", "assistant", "tool"];
+        for (const role of validRoles) {
+            const resp = await handleChat(
+                makeRequest("POST", "/api/chat", {
+                    messages: [{ role, content: "test" }]
+                }),
+                "test-key"
+            );
+            // Should not return 400 for invalid role validation
+            assert.notEqual(resp.status, 400, `role "${role}" should be accepted`);
+        }
+    });
 });
 
 // -- Route: 404 -------------------------------------------------------
@@ -1212,6 +1238,72 @@ describe("SSE streaming from Anthropic endpoint", () => {
             globalThis.fetch = REAL_FETCH;
             if (previousApiKey === undefined) delete process.env.MINIMAX_API_KEY;
             else process.env.MINIMAX_API_KEY = previousApiKey;
+        }
+    });
+
+    it("handles image tool result with mixed HTTP and data URLs without throwing", async () => {
+        const sessionId = `mixed-url-session-${Date.now()}`;
+        const db = requireDb();
+        createSession(db, sessionId, "Mixed URLs");
+
+        // Mock image generation returning mixed URLs
+        globalThis.fetch = async (url: string | URL | Request) => {
+            const urlStr = url.toString();
+            if (urlStr.includes("/v1/image_generation")) {
+                // Return mixed URLs: one HTTP, one data URL
+                return new Response(
+                    JSON.stringify({
+                        data: {
+                            image_urls: [
+                                "https://example.com/generated.png",
+                                "data:image/png;base64,SGVsbG9Xb3JsZA=="
+                            ]
+                        }
+                    }),
+                    { status: 200, headers: { "Content-Type": "application/json" } }
+                );
+            }
+            if (urlStr === "https://example.com/generated.png") {
+                return new Response(new Uint8Array([137, 80, 78, 71]), {
+                    status: 200,
+                    headers: { "Content-Type": "image/png" }
+                });
+            }
+            return new Response(JSON.stringify({ error: "not found" }), { status: 404 });
+        };
+
+        try {
+            const req = makeRequest(
+                "POST",
+                "/api/chat",
+                {
+                    messages: [
+                        {
+                            role: "user",
+                            content:
+                                "Use generate_image with prompt: cat\nTool params: response_format=url,response_format_2=base64"
+                        }
+                    ]
+                },
+                { "X-Session-Id": sessionId }
+            );
+            const resp = await handleChat(req, "test-key", sessionId);
+            // Should not throw 500 - mixed URLs should be handled gracefully
+            assert.notEqual(resp.status, 500, "should not return 500 for mixed URLs");
+            const body = await readBody(resp);
+            assert.ok(body.includes("tool_result"), "should include tool_result event");
+
+            // Verify both URLs are preserved in the result
+            assert.ok(
+                body.includes("https://example.com/generated.png") || body.includes("/asset/"),
+                "HTTP URL should be saved to disk"
+            );
+            assert.ok(
+                body.includes("data:image"),
+                "data URL should be preserved as-is"
+            );
+        } finally {
+            globalThis.fetch = REAL_FETCH;
         }
     });
 
@@ -2569,6 +2661,49 @@ describe("Integration: chat with agent loop + persistence", () => {
             assert.ok(userMsgs.length >= 1);
             assert.ok(assistantMsgs.length >= 1);
             assert.ok(assistantMsgs[assistantMsgs.length - 1].content.includes("Cool idea"));
+        } finally {
+            globalThis.fetch = REAL_FETCH;
+        }
+    });
+
+    it("persists ALL user messages from validation.body.messages, not just the last one", async () => {
+        const sessionId = `multi-msg-session-${Date.now()}`;
+        const sseChunks = anthropicTextSse(["First response."]);
+
+        globalThis.fetch = async () =>
+            new Response(makeAnthropicStream(sseChunks), {
+                status: 200,
+                headers: { "Content-Type": "text/event-stream" }
+            });
+
+        try {
+            const req = makeRequest(
+                "POST",
+                "/api/chat",
+                {
+                    messages: [
+                        { role: "user", content: "first message" },
+                        { role: "user", content: "second message" }
+                    ]
+                },
+                { "X-Session-Id": sessionId }
+            );
+            const resp = await handleChat(req, "test-key", sessionId);
+            assert.equal(resp.status, 200);
+            await readBody(resp);
+            await new Promise((r) => setTimeout(r, 100));
+
+            // Both messages should be persisted
+            const dbMessages = getMessages(requireDb(), sessionId);
+            const userMsgs = dbMessages.filter((m) => m.role === "user");
+            assert.ok(
+                userMsgs.some((m) => m.content === "first message"),
+                "first message should be saved"
+            );
+            assert.ok(
+                userMsgs.some((m) => m.content === "second message"),
+                "second message should be saved"
+            );
         } finally {
             globalThis.fetch = REAL_FETCH;
         }
