@@ -29,6 +29,8 @@ Obey unless user overrides.
 - Never put raw asset data in agent context or chat history.
 - Add tests for code and docs contracts.
   Tests prove invariants.
+- HallucyGenie is production software.
+  DB schema/data changes require explicit migration steps.
 - In `src/`, use `import { createLogger } from "./log.ts"`.
   No `console.log`.
 - Use `process.env.MINIMAX_API_KEY`.
