@@ -4,23 +4,23 @@ PRAGMA foreign_keys = OFF;
 BEGIN TRANSACTION;
 
 CREATE TABLE app_state (
-key TEXT PRIMARY KEY,
-value TEXT NOT NULL,
-updated_at TEXT NOT NULL DEFAULT (datetime ('now'))
-) ;
+    key TEXT PRIMARY KEY, -- noqa: RF04
+    value TEXT NOT NULL,
+    updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
 
 CREATE TABLE assets (
-id TEXT PRIMARY KEY,
-session_id TEXT NOT NULL,
-type TEXT NOT NULL CHECK (type IN ('image', 'audio', 'music')),
-filename TEXT NOT NULL,
-mime_type TEXT NOT NULL,
-prompt TEXT,
-tool_name TEXT NOT NULL,
-size_bytes INTEGER NOT NULL DEFAULT 0,
-created_at INTEGER NOT NULL,
-params_json TEXT
-) ;
+    id TEXT PRIMARY KEY,
+    session_id TEXT NOT NULL,
+    type TEXT NOT NULL CHECK (type IN ('image', 'audio', 'music')),
+    filename TEXT NOT NULL,
+    mime_type TEXT NOT NULL,
+    prompt TEXT,
+    tool_name TEXT NOT NULL,
+    size_bytes INTEGER NOT NULL DEFAULT 0,
+    created_at INTEGER NOT NULL,
+    params_json TEXT
+);
 
 CREATE TABLE daily_usage (
 [date] TEXT NOT NULL,
@@ -50,7 +50,7 @@ thinking TEXT
 ) ;
 
 CREATE TABLE preferences (
-key TEXT PRIMARY KEY,
+key TEXT PRIMARY KEY, -- noqa: RF04
 value TEXT NOT NULL,
 updated_at TEXT NOT NULL DEFAULT (datetime ('now'))
 ) ;
