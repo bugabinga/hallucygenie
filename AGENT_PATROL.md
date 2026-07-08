@@ -29,7 +29,7 @@ Autonomous CI agents. One PR per agent. Janitor keeps them honest.
 2. If janitor status is `needs-fix`, worker repairs that PR only.
 3. If another open PR exists, worker skips new work.
 4. If no PR exists, worker may create one.
-5. Worker runs `just fix` + `just ready` before commit.
+5. Worker runs `mise run check --fix` + `mise run test` before commit.
 6. Janitor rechecks PR, CI, comments, reviews, failed logs.
 
 ## Janitor status

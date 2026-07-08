@@ -18,8 +18,8 @@ analysis, web search, and local generated assets.
 ```sh
 cp .env.example .env
 $EDITOR .env # set MINIMAX_API_KEY
-just install
-just dev
+mise run setup
+mise run dev
 ```
 
 Open <http://localhost:3000>.
@@ -57,18 +57,19 @@ Then open <http://localhost:3000>.
 ## Release
 
 ```sh
-RELEASE_TAG=v1.0.2 just release-check ghcr.io/bugabinga/hallucygenie:v1.0.2
-just release v1.0.2
+RELEASE_TAG=v1.0.2 mise run release --check ghcr.io/bugabinga/hallucygenie:v1.0.2
+mise run release v1.0.2
 ```
 
-`just release` opens the release image in Chrome, asks for manual approval, tags, and pushes. Tag push publishes GHCR tags via `.github/workflows/release.yml`.
+`mise run release` opens the release image in Chrome, asks for manual approval, tags, and pushes. Tag push publishes GHCR tags via `.github/workflows/release.yml`.
 
 ## Commands
 
-• `just ready` — lint, typecheck, build-check, unit, integration, E2E.
-• `just release-check` — `ready`, metadata validation, container build, smoke test.
-• `just release vX.Y.Z` — verify, open Chrome, ask manual approval, tag, push.
-• `just container` — local production image.
-• `just minimax-test` — real MiniMax smoke test; consumes quota.
+• `mise run setup` — install JS deps and Playwright browsers.
+• `mise run check` — format/lint/typecheck/build-check/unit/integration.
+• `mise run test` — default E2E; `--matrix`, `--mutation`, `--minimax` opt in.
+• `mise run image` — build image; `--smoke` tests; `--push` publishes.
+• `mise run release --check IMAGE` — release proof without tagging.
+• `mise run release vX.Y.Z` — verify, open Chrome, ask manual approval, tag, push.
 
 Made with love, hand-vibing AI, and bugabinga.

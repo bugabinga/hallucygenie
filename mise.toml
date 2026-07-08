@@ -1,0 +1,299 @@
+[tools]
+bun = "1.3.14"
+gh = "2.96.0"
+gitleaks = "8.30.1"
+jq = "1.8.2"
+"npm:@mariozechner/pi-coding-agent" = "0.73.1"
+"pipx:sqruff" = "0.39.0"
+
+[tasks.setup]
+description = "install dependencies; default installs JS deps and Playwright browsers"
+usage = '''
+flag "--js" help="install JS deps only"
+flag "--browsers" help="install Playwright browsers only"
+'''
+run = '''
+js="${usage_js:-false}"
+browsers="${usage_browsers:-false}"
+if [ "$js" != "true" ] && [ "$browsers" != "true" ]; then
+    js=true
+    browsers=true
+fi
+if [ "$js" = "true" ]; then
+    if [ -n "${CI:-}" ]; then bun install --frozen-lockfile; else bun install; fi
+fi
+if [ "$browsers" = "true" ]; then
+    if [ -n "${CI:-}" ]; then
+        bunx playwright install --with-deps chromium firefox
+    else
+        bunx playwright install chromium firefox
+    fi
+fi
+'''
+
+[tasks.check]
+description = "format/lint/typecheck/build-check/unit/integration; --fix formats first"
+usage = 'flag "--fix" help="format and apply safe lint fixes before checking"'
+run = '''
+if [ "${usage_fix:-false}" = "true" ]; then
+    mise fmt
+    bunx dprint fmt
+    sqruff fix migrations/*.sql test/fixtures/db/v1.0.0/schema.sql
+    bunx biome lint --write .
+fi
+mise fmt --check
+bunx dprint check
+bunx biome lint .
+sqruff lint migrations/*.sql test/fixtures/db/v1.0.0/schema.sql
+tmp="$(mktemp -d)"
+trap 'rm -rf "$tmp"' EXIT
+mkdir -p "$tmp/config/containers/systemd" "$tmp/out" "$tmp/early" "$tmp/late"
+cp deploy/hallucygenie.container "$tmp/config/containers/systemd/hallucygenie.container"
+XDG_CONFIG_HOME="$tmp/config" /usr/lib/systemd/user-generators/podman-user-generator "$tmp/out" "$tmp/early" "$tmp/late" >/dev/null
+systemd-analyze --user verify "$tmp/out/hallucygenie.service"
+bunx tsc --noEmit
+bundle="$(mktemp)"
+trap 'rm -rf "$tmp" "$bundle"' EXIT
+bunx esbuild public/app.ts --outfile="$bundle" --bundle --format=esm --target=esnext
+bun test test/unit
+bun test test/integration
+'''
+
+[tasks.test]
+description = "run tests; default unit+integration+e2e"
+usage = '''
+flag "--unit" help="run unit tests"
+flag "--integration" help="run integration tests"
+flag "--e2e" help="run one browser E2E pass"
+flag "--matrix" help="run chromium/firefox × desktop/mobile E2E"
+flag "--mutation" help="run mutation tests"
+flag "--minimax" help="run real MiniMax smoke test; consumes quota"
+flag "--all" help="run unit+integration+e2e+mutation"
+'''
+run = '''
+unit="${usage_unit:-false}"
+integration="${usage_integration:-false}"
+e2e="${usage_e2e:-false}"
+matrix="${usage_matrix:-false}"
+mutation="${usage_mutation:-false}"
+minimax="${usage_minimax:-false}"
+all="${usage_all:-false}"
+if [ "$unit$integration$e2e$matrix$mutation$minimax$all" = "falsefalsefalsefalsefalsefalsefalse" ]; then
+    unit=true
+    integration=true
+    e2e=true
+fi
+if [ "$all" = "true" ]; then
+    unit=true
+    integration=true
+    e2e=true
+    mutation=true
+fi
+if [ "$unit" = "true" ]; then bun test test/unit; fi
+if [ "$integration" = "true" ]; then bun test test/integration; fi
+if [ "$e2e" = "true" ]; then
+    bunx esbuild public/app.ts --outfile=public/app.js --bundle --format=esm --target=esnext
+    bun e2e/run-e2e.ts
+fi
+if [ "$matrix" = "true" ]; then
+    for browser in chromium firefox; do
+        for device in desktop mobile; do
+            echo "E2E $browser $device"
+            bunx esbuild public/app.ts --outfile=public/app.js --bundle --format=esm --target=esnext
+            HG_E2E_BROWSER="$browser" HG_E2E_DEVICE="$device" bun e2e/run-e2e.ts
+        done
+    done
+fi
+if [ "$mutation" = "true" ]; then
+    tmp="$(mktemp)"
+    trap 'rm -f "$tmp"' EXIT
+    bunx esbuild public/app.ts --outfile="$tmp" --bundle --format=esm --target=esnext
+    status=0
+    bunx stryker run test/stryker.config.mjs & agent=$!
+    bunx stryker run test/stryker-tools.mjs & tools=$!
+    bunx stryker run test/stryker-db.mjs & db=$!
+    wait "$agent" || status=$?
+    wait "$tools" || status=$?
+    wait "$db" || status=$?
+    if [ "$status" -ne 0 ]; then exit "$status"; fi
+fi
+if [ "$minimax" = "true" ]; then
+    set -a
+    [ ! -f .env ] || . ./.env
+    set +a
+    bun scripts/minimax-test.ts
+fi
+'''
+
+[tasks.dev]
+description = "start dev server; --fresh resets data first; --kill stops server only; --chrome opens Chrome"
+usage = '''
+flag "--fresh" help="kill old server and reset local DB/assets before starting"
+flag "--kill" help="stop HallucyGenie dev server on port 3000"
+flag "--chrome" help="open app in Chrome with remote debugging"
+'''
+run = '''
+open_chrome() {
+    mkdir -p ${HOME}/.cache/hallucygenie/chrome-profile
+    google-chrome-stable \
+      --remote-debugging-port=9222 \
+      --remote-allow-origins=* \
+      --user-data-dir=${HOME}/.cache/hallucygenie/chrome-profile \
+      --no-first-run \
+      --no-default-browser-check \
+      --disable-search-engine-choice-screen \
+      --disable-features=Translate,SigninIntercept,SyncPromoAfterSigninIntercept \
+      http://localhost:3000 &>/dev/null &
+}
+kill_server() {
+    pids="$(lsof -ti tcp:3000 2>/dev/null || true)"
+    if [ -z "$pids" ]; then echo "No process listening on port 3000"; return 0; fi
+    killed=0
+    for pid in $pids; do
+        cmd="$(ps -o args= -p "$pid" 2>/dev/null || true)"
+        case "$cmd" in
+            *"bun src/server.ts"*) echo "Killing HallucyGenie server PID $pid"; kill "$pid"; killed=1 ;;
+            *) echo "Refusing to kill PID $pid on port 3000: $cmd" ;;
+        esac
+    done
+    test "$killed" = "1"
+}
+if [ "${usage_kill:-false}" = "true" ]; then kill_server; exit 0; fi
+if [ "${usage_chrome:-false}" = "true" ]; then open_chrome; exit 0; fi
+if [ "${usage_fresh:-false}" = "true" ]; then
+    kill_server || true
+    rm -rf data *.db *.db-shm *.db-wal
+fi
+bunx esbuild public/app.ts --outfile=public/app.js --bundle --format=esm --target=esnext
+set -a
+[ ! -f .env ] || . ./.env
+set +a
+bun src/server.ts
+'''
+
+[tasks.fonts]
+description = "update vendored Google fonts from pinned or supplied commit"
+usage = 'arg "[commit]" default="8fee968603b86ac85d4fbf0f3ffbde3fed1d84e1"'
+run = '''
+bun scripts/update-fonts.ts "$usage_commit"
+mise fmt
+bunx dprint fmt
+sqruff fix migrations/*.sql test/fixtures/db/v1.0.0/schema.sql
+'''
+
+[tasks.image]
+description = "build, smoke, or push production image"
+usage = '''
+arg "[image]" default="hallucygenie:local" help="image tag"
+flag "--smoke" help="smoke-test an existing image"
+flag "--push" help="build and push ghcr.io/bugabinga/hallucygenie:vX.Y.Z"
+'''
+run = '''
+set -e
+image="$usage_image"
+package_tag="v$(bun -e 'console.log(JSON.parse(await Bun.file("package.json").text()).version)')"
+version="${RELEASE_TAG:-$package_tag}"
+smoke() {
+    name="hallucygenie-smoke-$(date +%s)-$$"
+    volume="$name-data"
+    podman volume create "$volume" >/dev/null
+    cleanup() { podman rm -f "$name" >/dev/null 2>&1 || true; podman volume rm "$volume" >/dev/null 2>&1 || true; }
+    trap cleanup EXIT
+    podman run -d --name "$name" -p 127.0.0.1:3099:3000 -e MINIMAX_API_KEY=test-key-for-smoke -v "$volume:/app/data" \
+      --health-cmd "bun --eval \"const port=process.env.PORT||'3000';fetch('http://127.0.0.1:'+port+'/api/health').then((r)=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))\"" \
+      --health-interval 30s --health-timeout 3s --health-start-period 5s --health-retries 3 \
+      "$image" >/dev/null
+    ok=0
+    for _ in $(seq 1 30); do if curl -fsS http://127.0.0.1:3099/api/health >/dev/null 2>&1; then ok=1; break; fi; sleep 1; done
+    test "$ok" = "1"
+    podman healthcheck run "$name" >/dev/null
+    podman inspect "$name" | bun -e 'const container = JSON.parse(await new Response(Bun.stdin.stream()).text())[0]; if (container.State.Health.Status !== "healthy") throw new Error("container not healthy");'
+    curl -fsS http://127.0.0.1:3099/ >/dev/null
+    curl -fsS http://127.0.0.1:3099/fonts/pixelify-sans/PixelifySans.woff2 >/dev/null
+}
+if [ "${usage_smoke:-false}" = "true" ]; then smoke; exit 0; fi
+if [ "${usage_push:-false}" = "true" ]; then
+    case "$image" in ghcr.io/bugabinga/hallucygenie:v[0-9]*.[0-9]*.[0-9]*) ;; *) echo "image must be ghcr.io/bugabinga/hallucygenie:vX.Y.Z"; exit 1 ;; esac
+    version="${image##*:}"
+    RELEASE_TAG="$version" bun scripts/release-check.ts
+fi
+podman build -f deploy/Containerfile --build-arg VERSION="$version" -t "$image" .
+if [ "${usage_push:-false}" = "true" ]; then podman push "$image"; fi
+'''
+
+[tasks.release]
+description = "release gate or tag release; use --check [image] for local proof"
+usage = '''
+arg "[value]" default="hallucygenie:local" help="tag for release, image for --check"
+flag "--check" help="run release proof without tagging"
+'''
+interactive = true
+run = '''
+set -e
+value="$usage_value"
+if [ "${usage_check:-false}" = "true" ]; then
+    image="$value"
+    mise run check
+    mise run test
+    package_tag="v$(bun -e 'console.log(JSON.parse(await Bun.file("package.json").text()).version)')"
+    release_tag="${RELEASE_TAG:-$package_tag}"
+    image_tag="${image##*:}"
+    case "$image" in ghcr.io/bugabinga/hallucygenie:*) if [ "$image_tag" != "$release_tag" ]; then echo "image tag $image_tag != RELEASE_TAG $release_tag"; exit 1; fi ;; esac
+    RELEASE_TAG="$release_tag" bun scripts/release-check.ts
+    RELEASE_TAG="$release_tag" mise run image "$image"
+    podman inspect "$image" | RELEASE_TAG="$release_tag" bun -e 'const image = JSON.parse(await new Response(Bun.stdin.stream()).text())[0]; const got = image.Config.Labels["org.opencontainers.image.version"]; if (got !== process.env.RELEASE_TAG) throw new Error(`image version label ${got} != ${process.env.RELEASE_TAG}`);'
+    mise run image --smoke "$image"
+    exit 0
+fi
+set -a
+[ ! -f .env ] || . ./.env
+set +a
+tag="$value"
+case "$tag" in v[0-9]*.[0-9]*.[0-9]*) ;; *) echo "tag must be vX.Y.Z"; exit 1 ;; esac
+package_tag="v$(bun -e 'console.log(JSON.parse(await Bun.file("package.json").text()).version)')"
+if [ "$tag" != "$package_tag" ]; then echo "tag $tag != package $package_tag"; exit 1; fi
+image="ghcr.io/bugabinga/hallucygenie:$tag"
+RELEASE_TAG="$tag" mise run release --check "$image"
+if [ -n "$(git status --porcelain=v1 --untracked-files=all)" ]; then git status --short; echo "dirty worktree"; exit 1; fi
+if git rev-parse -q --verify "refs/tags/$tag" >/dev/null; then echo "tag $tag already exists"; exit 1; fi
+if git ls-remote --exit-code --tags origin "refs/tags/$tag" >/dev/null 2>&1; then echo "remote tag $tag already exists"; exit 1; fi
+if [ -z "${MINIMAX_API_KEY:-}" ]; then echo "MINIMAX_API_KEY required for manual release browser"; exit 1; fi
+command -v google-chrome-stable >/dev/null || { echo "google-chrome-stable missing"; exit 1; }
+name="hallucygenie-release-${tag#v}-$(date +%s)-$$"
+volume="$name-data"
+profile="$(mktemp -d)"
+cleanup() { podman rm -f "$name" >/dev/null 2>&1 || true; podman volume rm "$volume" >/dev/null 2>&1 || true; rm -rf "$profile"; }
+trap cleanup EXIT
+podman volume create "$volume" >/dev/null
+podman run -d --name "$name" -p 127.0.0.1:3100:3000 -e MINIMAX_API_KEY -v "$volume:/app/data" \
+  --health-cmd "bun --eval \"const port=process.env.PORT||'3000';fetch('http://127.0.0.1:'+port+'/api/health').then((r)=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))\"" \
+  --health-interval 30s --health-timeout 3s --health-start-period 5s --health-retries 3 \
+  "$image" >/dev/null
+ok=0
+for _ in $(seq 1 30); do if curl -fsS http://127.0.0.1:3100/api/health >/dev/null 2>&1; then ok=1; break; fi; sleep 1; done
+test "$ok" = "1"
+echo "Manual test: http://127.0.0.1:3100"
+echo "Close Chrome window or press Ctrl+C here when done."
+google-chrome-stable --user-data-dir="$profile" --no-first-run --no-default-browser-check --disable-search-engine-choice-screen --app=http://127.0.0.1:3100 >/dev/null 2>&1 &
+browser="$!"
+trap 'echo; kill "$browser" >/dev/null 2>&1 || true' INT
+wait "$browser" || true
+trap - INT
+printf "Manual test OK? [y/N] "
+read answer
+case "$answer" in y|Y|yes|YES) ;; *) echo "release aborted"; exit 1 ;; esac
+git tag "$tag"
+git push origin "$tag"
+'''
+
+[tasks.clean]
+description = "rm generated files, logs, and caches"
+run = [
+  "rm -rf dist coverage reports .stryker-tmp node_modules/.cache test-data* tmp logs public/app.js",
+  "find test -type d -name 'test-data*' -prune -exec rm -rf {} +",
+]
+
+[tasks.reset]
+description = "reset local SQLite DB + generated assets"
+confirm = { message = "Delete local data/*.db/assets?", default = "no" }
+run = "rm -rf data *.db *.db-shm *.db-wal"

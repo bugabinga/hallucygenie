@@ -245,7 +245,7 @@ async function main(): Promise<void> {
             source: {
                 repo: GOOGLE_FONTS_REPO,
                 commit,
-                downloaded_by: "just fonts-update"
+                downloaded_by: "mise run fonts"
             },
             fonts
         };

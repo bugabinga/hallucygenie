@@ -17,8 +17,8 @@ Workflow:
 2. If test framework exists in project, write/update tests first.
    Tests are the behavioral contract from the spec.
 3. Implement. Follow RULES and tiger style.
-4. Run `just fix`, then `just ready`.
-5. Verify with `just chrome` if UI changes.
+4. Run `mise run check --fix`, then `mise run test`.
+5. Verify with `mise run dev --chrome` if UI changes.
 
 Cross-reference completed work in the commit message.
 Update `.system/issues/` if new bugs surface during implementation.

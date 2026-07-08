@@ -43,7 +43,7 @@ Obey unless user overrides.
 - Mission: `.system/MISSION.md`.
 - Specs: `.system/specs/`.
 - Issues: `.system/issues/`.
-- Commands: `justfile`.
+- Commands: `mise.toml`.
 - Tests: `test/`, `e2e/`.
 
 ## Review

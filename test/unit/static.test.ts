@@ -10,7 +10,13 @@ import { describe, it } from "node:test";
 const indexHtml = readFileSync("public/index.html", "utf-8");
 const styleCss = readFileSync("public/style.css", "utf-8");
 const appTs = readFileSync("public/app.ts", "utf-8");
-const justfile = readFileSync("justfile", "utf-8");
+const miseToml = existsSync("mise.toml") ? readFileSync("mise.toml", "utf-8") : "";
+const miseTaskDir = ".mise/tasks";
+const miseTasks = existsSync(miseTaskDir)
+    ? readdirSync(miseTaskDir).sort().map((name) => readFileSync(`${miseTaskDir}/${name}`, "utf-8"))
+        .join("\n")
+    : "";
+const commandConfig = [miseToml, miseTasks].join("\n");
 const serverTs = readFileSync("src/server.ts", "utf-8");
 const agentTest = readFileSync("test/unit/agent.test.ts", "utf-8");
 const dbTest = readFileSync("test/unit/db.test.ts", "utf-8");
@@ -833,7 +839,7 @@ describe("font vendoring health", () => {
         assert.equal(manifest.version, 1);
         assert.equal(manifest.source.repo, "https://github.com/google/fonts");
         assert.match(manifest.source.commit, /^[0-9a-f]{40}$/);
-        assert.equal(manifest.source.downloaded_by, "just fonts-update");
+        assert.equal(manifest.source.downloaded_by, "mise run fonts");
         assert.deepEqual(manifest.fonts.map((font) => font.id).sort(), [
             "pixelify-sans",
             "playwrite-de-sas",
@@ -951,13 +957,13 @@ describe("constitution health", () => {
         assert.match(agentsMd, /\.system\/RULES\.md/);
         assert.match(agentsMd, /\/skill:tiger/);
         assert.match(agentsMd, /\/skill:minimax/);
-        assert.match(agentsMd, /just --list/);
+        assert.match(agentsMd, /mise tasks/);
         assert.doesNotMatch(agentsMd, /\.pi\/prompts\/issue\.md/);
         assert.match(agentsMd, /\.pi\/prompts\/spec\.md/);
         assert.match(agentsMd, /\.pi\/prompts\/minimax-research\.md/);
         assert.match(agentsMd, /\.pi\/prompts\/ci\.md/);
         assert.match(agentsMd, /\.pi\/prompts\/release\.md/);
-        assert.match(agentsMd, /just release/);
+        assert.match(agentsMd, /mise run release/);
         assert.doesNotMatch(agentsMd, /\.pi\/prompts\/commit\.md/);
         assert.doesNotMatch(agentsMd, /\/home\//);
         assert.doesNotMatch(
@@ -999,9 +1005,9 @@ describe("constitution health", () => {
         assert.match(serverTs, /saveMessage\(database, sessionId, "user", msg\)/);
     });
 
-    it("justfile has no constitution wrapper ceremony", () => {
-        assert.equal(/^rules:/m.test(justfile), false);
-        assert.equal(/^mission:/m.test(justfile), false);
+    it("mise commands have no constitution wrapper ceremony", () => {
+        assert.equal(/^rules:/m.test(commandConfig), false);
+        assert.equal(/^mission:/m.test(commandConfig), false);
     });
 });
 
@@ -1091,108 +1097,127 @@ describe("formatter and linter health", () => {
     });
 });
 
-describe("justfile health", () => {
-    it("has one obvious gate and ignored frontend bundle", () => {
-        assert.match(justfile, /\nready: lint typecheck build-check unit integration e2e\n/);
-        assert.match(
-            justfile,
-            /\nfmt:\n\s+just -f \.\/justfile --fmt\n\s+bunx dprint fmt\n\s+sqruff fix migrations\/\*\.sql test\/fixtures\/db\/v1\.0\.0\/schema\.sql/
+describe("mise command health", () => {
+    it("has a small public command surface", () => {
+        assert.equal(existsSync("justfile"), false);
+        assert.equal(existsSync("mise.toml"), true);
+        assert.match(miseToml, /\[tools\]/);
+        assert.match(miseToml, /bun = "1\.3\.14"/);
+        assert.match(miseToml, /"pipx:sqruff" = "0\.39\.0"/);
+        assert.match(miseToml, /jq = "1\.8\.2"/);
+        assert.match(miseToml, /gitleaks = "8\.30\.1"/);
+        assert.match(miseToml, /gh = "2\.96\.0"/);
+
+        const taskNames = [...commandConfig.matchAll(/^\[tasks\.([^\]]+)\]/gm)].map((match) =>
+            match[1]
         );
-        assert.match(justfile, /\nfix: fmt\n\s+bunx biome lint --write \./);
+        assert.deepEqual(taskNames, [
+            "setup",
+            "check",
+            "test",
+            "dev",
+            "fonts",
+            "image",
+            "release",
+            "clean",
+            "reset"
+        ]);
+    });
+
+    it("keeps setup, check, and test idempotent/composable", () => {
+        assert.match(commandConfig, /\[tasks\.setup\]/);
+        assert.match(commandConfig, /flag "--js"/);
+        assert.match(commandConfig, /flag "--browsers"/);
+        assert.match(commandConfig, /bun install --frozen-lockfile/);
+        assert.match(commandConfig, /playwright install --with-deps chromium firefox/);
+        assert.match(commandConfig, /\[tasks\.check\]/);
+        assert.match(commandConfig, /flag "--fix"/);
+        assert.match(commandConfig, /mise fmt --check/);
+        assert.match(commandConfig, /bunx dprint check/);
+        assert.match(commandConfig, /bunx biome lint \./);
         assert.match(
-            justfile,
-            /\nlint:\n\s+just -f \.\/justfile --fmt --check\n\s+bunx dprint check\n\s+bunx biome lint \.\n\s+sqruff lint migrations\/\*\.sql test\/fixtures\/db\/v1\.0\.0\/schema\.sql/
+            commandConfig,
+            /sqruff lint migrations\/\*\.sql test\/fixtures\/db\/v1\.0\.0\/schema\.sql/
         );
-        assert.match(justfile, /podman-user-generator/);
-        assert.match(justfile, /systemd-analyze --user verify/);
-        assert.match(justfile, /\nbuild-check:\n\s+tmp="\$\(mktemp\)"/);
-        assert.match(justfile, /verify frontend bundle builds without writing generated output/);
-        assert.doesNotMatch(justfile, /public\/app\.js is stale/);
+        assert.match(commandConfig, /podman-user-generator/);
+        assert.match(commandConfig, /systemd-analyze --user verify/);
+        assert.match(commandConfig, /bunx tsc --noEmit/);
+        assert.match(commandConfig, /bun test test\/unit/);
+        assert.match(commandConfig, /bun test test\/integration/);
+        assert.match(commandConfig, /\[tasks\.test\]/);
+        assert.match(commandConfig, /flag "--matrix"/);
+        assert.match(commandConfig, /flag "--mutation"/);
+        assert.match(commandConfig, /flag "--minimax"/);
+        assert.match(commandConfig, /HG_E2E_BROWSER="\$browser" HG_E2E_DEVICE="\$device"/);
+        assert.match(commandConfig, /bunx stryker run test\/stryker\.config\.mjs/);
+        assert.match(commandConfig, /bun scripts\/minimax-test\.ts/);
+    });
+
+    it("keeps dev, fonts, image, release, clean, and reset capabilities", () => {
+        assert.match(commandConfig, /\[tasks\.dev\]/);
+        assert.match(commandConfig, /flag "--fresh"/);
+        assert.match(commandConfig, /flag "--kill"/);
+        assert.match(commandConfig, /flag "--chrome"/);
+        assert.match(commandConfig, /google-chrome-stable/);
+        assert.match(commandConfig, /bun src\/server\.ts/);
+        assert.match(commandConfig, /\[tasks\.fonts\]/);
+        assert.match(commandConfig, /bun scripts\/update-fonts\.ts "\$usage_commit"/);
+        assert.match(commandConfig, /\[tasks\.image\]/);
+        assert.match(commandConfig, /flag "--smoke"/);
+        assert.match(commandConfig, /flag "--push"/);
+        assert.match(
+            commandConfig,
+            /podman build -f deploy\/Containerfile --build-arg VERSION="\$version" -t "\$image" \./
+        );
+        assert.match(commandConfig, /podman healthcheck run/);
+        assert.match(commandConfig, /podman push "\$image"/);
+        assert.match(commandConfig, /\[tasks\.release\]/);
+        assert.match(commandConfig, /flag "--check"/);
+        const releaseTask = commandConfig.match(/\[tasks\.release\][\s\S]*?\[tasks\.clean\]/)?.[0]
+            ?? "";
+        assert.match(releaseTask, /interactive = true/);
+        assert.doesNotMatch(releaseTask, /confirm =/);
+        assert.match(commandConfig, /Manual test OK\? \[y\/N\]/);
+        assert.match(commandConfig, /git status --porcelain=v1 --untracked-files=all/);
+        assert.match(commandConfig, /git tag "\$tag"/);
+        assert.match(commandConfig, /git push origin "\$tag"/);
+        assert.match(commandConfig, /\[tasks\.clean\][\s\S]*public\/app\.js/);
+        assert.match(commandConfig, /\[tasks\.reset\][\s\S]*rm -rf data \*\.db/);
+        assert.doesNotMatch(commandConfig, /MANUAL_CHROME_OK/);
+        assert.doesNotMatch(commandConfig, /\bdocker (?:build|buildx|volume|run|inspect|rm)\b/);
+        assert.match(
+            commandConfig,
+            /if \[ "\$\{usage_push:-false\}" = "true" \]; then podman push "\$image"; fi/
+        );
     });
 
     it("runs every test from directories, not brittle file lists", () => {
-        assert.match(justfile, /\nunit:\n\s+bun test test\/unit/);
-        assert.match(justfile, /\nintegration:\n\s+bun test test\/integration/);
-        assert.match(justfile, /\ne2e: build\n\s+bun e2e\/run-e2e\.ts/);
-        assert.doesNotMatch(justfile, /BACKEND_TESTS|FRONTEND_TESTS/);
-        assert.deepEqual(
-            readdirSync("test").filter((name) => name.endsWith(".test.ts")),
-            []
-        );
+        assert.match(commandConfig, /bun test test\/unit/);
+        assert.match(commandConfig, /bun test test\/integration/);
+        assert.match(commandConfig, /bun e2e\/run-e2e\.ts/);
+        assert.match(commandConfig, /for browser in chromium firefox/);
+        assert.match(commandConfig, /for device in desktop mobile/);
+        assert.doesNotMatch(commandConfig, /BACKEND_TESTS|FRONTEND_TESTS/);
+        assert.deepEqual(readdirSync("test").filter((name) => name.endsWith(".test.ts")), []);
         assert.equal(existsSync("test/unit/static.test.ts"), true);
         assert.equal(existsSync("test/integration/integration.test.ts"), true);
     });
 
-    it("keeps essential human commands simple", () => {
-        assert.match(justfile, /\nbuild:\n\s+bunx esbuild public\/app\.ts/);
-        assert.match(justfile, /\ndev: build\n\s+bun src\/server\.ts/);
-        assert.match(justfile, /\nfresh: kill reset dev\n/);
-        assert.match(justfile, /\nchrome:\n/);
-        assert.match(justfile, /\ncontainer image="hallucygenie:local":/);
-        assert.match(
-            justfile,
-            /podman build -f deploy\/Containerfile --build-arg VERSION="\$version" -t "\{\{ image \}\}" \./
-        );
-        assert.match(justfile, /\ncontainer-smoke image="hallucygenie:local":/);
-        assert.match(justfile, /curl -fsS http:\/\/127\.0\.0\.1:3099\/api\/health/);
-        assert.match(
-            justfile,
-            /curl -fsS http:\/\/127\.0\.0\.1:3099\/fonts\/pixelify-sans\/PixelifySans\.woff2/
-        );
-        assert.doesNotMatch(justfile, /curl -fsSI/);
-        assert.match(justfile, /\nrelease-check image="hallucygenie:local": ready/);
-        assert.match(justfile, /RELEASE_TAG="\$release_tag" bun scripts\/release-check\.ts/);
-        assert.match(justfile, /podman inspect "\$image"/);
-        assert.match(justfile, /image version label/);
-        assert.match(justfile, /--health-cmd/);
-        assert.match(justfile, /podman healthcheck run/);
-        assert.match(justfile, /\nrelease tag:/);
-        assert.doesNotMatch(justfile, /MANUAL_CHROME_OK/);
-        assert.match(justfile, /google-chrome-stable/);
-        assert.match(justfile, /Manual test OK\? \[y\/N\]/);
-        assert.match(justfile, /git status --porcelain=v1 --untracked-files=all/);
-        assert.match(justfile, /git tag "\$tag"/);
-        assert.match(justfile, /git push origin "\$tag"/);
-        assert.match(justfile, /image must be ghcr\.io\/bugabinga\/hallucygenie:vX\.Y\.Z/);
-        assert.match(justfile, /\npublish-container image:/);
-        assert.match(
-            justfile,
-            /podman build -f deploy\/Containerfile --build-arg VERSION="\$release_tag" -t "\$image" \./
-        );
-        assert.match(justfile, /podman push "\$image"/);
-        assert.doesNotMatch(justfile, /--push/);
-        assert.doesNotMatch(justfile, /\bdocker (?:build|buildx|volume|run|inspect|rm)\b/);
-        assert.match(readmeMd, /podman pull ghcr\.io\/bugabinga\/hallucygenie:v1\.0\.2/);
-        assert.match(readmeMd, /podman run --rm/);
-        assert.match(readmeMd, /--health-cmd/);
-        assert.doesNotMatch(readmeMd, /\bdocker (?:pull|run)\b/);
-        assert.match(justfile, /release tag:\n\s+set -e; \\/);
-        assert.match(justfile, /release-check image="hallucygenie:local": ready\n\s+set -e; \\/);
-        assert.doesNotMatch(justfile, /\$RANDOM/);
-    });
-
-    it("uses clear MiniMax smoke test script", () => {
-        assert.match(justfile, /\nminimax-test:\n\s+bun scripts\/minimax-test\.ts/);
-        assert.match(justfile, /consumes TTS\/image\/music quota/);
-        assert.equal(/^minimax-research:/m.test(justfile), false);
-    });
-
     it("can update vendored fonts from pinned source commit", () => {
         const commit = loadFontManifest().source.commit;
+        assert.match(commandConfig, new RegExp(commit));
         assert.match(
-            justfile,
-            new RegExp(
-                `\\nfonts-update commit="${commit}":\\n\\s+bun scripts/update-fonts\\.ts \\{\\{ commit \\}\\}\\n\\s+just fmt`
-            )
+            commandConfig,
+            /\[tasks\.fonts\][\s\S]*bun scripts\/update-fonts\.ts "\$usage_commit"/
         );
-        assert.doesNotMatch(justfile, /\nfonts-update commit="main":/);
+        assert.doesNotMatch(commandConfig, /fonts[\s\S]*commit="main"/);
         assert.equal(existsSync("scripts/update-fonts.ts"), true);
         assert.match(updateFontsScript, /function manifestTime/);
         assert.match(updateFontsScript, /sameCommit && sameFonts && previous\?\.generated_at/);
     });
 
-    it("uses only the one e2e runner named by justfile", () => {
-        const checked = [justfile, e2eRunner].join("\n");
+    it("uses only the one e2e runner named by mise", () => {
+        const checked = [commandConfig, e2eRunner].join("\n");
         assert.equal(existsSync("e2e/chat.spec.ts"), false);
         assert.equal(existsSync("e2e/static-server.ts"), false);
         assert.equal(existsSync("test/playwright.config.ts"), false);
@@ -1200,39 +1225,42 @@ describe("justfile health", () => {
         assert.equal(/\/data\/data\/com\.[a-z]+/.test(checked), false);
         assert.equal(/PLAYWRIGHT_ALLOW_[A-Z_]+/.test(checked), false);
         assert.equal(checked.includes("--test-name-pattern"), false);
+        assert.match(e2eRunner, /HG_E2E_BROWSER/);
+        assert.match(e2eRunner, /HG_E2E_DEVICE/);
+        assert.match(e2eRunner, /firefox/);
     });
 
-    it("clean removes real generated files", () => {
-        assert.match(justfile, /clean:\n\s+rm -rf .*public\/app\.js/);
-        assert.match(justfile, /clean:\n\s+rm -rf .*\.stryker-tmp/);
-        assert.match(justfile, /clean:\n\s+rm -rf .*coverage/);
-        assert.match(justfile, /clean:\n\s+rm -rf .*tmp/);
-        assert.match(justfile, /clean:\n\s+rm -rf .*logs/);
-        assert.match(justfile, /find test -type d -name 'test-data\*'/);
-        assert.match(justfile, /reset:\n\s+rm -rf .*\*\.db/);
-    });
-
-    it("does not define redundant recipes or aliases", () => {
-        assert.equal(/^list:/m.test(justfile), false);
-        assert.equal(/^alias\b/m.test(justfile), false);
-        assert.doesNotMatch(justfile, /hook-pre-commit|hook-pre-push|hook-post-merge/);
-        assert.doesNotMatch(
-            justfile,
-            /ci-test-all|test-all|test-unit|test-backend|test-integration|test-e2e/
+    it("does not define redundant tasks or aliases", () => {
+        assert.equal(/^list:/m.test(commandConfig), false);
+        assert.equal(/^alias\b/m.test(commandConfig), false);
+        assert.doesNotMatch(commandConfig, /hook-pre-commit|hook-pre-push|hook-post-merge/);
+        const taskNames = [...commandConfig.matchAll(/^\[tasks\.([^\]]+)\]/gm)].map((match) =>
+            match[1]
         );
+        assert.deepEqual(taskNames, [
+            "setup",
+            "check",
+            "test",
+            "dev",
+            "fonts",
+            "image",
+            "release",
+            "clean",
+            "reset"
+        ]);
     });
 });
-
 describe("lefthook health", () => {
-    it("runs the same ready gate as humans and agents", () => {
+    it("only wires Git hooks to mise commands", () => {
         assert.match(lefthookYml, /pre-commit:/);
         assert.match(lefthookYml, /gitleaks:/);
         assert.match(lefthookYml, /gitleaks protect --staged --redact --verbose/);
         assert.match(lefthookYml, /pre-push:/);
         assert.match(lefthookYml, /post-merge:/);
-        assert.equal((lefthookYml.match(/run: just ready/g) ?? []).length, 3);
+        assert.equal((lefthookYml.match(/mise run check && mise run test/g) ?? []).length, 3);
+        assert.match(lefthookYml, /mise run setup/);
         assert.doesNotMatch(lefthookYml, /hook-pre-commit|hook-pre-push|hook-post-merge/);
-        assert.doesNotMatch(justfile, /just ci-act/);
+        assert.doesNotMatch(commandConfig, /mise run ci-act/);
     });
 });
 
@@ -1248,7 +1276,7 @@ describe("prompt health", () => {
         assert.match(issuePrompt, /Do not fix unless user asks/);
     });
 
-    it("moves MiniMax research workflow out of justfile", () => {
+    it("keeps MiniMax research workflow out of command runner", () => {
         assert.equal(existsSync(".pi/prompts/minimax-research.md"), true);
         assert.match(minimaxResearchPrompt, /Research MiniMax API capabilities/);
         assert.match(minimaxResearchPrompt, /\/skill:minimax/);
@@ -1263,8 +1291,8 @@ describe("prompt health", () => {
 
     it("uses release prompt for tag and artifact workflow", () => {
         assert.equal(existsSync(".pi/prompts/release.md"), true);
-        assert.match(releasePrompt, /RELEASE_TAG=\$ARGUMENTS just release-check/);
-        assert.match(releasePrompt, /just release \$ARGUMENTS/);
+        assert.match(releasePrompt, /RELEASE_TAG=\$ARGUMENTS mise run release --check/);
+        assert.match(releasePrompt, /mise run release \$ARGUMENTS/);
         assert.match(releasePrompt, /Manual test OK\? \[y\/N\]/);
         assert.match(releasePrompt, /CHANGELOG\.md/);
         assert.match(releasePrompt, /\.system\/issues/);
@@ -1274,8 +1302,8 @@ describe("prompt health", () => {
     });
 
     it("uses the supported visible Chrome recipe for manual tests", () => {
-        assert.match(manualPrompt, /just chrome/);
-        assert.doesNotMatch(manualPrompt, /just dev-chrome/);
+        assert.match(manualPrompt, /mise run dev --chrome/);
+        assert.doesNotMatch(manualPrompt, /mise run chrome|mise run dev-chrome/);
     });
 });
 
@@ -1290,8 +1318,8 @@ describe("project metadata health", () => {
         assert.match(readmeMd, /MINIMAX_API_KEY/);
         assert.match(readmeMd, /No built-in auth/);
         assert.match(readmeMd, /data\//);
-        assert.match(readmeMd, /just release-check/);
-        assert.match(readmeMd, /just release v1\.0\.2/);
+        assert.match(readmeMd, /mise run release --check/);
+        assert.match(readmeMd, /mise run release v1\.0\.2/);
         assert.match(readmeMd, /opens the release image in Chrome/);
         assert.match(readmeMd, /Made with love, hand-vibing AI, and bugabinga\./);
     });
@@ -1322,35 +1350,45 @@ describe("project metadata health", () => {
 });
 
 describe("GitHub Actions health", () => {
-    it("runs the ready gate and mutation", () => {
+    it("runs check, e2e matrix, and mutation through mise", () => {
         assert.doesNotMatch(ciYml, /MINIMAX_(?:API_)?KEY/);
         assert.doesNotMatch(dependabotYml, /MINIMAX_(?:API_)?KEY/);
-        assert.match(ciYml, /run: bun install --frozen-lockfile/);
-        assert.match(ciYml, /run: just ready/);
-        assert.match(ciYml, /run: just mutation/);
+        assert.match(ciYml, /uses: jdx\/mise-action@v3/);
+        assert.match(ciYml, /run: mise run setup --js/);
+        assert.match(ciYml, /run: mise run setup --browsers/);
+        assert.match(ciYml, /run: mise run check/);
+        assert.match(ciYml, /run: mise run test --e2e/);
+        assert.match(ciYml, /run: mise run test --mutation/);
+        assert.match(ciYml, /browser: \[chromium, firefox\]/);
+        assert.match(ciYml, /device: \[desktop, mobile\]/);
+        assert.match(ciYml, /HG_E2E_BROWSER: \$\{\{ matrix\.browser \}\}/);
+        assert.match(ciYml, /HG_E2E_DEVICE: \$\{\{ matrix\.device \}\}/);
         assert.doesNotMatch(ciYml, /ci-test-all|test-e2e|test-mutation/);
-        assert.match(ciYml, /browser-actions\/setup-chrome@v2\.1\.2/);
-        assert.match(ciYml, /install-dependencies: true/);
-        assert.doesNotMatch(ciYml, /flaky apt source/);
-        assert.match(ciYml, /CHROMIUM_PATH=/);
+        assert.doesNotMatch(
+            ciYml,
+            /oven-sh\/setup-bun|taiki-e\/install-action|Install sqruff|setup-chrome|CHROMIUM_PATH/
+        );
     });
 
-    it("agent PR workflows fix then run ready before commit", () => {
-        assert.match(agentsYml, /browser-actions\/setup-chrome@v2\.1\.2/);
-        assert.equal((agentsYml.match(/just fix\n\s+just ready/g) ?? []).length, 8);
-        assert.doesNotMatch(agentsYml, /just fmt \|\| true/);
-        assert.match(slopChopperAgent, /Run "just fix" && "just ready" after/);
+    it("agent PR workflows fix then test before commit", () => {
+        assert.doesNotMatch(agentsYml, /browser-actions\/setup-chrome|Install sqruff|tool: just/);
+        assert.match(agentsYml, /uses: jdx\/mise-action@v3/);
+        assert.equal((agentsYml.match(/mise run check --fix\n\s+mise run test/g) ?? []).length, 8);
+        assert.doesNotMatch(agentsYml, /mise run fmt \|\| true|mise run ready|mise run fix/);
+        assert.match(slopChopperAgent, /Run "mise run check --fix" && "mise run test" after/);
     });
 
-    it("caches Bun deps and uploads mutation HTML artifacts", () => {
-        assert.match(ciYml, /bun-version: 1\.3\.14/);
+    it("caches deps and uploads mutation HTML artifacts", () => {
         assert.match(ciYml, /actions\/checkout@v6\.0\.3/);
-        assert.match(ciYml, /oven-sh\/setup-bun@v2\.2\.0/);
-        assert.match(ciYml, /actions\/cache@v5\.0\.5/);
-        assert.match(ciYml, /taiki-e\/install-action@v2\.81\.8/);
-        assert.match(ciYml, /tool: just/);
+        assert.match(ciYml, /jdx\/mise-action@v3/);
+        assert.match(ciYml, /cache: true/);
+        assert.match(ciYml, /path: ~\/\.cache\/ms-playwright/);
+        assert.match(
+            ciYml,
+            /key: \$\{\{ runner\.os \}\}-playwright-\$\{\{ hashFiles\('bun\.lock'\) \}\}/
+        );
         assert.match(ciYml, /path: ~\/\.bun\/install\/cache/);
-        assert.match(ciYml, /hashFiles\('bun\.lock'\)/);
+        assert.match(ciYml, /key: \$\{\{ runner\.os \}\}-bun-\$\{\{ hashFiles\('bun\.lock'\) \}\}/);
         assert.match(ciYml, /actions\/upload-artifact@v7\.0\.1/);
         assert.match(ciYml, /if: \$\{\{ always\(\) \}\}/);
         assert.match(ciYml, /name: mutation-reports/);
@@ -1362,18 +1400,20 @@ describe("GitHub Actions health", () => {
     });
 
     it("builds and releases containers without local act clutter", () => {
-        assert.match(ciYml, /container:/);
-        assert.match(ciYml, /run: just container hallucygenie:ci/);
+        assert.match(ciYml, /image:/);
+        assert.match(ciYml, /run: mise run image hallucygenie:ci/);
         assert.match(releaseYml, /tags:\n\s+- "v\*\.\*\.\*"/);
         assert.match(releaseYml, /ghcr\.io\/bugabinga\/hallucygenie/);
         assert.match(releaseYml, /permissions:\n\s+contents: read\n\s+packages: write/);
-        assert.match(releaseYml, /browser-actions\/setup-chrome@v2\.1\.2/);
-        assert.match(releaseYml, /CHROMIUM_PATH=/);
+        assert.doesNotMatch(
+            releaseYml,
+            /browser-actions\/setup-chrome|CHROMIUM_PATH|Install sqruff|setup-bun|tool: just/
+        );
         assert.match(
             releaseYml,
-            /run: RELEASE_TAG="\$RELEASE_TAG" just release-check "\$IMAGE:\$RELEASE_TAG"/
+            /run: RELEASE_TAG="\$RELEASE_TAG" mise run release --check "\$IMAGE:\$RELEASE_TAG"/
         );
-        assert.match(releaseYml, /just publish-container/);
+        assert.match(releaseYml, /mise run image --push/);
         assert.match(releaseYml, /podman login ghcr\.io/);
         assert.doesNotMatch(releaseYml, /docker\//);
         assert.doesNotMatch(ciYml, /env\.ACT/);
@@ -1384,21 +1424,21 @@ describe("GitHub Actions health", () => {
         assert.match(dependabotYml, /package-ecosystem: github-actions/);
         assert.doesNotMatch(dependabotYml, /package-ecosystem: docker/);
         assert.match(dependabotYml, /interval: weekly/);
-        assert.doesNotMatch(dependabotYml, /workflow_dispatch|bun outdated|just deps-check/);
-        assert.match(justfile, /\ncontainer image="hallucygenie:local":/);
+        assert.doesNotMatch(dependabotYml, /workflow_dispatch|bun outdated|deps-check/);
+        assert.match(commandConfig, /\[tasks\.image\]/);
         assert.match(
-            justfile,
-            /podman build -f deploy\/Containerfile --build-arg VERSION="\$version" -t "\{\{ image \}\}" \./
+            commandConfig,
+            /podman build -f deploy\/Containerfile --build-arg VERSION="\$version" -t "\$image" \./
         );
-        assert.match(justfile, /\nrelease-check image="hallucygenie:local": ready/);
-        assert.doesNotMatch(justfile, /\ndeps-check:|bun outdated --latest/);
+        assert.match(commandConfig, /\[tasks\.release\]/);
+        assert.doesNotMatch(commandConfig, /\ndeps-check:|bun outdated --latest/);
     });
 
-    it("has no local act runner recipes", () => {
-        assert.doesNotMatch(justfile, /\bACT_/);
-        assert.doesNotMatch(justfile, /\bci-act(?:\b|-)/);
-        assert.doesNotMatch(justfile, /\bagent-(?:spec|bugs|deslop|all)\b/);
-        assert.doesNotMatch(justfile, /\bact\b/);
+    it("has no local act runner tasks", () => {
+        assert.doesNotMatch(commandConfig, /\bACT_/);
+        assert.doesNotMatch(commandConfig, /\bci-act(?:\b|-)/);
+        assert.doesNotMatch(commandConfig, /\bagent-(?:spec|bugs|deslop|all)\b/);
+        assert.doesNotMatch(commandConfig, /\bact\b/);
         assert.equal(existsSync("deploy/act/Containerfile"), false);
         assert.doesNotMatch(gitignore, /\.artifacts\//);
         assert.doesNotMatch(gitignore, /\.act-cache\//);
@@ -1415,7 +1455,6 @@ describe("GitHub Actions health", () => {
         assert.match(pkg.scripts.prepare, /lefthook install/);
     });
 });
-
 describe("agent patrol health", () => {
     it("documents the patrol loop for humans", () => {
         assert.equal(existsSync("AGENT_PATROL.md"), true);
@@ -1506,8 +1545,8 @@ describe("layout health", () => {
         assert.match(deployContainerfile, /org\.opencontainers\.image\.version/);
         assert.match(deployContainerfile, /^USER bun$/m);
         assert.doesNotMatch(deployContainerfile, /^HEALTHCHECK /m);
-        assert.match(justfile, /--health-cmd/);
-        assert.match(justfile, /podman healthcheck run/);
+        assert.match(commandConfig, /--health-cmd/);
+        assert.match(commandConfig, /podman healthcheck run/);
         assert.match(readFileSync("deploy/hallucygenie.container", "utf-8"), /^HealthCmd=/m);
         assert.doesNotMatch(deployContainerfile, /COPY \. \./);
     });

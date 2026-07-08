@@ -5,9 +5,9 @@ argument-hint: "<flow or feature>"
 
 Manual test: $ARGUMENTS
 
-- Use visible Chrome via `just chrome`.
+- Use visible Chrome via `mise run dev --chrome`.
 - Use chrome-cdp to inspect/interact.
 - Exercise happy path + likely edge cases. Capture steps, observed, expected.
 - Add/fix durable tests: unit, integration, e2e, headless as useful.
-- Fix bugs found. Run `just fix`, then `just ready`.
+- Fix bugs found. Run `mise run check --fix`, then `mise run test`.
 - Report: Chrome/CDP, outcome, bugs, tests, checks.

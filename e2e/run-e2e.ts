@@ -9,7 +9,7 @@
 import { existsSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { type Browser, chromium, type Page } from "playwright-core";
+import { type Browser, chromium, devices, firefox, type Page } from "playwright";
 
 import { initDatabase, resetStateForTesting, shutdown, startServer } from "../src/server.ts";
 import {
@@ -28,6 +28,8 @@ const CHROMIUM_CANDIDATES = [
 ].filter((path): path is string => Boolean(path));
 
 const CHROMIUM_PATH = CHROMIUM_CANDIDATES.find((path) => existsSync(path));
+const E2E_BROWSER = parseBrowser(process.env.HG_E2E_BROWSER ?? "chromium");
+const E2E_DEVICE = parseDevice(process.env.HG_E2E_DEVICE ?? "desktop");
 const TEST_PORT = 3001;
 const BASE_URL = `http://localhost:${TEST_PORT}`;
 const TINY_PNG = Buffer.from([
@@ -112,6 +114,27 @@ interface TestResult {
 
 // ── Helpers ──────────────────────────────────────────────────────────
 
+type E2EBrowser = "chromium" | "firefox";
+type E2EDevice = "desktop" | "mobile";
+
+function parseBrowser(value: string): E2EBrowser {
+    if (value === "chromium" || value === "firefox") return value;
+    throw new Error(`HG_E2E_BROWSER must be chromium or firefox, got ${value}`);
+}
+
+function parseDevice(value: string): E2EDevice {
+    if (value === "desktop" || value === "mobile") return value;
+    throw new Error(`HG_E2E_DEVICE must be desktop or mobile, got ${value}`);
+}
+
+async function newPage(
+    browser: Browser,
+    options?: Parameters<Browser["newPage"]>[0]
+): Promise<Page> {
+    const deviceOptions = E2E_DEVICE === "mobile" ? devices["Pixel 5"] : {};
+    return await browser.newPage({ ...deviceOptions, ...options });
+}
+
 function assertEqual(actual: unknown, expected: unknown, label: string): void {
     if (actual !== expected) {
         throw new Error(`${label}: expected "${expected}", got "${actual}"`);
@@ -189,7 +212,11 @@ let _tmpDir: string | undefined;
 
 async function runE2ETests(): Promise<void> {
     console.log("🧪 HallucyGenie E2E Tests");
-    console.log(`   Browser: ${CHROMIUM_PATH ?? "Playwright default"}`);
+    console.log(`   Browser: ${E2E_BROWSER}`);
+    console.log(`   Device: ${E2E_DEVICE}`);
+    if (E2E_BROWSER === "chromium") {
+        console.log(`   Executable: ${CHROMIUM_PATH ?? "Playwright default"}`);
+    }
     console.log(`   URL: ${BASE_URL}`);
     console.log();
 
@@ -224,19 +251,24 @@ async function runE2ETests(): Promise<void> {
 
     let browser: Browser;
     try {
-        browser = await chromium.launch({
-            executablePath: CHROMIUM_PATH,
+        const browserType = E2E_BROWSER === "firefox" ? firefox : chromium;
+        browser = await browserType.launch({
+            ...(E2E_BROWSER === "chromium" && CHROMIUM_PATH
+                ? { executablePath: CHROMIUM_PATH }
+                : {}),
             headless: true,
-            args: [
-                "--no-sandbox",
-                "--disable-gpu",
-                "--disable-setuid-sandbox",
-                "--disable-dev-shm-usage"
-            ]
+            args: E2E_BROWSER === "chromium"
+                ? [
+                    "--no-sandbox",
+                    "--disable-gpu",
+                    "--disable-setuid-sandbox",
+                    "--disable-dev-shm-usage"
+                ]
+                : []
         });
     } catch (err: unknown) {
         const msg = err instanceof Error ? err.message : String(err);
-        console.error("❌ Failed to launch Chromium:", msg);
+        console.error(`❌ Failed to launch ${E2E_BROWSER}:`, msg);
         await cleanup();
         process.exit(1);
     }
@@ -249,7 +281,7 @@ async function runE2ETests(): Promise<void> {
     await runTest(
         "page loads with correct title and elements",
         async () => {
-            const page = await browser?.newPage();
+            const page = await newPage(browser);
             await waitForApp(page);
 
             const title = await page.title();
@@ -271,7 +303,7 @@ async function runE2ETests(): Promise<void> {
     await runTest(
         "vendored fonts load from self and apply",
         async () => {
-            const page = await browser?.newPage();
+            const page = await newPage(browser);
             const requests: string[] = [];
             const consoleMessages: string[] = [];
             page.on("request", (request) => requests.push(request.url()));
@@ -326,7 +358,7 @@ async function runE2ETests(): Promise<void> {
     await runTest(
         "send button disabled when input is empty",
         async () => {
-            const page = await browser?.newPage();
+            const page = await newPage(browser);
             await waitForApp(page);
 
             const sendBtn = page.locator("#send-button");
@@ -347,7 +379,7 @@ async function runE2ETests(): Promise<void> {
     await runTest(
         "Enter key sends message",
         async () => {
-            const page = await browser?.newPage();
+            const page = await newPage(browser);
             await waitForApp(page, { dismissOnboarding: true });
 
             await page.fill("#chat-input", "Test message");
@@ -368,7 +400,7 @@ async function runE2ETests(): Promise<void> {
     await runTest(
         "session UUID is not stored in localStorage",
         async () => {
-            const page = await browser?.newPage();
+            const page = await newPage(browser);
             await page.goto(BASE_URL);
             await waitForAppReady(page);
 
@@ -386,7 +418,7 @@ async function runE2ETests(): Promise<void> {
     await runTest(
         "error toast appears and auto-dismisses",
         async () => {
-            const page = await browser?.newPage();
+            const page = await newPage(browser);
             await waitForApp(page, { dismissOnboarding: true });
 
             await page.evaluate(() => {
@@ -410,7 +442,7 @@ async function runE2ETests(): Promise<void> {
     await runTest(
         "lightbox opens and closes",
         async () => {
-            const page = await browser?.newPage();
+            const page = await newPage(browser);
             await waitForApp(page, { dismissOnboarding: true });
 
             await page.evaluate(() => {
@@ -436,7 +468,7 @@ async function runE2ETests(): Promise<void> {
     await runTest(
         "mobile viewport (375x812)",
         async () => {
-            const page = await browser?.newPage({ viewport: { width: 375, height: 812 } });
+            const page = await newPage(browser, { viewport: { width: 375, height: 812 } });
             await waitForApp(page);
 
             await expectVisible(page, "#header");
@@ -452,7 +484,7 @@ async function runE2ETests(): Promise<void> {
     await runTest(
         "desktop viewport (1280x800)",
         async () => {
-            const page = await browser?.newPage({ viewport: { width: 1280, height: 800 } });
+            const page = await newPage(browser, { viewport: { width: 1280, height: 800 } });
             await waitForApp(page);
 
             await expectVisible(page, "#header");
@@ -472,7 +504,7 @@ async function runE2ETests(): Promise<void> {
                     { width: 375, height: 812 }
                 ]
             ) {
-                const page = await browser?.newPage({ viewport });
+                const page = await newPage(browser, { viewport });
                 await waitForApp(page, { dismissOnboarding: true });
                 await page.evaluate(() => {
                     const originalFetch = fetch.bind(globalThis);
@@ -650,7 +682,7 @@ async function runE2ETests(): Promise<void> {
     await runTest(
         "textarea auto-resizes with content",
         async () => {
-            const page = await browser?.newPage();
+            const page = await newPage(browser);
             await waitForApp(page);
 
             const initialHeight = await page.evaluate(() => {
@@ -675,7 +707,7 @@ async function runE2ETests(): Promise<void> {
     await runTest(
         "steer message renders with distinct style",
         async () => {
-            const page = await browser?.newPage();
+            const page = await newPage(browser);
             await waitForApp(page, { dismissOnboarding: true });
 
             // Inject a steer message directly
@@ -710,7 +742,7 @@ async function runE2ETests(): Promise<void> {
     await runTest(
         "onboarding shows on first visit",
         async () => {
-            const page = await browser?.newPage();
+            const page = await newPage(browser);
             // Fresh page context — no localStorage, so onboarding should show
             await page.goto(BASE_URL);
 
@@ -726,7 +758,7 @@ async function runE2ETests(): Promise<void> {
     await runTest(
         "onboarding completes and hides",
         async () => {
-            const page = await browser?.newPage();
+            const page = await newPage(browser);
             await page.goto(BASE_URL);
 
             const onboarding = page.locator("#onboarding");
@@ -761,7 +793,7 @@ async function runE2ETests(): Promise<void> {
     await runTest(
         "create modal opens and shows tabs",
         async () => {
-            const page = await browser?.newPage();
+            const page = await newPage(browser);
             await waitForApp(page, { dismissOnboarding: true });
 
             await page.click("#create-btn");
@@ -782,7 +814,7 @@ async function runE2ETests(): Promise<void> {
     await runTest(
         "create image keeps related helper text near its control",
         async () => {
-            const page = await browser?.newPage();
+            const page = await newPage(browser);
             await waitForApp(page, { dismissOnboarding: true });
 
             await page.click("#create-btn");
@@ -830,7 +862,7 @@ async function runE2ETests(): Promise<void> {
     await runTest(
         "create modal switches tabs",
         async () => {
-            const page = await browser?.newPage();
+            const page = await newPage(browser);
             await waitForApp(page, { dismissOnboarding: true });
 
             await page.click("#create-btn");
@@ -852,7 +884,7 @@ async function runE2ETests(): Promise<void> {
     await runTest(
         "create image renders chat lightbox and asset previews",
         async () => {
-            const page = await browser?.newPage();
+            const page = await newPage(browser);
             await waitForApp(page, { dismissOnboarding: true });
 
             await page.click("#create-btn");
@@ -861,9 +893,7 @@ async function runE2ETests(): Promise<void> {
             await page.click("#create-image-form button[type='submit']");
             await expectHidden(page, "#create-modal");
             await expectVisible(page, ".tool-result-image-grid");
-            await page.waitForFunction(
-                () => document.querySelectorAll(".tool-result-image").length === 2
-            );
+            await page.locator(".tool-result-image").nth(1).waitFor({ state: "attached" });
             await expectImageLoaded(
                 page,
                 ".tool-result-image-grid .tool-result-image:nth-child(1)"
@@ -886,9 +916,10 @@ async function runE2ETests(): Promise<void> {
                 .locator(".asset-card[data-type='image']")
                 .first()
                 .waitFor({ state: "visible" });
-            await page.waitForFunction(
-                () => document.querySelectorAll(".asset-card[data-type='image']").length >= 2
-            );
+            await page
+                .locator(".asset-card[data-type='image']")
+                .nth(1)
+                .waitFor({ state: "visible" });
             await expectImageLoaded(page, ".asset-card[data-type='image'] .asset-thumb");
             await page
                 .locator(".asset-card[data-type='image'] .asset-preview-button")
@@ -917,7 +948,7 @@ async function runE2ETests(): Promise<void> {
     await runTest(
         "create analyze uploads local image safely",
         async () => {
-            const page = await browser?.newPage();
+            const page = await newPage(browser);
             await waitForApp(page, { dismissOnboarding: true });
 
             await page.click("#create-btn");
@@ -983,7 +1014,7 @@ async function runE2ETests(): Promise<void> {
     await runTest(
         "create analyze handles file edges",
         async () => {
-            const page = await browser?.newPage();
+            const page = await newPage(browser);
             await waitForApp(page, { dismissOnboarding: true });
 
             await page.click("#create-btn");
@@ -1037,7 +1068,7 @@ async function runE2ETests(): Promise<void> {
     await runTest(
         "create music uses structured multiline lyrics",
         async () => {
-            const page = await browser?.newPage();
+            const page = await newPage(browser, { viewport: { width: 1280, height: 800 } });
             await waitForApp(page, { dismissOnboarding: true });
 
             await page.click("#create-btn");
@@ -1088,7 +1119,7 @@ async function runE2ETests(): Promise<void> {
     await runTest(
         "cover song uses separate tab and local file source",
         async () => {
-            const page = await browser?.newPage();
+            const page = await newPage(browser);
             await waitForApp(page, { dismissOnboarding: true });
 
             await page.click("#create-btn");
@@ -1141,7 +1172,7 @@ async function runE2ETests(): Promise<void> {
     await runTest(
         "voice composer inserts pause and interjection tags",
         async () => {
-            const page = await browser?.newPage();
+            const page = await newPage(browser);
             await waitForApp(page, { dismissOnboarding: true });
 
             await page.click("#create-btn");
@@ -1171,7 +1202,7 @@ async function runE2ETests(): Promise<void> {
     await runTest(
         "chat image paste uploads asset and analyzes without raw data",
         async () => {
-            const page = await browser?.newPage();
+            const page = await newPage(browser);
             await waitForApp(page, { dismissOnboarding: true });
 
             const uploadRequest = page.waitForRequest(
@@ -1209,7 +1240,7 @@ async function runE2ETests(): Promise<void> {
     await runTest(
         "write lyrics draft survives reload",
         async () => {
-            const page = await browser?.newPage();
+            const page = await newPage(browser);
             await waitForApp(page, { dismissOnboarding: true });
 
             await page.click("#create-btn");
@@ -1246,7 +1277,7 @@ async function runE2ETests(): Promise<void> {
     await runTest(
         "create modal closes",
         async () => {
-            const page = await browser?.newPage();
+            const page = await newPage(browser);
             await waitForApp(page, { dismissOnboarding: true });
 
             await page.click("#create-btn");
@@ -1265,7 +1296,7 @@ async function runE2ETests(): Promise<void> {
     await runTest(
         "quota badge shows in header",
         async () => {
-            const page = await browser?.newPage();
+            const page = await newPage(browser);
             await waitForApp(page, { dismissOnboarding: true });
 
             // Wait for quota badge to be populated (async fetch from /api/quota)
@@ -1283,7 +1314,7 @@ async function runE2ETests(): Promise<void> {
     await runTest(
         "profile avatar generate button stays near avatar",
         async () => {
-            const page = await browser?.newPage();
+            const page = await newPage(browser);
             await waitForApp(page, { dismissOnboarding: true });
 
             const initialProfileLoad = page.waitForResponse(
@@ -1331,7 +1362,7 @@ async function runE2ETests(): Promise<void> {
     await runTest(
         "profile saves via DB and survives localStorage clearing",
         async () => {
-            const page = await browser?.newPage();
+            const page = await newPage(browser);
             await waitForApp(page, { dismissOnboarding: true });
 
             const initialProfileLoad = page.waitForResponse(
@@ -1377,7 +1408,7 @@ async function runE2ETests(): Promise<void> {
     await runTest(
         "profile rejects raw avatar data URL through API",
         async () => {
-            const page = await browser?.newPage();
+            const page = await newPage(browser);
             await waitForApp(page, { dismissOnboarding: true });
 
             const result = await page.evaluate(async () => {
@@ -1406,7 +1437,7 @@ async function runE2ETests(): Promise<void> {
     await runTest(
         "profile avatar generation shows loading state",
         async () => {
-            const page = await browser?.newPage();
+            const page = await newPage(browser);
             await waitForApp(page, { dismissOnboarding: true });
             await page.route("**/api/profile/avatar/generate", async (route) => {
                 await page.waitForTimeout(300);
@@ -1463,7 +1494,7 @@ async function runE2ETests(): Promise<void> {
     await runTest(
         "profile generates avatar asset, persists, and uses it in chat",
         async () => {
-            const page = await browser?.newPage();
+            const page = await newPage(browser);
             await waitForApp(page, { dismissOnboarding: true });
             resetMinimaxMockCalls();
 

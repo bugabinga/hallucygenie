@@ -77,12 +77,12 @@ requireMatch(".env.example", /^PORT=3000$/m, "missing PORT");
 requireMatch(".env.example", /^COVER_EXTRACTOR_URL=$/m, "missing COVER_EXTRACTOR_URL");
 requireMatch(
     ".pi/prompts/release.md",
-    /RELEASE_TAG=\$ARGUMENTS just release-check/,
+    /RELEASE_TAG=\$ARGUMENTS mise run release --check/,
     "missing tagged release gate instruction"
 );
 requireMatch(
     ".pi/prompts/release.md",
-    /just release \$ARGUMENTS/,
+    /mise run release \$ARGUMENTS/,
     "missing release recipe instruction"
 );
 requireMatch(
@@ -109,8 +109,8 @@ requireMatch(
     /org\.opencontainers\.image\.version/,
     "missing OCI version label"
 );
-requireMatch("justfile", /--health-cmd/, "missing Podman-native healthcheck");
-requireMatch("justfile", /podman healthcheck run/, "missing Podman healthcheck proof");
+requireMatch("mise.toml", /--health-cmd/, "missing Podman-native healthcheck");
+requireMatch("mise.toml", /podman healthcheck run/, "missing Podman healthcheck proof");
 requireMatch(
     ".github/workflows/release.yml",
     /ghcr\.io\/bugabinga\/hallucygenie/,
@@ -118,26 +118,26 @@ requireMatch(
 );
 requireMatch(
     ".github/workflows/release.yml",
-    /just release-check/,
+    /mise run release --check/,
     "missing local artifact proof"
 );
 requireMatch(
     ".github/workflows/release.yml",
-    /just publish-container/,
+    /mise run image --push/,
     "missing Podman publish proof"
 );
 forbidMatch(
-    "justfile",
+    "mise.toml",
     /\bdocker (?:build|buildx|volume|run|inspect|rm)\b/,
     "local release recipes must use podman"
 );
 forbidMatch("README.md", /\bdocker (?:pull|run)\b/, "release image docs must use podman");
 forbidMatch(
-    "justfile",
+    "mise.toml",
     /Dockerfile|--format docker|image healthcheck/i,
     "use OCI Containerfile and Podman-native healthchecks"
 );
-forbidMatch("justfile", /--push/, "publish with explicit podman push");
+forbidMatch("mise.toml", /--push/, "publish with explicit podman push");
 forbidMatch(
     ".github/workflows/release.yml",
     /docker\//,

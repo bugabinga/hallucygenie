@@ -8,4 +8,4 @@
 - Vendored locally. No Google Fonts CDN. No runtime font requests.
 - `.woff2` only. Variable fonts. `font-display: swap`.
 - Reproducible: `public/fonts/fonts.manifest.json` with pinned source commit + SHA256 checksums.
-- `just fonts-update` downloads from pinned google/fonts repo commit, converts to woff2, updates manifest.
+- `mise run fonts` downloads from pinned google/fonts repo commit, converts to woff2, updates manifest.

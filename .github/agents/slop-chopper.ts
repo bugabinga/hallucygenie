@@ -143,7 +143,7 @@ SLOP
 ${findings}
 
 JOB
-Remove every slop listed. Run "just fix" && "just ready" after.
+Remove every slop listed. Run "mise run check --fix" && "mise run test" after.
 Only touch src/. Never touch .system/, test/, config.
 Write PR body to /tmp/pi-agent-pr-body.md.
 

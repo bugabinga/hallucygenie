@@ -7,13 +7,13 @@ Agent instructions only. Do not mirror project state here.
 - Read `.system/RULES.md` before non-trivial code.
 - Use `/skill:tiger` for style.
 - Use `/skill:minimax` when touching MiniMax APIs.
-- Use `just --list`; `justfile` is command source of truth.
+- Use `mise tasks`; `mise.toml` is command source of truth.
 - Agent Patrol docs: `AGENT_PATROL.md`.
-- Release work must use `.pi/prompts/release.md`; final tag push goes through `just release`.
+- Release work must use `.pi/prompts/release.md`; final tag push goes through `mise run release`.
 
 ## Rules
 
-- No duplicated state. Specs, tickets, issues, code, tests, README, and justfile
+- No duplicated state. Specs, tickets, issues, code, tests, README, and mise.toml
   are source of truth.
 - In `src/`, use `import { createLogger } from "./log.ts"`. No `console.log`.
 - Use `process.env.MINIMAX_API_KEY`. Never hardcode keys. Never log keys.
@@ -36,6 +36,6 @@ Agent instructions only. Do not mirror project state here.
 - Mission: `.system/MISSION.md`.
 - Specs: `.system/specs/`.
 - Issues: `.system/issues/`.
-- Commands: `justfile`.
+- Commands: `mise.toml`.
 - Agent Patrol: `AGENT_PATROL.md`.
 - Tests: `test/`, `e2e/`.

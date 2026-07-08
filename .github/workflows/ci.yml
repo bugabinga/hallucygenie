@@ -7,35 +7,58 @@ on:
     workflow_dispatch:
 
 jobs:
-    test:
-        name: check + unit + integration + e2e
+    check:
+        name: check
         runs-on: ubuntu-latest
-        timeout-minutes: 30
+        timeout-minutes: 20
         steps:
             - uses: actions/checkout@v6.0.3
-            - uses: oven-sh/setup-bun@v2.2.0
+            - uses: jdx/mise-action@v3
               with:
-                  bun-version: 1.3.14
+                  cache: true
             - uses: actions/cache@v5.0.5
               with:
                   path: ~/.bun/install/cache
                   key: ${{ runner.os }}-bun-${{ hashFiles('bun.lock') }}
                   restore-keys: ${{ runner.os }}-bun-
-            - uses: taiki-e/install-action@v2.81.8
+            - name: Setup JS deps
+              run: mise run setup --js
+            - name: Check
+              run: mise run check
+
+    e2e:
+        name: e2e (${{ matrix.browser }}, ${{ matrix.device }})
+        runs-on: ubuntu-latest
+        timeout-minutes: 30
+        strategy:
+            fail-fast: false
+            matrix:
+                browser: [chromium, firefox]
+                device: [desktop, mobile]
+        steps:
+            - uses: actions/checkout@v6.0.3
+            - uses: jdx/mise-action@v3
               with:
-                  tool: just
-            - name: Install sqruff
-              run: python -m pip install sqruff==0.38.0
-            - uses: browser-actions/setup-chrome@v2.1.2
-              id: setup-chrome
+                  cache: true
+            - uses: actions/cache@v5.0.5
               with:
-                  install-dependencies: true
-            - name: Use Chrome for E2E
-              run: echo "CHROMIUM_PATH=${{ steps.setup-chrome.outputs.chrome-path }}" >> "$GITHUB_ENV"
-            - name: Install deps
-              run: bun install --frozen-lockfile
-            - name: Ready
-              run: just ready
+                  path: ~/.bun/install/cache
+                  key: ${{ runner.os }}-bun-${{ hashFiles('bun.lock') }}
+                  restore-keys: ${{ runner.os }}-bun-
+            - uses: actions/cache@v5.0.5
+              with:
+                  path: ~/.cache/ms-playwright
+                  key: ${{ runner.os }}-playwright-${{ hashFiles('bun.lock') }}
+                  restore-keys: ${{ runner.os }}-playwright-
+            - name: Setup JS deps
+              run: mise run setup --js
+            - name: Setup browsers
+              run: mise run setup --browsers
+            - name: E2E
+              run: mise run test --e2e
+              env:
+                  HG_E2E_BROWSER: ${{ matrix.browser }}
+                  HG_E2E_DEVICE: ${{ matrix.device }}
 
     mutation:
         name: mutation
@@ -43,21 +66,18 @@ jobs:
         timeout-minutes: 60
         steps:
             - uses: actions/checkout@v6.0.3
-            - uses: oven-sh/setup-bun@v2.2.0
+            - uses: jdx/mise-action@v3
               with:
-                  bun-version: 1.3.14
+                  cache: true
             - uses: actions/cache@v5.0.5
               with:
                   path: ~/.bun/install/cache
                   key: ${{ runner.os }}-bun-${{ hashFiles('bun.lock') }}
                   restore-keys: ${{ runner.os }}-bun-
-            - uses: taiki-e/install-action@v2.81.8
-              with:
-                  tool: just
-            - name: Install deps
-              run: bun install --frozen-lockfile
+            - name: Setup JS deps
+              run: mise run setup --js
             - name: Mutation tests
-              run: just mutation
+              run: mise run test --mutation
             - name: Upload mutation reports
               if: ${{ always() }}
               uses: actions/upload-artifact@v7.0.1
@@ -66,17 +86,14 @@ jobs:
                   path: reports/mutation/
                   if-no-files-found: ignore
 
-    container:
-        name: container build
+    image:
+        name: image build
         runs-on: ubuntu-latest
         timeout-minutes: 20
         steps:
             - uses: actions/checkout@v6.0.3
-            - uses: oven-sh/setup-bun@v2.2.0
+            - uses: jdx/mise-action@v3
               with:
-                  bun-version: 1.3.14
-            - uses: taiki-e/install-action@v2.81.8
-              with:
-                  tool: just
-            - name: Build container
-              run: just container hallucygenie:ci
+                  cache: true
+            - name: Build image
+              run: mise run image hallucygenie:ci

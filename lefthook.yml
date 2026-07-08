@@ -2,25 +2,25 @@ pre-commit:
     commands:
         gitleaks:
             run: gitleaks protect --staged --redact --verbose
-        ready:
-            run: just ready
+        check:
+            run: mise run check && mise run test
 
 pre-push:
     commands:
-        ready:
-            run: just ready
+        check:
+            run: mise run check && mise run test
 
 post-checkout:
     commands:
-        install-deps:
+        setup:
             run: |
                 is_branch="$3"
                 if [ "$is_branch" = "1" ] && [ -f package.json ] && [ ! -d node_modules ]; then
-                  echo "post-checkout: running bun install for new worktree/branch"
-                  bun install
+                  echo "post-checkout: running mise setup for new worktree/branch"
+                  mise run setup
                 fi
 
 post-merge:
     commands:
-        ready:
-            run: just ready
+        check:
+            run: mise run check && mise run test
