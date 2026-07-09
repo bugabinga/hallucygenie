@@ -251,6 +251,13 @@ function validateChatBody(body: unknown):
                 error: `messages[${i}].role must be a string`
             };
         }
+        const VALID_ROLES = ["system", "user", "assistant", "tool"];
+        if (!VALID_ROLES.includes(msg.role)) {
+            return {
+                ok: false,
+                error: `messages[${i}].role must be one of ${VALID_ROLES.join(", ")}`
+            };
+        }
         if (typeof msg.content !== "string") {
             return {
                 ok: false,
@@ -402,7 +409,9 @@ export async function handleChat(
     if (explicitTool) {
         if (sessionId) {
             const userCount = countSessionUserMessages(database, sessionId);
-            saveMessage(database, sessionId, "user", lastUserMsg.content);
+            for (const msg of validation.body.messages) {
+                saveMessage(database, sessionId, "user", msg.content);
+            }
             if (userCount === 0) {
                 void autoNameDefaultSession(
                     database,
@@ -415,10 +424,12 @@ export async function handleChat(
         return handleExplicitToolDirective(explicitTool, apiKey, database, sessionId);
     }
 
-    // Save user message to DB
+    // Save all user messages to DB
     if (sessionId) {
         const userCount = countSessionUserMessages(database, sessionId);
-        saveMessage(database, sessionId, "user", lastUserMsg.content);
+        for (const msg of validation.body.messages) {
+            saveMessage(database, sessionId, "user", msg.content);
+        }
         if (userCount === 0) {
             void autoNameDefaultSession(database, sessionId, lastUserMsg.content, apiKey);
         }
@@ -2343,10 +2354,8 @@ async function saveAssetFile(
     try {
         if (result.type === "image" && result.urls?.some((url) => /^https?:\/\//i.test(url))) {
             const saved: string[] = [];
-            for (const url of result.urls) {
-                if (!/^https?:\/\//i.test(url)) {
-                    throw new Error("image asset URL must be http(s)");
-                }
+            const httpUrls = result.urls.filter((url) => /^https?:\/\//i.test(url));
+            for (const url of httpUrls) {
                 const downloaded = await downloadImageAsset(url);
                 saved.push(
                     saveAssetBuffer(
@@ -2360,7 +2369,10 @@ async function saveAssetFile(
                     ).content
                 );
             }
-            return { type: "image", content: saved[0], urls: saved };
+            // Preserve data URLs as-is (not saved to disk)
+            const dataUrls = result.urls.filter((url) => !/^https?:\/\//i.test(url));
+            const allUrls = [...saved, ...dataUrls];
+            return { type: "image", content: allUrls[0] ?? "", urls: allUrls };
         }
 
         if (result.type === "image" && /^https?:\/\//i.test(result.content)) {

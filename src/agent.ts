@@ -281,14 +281,9 @@ export function buildContext(
                 usedTokens += turnTokens;
                 i = pairedIndex - 1;
             } else {
-                // Orphan tool result with no matching tool_use — treat as standalone
-                if (usedTokens + msgTokens > remainingBudget) {
-                    // Budget exceeded — skip orphan and continue scanning older messages
-                    i--;
-                    continue;
-                }
-                result.unshift(msg);
-                usedTokens += msgTokens;
+                // Orphan tool result with no matching tool_use — skip entirely.
+                // Adding it as a standalone message would produce a tool_result block
+                // with an empty tool_use_id, which MiniMax rejects.
                 i--;
             }
         } else if (msg.role === "assistant" && msg.tool_calls && msg.tool_calls.length > 0) {
@@ -528,8 +523,21 @@ export async function runAgentLoop(
 ): Promise<ChatMessage[]> {
     const localMessages = [...messages];
     const tools = getToolDefinitions() as unknown as AnthropicTool[];
+    const MAX_ITERATIONS = 20;
+    let iterationCount = 0;
 
     while (true) {
+        iterationCount++;
+        if (iterationCount > MAX_ITERATIONS) {
+            log.warn("agent loop exceeded max iterations", { iterationCount });
+            await onEvent({
+                type: "text",
+                content:
+                    "The conversation is taking too long to complete. Please try a shorter request."
+            });
+            await onEvent({ type: "done" });
+            return localMessages;
+        }
         await onEvent({ type: "thinking_reset" });
 
         const loopMessages = buildContext(localMessages);
@@ -566,6 +574,8 @@ export async function runAgentLoop(
                 // MiniMax rejected the tool_result continuation, so the tool protocol
                 // rows (assistant+tool_calls, tool) will be skipped during DB replay.
                 // Append a plain assistant summary so the model knows tools ran.
+                // Only push to localMessages; do NOT emit model-only compact boilerplate
+                // text as user-facing content.
                 const summaries: string[] = [];
                 for (let i = localMessages.length - 1; i >= 0; i--) {
                     if (localMessages[i].role === "tool") {
@@ -575,8 +585,10 @@ export async function runAgentLoop(
                     }
                 }
                 if (summaries.length > 0) {
-                    const summary = summaries.join("\n");
-                    await onEvent({ type: "text", content: summary });
+                    const summary = stripInternalMediaToolBoilerplate(summaries.join("\n"));
+                    if (summary.trim()) {
+                        await onEvent({ type: "text", content: summary });
+                    }
                     localMessages.push({ role: "assistant", content: summary });
                 }
 

@@ -748,15 +748,15 @@ describe("runAgentLoop", () => {
         assert.equal(toolResults.length, 1);
         assert.equal(toolResults[0].result?.type, "image");
 
-        // A text event with the compact summary was emitted
-        const summaryEvents = events.filter(
+        // Compact boilerplate is NOT emitted as user-facing text (only pushed to localMessages)
+        const boilerplateEvents = events.filter(
             (e) => e.type === "text" && e.content?.includes("Generated image")
         );
-        assert.equal(summaryEvents.length, 1, "should emit compact tool summary as text");
+        assert.equal(boilerplateEvents.length, 0, "should NOT emit compact boilerplate as text");
 
-        // An assistant message with the summary was added for DB persistence
+        // An assistant message with the stripped summary was added for DB persistence
         const summaryMsg = messages.filter(
-            (m) => m.role === "assistant" && !m.tool_calls && m.content?.includes("Generated image")
+            (m) => m.role === "assistant" && !m.tool_calls
         );
         assert.equal(
             summaryMsg.length,
@@ -822,14 +822,12 @@ describe("runAgentLoop", () => {
         // Both tools executed
         assert.equal(events.filter((e) => e.type === "tool_result").length, 2);
 
-        // Summary includes both compact results
-        const summaryMsg = messages.find(
-            (m) => m.role === "assistant" && !m.tool_calls && m.content?.includes("Generated image")
-        );
+        // Boilerplate text is stripped from the summary
+        const summaryMsg = messages.find((m) => m.role === "assistant" && !m.tool_calls);
         assert.ok(summaryMsg, "should have assistant summary");
         assert.ok(
-            summaryMsg?.content?.includes("Generated audio"),
-            "summary should include audio tool result"
+            !summaryMsg?.content?.includes("Do not embed"),
+            "summary should not include boilerplate"
         );
     });
 
@@ -866,18 +864,24 @@ describe("runAgentLoop", () => {
             onEvent
         );
 
-        // Find the synthetic assistant summary
-        const summary = messages.find(
-            (m) => m.role === "assistant" && !m.tool_calls && m.content?.includes("Generated image")
-        );
+        // Find the synthetic assistant summary (boilerplate stripped, content will be empty for image-only result)
+        const summary = messages.find((m) => m.role === "assistant" && !m.tool_calls);
         assert.ok(summary, "should have assistant summary without tool_calls");
+        assert.ok(
+            !summary?.content?.includes("Do not embed"),
+            "summary should not contain boilerplate"
+        );
 
         // Verify it would survive DB round-trip:
         // - no tool_calls → tool_calls_json will be null → not skipped on load
         // - no tool_call_id → not a tool row → not skipped on load
         assert.equal(summary?.tool_calls, undefined);
         assert.equal(summary?.tool_call_id, undefined);
-        assert.ok(summary?.content?.length > 0, "summary content must not be empty");
+        // Boilerplate is stripped, so image-only result has empty content
+        assert.ok(
+            !summary?.content?.includes("Do not embed"),
+            "summary should not contain boilerplate"
+        );
     });
 
     it("detects MiniMax tool result id errors", () => {
@@ -1532,6 +1536,54 @@ describe("runAgentLoop", () => {
         assert.equal(content[0].thinking, "plan tool");
         assert.equal(content[0].signature, "sig_123");
         assert.equal(content[1].type, "tool_use");
+    });
+
+    it("exits with error when max iterations exceeded", async () => {
+        // Simulate model always returning tool_use stop_reason
+        const toolUseEvents: string[] = [messageStart()];
+        toolUseEvents.push(
+            contentBlockStart(0, "tool_use", { id: "call_1", name: "generate_image" })
+        );
+        toolUseEvents.push(contentBlockDelta(0, "input_json_delta", "{\"prompt\":\"x\"}"));
+        toolUseEvents.push(contentBlockStop(0));
+        toolUseEvents.push(messageDelta("tool_use"));
+        toolUseEvents.push(messageStop());
+
+        // Use a function to create fresh responses for each API call
+        // (ReadableStream can only be consumed once)
+        let fetchCallCount = 0;
+        globalThis.fetch = async (url: string | URL | Request) => {
+            if (url.toString().includes("/anthropic/v1/messages")) {
+                fetchCallCount++;
+                return anthropicResponse(toolUseEvents);
+            }
+            if (url.toString().includes("/v1/image_generation")) {
+                return new Response(
+                    JSON.stringify({ data: { image_urls: ["https://example.com/x.png"] } }),
+                    { status: 200, headers: { "Content-Type": "application/json" } }
+                );
+            }
+            return new Response(JSON.stringify({}), { status: 200 });
+        };
+
+        const { events, onEvent } = collectEvents();
+        const messages = await runAgentLoop(
+            [{ role: "user", content: "trigger infinite loop" }],
+            "test-key",
+            onEvent
+        );
+
+        // Should have stopped due to max iterations
+        assert.ok(fetchCallCount > 10, `Expected >10 API calls, got ${fetchCallCount}`);
+
+        // Should have emitted error text about conversation taking too long
+        const errorTextEvents = events.filter(
+            (e) => e.type === "text" && e.content?.includes("taking too long")
+        );
+        assert.ok(errorTextEvents.length > 0, "Should emit error about max iterations");
+
+        // Should have done event
+        assert.ok(events.some((e) => e.type === "done"));
     });
 });
 
@@ -2335,16 +2387,20 @@ describe("buildContext tool edge cases", () => {
         assert.ok(roles.includes("tool"), "tool result should be included with large budget");
     });
 
-    it("orphan tool result (no matching tool_use) is treated as standalone", () => {
+    it("orphan tool result (no matching tool_use) is skipped", () => {
         const messages: ChatMessage[] = [
             { role: "system" as const, content: "a" },
             { role: "tool" as const, content: "orphan result", tool_call_id: "nonexistent" }
         ];
-        // Should not throw, should be included
+        // Orphan tool results should be skipped to avoid empty tool_use_id in payload
         const result = buildContext(messages, 1000);
-        assert.equal(result.length, 2);
-        assert.equal(result[1].role, "tool");
-        assert.equal((result[1] as ContextToolMessage).tool_call_id, "nonexistent");
+        // Only system message should remain; orphan tool result is skipped
+        assert.ok(
+            result.every((m) => m.role !== "tool"),
+            "orphan tool result should be skipped"
+        );
+        assert.equal(result.length, 1, "only system message should remain");
+        assert.equal(result[0].role, "system");
     });
 
     it("assistant with tool_calls but no tool results included", () => {
@@ -2407,14 +2463,19 @@ describe("buildContext tool pair boundary conditions", () => {
         assert.equal(result[0].role, "system");
     });
 
-    it("orphan tool result included when standalone budget allows", () => {
+    it("orphan tool result always skipped (even when budget allows)", () => {
         const messages: ChatMessage[] = [
             { role: "system" as const, content: "a" }, // 1 token
             { role: "tool" as const, content: "orphan result", tool_call_id: "nonexistent" } // ~5 tokens
         ];
+        // Orphan tool results are skipped to avoid empty tool_use_id in payload
         const result = buildContext(messages, 1000);
-        assert.equal(result.length, 2);
-        assert.equal(result[1].role, "tool");
+        assert.ok(
+            result.every((m) => m.role !== "tool"),
+            "orphan tool result should be skipped"
+        );
+        assert.equal(result.length, 1, "only system message should remain");
+        assert.equal(result[0].role, "system");
     });
 
     it("oversized orphan tool result skipped without blocking older messages", () => {
