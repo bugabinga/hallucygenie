@@ -291,6 +291,20 @@ describe("index.html health", () => {
         );
     });
 
+    it("voice-volume slider has low/normal/loud range labels per HG-SPEC-016", () => {
+        const doc = parseIndex();
+        const volumeRange = doc.querySelector("#voice-volume");
+        assert.ok(volumeRange, "#voice-volume must exist");
+        const labels = Array.from(
+            volumeRange!.parentElement!.querySelectorAll(".range-labels span")
+        ).map((s) => visibleText(s));
+        assert.deepEqual(
+            labels,
+            ["low", "normal", "loud"],
+            "voice-volume slider ticks must be low/normal/loud per spec"
+        );
+    });
+
     it("groups related Create image helper text tightly before the action", () => {
         const doc = parseIndex();
         const group = doc.querySelector("#create-image-form .create-option-group");
