@@ -12,11 +12,11 @@ jobs:
         runs-on: ubuntu-latest
         timeout-minutes: 20
         steps:
-            - uses: actions/checkout@v6.0.3
-            - uses: jdx/mise-action@v3
+            - uses: actions/checkout@v7.0.0
+            - uses: jdx/mise-action@v4
               with:
                   cache: true
-            - uses: actions/cache@v5.0.5
+            - uses: actions/cache@v6.1.0
               with:
                   path: ~/.npm
                   key: ${{ runner.os }}-npm-${{ hashFiles('package-lock.json') }}
@@ -36,16 +36,16 @@ jobs:
                 browser: [chromium, firefox]
                 device: [desktop, mobile]
         steps:
-            - uses: actions/checkout@v6.0.3
-            - uses: jdx/mise-action@v3
+            - uses: actions/checkout@v7.0.0
+            - uses: jdx/mise-action@v4
               with:
                   cache: true
-            - uses: actions/cache@v5.0.5
+            - uses: actions/cache@v6.1.0
               with:
                   path: ~/.npm
                   key: ${{ runner.os }}-npm-${{ hashFiles('package-lock.json') }}
                   restore-keys: ${{ runner.os }}-npm-
-            - uses: actions/cache@v5.0.5
+            - uses: actions/cache@v6.1.0
               with:
                   path: ~/.cache/ms-playwright
                   key: ${{ runner.os }}-playwright-${{ hashFiles('package-lock.json') }}
@@ -65,11 +65,11 @@ jobs:
         runs-on: ubuntu-latest
         timeout-minutes: 60
         steps:
-            - uses: actions/checkout@v6.0.3
-            - uses: jdx/mise-action@v3
+            - uses: actions/checkout@v7.0.0
+            - uses: jdx/mise-action@v4
               with:
                   cache: true
-            - uses: actions/cache@v5.0.5
+            - uses: actions/cache@v6.1.0
               with:
                   path: ~/.npm
                   key: ${{ runner.os }}-npm-${{ hashFiles('package-lock.json') }}
@@ -91,8 +91,8 @@ jobs:
         runs-on: ubuntu-latest
         timeout-minutes: 20
         steps:
-            - uses: actions/checkout@v6.0.3
-            - uses: jdx/mise-action@v3
+            - uses: actions/checkout@v7.0.0
+            - uses: jdx/mise-action@v4
               with:
                   cache: true
             - name: Build image
