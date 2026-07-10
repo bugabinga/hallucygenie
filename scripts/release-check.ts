@@ -44,7 +44,7 @@ function exactGitTag(): string | null {
 }
 
 if (!/^\d+\.\d+\.\d+$/.test(version)) fail(`package version must be SemVer, got ${version}`);
-if (pkg.packageManager !== "bun@1.3.14") fail(`packageManager must be bun@1.3.14`);
+if (pkg.packageManager !== "npm@11.18.0") fail(`packageManager must be npm@11.18.0`);
 
 for (const file of requiredFiles) read(file);
 
@@ -103,7 +103,7 @@ requireMatch(
     /Release -> `.pi\/prompts\/release\.md`/,
     "missing release prompt pointer"
 );
-requireMatch("deploy/Containerfile", /^USER bun$/m, "runtime must use non-root bun user");
+requireMatch("deploy/Containerfile", /^USER node$/m, "runtime must use non-root node user");
 requireMatch(
     "deploy/Containerfile",
     /org\.opencontainers\.image\.version/,
@@ -137,7 +137,11 @@ forbidMatch(
     /Dockerfile|--format docker|image healthcheck/i,
     "use OCI Containerfile and Podman-native healthchecks"
 );
-forbidMatch("mise.toml", /--push/, "publish with explicit podman push");
+forbidMatch(
+    "mise.toml",
+    /(?:podman build|docker)[^\n]*--push/,
+    "publish with explicit podman push"
+);
 forbidMatch(
     ".github/workflows/release.yml",
     /docker\//,

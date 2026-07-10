@@ -35,7 +35,7 @@ First published release.
 ### Container
 
 • GHCR image: `ghcr.io/bugabinga/hallucygenie:v1.0.2`.
-• Runtime uses non-root `bun` user.
+• Runtime uses non-root `node` user.
 • Image includes OCI labels. Podman run/Quadlet config uses `/api/health` healthcheck.
 
 ## 1.0.1 - 2026-06-12

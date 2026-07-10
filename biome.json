@@ -1,12 +1,12 @@
 {
-    "$schema": "https://biomejs.dev/schemas/latest/schema.json",
+    "$schema": "https://biomejs.dev/schemas/2.5.3/schema.json",
     "formatter": {
         "enabled": false
     },
     "linter": {
         "enabled": true,
         "rules": {
-            "recommended": true
+            "preset": "recommended"
         }
     },
     "files": {
@@ -22,6 +22,7 @@
             "!data",
             "!logs",
             "!reports",
+            "!.stryker-tmp",
             "!test/**/__snapshots__",
             "!e2e/**/__snapshots__"
         ]

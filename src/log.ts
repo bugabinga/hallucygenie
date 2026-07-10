@@ -13,6 +13,7 @@ import { dirname } from "node:path";
 // ── Types ────────────────────────────────────────────────────────────
 
 type Level = "debug" | "info" | "warn" | "error";
+type MinLevel = Level | "silent";
 
 export interface LogEntry {
     level: Level;
@@ -31,11 +32,12 @@ export interface Logger {
 
 // ── Level ranks (early exit) ────────────────────────────────────────
 
-const RANK: Record<Level, number> = {
+const RANK: Record<MinLevel, number> = {
     debug: 0,
     info: 1,
     warn: 2,
-    error: 3
+    error: 3,
+    silent: 4
 };
 
 // ── ANSI colors (tasteful, minimal) ──────────────────────────────────
@@ -144,7 +146,7 @@ function ensureLogDir(): void {
 
 export function createLogger(context: Record<string, unknown> = {}): Logger {
     const isDev = process.env.NODE_ENV !== "production";
-    const minLevel: Level = (process.env.LOG_LEVEL as Level) || (isDev ? "debug" : "info");
+    const minLevel: MinLevel = (process.env.LOG_LEVEL as MinLevel) || (isDev ? "debug" : "info");
 
     // Start flush timer in dev mode
     if (isDev && !flushTimer) {

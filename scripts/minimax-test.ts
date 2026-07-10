@@ -103,7 +103,7 @@ function imageMime(url: string, contentType: string | null): string {
     throw new Error(`Unsupported image content type: ${contentType ?? "unknown"}`);
 }
 
-async function imageDataUrlFromUrl(url: string): Promise<string> {
+export async function imageDataUrlFromUrl(url: string): Promise<string> {
     const resp = await fetch(url, { headers: { "User-Agent": "hallucygenie/1.0" } });
     if (!resp.ok) throw new Error(`Image download failed: HTTP ${resp.status}`);
 
@@ -203,9 +203,11 @@ export async function main(): Promise<void> {
     await testVlm();
 }
 
+export function handleMainError(err: unknown): never {
+    console.error(String(err));
+    process.exit(1);
+}
+
 if (import.meta.main) {
-    main().catch((err) => {
-        console.error(String(err));
-        process.exit(1);
-    });
+    main().catch(handleMainError);
 }

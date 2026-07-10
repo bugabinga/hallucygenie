@@ -604,6 +604,16 @@ textarea,
     }
 }
 
+.message-bubble {
+    padding: var(--space-lg) var(--space-xl);
+    border-radius: var(--radius-md);
+    word-wrap: break-word;
+    overflow-wrap: break-word;
+    line-height: 1.65;
+    position: relative;
+    font-size: 17px;
+}
+
 /* User messages — right aligned, bold red */
 .message--user {
     flex-direction: row-reverse;
@@ -662,16 +672,6 @@ textarea,
     height: 100%;
     border-radius: 50%;
     object-fit: cover;
-}
-
-.message-bubble {
-    padding: var(--space-lg) var(--space-xl);
-    border-radius: var(--radius-md);
-    word-wrap: break-word;
-    overflow-wrap: break-word;
-    line-height: 1.65;
-    position: relative;
-    font-size: 17px;
 }
 
 .message-content {
@@ -1481,11 +1481,6 @@ textarea,
     cursor: pointer;
 }
 
-.profile-avatar-preview:hover .profile-avatar-overlay,
-.profile-avatar-preview:focus-visible .profile-avatar-overlay {
-    opacity: 1;
-}
-
 .profile-avatar-overlay {
     position: absolute;
     inset: auto 0 0;
@@ -1496,6 +1491,11 @@ textarea,
     text-align: center;
     opacity: 0;
     transition: opacity var(--snap);
+}
+
+.profile-avatar-preview:hover .profile-avatar-overlay,
+.profile-avatar-preview:focus-visible .profile-avatar-overlay {
+    opacity: 1;
 }
 
 .profile-avatar-spinner {
@@ -1509,6 +1509,12 @@ textarea,
     animation: spin 800ms linear infinite;
 }
 
+#profile-avatar-img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+
 .profile-avatar-preview.is-pending #profile-avatar-img,
 .profile-avatar-preview.is-pending #profile-avatar-fallback {
     opacity: 0.35;
@@ -1516,12 +1522,6 @@ textarea,
 
 .profile-avatar-preview.is-pending .profile-avatar-spinner {
     opacity: 1;
-}
-
-#profile-avatar-img {
-    width: 100%;
-    height: 100%;
-    object-fit: cover;
 }
 
 .profile-avatar-fields {

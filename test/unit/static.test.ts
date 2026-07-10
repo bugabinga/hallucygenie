@@ -168,10 +168,19 @@ describe("index.html health", () => {
         assert.doesNotMatch(viewport, /user-scalable=no/);
     });
 
-    it("has one onboarding dots group with four dots", () => {
+    it("has one onboarding dots group with four reachable slides", () => {
         const doc = parseIndex();
         assert.equal(doc.querySelectorAll("#onboarding .onboarding-dots").length, 1);
         assert.equal(doc.querySelectorAll("#onboarding .onboarding-dots .dot").length, 4);
+        assert.equal(doc.querySelectorAll("#onboarding .onboarding-slide").length, 4);
+        assert.equal(
+            doc.querySelectorAll("#onboarding .onboarding-slide:not(:last-child) .onboarding-next")
+                .length,
+            3
+        );
+        assert.ok(doc.querySelector("#onboarding-try-chat"));
+        assert.ok(doc.querySelector("#onboarding-try-create"));
+        assert.ok(doc.querySelector("#onboarding-done"));
     });
 
     it("has accessible child-friendly changelog entry point", () => {
@@ -199,6 +208,16 @@ describe("index.html health", () => {
             .map((el) => el.id || el.outerHTML);
         assert.deepEqual(offenders, []);
         assert.equal(doc.querySelector("#music-instrumental"), null);
+    });
+
+    it("keeps every HTML id covered by E2E selectors", () => {
+        const ids = Array.from(parseIndex().querySelectorAll("[id]"), (el) => el.id).sort();
+        const missing = ids.filter((id) =>
+            !e2eRunner.includes(`#${id}`)
+            && !e2eRunner.includes(`"${id}"`)
+            && !e2eRunner.includes(`'${id}'`)
+        );
+        assert.deepEqual(missing, []);
     });
 
     it("keeps Create UI on the kid-safe MiniMax parameter subset", () => {
@@ -1081,8 +1100,8 @@ describe("formatter and linter health", () => {
     it("uses dprint, Biome, and sqruff instead of Prettier", () => {
         assert.equal(existsSync(`.${legacyFormatter}rc`), false);
         assert.equal(existsSync(`.${legacyFormatter}ignore`), false);
-        assert.match(packageJson, /"dprint": "0\.54\.0"/);
-        assert.match(packageJson, /"@biomejs\/biome": "2\.3\.15"/);
+        assert.match(packageJson, /"dprint": "0\.55\.1"/);
+        assert.match(packageJson, /"@biomejs\/biome": "2\.5\.3"/);
         assert.doesNotMatch(packageJson, new RegExp(legacyFormatter));
         assert.match(dprintJson, /typescript-0\.96\.1\.wasm/);
         assert.match(dprintJson, /pretty_yaml-v0\.6\.0\.wasm/);
@@ -1091,7 +1110,7 @@ describe("formatter and linter health", () => {
         assert.doesNotMatch(dprintJson, /"public\/index\.html"/);
         assert.doesNotMatch(dprintJson, /sql-0\.3\.0\.wasm/);
         assert.match(biomeJson, /"formatter": \{\n\s+"enabled": false/);
-        assert.match(biomeJson, /"recommended": true/);
+        assert.match(biomeJson, /"preset": "recommended"/);
         assert.match(sqruffConfig, /dialect = sqlite/);
         assert.doesNotMatch(sqruffConfig, /exclude_rules/);
     });
@@ -1102,7 +1121,7 @@ describe("mise command health", () => {
         assert.equal(existsSync("justfile"), false);
         assert.equal(existsSync("mise.toml"), true);
         assert.match(miseToml, /\[tools\]/);
-        assert.match(miseToml, /bun = "1\.3\.14"/);
+        assert.match(miseToml, /node = "26\.4\.0"/);
         assert.match(miseToml, /"pipx:sqruff" = "0\.39\.0"/);
         assert.match(miseToml, /jq = "1\.8\.2"/);
         assert.match(miseToml, /gitleaks = "8\.30\.1"/);
@@ -1128,29 +1147,46 @@ describe("mise command health", () => {
         assert.match(commandConfig, /\[tasks\.setup\]/);
         assert.match(commandConfig, /flag "--js"/);
         assert.match(commandConfig, /flag "--browsers"/);
-        assert.match(commandConfig, /bun install --frozen-lockfile/);
+        assert.match(commandConfig, /npm ci/);
         assert.match(commandConfig, /playwright install --with-deps chromium firefox/);
         assert.match(commandConfig, /\[tasks\.check\]/);
         assert.match(commandConfig, /flag "--fix"/);
         assert.match(commandConfig, /mise fmt --check/);
-        assert.match(commandConfig, /bunx dprint check/);
-        assert.match(commandConfig, /bunx biome lint \./);
+        assert.match(commandConfig, /npm exec -- dprint check/);
+        assert.match(commandConfig, /npm exec -- biome lint \./);
         assert.match(
             commandConfig,
             /sqruff lint migrations\/\*\.sql test\/fixtures\/db\/v1\.0\.0\/schema\.sql/
         );
         assert.match(commandConfig, /podman-user-generator/);
         assert.match(commandConfig, /systemd-analyze --user verify/);
-        assert.match(commandConfig, /bunx tsc --noEmit/);
-        assert.match(commandConfig, /bun test test\/unit/);
-        assert.match(commandConfig, /bun test test\/integration/);
+        assert.match(commandConfig, /npm exec -- tsc --noEmit/);
+        assert.match(commandConfig, /node --test test\/unit\/\*\.test\.ts/);
+        assert.match(commandConfig, /node --test test\/integration\/\*\.test\.ts/);
         assert.match(commandConfig, /\[tasks\.test\]/);
         assert.match(commandConfig, /flag "--matrix"/);
+        assert.match(commandConfig, /flag "--coverage"/);
         assert.match(commandConfig, /flag "--mutation"/);
         assert.match(commandConfig, /flag "--minimax"/);
-        assert.match(commandConfig, /HG_E2E_BROWSER="\$browser" HG_E2E_DEVICE="\$device"/);
-        assert.match(commandConfig, /bunx stryker run test\/stryker\.config\.mjs/);
-        assert.match(commandConfig, /bun scripts\/minimax-test\.ts/);
+        assert.match(
+            commandConfig,
+            /HG_E2E_BROWSER="\$browser" HG_E2E_DEVICE="\$device" HG_E2E_PORT="\$port"/
+        );
+        const matrixBody = commandConfig.match(
+            /if \[ "\$matrix" = "true" \]; then\n([\s\S]*?)\nfi\nif \[ "\$coverage"/
+        )?.[1] ?? "";
+        assert.match(
+            matrixBody,
+            /^\s*npm exec -- esbuild public\/app\.ts[\s\S]*for browser in chromium firefox/m
+        );
+        assert.match(matrixBody, /for device in desktop mobile/);
+        assert.match(matrixBody, /matrix_wall_ms/);
+        assert.match(
+            commandConfig,
+            /node --test --experimental-test-coverage test\/unit\/\*\.test\.ts test\/integration\/\*\.test\.ts/
+        );
+        assert.match(commandConfig, /npm exec -- stryker run test\/stryker\.config\.mjs/);
+        assert.match(commandConfig, /node scripts\/minimax-test\.ts/);
     });
 
     it("keeps dev, fonts, image, release, clean, and reset capabilities", () => {
@@ -1159,9 +1195,9 @@ describe("mise command health", () => {
         assert.match(commandConfig, /flag "--kill"/);
         assert.match(commandConfig, /flag "--chrome"/);
         assert.match(commandConfig, /google-chrome-stable/);
-        assert.match(commandConfig, /bun src\/server\.ts/);
+        assert.match(commandConfig, /node src\/server\.ts/);
         assert.match(commandConfig, /\[tasks\.fonts\]/);
-        assert.match(commandConfig, /bun scripts\/update-fonts\.ts "\$usage_commit"/);
+        assert.match(commandConfig, /node scripts\/update-fonts\.ts "\$usage_commit"/);
         assert.match(commandConfig, /\[tasks\.image\]/);
         assert.match(commandConfig, /flag "--smoke"/);
         assert.match(commandConfig, /flag "--push"/);
@@ -1192,9 +1228,9 @@ describe("mise command health", () => {
     });
 
     it("runs every test from directories, not brittle file lists", () => {
-        assert.match(commandConfig, /bun test test\/unit/);
-        assert.match(commandConfig, /bun test test\/integration/);
-        assert.match(commandConfig, /bun e2e\/run-e2e\.ts/);
+        assert.match(commandConfig, /node --test test\/unit\/\*\.test\.ts/);
+        assert.match(commandConfig, /node --test test\/integration\/\*\.test\.ts/);
+        assert.match(commandConfig, /node e2e\/run-e2e\.ts/);
         assert.match(commandConfig, /for browser in chromium firefox/);
         assert.match(commandConfig, /for device in desktop mobile/);
         assert.doesNotMatch(commandConfig, /BACKEND_TESTS|FRONTEND_TESTS/);
@@ -1208,7 +1244,7 @@ describe("mise command health", () => {
         assert.match(commandConfig, new RegExp(commit));
         assert.match(
             commandConfig,
-            /\[tasks\.fonts\][\s\S]*bun scripts\/update-fonts\.ts "\$usage_commit"/
+            /\[tasks\.fonts\][\s\S]*node scripts\/update-fonts\.ts "\$usage_commit"/
         );
         assert.doesNotMatch(commandConfig, /fonts[\s\S]*commit="main"/);
         assert.equal(existsSync("scripts/update-fonts.ts"), true);
@@ -1228,6 +1264,8 @@ describe("mise command health", () => {
         assert.match(e2eRunner, /HG_E2E_BROWSER/);
         assert.match(e2eRunner, /HG_E2E_DEVICE/);
         assert.match(e2eRunner, /firefox/);
+        assert.match(e2eRunner, /slowest_tests/);
+        assert.match(e2eRunner, /toSorted\(\(a, b\) => b\.duration - a\.duration\)/);
     });
 
     it("does not define redundant tasks or aliases", () => {
@@ -1385,10 +1423,13 @@ describe("GitHub Actions health", () => {
         assert.match(ciYml, /path: ~\/\.cache\/ms-playwright/);
         assert.match(
             ciYml,
-            /key: \$\{\{ runner\.os \}\}-playwright-\$\{\{ hashFiles\('bun\.lock'\) \}\}/
+            /key: \$\{\{ runner\.os \}\}-playwright-\$\{\{ hashFiles\('package-lock\.json'\) \}\}/
         );
-        assert.match(ciYml, /path: ~\/\.bun\/install\/cache/);
-        assert.match(ciYml, /key: \$\{\{ runner\.os \}\}-bun-\$\{\{ hashFiles\('bun\.lock'\) \}\}/);
+        assert.match(ciYml, /path: ~\/\.npm/);
+        assert.match(
+            ciYml,
+            /key: \$\{\{ runner\.os \}\}-npm-\$\{\{ hashFiles\('package-lock\.json'\) \}\}/
+        );
         assert.match(ciYml, /actions\/upload-artifact@v7\.0\.1/);
         assert.match(ciYml, /if: \$\{\{ always\(\) \}\}/);
         assert.match(ciYml, /name: mutation-reports/);
@@ -1419,19 +1460,19 @@ describe("GitHub Actions health", () => {
         assert.doesNotMatch(ciYml, /env\.ACT/);
         assert.doesNotMatch(ciYml, /act \+ Podman/);
         assert.equal(existsSync(".github/workflows/updates.yml"), false);
-        assert.match(dependabotYml, /package-ecosystem: bun/);
-        assert.doesNotMatch(dependabotYml, /package-ecosystem: npm/);
+        assert.match(dependabotYml, /package-ecosystem: npm/);
+        assert.doesNotMatch(dependabotYml, /package-ecosystem: bun/);
         assert.match(dependabotYml, /package-ecosystem: github-actions/);
         assert.doesNotMatch(dependabotYml, /package-ecosystem: docker/);
         assert.match(dependabotYml, /interval: weekly/);
-        assert.doesNotMatch(dependabotYml, /workflow_dispatch|bun outdated|deps-check/);
+        assert.doesNotMatch(dependabotYml, /workflow_dispatch|npm outdated|deps-check/);
         assert.match(commandConfig, /\[tasks\.image\]/);
         assert.match(
             commandConfig,
             /podman build -f deploy\/Containerfile --build-arg VERSION="\$version" -t "\$image" \./
         );
         assert.match(commandConfig, /\[tasks\.release\]/);
-        assert.doesNotMatch(commandConfig, /\ndeps-check:|bun outdated --latest/);
+        assert.doesNotMatch(commandConfig, /\ndeps-check:|npm outdated --latest/);
     });
 
     it("has no local act runner tasks", () => {
@@ -1449,7 +1490,7 @@ describe("GitHub Actions health", () => {
             packageManager: string;
             scripts: Record<string, string>;
         };
-        assert.equal(pkg.packageManager, "bun@1.3.14");
+        assert.equal(pkg.packageManager, "npm@11.18.0");
         assert.deepEqual(Object.keys(pkg.scripts), ["prepare"]);
         assert.match(pkg.scripts.prepare, /git rev-parse --git-dir/);
         assert.match(pkg.scripts.prepare, /lefthook install/);
@@ -1522,28 +1563,31 @@ describe("agent patrol health", () => {
 });
 
 describe("layout health", () => {
-    it("deploy image uses hardened optimized Bun multi-stage build", () => {
-        assert.match(deployContainerfile, /^ARG BUN_VERSION=1\.3\.14$/m);
-        assert.match(deployContainerfile, /^FROM oven\/bun:\$\{BUN_VERSION\} AS deps/m);
+    it("deploy image uses hardened optimized Node multi-stage build", () => {
+        assert.match(deployContainerfile, /^ARG NODE_VERSION=26\.4\.0$/m);
+        assert.match(deployContainerfile, /^FROM node:\$\{NODE_VERSION\}-bookworm-slim AS deps/m);
         assert.match(deployContainerfile, /^FROM deps AS build/m);
-        assert.match(deployContainerfile, /^FROM oven\/bun:\$\{BUN_VERSION\} AS runtime/m);
+        assert.match(
+            deployContainerfile,
+            /^FROM node:\$\{NODE_VERSION\}-bookworm-slim AS runtime/m
+        );
         assert.match(deployContainerfile, /^ARG VERSION=1\.0\.0$/m);
         assert.match(
             deployContainerfile,
-            /--mount=type=cache,target=\/root\/\.bun\/install\/cache,sharing=locked/
+            /--mount=type=cache,target=\/root\/\.npm,sharing=locked/
         );
-        assert.match(deployContainerfile, /COPY package\.json bun\.lock \./);
+        assert.match(deployContainerfile, /COPY package\.json package-lock\.json \./);
         assert.match(deployContainerfile, /COPY public \.\/public/);
-        assert.match(deployContainerfile, /COPY --chown=bun:bun src \.\/src/);
-        assert.match(deployContainerfile, /COPY --chown=bun:bun migrations \.\/migrations/);
+        assert.match(deployContainerfile, /COPY --chown=node:node src \.\/src/);
+        assert.match(deployContainerfile, /COPY --chown=node:node migrations \.\/migrations/);
         assert.match(
             deployContainerfile,
-            /COPY --from=build --chown=bun:bun \/app\/public\/app\.js \.\/public\/app\.js/
+            /COPY --from=build --chown=node:node \/app\/public\/app\.js \.\/public\/app\.js/
         );
-        assert.match(deployContainerfile, /bunx esbuild public\/app\.ts/);
+        assert.match(deployContainerfile, /npm exec -- esbuild public\/app\.ts/);
         assert.match(deployContainerfile, /--minify/);
         assert.match(deployContainerfile, /org\.opencontainers\.image\.version/);
-        assert.match(deployContainerfile, /^USER bun$/m);
+        assert.match(deployContainerfile, /^USER node$/m);
         assert.doesNotMatch(deployContainerfile, /^HEALTHCHECK /m);
         assert.match(commandConfig, /--health-cmd/);
         assert.match(commandConfig, /podman healthcheck run/);
@@ -1560,7 +1604,7 @@ describe("layout health", () => {
         for (
             const path of [
                 "package.json",
-                "bun.lock",
+                "package-lock.json",
                 "src/",
                 "src/**",
                 "migrations/",

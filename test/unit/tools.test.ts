@@ -1801,6 +1801,32 @@ describe("generateLongSpeech", () => {
         assert.equal(payload.audio_setting.audio_sample_rate, 32000);
     });
 
+    it("waits between pending async TTS polls when configured", async () => {
+        let polls = 0;
+        globalThis.fetch = async (url: string | URL | Request) => {
+            const urlStr = String(url);
+            if (urlStr.endsWith("/v1/t2a_async_v2")) {
+                return jsonResponse({ data: { task_id: "task_wait" } });
+            }
+            if (urlStr.includes("/v1/query/t2a_async_query_v2")) {
+                polls++;
+                return jsonResponse({
+                    data: { status: polls < 2 ? "Processing" : "Success", file_id: "file_wait" }
+                });
+            }
+            if (urlStr.includes("/v1/files/retrieve")) {
+                return jsonResponse({
+                    data: { file: { download_url: "https://example.com/wait.mp3" } }
+                });
+            }
+            throw new Error(`unexpected fetch ${urlStr}`);
+        };
+
+        const result = await generateLongSpeech("Wait", API_KEY, { pollDelayMs: 1, maxPolls: 3 });
+        assert.equal(result.type, "audio");
+        assert.equal(polls, 2);
+    });
+
     it("returns timeout when provider never finishes", async () => {
         globalThis.fetch = async (url: string | URL | Request) => {
             const urlStr = url.toString();
@@ -1859,6 +1885,16 @@ describe("generateLongSpeech", () => {
             stage: "file",
             task_id: "nested-tts-task",
             file_id: "audio-file-2"
+        });
+    });
+
+    it("wraps unexpected async TTS exceptions", async () => {
+        globalThis.fetch = async () => {
+            throw new Error("socket gone");
+        };
+        assert.deepEqual(await generateLongSpeech("x", API_KEY), {
+            type: "error",
+            content: "Long TTS failed: Error: socket gone"
         });
     });
 
@@ -2131,6 +2167,16 @@ describe("generateVideo", () => {
             stage: "file",
             task_id: "nested-video-task",
             file_id: "nested-video-file"
+        });
+    });
+
+    it("wraps unexpected video exceptions", async () => {
+        globalThis.fetch = async () => {
+            throw new Error("socket gone");
+        };
+        assert.deepEqual(await generateVideo("x", API_KEY), {
+            type: "error",
+            content: "Video generation failed: Error: socket gone"
         });
     });
 
@@ -2554,6 +2600,64 @@ describe("webSearch HTTP request structure", () => {
         assert.ok(result.content.includes("Fallback snippet"));
     });
 
+    it("ignores malformed and invalid YouTube-looking URLs", async () => {
+        globalThis.fetch = async (url: string | URL | Request) => {
+            const urlStr = String(url);
+            if (urlStr.includes("/v1/coding_plan/search")) {
+                return jsonResponse({
+                    organic: [
+                        {
+                            title: "Bad",
+                            link: "https://example.com/a",
+                            snippet: "bad https://% and https://youtube.com/shorts/not-valid"
+                        }
+                    ]
+                });
+            }
+            if (urlStr.includes("youtube.com/oembed")) {
+                throw new Error("should not call oembed");
+            }
+            throw new Error(`unexpected fetch ${urlStr}`);
+        };
+
+        const result = await webSearch("https://% https://youtube.com/embed/nope", API_KEY);
+        assert.equal(result.type, "text");
+        assert.doesNotMatch(result.content, /YouTube metadata/);
+    });
+
+    it("enriches YouTube shorts and embed links found in snippets", async () => {
+        const oembedUrls: string[] = [];
+        globalThis.fetch = async (url: string | URL | Request) => {
+            const urlStr = String(url);
+            if (urlStr.includes("/v1/coding_plan/search")) {
+                return jsonResponse({
+                    organic: [
+                        {
+                            title: "Short",
+                            link: "https://youtube.com/shorts/dQw4w9WgXcQ",
+                            snippet: "short"
+                        },
+                        {
+                            title: "Embed",
+                            link: "https://youtube.com/embed/abcdefghijk",
+                            snippet: "embed"
+                        }
+                    ]
+                });
+            }
+            if (urlStr.includes("youtube.com/oembed")) {
+                oembedUrls.push(urlStr);
+                return jsonResponse({ title: "YT", author_name: "Rick", thumbnail_url: "thumb" });
+            }
+            throw new Error(`unexpected fetch ${urlStr}`);
+        };
+
+        const result = await webSearch("videos", API_KEY);
+        assert.equal(result.type, "text");
+        assert.equal(oembedUrls.length, 2);
+        assert.match(result.content, /YouTube metadata/);
+    });
+
     it("enriches YouTube result links with oEmbed metadata", async () => {
         const urls: string[] = [];
         globalThis.fetch = async (url: string | URL | Request) => {
@@ -2809,6 +2913,12 @@ describe("analyzeImage HTTP request structure", () => {
         const result = await analyzeImage("https://example.com/img.png", API_KEY);
         assert.equal(result.type, "error");
         assert.ok(result.content.includes("Connection refused"));
+    });
+
+    it("rejects non-http image URLs", async () => {
+        const result = await analyzeImage("ftp://example.com/image.png", API_KEY);
+        assert.equal(result.type, "error");
+        assert.ok(result.content.includes("image URL must be http(s)"));
     });
 
     it("rejects user-supplied data URLs", async () => {

@@ -274,10 +274,8 @@ export function buildContext(
                     break; // Would exceed budget — stop here
                 }
 
-                // Add the whole turn (we'll reverse at the end)
-                for (let k = pairedIndex; k <= i; k++) {
-                    result.unshift(messages[k]);
-                }
+                // Add the whole turn in original order at the front.
+                result.unshift(...messages.slice(pairedIndex, i + 1));
                 usedTokens += turnTokens;
                 i = pairedIndex - 1;
             } else {
@@ -292,29 +290,9 @@ export function buildContext(
                 i--;
             }
         } else if (msg.role === "assistant" && msg.tool_calls && msg.tool_calls.length > 0) {
-            // Assistant with tool_use — find all corresponding tool results
-            const toolCallIds = msg.tool_calls.map((tc) => tc.id);
-
-            // Find all tool result messages that follow this assistant message
-            const toolResultIndices: number[] = [];
-            for (let j = i + 1; j < messages.length; j++) {
-                if (
-                    messages[j].role === "tool"
-                    && toolCallIds.includes(messages[j].tool_call_id ?? "")
-                ) {
-                    toolResultIndices.push(j);
-                }
-            }
-
-            // Calculate tokens for the full turn (assistant + tool results)
-            const turnMessages = [msg, ...toolResultIndices.map((idx) => messages[idx])];
-            const turnTokens = turnMessages.reduce((sum, m) => sum + estimateTokens(m), 0);
-
-            if (usedTokens + turnTokens > remainingBudget) break;
-
-            // Add assistant message + tool results in order
-            result.unshift(msg, ...toolResultIndices.map((idx) => messages[idx]));
-            usedTokens += turnTokens;
+            if (usedTokens + msgTokens > remainingBudget) break;
+            result.unshift(msg);
+            usedTokens += msgTokens;
             i--;
         } else {
             // Regular message (user, assistant text-only, etc.)
@@ -620,8 +598,6 @@ export async function runAgentLoop(
         let thinkingSignature = "";
         let stopReason: string | null = null;
         const toolCalls = new Map<number, AnthropicToolCall>();
-        let currentBlockType: "thinking" | "text" | "tool_use" | null = null;
-        let currentBlockIndex = -1;
 
         const reader = resp.body.getReader();
         const decoder = new TextDecoder();
@@ -664,15 +640,10 @@ export async function runAgentLoop(
                     const contentBlock = parsed.content_block as
                         | Record<string, unknown>
                         | undefined;
-                    if (contentBlock) {
-                        currentBlockType = contentBlock.type as "thinking" | "text" | "tool_use";
-                        currentBlockIndex = parsed.index as number;
-
-                        if (currentBlockType === "tool_use") {
-                            const id = (contentBlock.id as string) || "";
-                            const name = (contentBlock.name as string) || "";
-                            toolCalls.set(currentBlockIndex, { id, name, input: "" });
-                        }
+                    if (contentBlock?.type === "tool_use") {
+                        const id = (contentBlock.id as string) || "";
+                        const name = (contentBlock.name as string) || "";
+                        toolCalls.set(parsed.index as number, { id, name, input: "" });
                     }
                     continue;
                 }
@@ -711,12 +682,6 @@ export async function runAgentLoop(
                             tc.input += partialJson;
                         }
                     }
-                    continue;
-                }
-
-                // Handle content_block_stop
-                if (currentEventType === "content_block_stop") {
-                    currentBlockType = null;
                     continue;
                 }
 

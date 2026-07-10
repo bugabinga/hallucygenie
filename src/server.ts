@@ -94,7 +94,7 @@ function publicToolInput(
 ): Record<string, unknown> {
     return toolName === "generate_long_speech" ? compactLongSpeechInput(args) : args;
 }
-import type { Database } from "bun:sqlite";
+import type { DatabaseSync as Database } from "node:sqlite";
 import {
     type AgentEvent,
     buildContext,
@@ -1228,6 +1228,13 @@ export function resolveSessionId(req: Request, database: Database): string {
     return validateSessionId(req) ?? getOrCreateActiveSessionId(database);
 }
 
+function resolveExistingSessionId(req: Request, database: Database): string {
+    const sessionId = resolveSessionId(req, database);
+    const session = getSession(database, sessionId);
+    if (!session || session.archived_at) throw new Error("session not found");
+    return sessionId;
+}
+
 // ── Health check ─────────────────────────────────────────────────────
 
 const startTime = Date.now();
@@ -1293,7 +1300,7 @@ async function autoNameDefaultSession(
     apiKey: string
 ): Promise<void> {
     const session = getSession(database, sessionId);
-    if (!session || session.name_source !== "default") return;
+    if (session?.name_source !== "default") return;
     try {
         const name = await generateSessionNameFromPrompt(apiKey, prompt);
         autoNameSession(database, sessionId, name);
@@ -1366,7 +1373,7 @@ function saveProfileAvatar(
 
 async function handleProfileAvatarUpload(req: Request, database: Database): Promise<Response> {
     try {
-        const sessionId = resolveSessionId(req, database);
+        const sessionId = resolveExistingSessionId(req, database);
         const form = await req.formData();
         const file = form.get("avatar");
         if (!(file instanceof File)) return jsonResponse({ error: "avatar file required" }, 400);
@@ -1398,7 +1405,7 @@ async function handleProfileAvatarUpload(req: Request, database: Database): Prom
 
 async function handleAnalyzeImageUpload(req: Request, database: Database): Promise<Response> {
     try {
-        const sessionId = resolveSessionId(req, database);
+        const sessionId = resolveExistingSessionId(req, database);
         const form = await req.formData();
         const file = form.get("image");
         if (!(file instanceof File)) return jsonResponse({ error: "image file required" }, 400);
@@ -1425,7 +1432,7 @@ async function handleAnalyzeImageUpload(req: Request, database: Database): Promi
 
 async function handleReferenceImageUpload(req: Request, database: Database): Promise<Response> {
     try {
-        const sessionId = resolveSessionId(req, database);
+        const sessionId = resolveExistingSessionId(req, database);
         const form = await req.formData();
         const file = form.get("image");
         if (!(file instanceof File)) {
@@ -2400,6 +2407,14 @@ async function saveAssetFile(
                 prompt,
                 args
             );
+        }
+
+        if (
+            (result.type === "image" || result.type === "audio" || result.type === "video")
+            && /^[a-z][a-z0-9+.-]*:/i.test(result.content)
+            && !/^data:/i.test(result.content)
+        ) {
+            throw new Error(`${result.type} asset URL must be http(s)`);
         }
 
         const match = result.content.match(/^data:([^;]+);base64,(.+)$/);

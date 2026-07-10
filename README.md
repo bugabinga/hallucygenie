@@ -33,7 +33,7 @@ podman run --rm \
   -p 127.0.0.1:3000:3000 \
   -e MINIMAX_API_KEY="$MINIMAX_API_KEY" \
   -v "$PWD/data:/app/data" \
-  --health-cmd 'bun --eval "fetch(\"http://127.0.0.1:3000/api/health\").then((r)=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"' \
+  --health-cmd 'node --eval "fetch(\"http://127.0.0.1:3000/api/health\").then((r)=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"' \
   --health-interval 30s --health-timeout 3s --health-start-period 5s --health-retries 3 \
   ghcr.io/bugabinga/hallucygenie:v1.0.2
 ```
@@ -50,7 +50,7 @@ Then open <http://localhost:3000>.
 
 • SQLite DB, generated assets, and pending video/long-narration tasks live under `data/`.
 • Back up `data/` before upgrading.
-• Bind-mounted `data/` must be writable by container user `bun` (UID 1000).
+• Bind-mounted `data/` must be writable by container user `node` (UID 1000).
 • Raw generated media stays in asset storage, not prompts or chat context.
 • No built-in auth. Run on localhost or a trusted network only.
 

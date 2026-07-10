@@ -1233,7 +1233,7 @@ function animateRenderedTextTail(textNodes: Text[], charCount: number): void {
 }
 
 function appendText(text: string): void {
-    if (!currentAssistantContent) return;
+    ensureAssistantContent();
 
     rawTextBuffer += text;
     const textRegion = getOrCreateContentRegion("assistant-text-region", "end");
@@ -1249,7 +1249,7 @@ function appendText(text: string): void {
 }
 
 function appendThinking(text: string): void {
-    if (!currentAssistantContent) return;
+    ensureAssistantContent();
 
     thinkingBuffer += text;
     const thinkingRegion = getOrCreateContentRegion("assistant-thinking-region", "start");
@@ -1356,7 +1356,7 @@ function setStreamingUI(streaming: boolean): void {
         sendBtn.disabled = true;
         typingIndicator.classList.add("is-visible");
         typingIndicator.setAttribute("aria-hidden", "false");
-        steerHint.hidden = true;
+        steerHint.hidden = steerHint.dataset.dismissed === "true";
     } else {
         input.disabled = false;
         input.placeholder = "Type a message...";
@@ -1364,6 +1364,7 @@ function setStreamingUI(streaming: boolean): void {
         typingIndicator.classList.remove("is-visible");
         typingIndicator.setAttribute("aria-hidden", "true");
         steerHint.hidden = true;
+        delete steerHint.dataset.dismissed;
         input.focus();
     }
 }
@@ -2178,7 +2179,9 @@ export function init(): void {
 
     // Steer close
     steerClose.addEventListener("click", () => {
-        $("#steer-hint").hidden = true;
+        const steerHint = $("#steer-hint");
+        steerHint.hidden = true;
+        steerHint.dataset.dismissed = "true";
     });
 
     // ── Onboarding ──────────────────────────────────────────────────
@@ -2196,10 +2199,6 @@ export function init(): void {
             d.classList.toggle("active", i === idx);
         });
         currentSlide = idx;
-    }
-
-    function _getOnboardingFocusable(): HTMLElement[] {
-        return focusableIn(onboarding);
     }
 
     function focusCurrentOnboardingButton(): void {
@@ -2423,10 +2422,10 @@ export function init(): void {
         "#voice-insert-interjection"
     );
     const voiceComposerStatus = document.querySelector<HTMLElement>("#voice-composer-status");
-    const analyzeFileInput = document.querySelector<HTMLInputElement>("#analyze-file");
-    const analyzeDropzone = document.querySelector<HTMLButtonElement>("#analyze-dropzone");
-    const analyzeFileStatus = document.querySelector<HTMLElement>("#analyze-file-status");
-    const analyzeFilePreview = document.querySelector<HTMLElement>("#analyze-file-preview");
+    const analyzeFileInput = $("#analyze-file") as HTMLInputElement;
+    const analyzeDropzone = $("#analyze-dropzone") as HTMLButtonElement;
+    const analyzeFileStatus = $("#analyze-file-status") as HTMLElement;
+    const analyzeFilePreview = $("#analyze-file-preview") as HTMLElement;
     const analyzeUrlInput = $("#analyze-url") as HTMLInputElement;
     const analyzePromptInput = $("#analyze-prompt") as HTMLTextAreaElement;
     const searchQueryInput = $("#search-query") as HTMLTextAreaElement;
@@ -2651,9 +2650,6 @@ export function init(): void {
     }
 
     async function selectAnalyzeFile(file: File): Promise<void> {
-        if (!analyzeFileInput || !analyzeDropzone || !analyzeFileStatus || !analyzeFilePreview) {
-            return;
-        }
         const error = rejectBadAnalyzeFile(file);
         if (error) {
             showError(error);

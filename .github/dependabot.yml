@@ -1,6 +1,6 @@
 version: 2
 updates:
-    - package-ecosystem: bun
+    - package-ecosystem: npm
       directory: /
       schedule:
           interval: weekly
@@ -9,7 +9,7 @@ updates:
           timezone: Etc/UTC
       open-pull-requests-limit: 5
       groups:
-          bun-dependencies:
+          npm-dependencies:
               patterns:
                   - "*"
 

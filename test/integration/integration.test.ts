@@ -580,6 +580,16 @@ describe("GET /assets (no session)", () => {
         const r = await api("GET", "/assets");
         assert.equal(r.status, 500);
         assert.equal(bodyAs<Record<string, unknown>>(r.body).error, "Invalid asset metadata");
+
+        database
+            .prepare("UPDATE assets SET params_json = ? WHERE id = ?")
+            .run("[]", "integration-bad-params");
+        const nonObject = await api("GET", "/assets");
+        assert.equal(nonObject.status, 500);
+        assert.equal(
+            bodyAs<Record<string, unknown>>(nonObject.body).error,
+            "Invalid asset metadata"
+        );
     });
 });
 
@@ -591,6 +601,14 @@ describe("GET /asset (active session)", () => {
         assert.equal(r.status, 200);
         assert.equal(r.headers.get("content-type"), "image/png");
         assert.deepEqual(Array.from(new Uint8Array(await r.arrayBuffer())), [1, 2, 3]);
+    });
+
+    it("returns 404 when asset row points at a missing file", async () => {
+        seedActiveAsset("integration-missing-file");
+
+        const r = await httpGet("/asset/integration-missing-file");
+        assert.equal(r.status, 404);
+        assert.equal(bodyAs<Record<string, unknown>>(await r.json()).error, "File not found");
     });
 
     it("blocks wrong explicit session header for active asset", async () => {

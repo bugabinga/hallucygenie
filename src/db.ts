@@ -1,10 +1,9 @@
 // HallucyGenie — SQLite persistence, migrations, and quota tracking
-// Uses bun:sqlite
 
-import { Database } from "bun:sqlite";
 import { randomUUID } from "node:crypto";
 import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
+import { DatabaseSync as Database } from "node:sqlite";
 
 // ── Quota Limits (MiniMax Plus-Highspeed plan) ──────────────────────
 
@@ -17,9 +16,13 @@ export const QUOTAS: Record<string, number> = {
 
 const QUOTA_WARNING_THRESHOLD = 0.8;
 
-function expectRow<T>(row: T | null, message: string): T {
+function expectRow<T>(row: T | null | undefined, message: string): T {
     if (!row) throw new Error(message);
     return row;
+}
+
+function rowOrNull<T>(row: T | null | undefined): T | null {
+    return row ?? null;
 }
 
 // ── Database Initialization ─────────────────────────────────────────
@@ -187,10 +190,10 @@ function truncateCodepoints(value: string, max: number): string {
 }
 
 function rejectRawProfileText(value: string): void {
-    assertNoRawAssetDataInMessage(value);
     if (/data:(?:image|audio|video)\//i.test(value)) {
         throw new Error("profile must not contain raw asset data");
     }
+    assertNoRawAssetDataInMessage(value);
 }
 
 function normalizeProfileText(value: unknown, field: string, max: number): string {
@@ -296,13 +299,14 @@ export function getOrCreateActiveSession(db: Database): SessionRow {
 }
 
 export function getSession(db: Database, id: string): SessionRow | null {
-    return db
+    const row = db
         .prepare(
             `SELECT id, name, name_source, created_at, updated_at, archived_at
              FROM sessions
              WHERE id = ?`
         )
-        .get(id) as SessionRow | null;
+        .get(id) as SessionRow | undefined;
+    return rowOrNull(row);
 }
 
 export function listSessions(db: Database): SessionRow[] {
@@ -313,7 +317,7 @@ export function listSessions(db: Database): SessionRow[] {
              WHERE archived_at IS NULL
              ORDER BY updated_at DESC, created_at DESC, id DESC`
         )
-        .all() as SessionRow[];
+        .all() as unknown as SessionRow[];
 }
 
 export function renameSession(db: Database, id: string, name: string): SessionRow {
@@ -372,11 +376,12 @@ export function getDraft(
     sessionId: string,
     kind: "chat" | "create"
 ): DraftRow | null {
-    return db
+    const row = db
         .prepare(
             "SELECT session_id, kind, value_json, updated_at FROM drafts WHERE session_id = ? AND kind = ?"
         )
-        .get(sessionId, kind) as DraftRow | null;
+        .get(sessionId, kind) as DraftRow | undefined;
+    return rowOrNull(row);
 }
 
 export function saveDraft(
@@ -492,9 +497,10 @@ export function recordToolInputHistory(
 }
 
 export function getToolInputHistory(db: Database, id: string): ToolInputHistoryRow | null {
-    return db
+    const row = db
         .prepare("SELECT * FROM tool_input_history WHERE id = ?")
-        .get(id) as ToolInputHistoryRow | null;
+        .get(id) as ToolInputHistoryRow | undefined;
+    return rowOrNull(row);
 }
 
 export function listToolInputHistory(
@@ -512,7 +518,7 @@ export function listToolInputHistory(
                  ORDER BY created_at DESC, id DESC
                  LIMIT ? OFFSET ?`
             )
-            .all(sessionId, options.kind, limit, offset) as ToolInputHistoryRow[];
+            .all(sessionId, options.kind, limit, offset) as unknown as ToolInputHistoryRow[];
     }
     return db
         .prepare(
@@ -521,7 +527,7 @@ export function listToolInputHistory(
              ORDER BY created_at DESC, id DESC
              LIMIT ? OFFSET ?`
         )
-        .all(sessionId, limit, offset) as ToolInputHistoryRow[];
+        .all(sessionId, limit, offset) as unknown as ToolInputHistoryRow[];
 }
 
 export function hideToolInputHistory(db: Database, sessionId: string, id: string): void {
@@ -688,13 +694,33 @@ export function checkQuota(db: Database, feature: string): QuotaStatus {
  * Atomically check and consume quota for a feature.
  * Returns the new usage count, or null if quota was already exhausted.
  */
+export function runTransaction<T>(db: Database, fn: () => T): T {
+    const nested = db.isTransaction;
+    const before = nested ? "SAVEPOINT `\t_bs3.\t`" : "BEGIN";
+    const after = nested ? "RELEASE `\t_bs3.\t`" : "COMMIT";
+    const undo = nested ? "ROLLBACK TO `\t_bs3.\t`" : "ROLLBACK";
+
+    try {
+        db.exec(before);
+        const result = fn();
+        db.exec(after);
+        return result;
+    } catch (err) {
+        if (db.isTransaction) {
+            db.exec(undo);
+            if (nested) db.exec(after);
+        }
+        throw err;
+    }
+}
+
 export function consumeQuota(db: Database, feature: string, amount = 1): number | null {
     if (!Number.isInteger(amount) || amount <= 0) throw new Error("quota amount invalid");
     const limit = QUOTAS[feature] ?? 0;
     if (limit === 0) return 0;
     if (amount > limit) return null;
 
-    return db.transaction(() => {
+    return runTransaction(db, () => {
         const row = db
             .prepare("SELECT count FROM daily_usage WHERE date = date('now') AND feature = ?")
             .get(feature) as { count: number; } | undefined;
@@ -713,7 +739,7 @@ export function consumeQuota(db: Database, feature: string, amount = 1): number 
         }
 
         return currentCount + amount;
-    })();
+    });
 }
 
 /**
@@ -782,9 +808,10 @@ export function getAssets(db: Database, sessionId: string): AssetRow[] {
 }
 
 export function getAsset(db: Database, assetId: string): AssetRow | null {
-    return db
+    const row = db
         .prepare("SELECT * FROM assets WHERE id = ?")
-        .get(assetId) as unknown as AssetRow | null;
+        .get(assetId) as unknown as AssetRow | undefined;
+    return rowOrNull(row);
 }
 
 export interface ProviderDiagnosticRow {

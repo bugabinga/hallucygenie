@@ -18,9 +18,9 @@ jobs:
                   cache: true
             - uses: actions/cache@v5.0.5
               with:
-                  path: ~/.bun/install/cache
-                  key: ${{ runner.os }}-bun-${{ hashFiles('bun.lock') }}
-                  restore-keys: ${{ runner.os }}-bun-
+                  path: ~/.npm
+                  key: ${{ runner.os }}-npm-${{ hashFiles('package-lock.json') }}
+                  restore-keys: ${{ runner.os }}-npm-
             - name: Setup JS deps
               run: mise run setup --js
             - name: Check
@@ -42,13 +42,13 @@ jobs:
                   cache: true
             - uses: actions/cache@v5.0.5
               with:
-                  path: ~/.bun/install/cache
-                  key: ${{ runner.os }}-bun-${{ hashFiles('bun.lock') }}
-                  restore-keys: ${{ runner.os }}-bun-
+                  path: ~/.npm
+                  key: ${{ runner.os }}-npm-${{ hashFiles('package-lock.json') }}
+                  restore-keys: ${{ runner.os }}-npm-
             - uses: actions/cache@v5.0.5
               with:
                   path: ~/.cache/ms-playwright
-                  key: ${{ runner.os }}-playwright-${{ hashFiles('bun.lock') }}
+                  key: ${{ runner.os }}-playwright-${{ hashFiles('package-lock.json') }}
                   restore-keys: ${{ runner.os }}-playwright-
             - name: Setup JS deps
               run: mise run setup --js
@@ -71,9 +71,9 @@ jobs:
                   cache: true
             - uses: actions/cache@v5.0.5
               with:
-                  path: ~/.bun/install/cache
-                  key: ${{ runner.os }}-bun-${{ hashFiles('bun.lock') }}
-                  restore-keys: ${{ runner.os }}-bun-
+                  path: ~/.npm
+                  key: ${{ runner.os }}-npm-${{ hashFiles('package-lock.json') }}
+                  restore-keys: ${{ runner.os }}-npm-
             - name: Setup JS deps
               run: mise run setup --js
             - name: Mutation tests

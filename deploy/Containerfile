@@ -1,22 +1,22 @@
-ARG BUN_VERSION=1.3.14
+ARG NODE_VERSION=26.4.0
 ARG VERSION=1.0.0
 
-FROM oven/bun:${BUN_VERSION} AS deps
+FROM node:${NODE_VERSION}-bookworm-slim AS deps
 WORKDIR /app
-COPY package.json bun.lock ./
-RUN --mount=type=cache,target=/root/.bun/install/cache,sharing=locked \
-    bun install --frozen-lockfile
+COPY package.json package-lock.json ./
+RUN --mount=type=cache,target=/root/.npm,sharing=locked \
+    npm ci
 
 FROM deps AS build
 COPY public ./public
-RUN bunx esbuild public/app.ts \
+RUN npm exec -- esbuild public/app.ts \
     --outfile=public/app.js \
     --bundle \
     --format=esm \
     --target=esnext \
     --minify
 
-FROM oven/bun:${BUN_VERSION} AS runtime
+FROM node:${NODE_VERSION}-bookworm-slim AS runtime
 ARG VERSION=1.0.0
 WORKDIR /app
 ENV NODE_ENV=production \
@@ -26,12 +26,12 @@ LABEL org.opencontainers.image.title="HallucyGenie" \
       org.opencontainers.image.source="https://github.com/bugabinga/hallucygenie" \
       org.opencontainers.image.licenses="MIT" \
       org.opencontainers.image.version="${VERSION}"
-COPY --chown=bun:bun package.json bun.lock ./
-COPY --chown=bun:bun src ./src
-COPY --chown=bun:bun migrations ./migrations
-COPY --chown=bun:bun public ./public
-COPY --from=build --chown=bun:bun /app/public/app.js ./public/app.js
-RUN mkdir -p data logs && chown -R bun:bun data logs
-USER bun
+COPY --chown=node:node package.json package-lock.json ./
+COPY --chown=node:node src ./src
+COPY --chown=node:node migrations ./migrations
+COPY --chown=node:node public ./public
+COPY --from=build --chown=node:node /app/public/app.js ./public/app.js
+RUN mkdir -p data logs && chown -R node:node data logs
+USER node
 EXPOSE 3000
-CMD ["bun", "src/server.ts"]
+CMD ["node", "src/server.ts"]

@@ -1,5 +1,5 @@
 [tools]
-bun = "1.3.14"
+node = "26.4.0"
 gh = "2.96.0"
 gitleaks = "8.30.1"
 jq = "1.8.2"
@@ -20,13 +20,13 @@ if [ "$js" != "true" ] && [ "$browsers" != "true" ]; then
     browsers=true
 fi
 if [ "$js" = "true" ]; then
-    if [ -n "${CI:-}" ]; then bun install --frozen-lockfile; else bun install; fi
+    if [ -n "${CI:-}" ]; then npm ci; else npm install; fi
 fi
 if [ "$browsers" = "true" ]; then
     if [ -n "${CI:-}" ]; then
-        bunx playwright install --with-deps chromium firefox
+        npm exec -- playwright install --with-deps chromium firefox
     else
-        bunx playwright install chromium firefox
+        npm exec -- playwright install chromium firefox
     fi
 fi
 '''
@@ -37,13 +37,13 @@ usage = 'flag "--fix" help="format and apply safe lint fixes before checking"'
 run = '''
 if [ "${usage_fix:-false}" = "true" ]; then
     mise fmt
-    bunx dprint fmt
+    npm exec -- dprint fmt
     sqruff fix migrations/*.sql test/fixtures/db/v1.0.0/schema.sql
-    bunx biome lint --write .
+    npm exec -- biome lint --write .
 fi
 mise fmt --check
-bunx dprint check
-bunx biome lint .
+npm exec -- dprint check
+npm exec -- biome lint .
 sqruff lint migrations/*.sql test/fixtures/db/v1.0.0/schema.sql
 tmp="$(mktemp -d)"
 trap 'rm -rf "$tmp"' EXIT
@@ -51,12 +51,16 @@ mkdir -p "$tmp/config/containers/systemd" "$tmp/out" "$tmp/early" "$tmp/late"
 cp deploy/hallucygenie.container "$tmp/config/containers/systemd/hallucygenie.container"
 XDG_CONFIG_HOME="$tmp/config" /usr/lib/systemd/user-generators/podman-user-generator "$tmp/out" "$tmp/early" "$tmp/late" >/dev/null
 systemd-analyze --user verify "$tmp/out/hallucygenie.service"
-bunx tsc --noEmit
+npm exec -- tsc --noEmit
 bundle="$(mktemp)"
 trap 'rm -rf "$tmp" "$bundle"' EXIT
-bunx esbuild public/app.ts --outfile="$bundle" --bundle --format=esm --target=esnext
-bun test test/unit
-bun test test/integration
+npm exec -- esbuild public/app.ts --outfile="$bundle" --bundle --format=esm --target=esnext
+status=0
+LOG_LEVEL=silent node --test test/unit/*.test.ts & unit_pid=$!
+LOG_LEVEL=silent node --test test/integration/*.test.ts & integration_pid=$!
+wait "$unit_pid" || status=$?
+wait "$integration_pid" || status=$?
+if [ "$status" -ne 0 ]; then exit "$status"; fi
 '''
 
 [tasks.test]
@@ -66,6 +70,7 @@ flag "--unit" help="run unit tests"
 flag "--integration" help="run integration tests"
 flag "--e2e" help="run one browser E2E pass"
 flag "--matrix" help="run chromium/firefox × desktop/mobile E2E"
+flag "--coverage" help="run unit+integration with Node coverage"
 flag "--mutation" help="run mutation tests"
 flag "--minimax" help="run real MiniMax smoke test; consumes quota"
 flag "--all" help="run unit+integration+e2e+mutation"
@@ -75,10 +80,11 @@ unit="${usage_unit:-false}"
 integration="${usage_integration:-false}"
 e2e="${usage_e2e:-false}"
 matrix="${usage_matrix:-false}"
+coverage="${usage_coverage:-false}"
 mutation="${usage_mutation:-false}"
 minimax="${usage_minimax:-false}"
 all="${usage_all:-false}"
-if [ "$unit$integration$e2e$matrix$mutation$minimax$all" = "falsefalsefalsefalsefalsefalsefalse" ]; then
+if [ "$unit$integration$e2e$matrix$coverage$mutation$minimax$all" = "falsefalsefalsefalsefalsefalsefalsefalse" ]; then
     unit=true
     integration=true
     e2e=true
@@ -89,29 +95,48 @@ if [ "$all" = "true" ]; then
     e2e=true
     mutation=true
 fi
-if [ "$unit" = "true" ]; then bun test test/unit; fi
-if [ "$integration" = "true" ]; then bun test test/integration; fi
+if [ "$unit" = "true" ] && [ "$integration" = "true" ]; then
+    status=0
+    LOG_LEVEL=silent node --test test/unit/*.test.ts & unit_pid=$!
+    LOG_LEVEL=silent node --test test/integration/*.test.ts & integration_pid=$!
+    wait "$unit_pid" || status=$?
+    wait "$integration_pid" || status=$?
+    if [ "$status" -ne 0 ]; then exit "$status"; fi
+    unit=false
+    integration=false
+fi
+if [ "$unit" = "true" ]; then LOG_LEVEL=silent node --test test/unit/*.test.ts; fi
+if [ "$integration" = "true" ]; then LOG_LEVEL=silent node --test test/integration/*.test.ts; fi
 if [ "$e2e" = "true" ]; then
-    bunx esbuild public/app.ts --outfile=public/app.js --bundle --format=esm --target=esnext
-    bun e2e/run-e2e.ts
+    npm exec -- esbuild public/app.ts --outfile=public/app.js --bundle --format=esm --target=esnext
+    LOG_LEVEL=silent node e2e/run-e2e.ts
 fi
 if [ "$matrix" = "true" ]; then
+    npm exec -- esbuild public/app.ts --outfile=public/app.js --bundle --format=esm --target=esnext
+    matrix_status=0
+    matrix_start="$(date +%s%3N)"
+    port=3000
     for browser in chromium firefox; do
         for device in desktop mobile; do
-            echo "E2E $browser $device"
-            bunx esbuild public/app.ts --outfile=public/app.js --bundle --format=esm --target=esnext
-            HG_E2E_BROWSER="$browser" HG_E2E_DEVICE="$device" bun e2e/run-e2e.ts
+            port=$((port + 1))
+            echo "E2E $browser $device port $port"
+            LOG_LEVEL=silent HG_E2E_BROWSER="$browser" HG_E2E_DEVICE="$device" HG_E2E_PORT="$port" node e2e/run-e2e.ts || matrix_status=$?
         done
     done
+    matrix_end="$(date +%s%3N)"
+    echo "ℹ matrix_wall_ms $((matrix_end - matrix_start))"
+    if [ "$matrix_status" -ne 0 ]; then exit "$matrix_status"; fi
 fi
+if [ "$coverage" = "true" ]; then LOG_LEVEL=silent node --test --experimental-test-coverage test/unit/*.test.ts test/integration/*.test.ts; fi
 if [ "$mutation" = "true" ]; then
+    rm -rf .stryker-tmp
     tmp="$(mktemp)"
-    trap 'rm -f "$tmp"' EXIT
-    bunx esbuild public/app.ts --outfile="$tmp" --bundle --format=esm --target=esnext
+    trap 'rm -f "$tmp"; rm -rf .stryker-tmp' EXIT
+    npm exec -- esbuild public/app.ts --outfile="$tmp" --bundle --format=esm --target=esnext
     status=0
-    bunx stryker run test/stryker.config.mjs & agent=$!
-    bunx stryker run test/stryker-tools.mjs & tools=$!
-    bunx stryker run test/stryker-db.mjs & db=$!
+    npm exec -- stryker run test/stryker.config.mjs & agent=$!
+    npm exec -- stryker run test/stryker-tools.mjs & tools=$!
+    npm exec -- stryker run test/stryker-db.mjs & db=$!
     wait "$agent" || status=$?
     wait "$tools" || status=$?
     wait "$db" || status=$?
@@ -121,7 +146,7 @@ if [ "$minimax" = "true" ]; then
     set -a
     [ ! -f .env ] || . ./.env
     set +a
-    bun scripts/minimax-test.ts
+    node scripts/minimax-test.ts
 fi
 '''
 
@@ -152,7 +177,7 @@ kill_server() {
     for pid in $pids; do
         cmd="$(ps -o args= -p "$pid" 2>/dev/null || true)"
         case "$cmd" in
-            *"bun src/server.ts"*) echo "Killing HallucyGenie server PID $pid"; kill "$pid"; killed=1 ;;
+            *"node src/server.ts"*) echo "Killing HallucyGenie server PID $pid"; kill "$pid"; killed=1 ;;
             *) echo "Refusing to kill PID $pid on port 3000: $cmd" ;;
         esac
     done
@@ -164,20 +189,20 @@ if [ "${usage_fresh:-false}" = "true" ]; then
     kill_server || true
     rm -rf data *.db *.db-shm *.db-wal
 fi
-bunx esbuild public/app.ts --outfile=public/app.js --bundle --format=esm --target=esnext
+npm exec -- esbuild public/app.ts --outfile=public/app.js --bundle --format=esm --target=esnext
 set -a
 [ ! -f .env ] || . ./.env
 set +a
-bun src/server.ts
+node src/server.ts
 '''
 
 [tasks.fonts]
 description = "update vendored Google fonts from pinned or supplied commit"
 usage = 'arg "[commit]" default="8fee968603b86ac85d4fbf0f3ffbde3fed1d84e1"'
 run = '''
-bun scripts/update-fonts.ts "$usage_commit"
+node scripts/update-fonts.ts "$usage_commit"
 mise fmt
-bunx dprint fmt
+npm exec -- dprint fmt
 sqruff fix migrations/*.sql test/fixtures/db/v1.0.0/schema.sql
 '''
 
@@ -191,7 +216,7 @@ flag "--push" help="build and push ghcr.io/bugabinga/hallucygenie:vX.Y.Z"
 run = '''
 set -e
 image="$usage_image"
-package_tag="v$(bun -e 'console.log(JSON.parse(await Bun.file("package.json").text()).version)')"
+package_tag="v$(node -p 'JSON.parse(require("fs").readFileSync("package.json", "utf8")).version')"
 version="${RELEASE_TAG:-$package_tag}"
 smoke() {
     name="hallucygenie-smoke-$(date +%s)-$$"
@@ -200,14 +225,14 @@ smoke() {
     cleanup() { podman rm -f "$name" >/dev/null 2>&1 || true; podman volume rm "$volume" >/dev/null 2>&1 || true; }
     trap cleanup EXIT
     podman run -d --name "$name" -p 127.0.0.1:3099:3000 -e MINIMAX_API_KEY=test-key-for-smoke -v "$volume:/app/data" \
-      --health-cmd "bun --eval \"const port=process.env.PORT||'3000';fetch('http://127.0.0.1:'+port+'/api/health').then((r)=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))\"" \
+      --health-cmd "node --eval \"const port=process.env.PORT||'3000';fetch('http://127.0.0.1:'+port+'/api/health').then((r)=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))\"" \
       --health-interval 30s --health-timeout 3s --health-start-period 5s --health-retries 3 \
       "$image" >/dev/null
     ok=0
     for _ in $(seq 1 30); do if curl -fsS http://127.0.0.1:3099/api/health >/dev/null 2>&1; then ok=1; break; fi; sleep 1; done
     test "$ok" = "1"
     podman healthcheck run "$name" >/dev/null
-    podman inspect "$name" | bun -e 'const container = JSON.parse(await new Response(Bun.stdin.stream()).text())[0]; if (container.State.Health.Status !== "healthy") throw new Error("container not healthy");'
+    podman inspect "$name" | node -e 'let s=""; process.stdin.setEncoding("utf8"); process.stdin.on("data", c => s += c); process.stdin.on("end", () => { const container = JSON.parse(s)[0]; if (container.State.Health.Status !== "healthy") throw new Error("container not healthy"); });'
     curl -fsS http://127.0.0.1:3099/ >/dev/null
     curl -fsS http://127.0.0.1:3099/fonts/pixelify-sans/PixelifySans.woff2 >/dev/null
 }
@@ -215,7 +240,7 @@ if [ "${usage_smoke:-false}" = "true" ]; then smoke; exit 0; fi
 if [ "${usage_push:-false}" = "true" ]; then
     case "$image" in ghcr.io/bugabinga/hallucygenie:v[0-9]*.[0-9]*.[0-9]*) ;; *) echo "image must be ghcr.io/bugabinga/hallucygenie:vX.Y.Z"; exit 1 ;; esac
     version="${image##*:}"
-    RELEASE_TAG="$version" bun scripts/release-check.ts
+    RELEASE_TAG="$version" node scripts/release-check.ts
 fi
 podman build -f deploy/Containerfile --build-arg VERSION="$version" -t "$image" .
 if [ "${usage_push:-false}" = "true" ]; then podman push "$image"; fi
@@ -235,13 +260,13 @@ if [ "${usage_check:-false}" = "true" ]; then
     image="$value"
     mise run check
     mise run test
-    package_tag="v$(bun -e 'console.log(JSON.parse(await Bun.file("package.json").text()).version)')"
+    package_tag="v$(node -p 'JSON.parse(require("fs").readFileSync("package.json", "utf8")).version')"
     release_tag="${RELEASE_TAG:-$package_tag}"
     image_tag="${image##*:}"
     case "$image" in ghcr.io/bugabinga/hallucygenie:*) if [ "$image_tag" != "$release_tag" ]; then echo "image tag $image_tag != RELEASE_TAG $release_tag"; exit 1; fi ;; esac
-    RELEASE_TAG="$release_tag" bun scripts/release-check.ts
+    RELEASE_TAG="$release_tag" node scripts/release-check.ts
     RELEASE_TAG="$release_tag" mise run image "$image"
-    podman inspect "$image" | RELEASE_TAG="$release_tag" bun -e 'const image = JSON.parse(await new Response(Bun.stdin.stream()).text())[0]; const got = image.Config.Labels["org.opencontainers.image.version"]; if (got !== process.env.RELEASE_TAG) throw new Error(`image version label ${got} != ${process.env.RELEASE_TAG}`);'
+    podman inspect "$image" | RELEASE_TAG="$release_tag" node -e 'let s=""; process.stdin.setEncoding("utf8"); process.stdin.on("data", c => s += c); process.stdin.on("end", () => { const image = JSON.parse(s)[0]; const got = image.Config.Labels["org.opencontainers.image.version"]; if (got !== process.env.RELEASE_TAG) throw new Error(`image version label ${got} != ${process.env.RELEASE_TAG}`); });'
     mise run image --smoke "$image"
     exit 0
 fi
@@ -250,7 +275,7 @@ set -a
 set +a
 tag="$value"
 case "$tag" in v[0-9]*.[0-9]*.[0-9]*) ;; *) echo "tag must be vX.Y.Z"; exit 1 ;; esac
-package_tag="v$(bun -e 'console.log(JSON.parse(await Bun.file("package.json").text()).version)')"
+package_tag="v$(node -p 'JSON.parse(require("fs").readFileSync("package.json", "utf8")).version')"
 if [ "$tag" != "$package_tag" ]; then echo "tag $tag != package $package_tag"; exit 1; fi
 image="ghcr.io/bugabinga/hallucygenie:$tag"
 RELEASE_TAG="$tag" mise run release --check "$image"
@@ -266,7 +291,7 @@ cleanup() { podman rm -f "$name" >/dev/null 2>&1 || true; podman volume rm "$vol
 trap cleanup EXIT
 podman volume create "$volume" >/dev/null
 podman run -d --name "$name" -p 127.0.0.1:3100:3000 -e MINIMAX_API_KEY -v "$volume:/app/data" \
-  --health-cmd "bun --eval \"const port=process.env.PORT||'3000';fetch('http://127.0.0.1:'+port+'/api/health').then((r)=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))\"" \
+  --health-cmd "node --eval \"const port=process.env.PORT||'3000';fetch('http://127.0.0.1:'+port+'/api/health').then((r)=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))\"" \
   --health-interval 30s --health-timeout 3s --health-start-period 5s --health-retries 3 \
   "$image" >/dev/null
 ok=0

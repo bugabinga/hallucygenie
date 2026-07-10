@@ -215,6 +215,101 @@ describe("API Headers", () => {
     });
 });
 
+// ── Exported API helpers ──────────────────────────────────────────────
+
+describe("exported API helpers", () => {
+    it("loads history and profile data", async () => {
+        const calls: string[] = [];
+        globalThis.fetch = async (input: RequestInfo | URL) => {
+            calls.push(String(input));
+            if (String(input) === "/api/history") {
+                return new Response(
+                    JSON.stringify({ messages: [{ role: "user", content: "hi" }] }),
+                    {
+                        status: 200,
+                        headers: { "Content-Type": "application/json" }
+                    }
+                );
+            }
+            if (String(input) === "/api/profile") {
+                return new Response(
+                    JSON.stringify({
+                        version: 1,
+                        username: "Player",
+                        interests: "games",
+                        hates: "lag",
+                        favorites: "blue",
+                        avatar: { type: "asset", value: "" },
+                        updatedAt: 1
+                    }),
+                    { status: 200, headers: { "Content-Type": "application/json" } }
+                );
+            }
+            throw new Error(`unexpected fetch ${String(input)}`);
+        };
+
+        assert.deepEqual(await fetchHistory(), [{ role: "user", content: "hi" }]);
+        assert.equal((await fetchProfile()).username, "Player");
+        assert.deepEqual(calls, ["/api/history", "/api/profile"]);
+    });
+
+    it("saves, deletes, and steers with JSON requests", async () => {
+        const calls: Array<{ url: string; init?: RequestInit; }> = [];
+        const profile = {
+            version: 1,
+            username: "Player",
+            interests: "games",
+            hates: "lag",
+            favorites: "blue",
+            avatar: { type: "asset" as const, value: "" },
+            updatedAt: 1
+        };
+        globalThis.fetch = async (input: RequestInfo | URL, init?: RequestInit) => {
+            calls.push({ url: String(input), init });
+            return new Response(JSON.stringify(profile), {
+                status: 200,
+                headers: { "Content-Type": "application/json" }
+            });
+        };
+
+        assert.equal((await putProfile(profile)).username, "Player");
+        assert.equal((await deleteProfile()).username, "Player");
+        await sendSteer("make it brighter");
+
+        assert.equal(calls[0]?.url, "/api/profile");
+        assert.equal(calls[0]?.init?.method, "PUT");
+        assert.equal(new Headers(calls[0]?.init?.headers).get("Content-Type"), "application/json");
+        assert.equal(JSON.parse(String(calls[0]?.init?.body)).username, "Player");
+        assert.equal(calls[1]?.url, "/api/profile");
+        assert.equal(calls[1]?.init?.method, "DELETE");
+        assert.equal(calls[2]?.url, "/api/steer");
+        assert.equal(calls[2]?.init?.method, "POST");
+        assert.deepEqual(JSON.parse(String(calls[2]?.init?.body)), { message: "make it brighter" });
+    });
+
+    it("throws named errors for failed API helpers", async () => {
+        globalThis.fetch = async () => new Response("nope", { status: 500 });
+
+        await assert.rejects(() => fetchHistory(), /Failed to load history: 500/);
+        await assert.rejects(() => sendSteer("x"), /Steer failed: 500/);
+        await assert.rejects(() => fetchProfile(), /Failed to load profile: 500/);
+        await assert.rejects(
+            () =>
+                putProfile({
+                    version: 1,
+                    username: "x",
+                    interests: "",
+                    hates: "",
+                    favorites: "",
+                    avatar: { type: "asset", value: "" },
+                    updatedAt: 1
+                }),
+            /Failed to save profile: 500/
+        );
+        await assert.rejects(() => deleteProfile(), /Failed to reset profile: 500/);
+    });
+});
+
 // ── Tool Emojis ────────────────────────────────────────────────────────
 
 describe("Create image control helpers", () => {
@@ -637,8 +732,7 @@ describe("Snapshot Tests - Message Bubbles", () => {
         return card;
     }
 
-    // Snapshot tests use inline HTML comparison since bun test runner
-    // doesn't have assert.snapshot
+    // Snapshot tests use inline HTML comparison.
 
     it("snapshot: user message bubble HTML structure", () => {
         const msg = renderUserMessage("Hello HallucyGenie!");
@@ -1010,6 +1104,7 @@ function createTestWindow(options?: ConstructorParameters<typeof Window>[0]): Wi
 import {
     autoResizeInput,
     closeLightbox,
+    createElement,
     deleteProfile,
     fetchHistory,
     fetchProfile,
@@ -1018,6 +1113,8 @@ import {
     loadHistory,
     normalizedProfileFromForm,
     openLightbox,
+    parseSSEChunk as appParseSSEChunk,
+    parseSSELine as appParseSSELine,
     putProfile,
     renderAssistantMessage,
     renderProfileAvatar,
@@ -1029,6 +1126,7 @@ import {
     sendCreateTool,
     sendMessage,
     sendSteer,
+    sendSteerMessage,
     showError,
     streamChat,
     updateQuotaBadge
@@ -1378,6 +1476,73 @@ describe("renderThinkingBlock (imported)", () => {
 // Step 2: streamChat Error Paths
 // ═══════════════════════════════════════════════════════════════════════
 
+describe("exported app edge helpers", () => {
+    it("parses SSE comments, trailing buffers, and data-only events", () => {
+        assert.equal(appParseSSELine(":keep-alive"), null);
+        assert.deepEqual([...appParseSSEChunk("data: {\"delta\":\"tail\"}")], [
+            { event: "message", data: "{\"delta\":\"tail\"}" }
+        ]);
+    });
+
+    it("createElement handles missing attrs and node children", () => {
+        setupDOM();
+        const child = document.createElement("strong");
+        child.textContent = "node";
+        const el = createElement("p", undefined, ["text ", child]);
+        assert.equal(el.tagName, "P");
+        assert.equal(el.textContent, "text node");
+    });
+
+    it("asset avatar falls back on image load error", () => {
+        setupDOM();
+        const avatar = renderProfileAvatar({
+            version: 1,
+            username: "",
+            avatar: { kind: "asset", value: "asset_dead-beef" },
+            preferences: { tone: "", safety: "", theme: "" }
+        });
+        const img = avatar.querySelector("img") as HTMLImageElement;
+        img.dispatchEvent(new Event("error"));
+        assert.equal(avatar.textContent, "🎮");
+    });
+
+    it("tool tweak button dispatches tweak detail", () => {
+        setupDOM();
+        const card = renderToolResult(
+            "generate_image",
+            { type: "image", content: "/asset/a.png" },
+            {
+                prompt: "cat"
+            }
+        );
+        let detail: unknown;
+        document.addEventListener("hallucygenie:tweak-tool", (event) => {
+            detail = (event as CustomEvent).detail;
+        });
+        (card.querySelector(".tool-tweak-button") as HTMLButtonElement).click();
+        assert.deepEqual(detail, { toolName: "generate_image", input: { prompt: "cat" } });
+    });
+
+    it("loadAssets shows failure copy on fetch rejection", async () => {
+        setupDOM();
+        globalThis.fetch = () => Promise.reject(new Error("offline"));
+        loadAssets();
+        await new Promise((resolve) => setTimeout(resolve, 20));
+        const empty = document.querySelector("#assets-empty") as HTMLElement;
+        assert.equal(empty.hidden, false);
+        assert.equal(empty.textContent, "Failed to load assets 😕");
+    });
+
+    it("showError hides provider JSON and leaked bearer tokens", () => {
+        setupDOM();
+        showError("authorization: Bearer abc.def-123");
+        assert.equal(
+            document.querySelector("#error-toast-message")?.textContent,
+            "Something went wrong. Try again! 🤷"
+        );
+    });
+});
+
 describe("streamChat error paths", () => {
     let doc: Document;
 
@@ -1438,6 +1603,43 @@ describe("streamChat error paths", () => {
         assert.equal(msg, "No response from server 😴");
     });
 
+    it("assistant turn start resets prior streamed assistant buffers", async () => {
+        setupDOM();
+        const chunks = [
+            sseText("first"),
+            sseEvent("assistant_turn_start", "{}"),
+            sseText("second"),
+            sseDone()
+        ];
+        globalThis.fetch = () => Promise.resolve(createSSEResponse(chunks));
+
+        await sendMessage("hi");
+
+        assert.equal(document.querySelectorAll(".message--assistant").length, 2);
+        assert.match(document.querySelector("#message-list")?.textContent ?? "", /first/);
+        assert.match(document.querySelector("#message-list")?.textContent ?? "", /second/);
+    });
+
+    it("processes trailing SSE buffer without final blank line", async () => {
+        setupDOM();
+        const encoder = new TextEncoder();
+        globalThis.fetch = () =>
+            Promise.resolve(
+                new Response(
+                    new ReadableStream({
+                        start(controller) {
+                            controller.enqueue(encoder.encode("data: {\"delta\":\"tail\"}"));
+                            controller.close();
+                        }
+                    }),
+                    { status: 200 }
+                )
+            );
+        const events: Array<{ event: string; data: string; }> = [];
+        await streamChat([{ role: "user", content: "hi" }], (event) => events.push(event));
+        assert.deepEqual(events, [{ event: "message", data: "{\"delta\":\"tail\"}" }]);
+    });
+
     it("network error (fetch throws) → rejects with error", async () => {
         globalThis.fetch = () => Promise.reject(new Error("Network error"));
 
@@ -1465,7 +1667,8 @@ describe("streamChat error paths", () => {
         };
 
         await streamChat([{ role: "user", content: "hi" }]);
-        assert.equal((request?.headers as Record<string, string>)["X-Session-Id"], undefined);
+        assert.ok(request);
+        assert.equal((request.headers as Record<string, string>)["X-Session-Id"], undefined);
     });
 });
 
@@ -1619,6 +1822,33 @@ describe("streamChat SSE processing", () => {
         );
     });
 
+    it("renders streamed video tool results as playable video cards", async () => {
+        const { doc: newDoc } = setupDOM();
+        doc = newDoc;
+        const chunks = [
+            sseEvent("tool_start", JSON.stringify({ id: "tool-video", name: "generate_video" })),
+            sseEvent(
+                "tool_result",
+                JSON.stringify({
+                    id: "tool-video",
+                    name: "generate_video",
+                    result: { type: "video", content: "/asset/clip.mp4" }
+                })
+            ),
+            sseDone()
+        ];
+        globalThis.fetch = (url: string) => {
+            if (String(url) === "/api/chat") return Promise.resolve(createSSEResponse(chunks));
+            return Promise.resolve(new Response("{}", { status: 200 }));
+        };
+
+        await sendMessage("Make a fox video");
+
+        const video = doc.querySelector("video.tool-result-video") as HTMLVideoElement | null;
+        assert.ok(video);
+        assert.equal(video.getAttribute("src"), "/asset/clip.mp4");
+    });
+
     it("Create tool endpoint renders kid label and clears draft after success", async () => {
         const { doc: newDoc } = setupDOM();
         doc = newDoc;
@@ -1735,6 +1965,103 @@ describe("streamChat SSE processing", () => {
             calls.some((call) => call.url === "/api/draft/create" && call.method === "DELETE"),
             false
         );
+    });
+
+    it("draft API failures never block restore, save, or clear", async () => {
+        const { doc: newDoc } = setupDOM();
+        doc = newDoc;
+        const sessionSelect = doc.createElement("select");
+        sessionSelect.id = "session-select";
+        doc.body.appendChild(sessionSelect);
+        globalThis.fetch = (url: string, _init?: RequestInit) => {
+            if (String(url).startsWith("/api/draft/")) {
+                return Promise.reject(new Error("draft db down"));
+            }
+            if (String(url) === "/api/chat") return Promise.resolve(createSSEResponse([sseDone()]));
+            if (String(url) === "/api/profile") {
+                return Promise.resolve(
+                    new Response(
+                        JSON.stringify({
+                            version: 1,
+                            username: "",
+                            interests: "",
+                            hates: "",
+                            favorites: "",
+                            avatar: { type: "emoji", value: "🎮" },
+                            updatedAt: 0
+                        }),
+                        { headers: { "Content-Type": "application/json" } }
+                    )
+                );
+            }
+            return Promise.resolve(new Response(JSON.stringify({}), { status: 200 }));
+        };
+
+        init();
+        await Promise.resolve();
+        (doc.querySelector("#create-btn") as HTMLButtonElement).click();
+        (doc.querySelector("#create-close") as HTMLButtonElement).click();
+        await sendMessage("hello");
+
+        assert.equal((doc.querySelector("#create-modal") as HTMLElement).hidden, true);
+    });
+
+    it("sendMessage shows connection error when chat stream fails", async () => {
+        setupDOM();
+        globalThis.fetch = () => Promise.reject(new Error("offline"));
+
+        await sendMessage("hello");
+
+        assert.match(
+            document.querySelector("#error-toast-message")?.textContent ?? "",
+            /Connection lost/
+        );
+    });
+
+    it("sendCreateTool shows connection error when create stream fails", async () => {
+        setupDOM();
+        globalThis.fetch = () => Promise.reject(new Error("offline"));
+        await sendCreateTool("generate_image", { prompt: "cat" }, "Create image: cat");
+        assert.match(
+            document.querySelector("#error-toast-message")?.textContent ?? "",
+            /Connection lost/
+        );
+    });
+
+    it("sendSteerMessage ignores blank/non-streaming and reports steer failures while streaming", async () => {
+        setupDOM();
+        await sendSteerMessage("ignored");
+        assert.equal(document.querySelector("#message-list")?.textContent ?? "", "");
+
+        let calls = 0;
+        let controller: ReadableStreamDefaultController<Uint8Array> | null = null;
+        globalThis.fetch = (url: string) => {
+            calls++;
+            if (url === "/api/chat") {
+                return Promise.resolve(
+                    new Response(
+                        new ReadableStream({
+                            start(c) {
+                                controller = c;
+                            }
+                        }),
+                        { status: 200 }
+                    )
+                );
+            }
+            return Promise.resolve(new Response(JSON.stringify({ error: "no" }), { status: 500 }));
+        };
+        const pending = sendMessage("hi");
+        await new Promise((resolve) => setTimeout(resolve, 20));
+        await sendSteerMessage("left please");
+        assert.match(document.querySelector("#message-list")?.textContent ?? "", /left please/);
+        assert.match(
+            document.querySelector("#error-toast-message")?.textContent ?? "",
+            /Couldn't steer/
+        );
+        assert.equal(calls >= 2, true);
+        controller?.close();
+        await pending;
     });
 
     it("tool result error preserves create draft after done", async () => {
@@ -2392,6 +2719,54 @@ describe("loadHistory", () => {
         assert.ok(doc.querySelector(".assistant-text-region")?.textContent?.includes("Done."));
     });
 
+    it("history ignores malformed tool call JSON and infers audio/video tool cards", async () => {
+        setupDOM();
+        doc = globalThis.document;
+
+        globalThis.fetch = () =>
+            Promise.resolve(
+                new Response(
+                    JSON.stringify({
+                        messages: [
+                            {
+                                role: "assistant",
+                                content: "Bad metadata survives.",
+                                tool_calls_json: "{bad json"
+                            },
+                            {
+                                role: "assistant",
+                                content: "",
+                                tool_calls_json: JSON.stringify([
+                                    { id: "tc-audio", name: "text_to_speech", input: {} },
+                                    { id: "tc-video", name: "generate_video", input: {} },
+                                    { id: 42, name: null, input: {} }
+                                ])
+                            },
+                            {
+                                role: "tool",
+                                content: "https://cdn.example/sound.mp3",
+                                tool_call_id: "tc-audio"
+                            },
+                            {
+                                role: "tool",
+                                content: "https://cdn.example/movie.mp4",
+                                tool_call_id: "tc-video"
+                            }
+                        ]
+                    }),
+                    { status: 200, headers: { "Content-Type": "application/json" } }
+                )
+            );
+
+        await loadHistory();
+
+        assert.ok(
+            doc.querySelector(".assistant-text-region")?.textContent?.includes("Bad metadata")
+        );
+        assert.equal(doc.querySelectorAll("audio.tool-result-audio").length, 1);
+        assert.equal(doc.querySelectorAll("video.tool-result-video").length, 1);
+    });
+
     it("history rehydrates tool errors", async () => {
         setupDOM();
         doc = globalThis.document;
@@ -2436,6 +2811,40 @@ describe("loadHistory", () => {
         // Should not throw
         await loadHistory();
         assert.ok(true, "should not crash");
+    });
+
+    it("loadHistory restores video tool cards and plain text tool fallbacks", async () => {
+        setupDOM();
+        doc = globalThis.document;
+        globalThis.fetch = () =>
+            Promise.resolve(
+                new Response(
+                    JSON.stringify({
+                        messages: [
+                            {
+                                role: "assistant",
+                                content: "Here",
+                                tool_calls_json: JSON.stringify([
+                                    { id: "video-tool", name: "generate_video", input: {} },
+                                    { id: "text-tool", name: "web_search", input: {} }
+                                ])
+                            },
+                            {
+                                role: "tool",
+                                content: "/asset/movie.mp4",
+                                tool_call_id: "video-tool"
+                            },
+                            { role: "tool", content: "plain result", tool_call_id: "text-tool" }
+                        ]
+                    }),
+                    { headers: { "Content-Type": "application/json" } }
+                )
+            );
+
+        await loadHistory();
+
+        assert.ok(doc.querySelector("video.tool-result-video"));
+        assert.match(doc.querySelector("#message-list")?.textContent ?? "", /plain result/);
     });
 
     it("fetch returns non-OK → throws and loadHistory catches", async () => {
@@ -2690,6 +3099,147 @@ describe("init event binding", () => {
         assert.ok(preview.src.includes("/asset/asset_12345678"));
     });
 
+    it("Pasted chat image rejects bad images and restores placeholder on upload failure", async () => {
+        setupFullDOM();
+        globalThis.fetch = () => Promise.resolve(new Response(JSON.stringify({}), { status: 500 }));
+        init();
+        const input = doc.querySelector("#chat-input") as HTMLTextAreaElement;
+        input.placeholder = "Say hi";
+
+        const bad = new win.File(["x"], "bad.txt", { type: "text/plain" });
+        const ignored = new win.Event("paste", { bubbles: true, cancelable: true });
+        Object.defineProperty(ignored, "clipboardData", { value: { files: [bad] } });
+        input.dispatchEvent(ignored);
+        assert.equal(doc.querySelector("#error-toast-message")?.textContent ?? "", "");
+
+        const huge = new win.File(["x"], "huge.png", { type: "image/png" });
+        Object.defineProperty(huge, "size", { value: 21 * 1024 * 1024, configurable: true });
+        const invalid = new win.Event("paste", { bubbles: true, cancelable: true });
+        Object.defineProperty(invalid, "clipboardData", { value: { files: [huge] } });
+        input.dispatchEvent(invalid);
+        await new Promise((resolve) => setTimeout(resolve, 20));
+        assert.match(doc.querySelector("#error-toast-message")?.textContent ?? "", /too big/);
+
+        const good = new win.File(["png"], "clip.png", { type: "image/png" });
+        const fail = new win.Event("paste", { bubbles: true, cancelable: true });
+        Object.defineProperty(fail, "clipboardData", { value: { files: [good] } });
+        input.dispatchEvent(fail);
+        await new Promise((resolve) => setTimeout(resolve, 30));
+        assert.match(
+            doc.querySelector("#error-toast-message")?.textContent ?? "",
+            /Failed to upload pasted image/
+        );
+        assert.equal(input.placeholder, "Say hi");
+    });
+
+    it("Create image reference upload validates, previews, fails, and clears", async () => {
+        setupFullDOM();
+        const calls: string[] = [];
+        globalThis.fetch = (url: string) => {
+            calls.push(url);
+            if (url === "/api/reference-image") {
+                return Promise.resolve(
+                    new Response(
+                        JSON.stringify({ assetId: "asset_ref", assetUrl: "/asset/asset_ref" }),
+                        { status: 200 }
+                    )
+                );
+            }
+            return Promise.resolve(new Response(JSON.stringify({}), { status: 200 }));
+        };
+        init();
+
+        const fileInput = doc.querySelector("#img-reference-file") as HTMLInputElement;
+        const asset = doc.querySelector("#img-reference-asset") as HTMLInputElement;
+        const status = doc.querySelector("#img-reference-status") as HTMLElement;
+        const clear = doc.querySelector("#img-reference-clear") as HTMLButtonElement;
+
+        const bad = new win.File(["bad"], "ref.gif", { type: "image/gif" });
+        Object.defineProperty(fileInput, "files", { value: [bad], configurable: true });
+        fileInput.dispatchEvent(new win.Event("change", { bubbles: true }));
+        assert.match(doc.querySelector("#error-toast-message")?.textContent ?? "", /PNG or JPG/);
+
+        const good = new win.File(["jpg"], "ref.jpg", { type: "image/jpeg" });
+        Object.defineProperty(fileInput, "files", { value: [good], configurable: true });
+        fileInput.dispatchEvent(new win.Event("change", { bubbles: true }));
+        await new Promise((resolve) => setTimeout(resolve, 30));
+        assert.ok(calls.includes("/api/reference-image"));
+        assert.equal(asset.value, "asset_ref");
+        assert.match(status.textContent ?? "", /Reference ready/);
+        assert.equal(
+            doc.querySelector<HTMLImageElement>("#img-reference-preview img")?.getAttribute("src"),
+            "/asset/asset_ref"
+        );
+
+        clear.click();
+        assert.equal(asset.value, "");
+        assert.equal(clear.disabled, true);
+
+        globalThis.fetch = () => Promise.resolve(new Response(JSON.stringify({}), { status: 500 }));
+        Object.defineProperty(fileInput, "files", { value: [good], configurable: true });
+        fileInput.dispatchEvent(new win.Event("change", { bubbles: true }));
+        await new Promise((resolve) => setTimeout(resolve, 30));
+        assert.match(
+            doc.querySelector("#error-toast-message")?.textContent ?? "",
+            /Failed to upload reference/
+        );
+    });
+
+    it("draft persistence runs on input, visibility hidden, and pagehide", async () => {
+        setupFullDOM();
+        doc.querySelector("header")?.insertAdjacentHTML(
+            "beforeend",
+            "<select id=\"session-select\"></select>"
+        );
+        const draftCalls: Array<{ url: string; body: string; }> = [];
+        globalThis.fetch = (url: string, init?: RequestInit) => {
+            if (String(url).startsWith("/api/draft/")) {
+                draftCalls.push({ url: String(url), body: String(init?.body ?? "") });
+                return Promise.resolve(
+                    new Response(JSON.stringify({ draft: null }), { status: 200 })
+                );
+            }
+            if (url === "/api/sessions") {
+                return Promise.resolve(
+                    new Response(JSON.stringify({ activeSessionId: "s1", sessions: [] }), {
+                        status: 200
+                    })
+                );
+            }
+            if (url === "/api/history") {
+                return Promise.resolve(
+                    new Response(JSON.stringify({ messages: [] }), { status: 200 })
+                );
+            }
+            return Promise.resolve(new Response(JSON.stringify({}), { status: 200 }));
+        };
+        init();
+        await new Promise((resolve) => setTimeout(resolve, 20));
+
+        const chat = doc.querySelector("#chat-input") as HTMLTextAreaElement;
+        chat.value = "draft text";
+        chat.dispatchEvent(new win.Event("input", { bubbles: true }));
+        (doc.querySelector("#music-prompt") as HTMLTextAreaElement).value = "draft music";
+        doc.querySelector("#music-prompt")?.dispatchEvent(
+            new win.Event("input", { bubbles: true })
+        );
+        Object.defineProperty(doc, "visibilityState", { value: "hidden", configurable: true });
+        win.dispatchEvent(new win.Event("visibilitychange"));
+        win.dispatchEvent(new win.Event("pagehide"));
+        await new Promise((resolve) => setTimeout(resolve, 20));
+
+        assert.ok(
+            draftCalls.some((call) =>
+                call.url === "/api/draft/chat" && call.body.includes("draft text")
+            )
+        );
+        assert.ok(
+            draftCalls.some((call) =>
+                call.url === "/api/draft/create" && call.body.includes("draft music")
+            )
+        );
+    });
+
     it("Escape → closes lightbox", () => {
         setupFullDOM();
 
@@ -2787,6 +3337,868 @@ describe("init event binding", () => {
             input: { image_url: "/asset/asset_1", prompt: "What do you see in this image?" }
         });
         assert.equal(JSON.stringify(calls).includes("data:image"), false);
+    });
+
+    it("Create form submitters send exact tool payloads", async () => {
+        setupFullDOM();
+        const calls: Array<{ url: string; body: string; }> = [];
+        globalThis.fetch = (url: string, init?: RequestInit) => {
+            calls.push({ url: String(url), body: String(init?.body ?? "") });
+            if (url === "/api/create-tool") return Promise.resolve(createSSEResponse([sseDone()]));
+            if (url === "/api/profile") {
+                return Promise.resolve(
+                    new Response(
+                        JSON.stringify({
+                            version: 1,
+                            username: "",
+                            interests: "",
+                            hates: "",
+                            favorites: "",
+                            avatar: { type: "asset", value: "" },
+                            updatedAt: 0
+                        }),
+                        { status: 200, headers: { "Content-Type": "application/json" } }
+                    )
+                );
+            }
+            return Promise.resolve(new Response(JSON.stringify({}), { status: 200 }));
+        };
+        init();
+
+        (doc.querySelector("#img-prompt") as HTMLTextAreaElement).value = "sky castle";
+        (doc.querySelector("#img-seed") as HTMLInputElement).value = "12345";
+        (doc.querySelector("#img-width") as HTMLInputElement).value = "1024";
+        (doc.querySelector("#img-height") as HTMLInputElement).value = "576";
+        (doc.querySelector("#img-reference-asset") as HTMLInputElement).value = "asset_ref";
+        (doc.querySelector("#img-prompt-optimizer") as HTMLInputElement).checked = true;
+        (doc.querySelector("#create-image-form") as HTMLFormElement).dispatchEvent(
+            new win.Event("submit", { bubbles: true, cancelable: true })
+        );
+        await new Promise((resolve) => setTimeout(resolve, 20));
+
+        (doc.querySelector("#music-prompt") as HTMLTextAreaElement).value = "boss music";
+        (doc.querySelector("#music-lyrics") as HTMLTextAreaElement).value = "la la";
+        (doc.querySelector("#create-music-form") as HTMLFormElement).dispatchEvent(
+            new win.Event("submit", { bubbles: true, cancelable: true })
+        );
+        await new Promise((resolve) => setTimeout(resolve, 20));
+
+        (doc.querySelector("#video-prompt") as HTMLTextAreaElement).value = "fox trailer";
+        (doc.querySelector("#video-duration") as HTMLSelectElement).value = "10";
+        (doc.querySelector("#video-resolution") as HTMLSelectElement).value = "1080p";
+        (doc.querySelector("#create-video-form") as HTMLFormElement).dispatchEvent(
+            new win.Event("submit", { bubbles: true, cancelable: true })
+        );
+        await new Promise((resolve) => setTimeout(resolve, 20));
+
+        (doc.querySelector("#voice-text") as HTMLTextAreaElement).value = "short line";
+        (doc.querySelector("#create-voice-form") as HTMLFormElement).dispatchEvent(
+            new win.Event("submit", { bubbles: true, cancelable: true })
+        );
+        await new Promise((resolve) => setTimeout(resolve, 20));
+
+        (doc.querySelector("#analyze-url") as HTMLInputElement).value =
+            "https://example.com/cat.png";
+        (doc.querySelector("#analyze-prompt") as HTMLTextAreaElement).value = "Name it";
+        (doc.querySelector("#create-analyze-form") as HTMLFormElement).dispatchEvent(
+            new win.Event("submit", { bubbles: true, cancelable: true })
+        );
+        await new Promise((resolve) => setTimeout(resolve, 20));
+
+        (doc.querySelector("#search-query") as HTMLTextAreaElement).value = "minecraft redstone";
+        (doc.querySelector("#create-search-form") as HTMLFormElement).dispatchEvent(
+            new win.Event("submit", { bubbles: true, cancelable: true })
+        );
+        await new Promise((resolve) => setTimeout(resolve, 40));
+
+        const payloads = calls
+            .filter((call) => call.url === "/api/create-tool")
+            .map((call) => JSON.parse(call.body));
+        assert.deepEqual(payloads, [
+            {
+                tool_name: "generate_image",
+                input: {
+                    prompt: "sky castle",
+                    aspect_ratio: "16:9",
+                    prompt_optimizer: true,
+                    seed: 12345,
+                    width: 1024,
+                    height: 576,
+                    reference_asset_id: "asset_ref"
+                }
+            },
+            {
+                tool_name: "generate_music",
+                input: { prompt: "boss music", lyrics: "la la" }
+            },
+            {
+                tool_name: "generate_video",
+                input: { prompt: "fox trailer", duration: 10, resolution: "1080p" }
+            },
+            {
+                tool_name: "text_to_speech",
+                input: {
+                    text: "short line",
+                    speed: 1,
+                    voice_id: "English_expressive_narrator",
+                    volume: 1,
+                    pitch: 0
+                }
+            },
+            {
+                tool_name: "analyze_image",
+                input: { image_url: "https://example.com/cat.png", prompt: "Name it" }
+            },
+            { tool_name: "web_search", input: { query: "minecraft redstone" } }
+        ]);
+    });
+
+    it("What's New modal opens, traps focus, closes, and restores focus", () => {
+        setupFullDOM();
+        doc.querySelector("header")?.insertAdjacentHTML(
+            "beforeend",
+            "<button id=\"whats-new-btn\" type=\"button\">v1.0</button><div id=\"whats-new-modal\" hidden><div class=\"whats-new-backdrop\"></div><button id=\"whats-new-close\" type=\"button\">Close</button><a href=\"#x\">Link</a></div>"
+        );
+        init();
+
+        const btn = doc.querySelector("#whats-new-btn") as HTMLButtonElement;
+        const modal = doc.querySelector("#whats-new-modal") as HTMLElement;
+        const close = doc.querySelector("#whats-new-close") as HTMLButtonElement;
+        const link = modal.querySelector("a") as HTMLAnchorElement;
+
+        btn.focus();
+        btn.click();
+        assert.equal(modal.hidden, false);
+        assert.equal(doc.activeElement, close);
+
+        link.focus();
+        modal.dispatchEvent(
+            new win.KeyboardEvent("keydown", { key: "Tab", bubbles: true, cancelable: true })
+        );
+        assert.equal(doc.activeElement, close);
+
+        close.click();
+        assert.equal(modal.hidden, true);
+        assert.equal(doc.activeElement, btn);
+
+        btn.click();
+        modal.querySelector<HTMLElement>(".whats-new-backdrop")?.click();
+        assert.equal(modal.hidden, true);
+    });
+
+    it("Create form validation blocks empty required fields", async () => {
+        setupFullDOM();
+        const calls: string[] = [];
+        globalThis.fetch = (url: string) => {
+            calls.push(String(url));
+            if (url === "/api/profile") {
+                return Promise.resolve(
+                    new Response(
+                        JSON.stringify({
+                            version: 1,
+                            username: "",
+                            interests: "",
+                            hates: "",
+                            favorites: "",
+                            avatar: { type: "emoji", value: "🎮" },
+                            updatedAt: 0
+                        }),
+                        { status: 200 }
+                    )
+                );
+            }
+            return Promise.resolve(new Response(JSON.stringify({}), { status: 200 }));
+        };
+        init();
+
+        (doc.querySelector("#create-image-form") as HTMLFormElement).dispatchEvent(
+            new win.Event("submit", { bubbles: true, cancelable: true })
+        );
+        assert.match(
+            doc.querySelector("#error-toast-message")?.textContent ?? "",
+            /Describe your image/
+        );
+
+        (doc.querySelector("#create-analyze-form") as HTMLFormElement).dispatchEvent(
+            new win.Event("submit", { bubbles: true, cancelable: true })
+        );
+        assert.match(
+            doc.querySelector("#error-toast-message")?.textContent ?? "",
+            /Choose an image/
+        );
+
+        (doc.querySelector("#music-prompt") as HTMLTextAreaElement).value = "";
+        doc.querySelector("#write-lyrics-btn")?.dispatchEvent(new win.Event("click"));
+        assert.match(
+            doc.querySelector("#error-toast-message")?.textContent ?? "",
+            /Describe the music/
+        );
+
+        const coverSourceKind = doc.querySelector("#cover-source-kind") as HTMLSelectElement;
+        coverSourceKind.value = "direct";
+        doc.querySelector("#cover-preprocess")?.dispatchEvent(new win.Event("click"));
+        assert.match(
+            doc.querySelector("#error-toast-message")?.textContent ?? "",
+            /Paste an audio or YouTube URL/
+        );
+
+        doc.querySelector("#cover-generate")?.dispatchEvent(new win.Event("click"));
+        assert.match(
+            doc.querySelector("#error-toast-message")?.textContent ?? "",
+            /Prepare the cover/
+        );
+        assert.equal(calls.includes("/api/create-tool"), false);
+    });
+
+    it("Profile modal reports validation and API failures", async () => {
+        setupFullDOM();
+        globalThis.fetch = (url: string, init?: RequestInit) => {
+            if (url === "/api/profile" && init?.method === "PUT") {
+                return Promise.resolve(
+                    new Response(JSON.stringify({ error: "no" }), { status: 500 })
+                );
+            }
+            if (url === "/api/profile" && init?.method === "DELETE") {
+                return Promise.resolve(
+                    new Response(JSON.stringify({ error: "no" }), { status: 500 })
+                );
+            }
+            if (url === "/api/profile/avatar/generate") {
+                return Promise.resolve(
+                    new Response(JSON.stringify({ error: "no" }), { status: 500 })
+                );
+            }
+            if (url === "/api/profile/avatar") {
+                return Promise.resolve(
+                    new Response(JSON.stringify({ error: "no" }), { status: 500 })
+                );
+            }
+            if (url === "/api/profile") {
+                return Promise.resolve(
+                    new Response(JSON.stringify({ error: "no" }), { status: 500 })
+                );
+            }
+            return Promise.resolve(new Response(JSON.stringify({}), { status: 200 }));
+        };
+        init();
+
+        (doc.querySelector("#profile-btn") as HTMLButtonElement).click();
+        await new Promise((resolve) => setTimeout(resolve, 20));
+        assert.match(
+            doc.querySelector("#error-toast-message")?.textContent ?? "",
+            /Failed to load profile/
+        );
+
+        const avatarAsset = doc.querySelector("#profile-avatar-asset") as HTMLInputElement;
+        avatarAsset.value = "data:image/png;base64,bad";
+        (doc.querySelector("#profile-form") as HTMLFormElement).dispatchEvent(
+            new win.Event("submit", { bubbles: true, cancelable: true })
+        );
+        assert.match(
+            doc.querySelector("#error-toast-message")?.textContent ?? "",
+            /Avatar asset id is invalid/
+        );
+
+        (doc.querySelector("#profile-generate") as HTMLButtonElement).click();
+        assert.match(
+            doc.querySelector("#error-toast-message")?.textContent ?? "",
+            /Avatar asset id is invalid/
+        );
+
+        const avatarInput = doc.querySelector("#profile-avatar-upload") as HTMLInputElement;
+        Object.defineProperty(avatarInput, "files", {
+            value: [new win.File(["x"], "a.png", { type: "image/png" })],
+            configurable: true
+        });
+        avatarInput.dispatchEvent(new win.Event("change", { bubbles: true }));
+        assert.match(
+            doc.querySelector("#error-toast-message")?.textContent ?? "",
+            /Avatar asset id is invalid/
+        );
+
+        avatarAsset.value = "";
+        (doc.querySelector("#profile-form") as HTMLFormElement).dispatchEvent(
+            new win.Event("submit", { bubbles: true, cancelable: true })
+        );
+        await new Promise((resolve) => setTimeout(resolve, 20));
+        assert.match(
+            doc.querySelector("#error-toast-message")?.textContent ?? "",
+            /Failed to save profile/
+        );
+
+        (doc.querySelector("#profile-reset") as HTMLButtonElement).click();
+        await new Promise((resolve) => setTimeout(resolve, 20));
+        assert.match(
+            doc.querySelector("#error-toast-message")?.textContent ?? "",
+            /Failed to reset profile/
+        );
+
+        (doc.querySelector("#profile-generate") as HTMLButtonElement).click();
+        await new Promise((resolve) => setTimeout(resolve, 20));
+        assert.match(
+            doc.querySelector("#error-toast-message")?.textContent ?? "",
+            /Failed to generate avatar/
+        );
+
+        Object.defineProperty(avatarInput, "files", {
+            value: [new win.File(["x"], "a.png", { type: "image/png" })],
+            configurable: true
+        });
+        avatarInput.dispatchEvent(new win.Event("change", { bubbles: true }));
+        await new Promise((resolve) => setTimeout(resolve, 20));
+        assert.match(
+            doc.querySelector("#error-toast-message")?.textContent ?? "",
+            /Failed to upload avatar/
+        );
+    });
+
+    it("Profile modal loads, saves, resets, and uploads avatar assets", async () => {
+        setupFullDOM();
+        const calls: Array<{ url: string; method: string; body: string; }> = [];
+        globalThis.fetch = (url: string, init?: RequestInit) => {
+            calls.push({
+                url: String(url),
+                method: init?.method ?? "GET",
+                body: String(init?.body ?? "")
+            });
+            if (url === "/api/profile/avatar") {
+                return Promise.resolve(
+                    new Response(
+                        JSON.stringify({
+                            profile: {
+                                version: 1,
+                                username: "Kid",
+                                interests: "blocks",
+                                hates: "lag",
+                                favorites: "diamonds",
+                                avatar: { type: "asset", value: "asset_abcdef" },
+                                updatedAt: 3
+                            }
+                        }),
+                        { status: 200 }
+                    )
+                );
+            }
+            if (url === "/api/profile" && init?.method === "PUT") {
+                return Promise.resolve(new Response(String(init.body), { status: 200 }));
+            }
+            if (url === "/api/profile" && init?.method === "DELETE") {
+                return Promise.resolve(
+                    new Response(
+                        JSON.stringify({
+                            version: 1,
+                            username: "",
+                            interests: "",
+                            hates: "",
+                            favorites: "",
+                            avatar: { type: "asset", value: "" },
+                            updatedAt: 4
+                        }),
+                        { status: 200 }
+                    )
+                );
+            }
+            if (url === "/api/profile") {
+                return Promise.resolve(
+                    new Response(
+                        JSON.stringify({
+                            version: 1,
+                            username: "Kid",
+                            interests: "blocks",
+                            hates: "lag",
+                            favorites: "diamonds",
+                            avatar: { type: "asset", value: "asset_123abc" },
+                            updatedAt: 2
+                        }),
+                        { status: 200 }
+                    )
+                );
+            }
+            if (String(url).startsWith("/api/create-history")) {
+                return Promise.resolve(
+                    new Response(JSON.stringify({ items: [] }), { status: 200 })
+                );
+            }
+            return Promise.resolve(new Response(JSON.stringify({}), { status: 200 }));
+        };
+        init();
+
+        (doc.querySelector("#profile-btn") as HTMLButtonElement).click();
+        await new Promise((resolve) => setTimeout(resolve, 30));
+        assert.equal((doc.querySelector("#profile-username") as HTMLInputElement).value, "Kid");
+        assert.equal(
+            doc.querySelector<HTMLImageElement>("#profile-avatar-img")?.getAttribute("src"),
+            "/asset/asset_123abc"
+        );
+
+        (doc.querySelector("#profile-username") as HTMLInputElement).value = " Saved ";
+        (doc.querySelector("#profile-form") as HTMLFormElement).dispatchEvent(
+            new win.Event("submit", { bubbles: true, cancelable: true })
+        );
+        await new Promise((resolve) => setTimeout(resolve, 30));
+        const save = calls.find((call) => call.method === "PUT" && call.url === "/api/profile");
+        assert.equal(JSON.parse(save?.body ?? "{}").username, "Saved");
+
+        const avatarInput = doc.querySelector("#profile-avatar-upload") as HTMLInputElement;
+        const file = new win.File(["png"], "avatar.png", { type: "image/png" });
+        Object.defineProperty(avatarInput, "files", { value: [file], configurable: true });
+        avatarInput.dispatchEvent(new win.Event("change", { bubbles: true }));
+        await new Promise((resolve) => setTimeout(resolve, 30));
+        assert.ok(
+            calls.some((call) => call.method === "POST" && call.url === "/api/profile/avatar")
+        );
+        assert.equal(
+            (doc.querySelector("#profile-avatar-asset") as HTMLInputElement).value,
+            "asset_abcdef"
+        );
+
+        (doc.querySelector("#profile-reset") as HTMLButtonElement).click();
+        await new Promise((resolve) => setTimeout(resolve, 30));
+        assert.ok(calls.some((call) => call.method === "DELETE" && call.url === "/api/profile"));
+    });
+
+    it("Analyze dropzone supports drag states, drop upload failure, and oversize validation", async () => {
+        setupFullDOM();
+        doc.querySelector("#create-analyze-form")?.insertAdjacentHTML(
+            "afterbegin",
+            "<button id=\"analyze-dropzone\" type=\"button\">Drop image</button><input id=\"analyze-file\" type=\"file\"><p id=\"analyze-file-status\"></p><div id=\"analyze-file-preview\" hidden></div>"
+        );
+        globalThis.fetch = (url: string) => {
+            if (url === "/api/analyze-image") {
+                return Promise.resolve(
+                    new Response(JSON.stringify({ error: "no" }), { status: 500 })
+                );
+            }
+            return Promise.resolve(new Response(JSON.stringify({}), { status: 200 }));
+        };
+        init();
+
+        const dropzone = doc.querySelector("#analyze-dropzone") as HTMLButtonElement;
+        const status = doc.querySelector("#analyze-file-status") as HTMLElement;
+        dropzone.dispatchEvent(new win.Event("dragover", { bubbles: true, cancelable: true }));
+        assert.equal(dropzone.classList.contains("is-dragging"), true);
+        dropzone.dispatchEvent(new win.Event("dragleave", { bubbles: true }));
+        assert.equal(dropzone.classList.contains("is-dragging"), false);
+
+        const huge = new win.File(["x"], "huge.png", { type: "image/png" });
+        Object.defineProperty(huge, "size", { value: 21 * 1024 * 1024, configurable: true });
+        const hugeDrop = new win.Event("drop", { bubbles: true, cancelable: true });
+        Object.defineProperty(hugeDrop, "dataTransfer", { value: { files: [huge] } });
+        dropzone.dispatchEvent(hugeDrop);
+        assert.match(status.textContent ?? "", /too big/);
+
+        const good = new win.File(["png"], "cat.png", { type: "image/png" });
+        const failDrop = new win.Event("drop", { bubbles: true, cancelable: true });
+        Object.defineProperty(failDrop, "dataTransfer", { value: { files: [good] } });
+        dropzone.dispatchEvent(failDrop);
+        await new Promise((resolve) => setTimeout(resolve, 30));
+        assert.equal(status.textContent, "Upload failed.");
+        assert.match(
+            doc.querySelector("#error-toast-message")?.textContent ?? "",
+            /Failed to upload image/
+        );
+    });
+
+    it("Analyze file picker validates, uploads, previews, and submits stored assets", async () => {
+        setupFullDOM();
+        doc.querySelector("#create-analyze-form")?.insertAdjacentHTML(
+            "afterbegin",
+            "<button id=\"analyze-dropzone\" type=\"button\">Drop image</button><input id=\"analyze-file\" type=\"file\"><p id=\"analyze-file-status\"></p><div id=\"analyze-file-preview\" hidden></div>"
+        );
+        const calls: Array<{ url: string; body: string; }> = [];
+        globalThis.fetch = (url: string, init?: RequestInit) => {
+            calls.push({ url: String(url), body: String(init?.body ?? "") });
+            if (url === "/api/profile") {
+                return Promise.resolve(
+                    new Response(
+                        JSON.stringify({
+                            version: 1,
+                            username: "",
+                            interests: "",
+                            hates: "",
+                            favorites: "",
+                            avatar: { type: "emoji", value: "🎮" },
+                            updatedAt: 0
+                        }),
+                        { status: 200 }
+                    )
+                );
+            }
+            if (url === "/api/analyze-image") {
+                return Promise.resolve(
+                    new Response(
+                        JSON.stringify({ assetId: "asset_img", assetUrl: "/asset/asset_img" }),
+                        { status: 200 }
+                    )
+                );
+            }
+            if (url === "/api/create-tool") return Promise.resolve(createSSEResponse([sseDone()]));
+            if (String(url).startsWith("/api/create-history")) {
+                return Promise.resolve(
+                    new Response(JSON.stringify({ items: [] }), { status: 200 })
+                );
+            }
+            return Promise.resolve(new Response(JSON.stringify({}), { status: 200 }));
+        };
+        init();
+
+        const inputFile = doc.querySelector("#analyze-file") as HTMLInputElement;
+        const status = doc.querySelector("#analyze-file-status") as HTMLElement;
+        const bad = new win.File(["no"], "note.txt", { type: "text/plain" });
+        Object.defineProperty(inputFile, "files", { value: [bad], configurable: true });
+        inputFile.dispatchEvent(new win.Event("change", { bubbles: true }));
+        assert.match(status.textContent ?? "", /PNG, JPG, GIF, or WebP/);
+
+        const good = new win.File(["png"], "cat.png", { type: "image/png" });
+        Object.defineProperty(inputFile, "files", { value: [good], configurable: true });
+        inputFile.dispatchEvent(new win.Event("change", { bubbles: true }));
+        await new Promise((resolve) => setTimeout(resolve, 30));
+        assert.equal(status.textContent, "Selected cat.png");
+        assert.equal(
+            doc.querySelector<HTMLImageElement>("#analyze-file-preview img")?.getAttribute("src"),
+            "/asset/asset_img"
+        );
+
+        (doc.querySelector("#analyze-prompt") as HTMLTextAreaElement).value = "Describe upload";
+        (doc.querySelector("#create-analyze-form") as HTMLFormElement).dispatchEvent(
+            new win.Event("submit", { bubbles: true, cancelable: true })
+        );
+        await new Promise((resolve) => setTimeout(resolve, 30));
+        const create = calls.find((call) => call.url === "/api/create-tool");
+        assert.deepEqual(JSON.parse(create?.body ?? "{}"), {
+            tool_name: "analyze_image",
+            input: { image_url: "/asset/asset_img", prompt: "Describe upload" }
+        });
+
+        (doc.querySelector("#analyze-url") as HTMLInputElement).value =
+            "https://example.com/fallback.png";
+        doc.querySelector("#analyze-url")?.dispatchEvent(new win.Event("input", { bubbles: true }));
+        assert.equal(status.textContent, "Using image URL fallback.");
+        assert.equal((doc.querySelector("#analyze-file-preview") as HTMLElement).hidden, true);
+    });
+
+    it("Tweak events refill Create forms for every tool kind", async () => {
+        setupFullDOM();
+        globalThis.fetch = (url: string) => {
+            if (url === "/api/profile") {
+                return Promise.resolve(
+                    new Response(
+                        JSON.stringify({
+                            version: 1,
+                            username: "",
+                            interests: "",
+                            hates: "",
+                            favorites: "",
+                            avatar: { type: "emoji", value: "🎮" },
+                            updatedAt: 0
+                        }),
+                        { status: 200 }
+                    )
+                );
+            }
+            if (String(url).startsWith("/api/create-history")) {
+                return Promise.resolve(
+                    new Response(JSON.stringify({ items: [] }), { status: 200 })
+                );
+            }
+            return Promise.resolve(new Response(JSON.stringify({}), { status: 200 }));
+        };
+        init();
+
+        doc.dispatchEvent(
+            new win.CustomEvent("hallucygenie:tweak-tool", {
+                detail: {
+                    toolName: "generate_image",
+                    input: {
+                        prompt: "castle",
+                        aspect_ratio: "1:1",
+                        n: 2,
+                        width: 1024,
+                        height: 1024,
+                        reference_asset_id: "asset_123abc",
+                        prompt_optimizer: true
+                    }
+                }
+            })
+        );
+        assert.equal((doc.querySelector("#img-prompt") as HTMLTextAreaElement).value, "castle");
+        assert.equal((doc.querySelector("#img-ratio") as HTMLSelectElement).value, "1:1");
+        assert.equal((doc.querySelector("#img-count") as HTMLSelectElement).value, "2");
+        assert.equal(
+            (doc.querySelector("#img-reference-asset") as HTMLInputElement).value,
+            "asset_123abc"
+        );
+        assert.equal(
+            (doc.querySelector("#img-prompt-optimizer") as HTMLInputElement).checked,
+            true
+        );
+
+        doc.dispatchEvent(
+            new win.CustomEvent("hallucygenie:tweak-tool", {
+                detail: {
+                    toolName: "generate_music_cover",
+                    input: { prompt: "reggae", lyrics: "hey", cover_feature_id: "cover_1" }
+                }
+            })
+        );
+        assert.equal((doc.querySelector("#music-prompt") as HTMLTextAreaElement).value, "reggae");
+        assert.equal((doc.querySelector("#cover-feature-id") as HTMLInputElement).value, "cover_1");
+        assert.equal(doc.querySelector<HTMLElement>("[data-panel=\"cover\"]")?.hidden, false);
+
+        doc.dispatchEvent(
+            new win.CustomEvent("hallucygenie:tweak-tool", {
+                detail: {
+                    toolName: "generate_video",
+                    input: { prompt: "space", duration: 10, resolution: "1080p" }
+                }
+            })
+        );
+        assert.equal((doc.querySelector("#video-duration") as HTMLSelectElement).value, "10");
+
+        doc.dispatchEvent(
+            new win.CustomEvent("hallucygenie:tweak-tool", {
+                detail: {
+                    toolName: "text_to_speech",
+                    input: { text: "hello", speed: 1, voice_id: "English_expressive_narrator" }
+                }
+            })
+        );
+        assert.equal((doc.querySelector("#voice-text") as HTMLTextAreaElement).value, "hello");
+
+        doc.dispatchEvent(
+            new win.CustomEvent("hallucygenie:tweak-tool", {
+                detail: {
+                    toolName: "analyze_image",
+                    input: { image_url: "https://example.com/a.png", prompt: "describe" }
+                }
+            })
+        );
+        assert.equal(
+            (doc.querySelector("#analyze-url") as HTMLInputElement).value,
+            "https://example.com/a.png"
+        );
+
+        doc.dispatchEvent(
+            new win.CustomEvent("hallucygenie:tweak-tool", {
+                detail: { toolName: "web_search", input: { query: "latest minimax" } }
+            })
+        );
+        assert.equal(
+            (doc.querySelector("#search-query") as HTMLTextAreaElement).value,
+            "latest minimax"
+        );
+
+        doc.dispatchEvent(new win.CustomEvent("hallucygenie:tweak-tool", { detail: {} }));
+    });
+
+    it("Recent Create history can refill and remove a saved tool input", async () => {
+        setupFullDOM();
+        const videoRecent = doc.createElement("div");
+        videoRecent.className = "create-recent";
+        videoRecent.dataset.kind = "video";
+        doc.querySelector("[data-panel=\"video\"]")?.appendChild(videoRecent);
+        const calls: string[] = [];
+        globalThis.fetch = (url: string, init?: RequestInit) => {
+            calls.push(`${init?.method ?? "GET"} ${url}`);
+            if (url === "/api/profile") {
+                return Promise.resolve(
+                    new Response(
+                        JSON.stringify({
+                            version: 1,
+                            username: "",
+                            interests: "",
+                            hates: "",
+                            favorites: "",
+                            avatar: { type: "emoji", value: "🎮" },
+                            updatedAt: 0
+                        }),
+                        { status: 200 }
+                    )
+                );
+            }
+            if (String(url).startsWith("/api/create-history?kind=video")) {
+                return Promise.resolve(
+                    new Response(
+                        JSON.stringify({
+                            items: [
+                                {
+                                    id: "hist_1",
+                                    tool_name: "generate_video",
+                                    input: {
+                                        prompt: "recent video",
+                                        duration: 10,
+                                        resolution: "1080p"
+                                    }
+                                }
+                            ]
+                        }),
+                        { status: 200 }
+                    )
+                );
+            }
+            if (String(url).startsWith("/api/create-history")) {
+                return Promise.resolve(
+                    new Response(JSON.stringify({ items: [] }), { status: 200 })
+                );
+            }
+            return Promise.resolve(new Response(JSON.stringify({}), { status: 200 }));
+        };
+        init();
+
+        doc.querySelector<HTMLButtonElement>(".create-tab[data-tab=\"video\"]")?.click();
+        await new Promise((resolve) => setTimeout(resolve, 30));
+        doc.querySelector<HTMLButtonElement>(".create-recent[data-kind=\"video\"] .recent-button")
+            ?.click();
+        assert.equal(
+            (doc.querySelector("#video-prompt") as HTMLTextAreaElement).value,
+            "recent video"
+        );
+        assert.equal((doc.querySelector("#video-duration") as HTMLSelectElement).value, "10");
+
+        doc.querySelector<HTMLButtonElement>(".create-recent[data-kind=\"video\"] .recent-remove")
+            ?.click();
+        await new Promise((resolve) => setTimeout(resolve, 30));
+        assert.ok(calls.includes("DELETE /api/create-history/hist_1"));
+    });
+
+    it("Session controls switch chats, create chats, and restore scoped drafts", async () => {
+        setupFullDOM();
+        doc.querySelector("header")?.insertAdjacentHTML(
+            "beforeend",
+            "<select id=\"session-select\"></select><button id=\"session-new\" type=\"button\">New chat</button>"
+        );
+        const calls: string[] = [];
+        globalThis.fetch = (url: string, init?: RequestInit) => {
+            calls.push(`${init?.method ?? "GET"} ${url}`);
+            if (url === "/api/profile") {
+                return Promise.resolve(
+                    new Response(
+                        JSON.stringify({
+                            version: 1,
+                            username: "",
+                            interests: "",
+                            hates: "",
+                            favorites: "",
+                            avatar: { type: "emoji", value: "🎮" },
+                            updatedAt: 0
+                        }),
+                        { status: 200 }
+                    )
+                );
+            }
+            if (url === "/api/sessions" && init?.method === "POST") {
+                return Promise.resolve(
+                    new Response(
+                        JSON.stringify({ session: { id: "s3", name: "New Chat" } }),
+                        { status: 200 }
+                    )
+                );
+            }
+            if (url === "/api/sessions") {
+                return Promise.resolve(
+                    new Response(
+                        JSON.stringify({
+                            activeSessionId: "s1",
+                            sessions: [
+                                { id: "s1", name: "One" },
+                                { id: "s2", name: "Two" }
+                            ]
+                        }),
+                        { status: 200 }
+                    )
+                );
+            }
+            if (url === "/api/draft/chat") {
+                return Promise.resolve(
+                    new Response(JSON.stringify({ draft: { text: "saved chat draft" } }), {
+                        status: 200
+                    })
+                );
+            }
+            if (url === "/api/draft/create") {
+                return Promise.resolve(
+                    new Response(
+                        JSON.stringify({
+                            draft: {
+                                selectedTab: "video",
+                                image: {
+                                    prompt: "",
+                                    aspect_ratio: "16:9",
+                                    n: "",
+                                    seed: "",
+                                    width: "",
+                                    height: "",
+                                    prompt_optimizer: false,
+                                    reference_asset_id: ""
+                                },
+                                music: {
+                                    prompt: "",
+                                    lyrics: "",
+                                    cover_source_kind: "direct",
+                                    cover_audio_url: "",
+                                    cover_style: "",
+                                    cover_feature_id: "",
+                                    cover_lyrics: ""
+                                },
+                                video: {
+                                    prompt: "saved video",
+                                    duration: "10",
+                                    resolution: "1080p"
+                                },
+                                voice: {
+                                    text: "",
+                                    speed: "1.0",
+                                    voice_id: "English_expressive_narrator",
+                                    volume: "1",
+                                    pitch: "0"
+                                },
+                                analyze: { image_url: "", prompt: "What do you see?" },
+                                search: { query: "" }
+                            }
+                        }),
+                        { status: 200 }
+                    )
+                );
+            }
+            if (url === "/api/history") {
+                return Promise.resolve(
+                    new Response(JSON.stringify({ messages: [] }), { status: 200 })
+                );
+            }
+            if (url === "/assets") {
+                return Promise.resolve(
+                    new Response(JSON.stringify({ assets: [] }), { status: 200 })
+                );
+            }
+            if (String(url).startsWith("/api/create-history")) {
+                return Promise.resolve(
+                    new Response(JSON.stringify({ items: [] }), { status: 200 })
+                );
+            }
+            return Promise.resolve(new Response(JSON.stringify({}), { status: 200 }));
+        };
+        init();
+        await new Promise((resolve) => setTimeout(resolve, 100));
+
+        const sessionSelect = doc.querySelector("#session-select") as HTMLSelectElement;
+        assert.equal(sessionSelect.options.length, 2);
+        assert.equal(
+            (doc.querySelector("#chat-input") as HTMLTextAreaElement).value,
+            "saved chat draft"
+        );
+        assert.equal(
+            (doc.querySelector("#video-prompt") as HTMLTextAreaElement).value,
+            "saved video"
+        );
+
+        sessionSelect.value = "s2";
+        sessionSelect.dispatchEvent(new win.Event("change", { bubbles: true }));
+        await new Promise((resolve) => setTimeout(resolve, 40));
+        assert.ok(calls.includes("POST /api/sessions/s2/activate"));
+
+        doc.querySelector<HTMLButtonElement>("#session-new")?.click();
+        await new Promise((resolve) => setTimeout(resolve, 40));
+        assert.ok(calls.includes("POST /api/sessions"));
     });
 
     it("Voice sends async TTS for long text transparently", async () => {
@@ -2896,6 +4308,123 @@ describe("init event binding", () => {
             input: { prompt: "boss fight", mode: "edit", lyrics: "draft lyrics" }
         });
         assert.equal(lyrics.value, "better lyrics");
+    });
+
+    it("create controls apply presets, reject bad pauses, and send cover generation", async () => {
+        setupFullDOM();
+        const bodies: unknown[] = [];
+        globalThis.fetch = (url: string, init?: RequestInit) => {
+            if (url === "/api/create-tool") {
+                bodies.push(JSON.parse(String(init?.body)));
+                return Promise.resolve(createSSEResponse([sseDone()]));
+            }
+            return Promise.resolve(new Response(JSON.stringify({}), { status: 200 }));
+        };
+        init();
+
+        const ratio = doc.querySelector("#img-ratio") as HTMLSelectElement;
+        const size = doc.querySelector("#img-size") as HTMLSelectElement;
+        ratio.value = "1:1";
+        ratio.dispatchEvent(new win.Event("change", { bubbles: true }));
+        size.value = "medium";
+        size.dispatchEvent(new win.Event("change", { bubbles: true }));
+        assert.equal((doc.querySelector("#img-width") as HTMLInputElement).value, "1536");
+        assert.equal((doc.querySelector("#img-height") as HTMLInputElement).value, "1536");
+
+        const pauseSelect = doc.querySelector("#voice-pause-duration") as HTMLSelectElement;
+        pauseSelect.insertAdjacentHTML("beforeend", "<option value=\"100\">100 sec</option>");
+        pauseSelect.value = "100";
+        (doc.querySelector("#voice-insert-pause") as HTMLButtonElement).click();
+        assert.match(
+            doc.querySelector("#voice-composer-status")?.textContent ?? "",
+            /0.01 to 99.99/
+        );
+
+        (doc.querySelector("#cover-feature-id") as HTMLInputElement).value = "cover_1";
+        (doc.querySelector("#cover-style") as HTMLTextAreaElement).value = "ska";
+        (doc.querySelector("#cover-lyrics") as HTMLTextAreaElement).value = "la la";
+        doc.querySelector("#cover-generate")?.dispatchEvent(new win.Event("click"));
+        await new Promise((resolve) => setTimeout(resolve, 20));
+        assert.deepEqual(bodies[0], {
+            tool_name: "generate_music_cover",
+            input: { prompt: "ska", lyrics: "la la", cover_feature_id: "cover_1" }
+        });
+    });
+
+    it("cover controls validate source, URL changes, prepare failures, and generate fields", async () => {
+        setupFullDOM();
+        globalThis.fetch = (url: string) => {
+            if (url === "/api/music-cover/preprocess") {
+                return Promise.resolve(
+                    new Response(JSON.stringify({ error: "bad cover" }), { status: 500 })
+                );
+            }
+            return Promise.resolve(new Response(JSON.stringify({}), { status: 200 }));
+        };
+        init();
+
+        const sourceKind = doc.querySelector("#cover-source-kind") as HTMLSelectElement;
+        const url = doc.querySelector("#cover-audio-url") as HTMLInputElement;
+        const file = doc.querySelector("#cover-audio-file") as HTMLInputElement;
+        const status = doc.querySelector("#cover-status") as HTMLElement;
+        const generate = doc.querySelector("#cover-generate") as HTMLButtonElement;
+
+        sourceKind.value = "upload";
+        sourceKind.dispatchEvent(new win.Event("change", { bubbles: true }));
+        assert.equal(status.textContent, "Prepare the cover source first.");
+
+        doc.querySelector("#cover-preprocess")?.dispatchEvent(new win.Event("click"));
+        assert.match(
+            doc.querySelector("#error-toast-message")?.textContent ?? "",
+            /Choose an audio file/
+        );
+
+        sourceKind.value = "direct";
+        sourceKind.dispatchEvent(new win.Event("change", { bubbles: true }));
+        doc.querySelector("#cover-preprocess")?.dispatchEvent(new win.Event("click"));
+        assert.match(
+            doc.querySelector("#error-toast-message")?.textContent ?? "",
+            /Paste an audio/
+        );
+
+        Object.defineProperty(file, "files", {
+            value: [new win.File(["mp3"], "song.mp3", { type: "audio/mpeg" })],
+            configurable: true
+        });
+        file.dispatchEvent(new win.Event("change", { bubbles: true }));
+        assert.equal(sourceKind.value, "upload");
+        assert.match(status.textContent ?? "", /Audio file selected/);
+
+        sourceKind.value = "upload";
+        url.value = "https://example.com/song.mp3";
+        url.dispatchEvent(new win.Event("input", { bubbles: true }));
+        assert.equal(sourceKind.value, "direct");
+        assert.match(status.textContent ?? "", /URL changed/);
+
+        doc.querySelector("#cover-preprocess")?.dispatchEvent(new win.Event("click"));
+        await new Promise((resolve) => setTimeout(resolve, 30));
+        assert.match(status.textContent ?? "", /Prepare failed: bad cover/);
+
+        generate.disabled = false;
+        doc.querySelector("#cover-generate")?.dispatchEvent(new win.Event("click"));
+        assert.match(
+            doc.querySelector("#error-toast-message")?.textContent ?? "",
+            /Prepare the cover source/
+        );
+
+        (doc.querySelector("#cover-feature-id") as HTMLInputElement).value = "cover_1";
+        doc.querySelector("#cover-generate")?.dispatchEvent(new win.Event("click"));
+        assert.match(
+            doc.querySelector("#error-toast-message")?.textContent ?? "",
+            /Describe the new style/
+        );
+
+        (doc.querySelector("#cover-style") as HTMLTextAreaElement).value = "rock";
+        doc.querySelector("#cover-generate")?.dispatchEvent(new win.Event("click"));
+        assert.match(
+            doc.querySelector("#error-toast-message")?.textContent ?? "",
+            /lyrics are required/
+        );
     });
 
     it("cover prepare prefers selected file over source dropdown", async () => {
@@ -3277,7 +4806,8 @@ describe("sendSteer", () => {
         };
 
         await sendSteer("steer message");
-        assert.equal((request?.headers as Record<string, string>)["X-Session-Id"], undefined);
+        assert.ok(request);
+        assert.equal((request.headers as Record<string, string>)["X-Session-Id"], undefined);
     });
 
     it("throws on non-OK response", async () => {
@@ -3573,6 +5103,86 @@ describe("init accessibility behavior", () => {
         assert.equal(musicPanel.hidden, false);
     });
 
+    it("supports keyboard navigation between create tabs", () => {
+        const { doc, win } = setupDOM();
+        init();
+
+        const imageTab = doc.querySelector(".create-tab[data-tab=\"image\"]") as HTMLButtonElement;
+        const musicTab = doc.querySelector(".create-tab[data-tab=\"music\"]") as HTMLButtonElement;
+        const searchTab = doc.querySelector(
+            ".create-tab[data-tab=\"search\"]"
+        ) as HTMLButtonElement;
+
+        imageTab.dispatchEvent(
+            new win.KeyboardEvent("keydown", { key: "ArrowRight", bubbles: true, cancelable: true })
+        );
+        assert.equal(doc.activeElement, musicTab);
+        assert.equal(musicTab.getAttribute("aria-selected"), "true");
+
+        musicTab.dispatchEvent(
+            new win.KeyboardEvent("keydown", { key: "ArrowLeft", bubbles: true, cancelable: true })
+        );
+        assert.equal(doc.activeElement, imageTab);
+
+        imageTab.dispatchEvent(
+            new win.KeyboardEvent("keydown", { key: "End", bubbles: true, cancelable: true })
+        );
+        assert.equal(doc.activeElement, searchTab);
+        assert.equal(searchTab.getAttribute("aria-selected"), "true");
+
+        searchTab.dispatchEvent(
+            new win.KeyboardEvent("keydown", { key: "Home", bubbles: true, cancelable: true })
+        );
+        assert.equal(doc.activeElement, imageTab);
+    });
+
+    it("traps Tab focus inside profile modal", async () => {
+        const { doc, win } = setupDOM();
+        globalThis.fetch = (input: string | Request | URL) => {
+            if (input.toString() === "/api/profile") {
+                return Promise.resolve(
+                    new Response(
+                        JSON.stringify({
+                            version: 1,
+                            username: "",
+                            interests: "",
+                            hates: "",
+                            favorites: "",
+                            avatar: { type: "emoji", value: "🎮" },
+                            updatedAt: 0
+                        }),
+                        { status: 200, headers: { "Content-Type": "application/json" } }
+                    )
+                );
+            }
+            return Promise.resolve(new Response(JSON.stringify({}), { status: 200 }));
+        };
+        init();
+
+        const profileBtn = doc.querySelector("#profile-btn") as HTMLButtonElement;
+        const closeBtn = doc.querySelector("#profile-close") as HTMLButtonElement;
+        const last = doc.querySelector("#profile-generate") as HTMLButtonElement;
+        const modal = doc.querySelector("#profile-modal") as HTMLElement;
+
+        profileBtn.click();
+        await Promise.resolve();
+        closeBtn.focus();
+        modal.dispatchEvent(
+            new win.KeyboardEvent("keydown", {
+                key: "Tab",
+                shiftKey: true,
+                bubbles: true,
+                cancelable: true
+            })
+        );
+        assert.equal(doc.activeElement, last);
+
+        modal.dispatchEvent(
+            new win.KeyboardEvent("keydown", { key: "Tab", bubbles: true, cancelable: true })
+        );
+        assert.equal(doc.activeElement, closeBtn);
+    });
+
     it("traps Tab focus inside create modal", () => {
         const { doc, win } = setupDOM();
         init();
@@ -3583,11 +5193,65 @@ describe("init accessibility behavior", () => {
         const modal = doc.querySelector("#create-modal") as HTMLElement;
 
         createBtn.click();
-        promptOptimizer.focus();
+        closeBtn.focus();
+        modal.dispatchEvent(
+            new win.KeyboardEvent("keydown", {
+                key: "Tab",
+                shiftKey: true,
+                bubbles: true,
+                cancelable: true
+            })
+        );
+        assert.equal(doc.activeElement, promptOptimizer);
+
         modal.dispatchEvent(
             new win.KeyboardEvent("keydown", { key: "Tab", bubbles: true, cancelable: true })
         );
         assert.equal(doc.activeElement, closeBtn);
+    });
+
+    it("onboarding action buttons seed chat, open create, and dismiss", () => {
+        const { doc } = setupDOM();
+        init();
+
+        const onboarding = doc.querySelector("#onboarding") as HTMLElement;
+        const input = doc.querySelector("#chat-input") as HTMLTextAreaElement;
+        const createModal = doc.querySelector("#create-modal") as HTMLElement;
+
+        (doc.querySelector(".onboarding-next") as HTMLButtonElement).click();
+        assert.equal(
+            doc.querySelector(".onboarding-slide[data-slide=\"1\"]")?.classList.contains("active"),
+            true
+        );
+
+        (doc.querySelector("#onboarding-try-chat") as HTMLButtonElement).click();
+        assert.equal(onboarding.hidden, true);
+        assert.match(input.value, /top 3 gaming tips/);
+        assert.equal(doc.activeElement, input);
+
+        localStorage.removeItem("hg_onboarding_done");
+        const second = setupDOM();
+        init();
+        (second.doc.querySelector("#onboarding-try-create") as HTMLButtonElement).click();
+        assert.equal((second.doc.querySelector("#create-modal") as HTMLElement).hidden, false);
+        assert.equal((second.doc.querySelector("#onboarding") as HTMLElement).hidden, true);
+        assert.equal(createModal.hidden, true);
+    });
+
+    it("Escape closes profile and create modals", () => {
+        const { doc, win } = setupDOM();
+        init();
+
+        const profileModal = doc.querySelector("#profile-modal") as HTMLElement;
+        const createModal = doc.querySelector("#create-modal") as HTMLElement;
+        (doc.querySelector("#profile-btn") as HTMLButtonElement).click();
+        (doc.querySelector("#create-btn") as HTMLButtonElement).click();
+        assert.equal(profileModal.hidden, false);
+        assert.equal(createModal.hidden, false);
+
+        doc.dispatchEvent(new win.KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+        assert.equal(profileModal.hidden, true);
+        assert.equal(createModal.hidden, true);
     });
 
     it("traps onboarding focus and restores focus on dismiss", () => {
@@ -3854,7 +5518,7 @@ describe("loadAssets", () => {
                                     tool_name: "generate_music",
                                     size_bytes: 2048,
                                     created_at: Date.now(),
-                                    params: {},
+                                    params: { speed: 1.25 },
                                     url: "/asset/aud-1",
                                     download_url: "/asset/aud-1"
                                 },
@@ -3903,6 +5567,7 @@ describe("loadAssets", () => {
         assert.equal(audio?.preload, "metadata");
         assert.equal(audio?.src.includes("?s="), false);
         assert.equal(audio?.src.includes("/asset/aud-1"), true);
+        assert.match(cards[1]?.textContent ?? "", /1\.25x/);
 
         const video = doc.querySelector("video.asset-video") as HTMLVideoElement | null;
         assert.ok(video, "video assets should use native controls");

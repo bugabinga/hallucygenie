@@ -7,7 +7,7 @@ Image=localhost/hallucygenie:latest
 PublishPort=3000:3000
 EnvironmentFile=.env
 Volume=./data:/app/data
-HealthCmd=bun --eval "const port=process.env.PORT||'3000';fetch('http://127.0.0.1:'+port+'/api/health').then((r)=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
+HealthCmd=node --eval "const port=process.env.PORT||'3000';fetch('http://127.0.0.1:'+port+'/api/health').then((r)=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
 HealthInterval=30s
 HealthTimeout=3s
 HealthStartPeriod=5s

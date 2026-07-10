@@ -28,6 +28,7 @@ import {
     generateSessionNameFromPrompt,
     getDb,
     handleChat,
+    handleNodeRequest,
     handleRequest,
     initDatabase,
     isShuttingDown,
@@ -87,6 +88,18 @@ async function readBody(resp: Response): Promise<string> {
 
 async function readJson(resp: Response): Promise<unknown> {
     return JSON.parse(await resp.text());
+}
+
+function formRequest(path: string, form: FormData, sessionId: string): Request {
+    return new Request(`http://localhost${path}`, {
+        method: "POST",
+        headers: { "X-Session-Id": sessionId },
+        body: form
+    });
+}
+
+function fileWithSize(name: string, type: string, size: number): File {
+    return new File([new Uint8Array(size)], name, { type });
 }
 
 function tarWithFile(filename: string, bytes: Uint8Array): Buffer {
@@ -415,6 +428,112 @@ describe("Explicit Create directives", () => {
         }
     });
 
+    it("rejects local analyze assets with unsupported MIME before provider use", async () => {
+        const originalKey = process.env.MINIMAX_API_KEY;
+        process.env.MINIMAX_API_KEY = "test-key";
+        const db = requireDb();
+        const session = createSession(db, undefined, "Invalid Analyze MIME");
+        setActiveSessionId(db, session.id);
+        const assetId = "asset_11111111-1111-1111-1111-111111111111";
+        saveAsset(db, {
+            id: assetId,
+            session_id: session.id,
+            type: "image",
+            filename: "bad.bmp",
+            mime_type: "image/bmp",
+            prompt: "bad",
+            tool_name: "analyze_image",
+            size_bytes: 1
+        });
+        let providerCalls = 0;
+        globalThis.fetch = async (url: string | URL | Request) => {
+            if (url.toString().includes("/v1/coding_plan/vlm")) {
+                providerCalls++;
+                throw new Error("provider should not be called");
+            }
+            return anthropicResponse(anthropicTextSse(["Bad MIME"]));
+        };
+
+        try {
+            const chatResp = await handleRequest(
+                new Request("http://localhost/api/chat", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                        messages: [{
+                            role: "user",
+                            content: `Use analyze_image with image_url: /asset/${assetId}`
+                        }]
+                    })
+                })
+            );
+
+            assert.match(await readBody(chatResp), /analyze image type invalid/);
+            assert.equal(providerCalls, 0);
+        } finally {
+            globalThis.fetch = REAL_FETCH;
+            if (originalKey === undefined) delete process.env.MINIMAX_API_KEY;
+            else process.env.MINIMAX_API_KEY = originalKey;
+        }
+    });
+
+    it("analyzes uploaded GIF and WebP assets without storing raw data URLs", async () => {
+        const originalKey = process.env.MINIMAX_API_KEY;
+        process.env.MINIMAX_API_KEY = "test-key";
+        const db = requireDb();
+        const session = createSession(db);
+        setActiveSessionId(db, session.id);
+        const uploaded: string[] = [];
+        for (const [name, type] of [["tiny.gif", "image/gif"], ["tiny.webp", "image/webp"]]) {
+            const body = new FormData();
+            body.set("image", new File([new Uint8Array([1, 2, 3])], name, { type }));
+            const uploadResp = await handleRequest(
+                new Request("http://localhost/api/analyze-image", { method: "POST", body })
+            );
+            assert.equal(uploadResp.status, 200);
+            uploaded.push(((await readJson(uploadResp)) as { assetUrl: string; }).assetUrl);
+        }
+        const prompts: string[] = [];
+        globalThis.fetch = async (_url: string | URL | Request, init?: RequestInit) => {
+            const payload = JSON.parse(String(init?.body));
+            prompts.push(String(payload.image_url));
+            return new Response(JSON.stringify({ content: "asset analyzed" }), {
+                status: 200,
+                headers: { "Content-Type": "application/json" }
+            });
+        };
+
+        try {
+            for (const assetUrl of uploaded) {
+                const chatResp = await handleRequest(
+                    new Request("http://localhost/api/chat", {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({
+                            messages: [{
+                                role: "user",
+                                content: `Use analyze_image with image_url: ${assetUrl}`
+                            }]
+                        })
+                    })
+                );
+                assert.match(await readBody(chatResp), /asset analyzed/);
+            }
+            assert.equal(
+                prompts.some((prompt) => prompt.startsWith("data:image/gif;base64,")),
+                true
+            );
+            assert.equal(
+                prompts.some((prompt) => prompt.startsWith("data:image/webp;base64,")),
+                true
+            );
+        } finally {
+            globalThis.fetch = REAL_FETCH;
+            if (originalKey === undefined) delete process.env.MINIMAX_API_KEY;
+            else process.env.MINIMAX_API_KEY = originalKey;
+        }
+    });
+
     it("ignores MiniMax params outside the explicit kid-safe allowlist", () => {
         const image = parseExplicitToolDirective(
             "Use generate_image with prompt: cat\nTool params: aspect_ratio=1:1, n=2, seed=7, width=1024, height=1024, prompt_optimizer=true, response_format=base64, subject_reference=https://example.com/cat.png"
@@ -428,6 +547,10 @@ describe("Explicit Create directives", () => {
             height: 1024,
             prompt_optimizer: true
         });
+        const imageFalse = parseExplicitToolDirective(
+            "Use generate_image with prompt: cat\nTool params: prompt_optimizer=false"
+        );
+        assert.deepEqual(imageFalse?.args, { prompt: "cat", prompt_optimizer: false });
 
         const tts = parseExplicitToolDirective(
             "Use text_to_speech with text: hello\nTool params: voice_id=English_expressive_narrator, speed=1.1, volume=2, pitch=1, emotion=happy, language_boost=English, subtitle_enable=true, output_format=wav, stream=true"
@@ -944,9 +1067,9 @@ describe("SSE streaming from Anthropic endpoint", () => {
                 urlStr === "https://example.com/direct-cat-1.png"
                 || urlStr === "https://example.com/direct-cat-2.png"
             ) {
-                return new Response(new Uint8Array([4, 5, 6]), {
+                return new Response(null, {
                     status: 200,
-                    headers: { "Content-Type": "image/png" }
+                    headers: { "Content-Type": "image/png", "Content-Length": "0" }
                 });
             }
             return new Response(
@@ -1114,6 +1237,227 @@ describe("SSE streaming from Anthropic endpoint", () => {
         }
     });
 
+    it("rejects Create tool execution when API key is missing", async () => {
+        const previousApiKey = process.env.MINIMAX_API_KEY;
+        delete process.env.MINIMAX_API_KEY;
+        try {
+            const resp = await handleRequest(
+                makeRequest(
+                    "POST",
+                    "/api/create-tool",
+                    { tool_name: "web_search", input: { query: "cats" } },
+                    { "X-Session-Id": "missing-key-create" }
+                )
+            );
+            assert.equal(resp.status, 503);
+            assert.match((await readJson(resp) as { error: string; }).error, /MINIMAX_API_KEY/);
+        } finally {
+            if (previousApiKey === undefined) delete process.env.MINIMAX_API_KEY;
+            else process.env.MINIMAX_API_KEY = previousApiKey;
+        }
+    });
+
+    it("rejects malformed Create tool requests before provider use", async () => {
+        const previousApiKey = process.env.MINIMAX_API_KEY;
+        process.env.MINIMAX_API_KEY = "test-key";
+        try {
+            const invalidJson = await handleRequest(
+                new Request("http://localhost/api/create-tool", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json", "X-Session-Id": "bad-create" },
+                    body: "{"
+                })
+            );
+            assert.equal(invalidJson.status, 400);
+            assert.deepEqual(await readJson(invalidJson), {
+                error: "Invalid JSON in request body"
+            });
+
+            const cases: Array<[unknown, string]> = [
+                [null, "body must be an object"],
+                [{ input: {} }, "tool_name required"],
+                [{ tool_name: "web_search" }, "input required"],
+                [{ tool_name: "web_search", input: {} }, "query required"],
+                [{ tool_name: "nope", input: {} }, "unsupported tool_name"]
+            ];
+            for (const [payload, error] of cases) {
+                const resp = await handleRequest(
+                    makeRequest("POST", "/api/create-tool", payload, {
+                        "X-Session-Id": "bad-create"
+                    })
+                );
+                assert.equal(resp.status, 400, error);
+                assert.deepEqual(await readJson(resp), { error });
+            }
+        } finally {
+            if (previousApiKey === undefined) delete process.env.MINIMAX_API_KEY;
+            else process.env.MINIMAX_API_KEY = previousApiKey;
+        }
+    });
+
+    it("executes Create voice endpoint with full voice controls", async () => {
+        const sessionId = "create-tool-voice-full-session";
+        const db = requireDb();
+        createSession(db, sessionId, "Create Tool Voice Full");
+        const previousApiKey = process.env.MINIMAX_API_KEY;
+        process.env.MINIMAX_API_KEY = "test-key";
+        let ttsPayload: Record<string, unknown> | null = null;
+        globalThis.fetch = async (_url: string | URL | Request, init?: RequestInit) => {
+            ttsPayload = JSON.parse(String(init?.body));
+            return new Response(JSON.stringify({ data: { audio: "ff" } }), {
+                status: 200,
+                headers: { "Content-Type": "application/json" }
+            });
+        };
+
+        try {
+            const resp = await handleRequest(
+                makeRequest(
+                    "POST",
+                    "/api/create-tool",
+                    {
+                        tool_name: "text_to_speech",
+                        input: {
+                            text: "Hello from the create voice tab",
+                            voice_id: "English_expressive_narrator",
+                            speed: 2.5,
+                            volume: 0,
+                            pitch: -20
+                        }
+                    },
+                    { "X-Session-Id": sessionId }
+                )
+            );
+            const body = await readBody(resp);
+            const history = listToolInputHistory(db, sessionId, { kind: "voice" });
+            const asset = getAssets(db, sessionId).at(-1);
+            const input = JSON.parse(history[0]?.input_json);
+
+            assert.ok(body.includes("tool_result"));
+            assert.equal(ttsPayload?.text, "Hello from the create voice tab");
+            const voiceSetting = ttsPayload?.voice_setting as Record<string, unknown>;
+            assert.equal(voiceSetting.voice_id, "English_expressive_narrator");
+            assert.equal(voiceSetting.speed, 2);
+            assert.equal(voiceSetting.vol, 0.01);
+            assert.equal(voiceSetting.pitch, -12);
+            assert.equal(input.speed, 2);
+            assert.equal(input.volume, 0.01);
+            assert.equal(input.pitch, -12);
+            assert.equal(asset?.type, "audio");
+            assert.equal(asset?.mime_type, "audio/mp3");
+        } finally {
+            globalThis.fetch = REAL_FETCH;
+            if (previousApiKey === undefined) delete process.env.MINIMAX_API_KEY;
+            else process.env.MINIMAX_API_KEY = previousApiKey;
+        }
+    });
+
+    it("executes Create image analysis with default prompt", async () => {
+        const sessionId = "create-tool-analyze-session";
+        const db = requireDb();
+        createSession(db, sessionId, "Create Analyze Image");
+        const previousApiKey = process.env.MINIMAX_API_KEY;
+        process.env.MINIMAX_API_KEY = "test-key";
+        let vlmPayload: Record<string, unknown> | null = null;
+        globalThis.fetch = async (url: string | URL | Request, init?: RequestInit) => {
+            const urlStr = url.toString();
+            if (urlStr === "https://example.com/cat.png") {
+                return new Response(new Uint8Array([137, 80, 78, 71]), {
+                    status: 200,
+                    headers: { "Content-Type": "image/png", "Content-Length": "4" }
+                });
+            }
+            if (urlStr.endsWith("/v1/coding_plan/vlm")) {
+                vlmPayload = JSON.parse(String(init?.body));
+                return new Response(JSON.stringify({ content: "a tiny cat" }), {
+                    status: 200,
+                    headers: { "Content-Type": "application/json" }
+                });
+            }
+            throw new Error(`unexpected fetch ${urlStr}`);
+        };
+
+        try {
+            const resp = await handleRequest(
+                makeRequest(
+                    "POST",
+                    "/api/create-tool",
+                    {
+                        tool_name: "analyze_image",
+                        input: { image_url: "https://example.com/cat.png" }
+                    },
+                    { "X-Session-Id": sessionId }
+                )
+            );
+            const body = await readBody(resp);
+            const history = listToolInputHistory(db, sessionId, { kind: "analyze" });
+
+            assert.ok(body.includes("a tiny cat"));
+            assert.equal(vlmPayload?.prompt, "What do you see?");
+            assert.match(String(vlmPayload?.image_url), /^data:image\/png;base64,/);
+            assert.equal(history[0]?.origin, "create");
+            assert.equal(history[0]?.tool_name, "analyze_image");
+        } finally {
+            globalThis.fetch = REAL_FETCH;
+            if (previousApiKey === undefined) delete process.env.MINIMAX_API_KEY;
+            else process.env.MINIMAX_API_KEY = previousApiKey;
+        }
+    });
+
+    it("rejects missing and incompatible reference assets before provider use", async () => {
+        const sessionId = "bad-reference-asset-session";
+        const database = requireDb();
+        createSession(database, sessionId, "Bad Reference Asset");
+        const previousApiKey = process.env.MINIMAX_API_KEY;
+        process.env.MINIMAX_API_KEY = "test-key";
+        try {
+            const missingResp = await handleRequest(
+                makeRequest(
+                    "POST",
+                    "/api/create-tool",
+                    {
+                        tool_name: "generate_image",
+                        input: {
+                            prompt: "fox",
+                            reference_asset_id: "asset_00000000000000000000000000000000"
+                        }
+                    },
+                    { "X-Session-Id": sessionId }
+                )
+            );
+            assert.match(await readBody(missingResp), /reference image asset not found/);
+
+            const form = new FormData();
+            form.set(
+                "image",
+                new File([new Uint8Array([71, 73, 70, 56])], "anim.gif", { type: "image/gif" })
+            );
+            const uploadResp = await handleRequest(
+                new Request("http://localhost/api/analyze-image", {
+                    method: "POST",
+                    body: form,
+                    headers: { "X-Session-Id": sessionId }
+                })
+            );
+            const uploaded = await readJson(uploadResp) as { assetId: string; };
+            const wrongTypeResp = await handleRequest(
+                makeRequest(
+                    "POST",
+                    "/api/create-tool",
+                    {
+                        tool_name: "generate_image",
+                        input: { prompt: "fox", reference_asset_id: uploaded.assetId }
+                    },
+                    { "X-Session-Id": sessionId }
+                )
+            );
+            assert.match(await readBody(wrongTypeResp), /reference image must be PNG or JPG/);
+        } finally {
+            if (previousApiKey === undefined) delete process.env.MINIMAX_API_KEY;
+            else process.env.MINIMAX_API_KEY = previousApiKey;
+        }
+    });
+
     it("rejects invalid reference image uploads before provider use", async () => {
         const sessionId = "bad-reference-upload-session";
         const database = requireDb();
@@ -1208,6 +1552,40 @@ describe("SSE streaming from Anthropic endpoint", () => {
                 rows.some((row) => row.content.includes("data:image")),
                 false
             );
+        } finally {
+            globalThis.fetch = REAL_FETCH;
+            if (previousApiKey === undefined) delete process.env.MINIMAX_API_KEY;
+            else process.env.MINIMAX_API_KEY = previousApiKey;
+        }
+    });
+
+    it("marks async TTS task failed when long narration generation fails", async () => {
+        const sessionId = "long-tts-failed-session";
+        const database = requireDb();
+        createSession(database, sessionId, "Long TTS Failed");
+        const previousApiKey = process.env.MINIMAX_API_KEY;
+        process.env.MINIMAX_API_KEY = "test-key";
+        globalThis.fetch = async () =>
+            new Response(
+                JSON.stringify({ base_resp: { status_code: 2013, status_msg: "bad long text" } }),
+                { status: 200, headers: { "Content-Type": "application/json" } }
+            );
+
+        try {
+            const resp = await handleRequest(
+                makeRequest(
+                    "POST",
+                    "/api/create-tool",
+                    { tool_name: "generate_long_speech", input: { text: "Long failed story" } },
+                    { "X-Session-Id": sessionId }
+                )
+            );
+            const body = await readBody(resp);
+            const tasks = listAsyncTtsTasks(database, sessionId);
+
+            assert.match(body, /tool_result/);
+            assert.equal(tasks[0]?.status, "failed");
+            assert.match(tasks[0]?.error ?? "", /Couldn't generate long narration/);
         } finally {
             globalThis.fetch = REAL_FETCH;
             if (previousApiKey === undefined) delete process.env.MINIMAX_API_KEY;
@@ -1383,6 +1761,59 @@ describe("SSE streaming from Anthropic endpoint", () => {
         }
     });
 
+    it("rejects provider video URLs with non-http schemes", async () => {
+        const sessionId = "create-video-file-url-session";
+        const database = requireDb();
+        createSession(database, sessionId, "Create Video File URL");
+        const previousApiKey = process.env.MINIMAX_API_KEY;
+        process.env.MINIMAX_API_KEY = "test-key";
+        globalThis.fetch = async (url: string | URL | Request) => {
+            const urlStr = url.toString();
+            if (urlStr.endsWith("/v1/video_generation")) {
+                return new Response(JSON.stringify({ task_id: "video-task-file-url" }), {
+                    status: 200,
+                    headers: { "Content-Type": "application/json" }
+                });
+            }
+            if (urlStr.includes("/v1/query/video_generation")) {
+                return new Response(JSON.stringify({ status: "Success", file_id: "file-local" }), {
+                    status: 200,
+                    headers: { "Content-Type": "application/json" }
+                });
+            }
+            if (urlStr.includes("/v1/files/retrieve")) {
+                return new Response(JSON.stringify({ download_url: "file:///tmp/output.mp4" }), {
+                    status: 200,
+                    headers: { "Content-Type": "application/json" }
+                });
+            }
+            throw new Error(`unexpected fetch ${urlStr}`);
+        };
+
+        try {
+            const resp = await handleRequest(
+                makeRequest(
+                    "POST",
+                    "/api/create-tool",
+                    { tool_name: "generate_video", input: { prompt: "fox mascot intro" } },
+                    { "X-Session-Id": sessionId }
+                )
+            );
+            const body = await readBody(resp);
+            const assets = getAssets(database, sessionId);
+            const rows = getMessages(database, sessionId);
+
+            assert.ok(body.includes("Couldn't save generated video"));
+            assert.equal(body.includes("file:///tmp/output.mp4"), false);
+            assert.equal(assets.length, 0);
+            assert.equal(rows.some((row) => row.content.includes("file:///")), false);
+        } finally {
+            globalThis.fetch = REAL_FETCH;
+            if (previousApiKey === undefined) delete process.env.MINIMAX_API_KEY;
+            else process.env.MINIMAX_API_KEY = previousApiKey;
+        }
+    });
+
     it("persists provider diagnostics for failed Create video", async () => {
         const sessionId = "create-video-sensitive-session";
         const database = requireDb();
@@ -1494,15 +1925,82 @@ describe("SSE streaming from Anthropic endpoint", () => {
         }
     });
 
-    it("rejects music cover upload with named validation errors", async () => {
+    it("rejects malformed music cover preprocess requests before provider use", async () => {
+        const previousApiKey = process.env.MINIMAX_API_KEY;
+        const previousExtractor = process.env.COVER_EXTRACTOR_URL;
+        process.env.MINIMAX_API_KEY = "test-key";
+        process.env.COVER_EXTRACTOR_URL = "https://extractor.example/audio";
+        const originalFetch = globalThis.fetch;
+        globalThis.fetch = async () =>
+            new Response(JSON.stringify({}), {
+                status: 200,
+                headers: { "Content-Type": "application/json" }
+            });
+
+        try {
+            const cases: Array<[FormData, string]> = [];
+            const direct = new FormData();
+            direct.set("source_kind", "direct");
+            cases.push([direct, "audio URL required"]);
+
+            const upload = new FormData();
+            upload.set("source_kind", "upload");
+            cases.push([upload, "audio file required"]);
+
+            const youtube = new FormData();
+            youtube.set("source_kind", "youtube");
+            cases.push([youtube, "YouTube URL required"]);
+
+            const invalid = new FormData();
+            invalid.set("source_kind", "cassette");
+            cases.push([invalid, "source kind invalid"]);
+
+            const sidecar = new FormData();
+            sidecar.set("source_kind", "youtube");
+            sidecar.set("audio_url", "https://youtu.be/no-audio");
+            cases.push([sidecar, "cover extractor returned no audio"]);
+
+            for (const [form, error] of cases) {
+                const resp = await handleRequest(
+                    new Request("http://localhost/api/music-cover/preprocess", {
+                        method: "POST",
+                        body: form
+                    })
+                );
+                const body = JSON.parse(await readBody(resp));
+                assert.equal(resp.status, 400, error);
+                assert.equal(body.error, error);
+            }
+        } finally {
+            globalThis.fetch = originalFetch;
+            if (previousApiKey === undefined) delete process.env.MINIMAX_API_KEY;
+            else process.env.MINIMAX_API_KEY = previousApiKey;
+            if (previousExtractor === undefined) delete process.env.COVER_EXTRACTOR_URL;
+            else process.env.COVER_EXTRACTOR_URL = previousExtractor;
+        }
+    });
+
+    it("preprocesses music cover uploaded audio", async () => {
+        const originalFetch = globalThis.fetch;
         const previousApiKey = process.env.MINIMAX_API_KEY;
         process.env.MINIMAX_API_KEY = "test-key";
+        let payload: Record<string, unknown> | null = null;
+        globalThis.fetch = async (_url: string | URL | Request, init?: RequestInit) => {
+            payload = JSON.parse(String(init?.body));
+            return new Response(
+                JSON.stringify({
+                    data: { cover_feature_id: "cover-upload", formatted_lyrics: "[Verse]\nupload" }
+                }),
+                { status: 200, headers: { "Content-Type": "application/json" } }
+            );
+        };
+
         try {
             const form = new FormData();
             form.set("source_kind", "upload");
             form.set(
                 "audio",
-                new File([new Uint8Array([1])], "bad.txt", { type: "text/plain" })
+                new File([new Uint8Array([1, 2, 3])], "source.mp3", { type: "audio/mpeg" })
             );
             const resp = await handleRequest(
                 new Request("http://localhost/api/music-cover/preprocess", {
@@ -1512,8 +2010,111 @@ describe("SSE streaming from Anthropic endpoint", () => {
             );
             const body = JSON.parse(await readBody(resp));
 
-            assert.equal(resp.status, 400);
-            assert.equal(body.error, "audio type must be MP3, M4A, MP4, or WAV");
+            assert.equal(resp.status, 200);
+            assert.equal(payload?.model, "music-cover");
+            assert.match(String(payload?.audio_base64), /^[A-Za-z0-9+/=]+$/);
+            assert.equal(body.cover_feature_id, "cover-upload");
+            assert.equal(body.lyrics, "[Verse]\nupload");
+        } finally {
+            globalThis.fetch = originalFetch;
+            if (previousApiKey === undefined) delete process.env.MINIMAX_API_KEY;
+            else process.env.MINIMAX_API_KEY = previousApiKey;
+        }
+    });
+
+    it("preprocesses music cover YouTube audio through extractor sidecar", async () => {
+        const originalFetch = globalThis.fetch;
+        const previousApiKey = process.env.MINIMAX_API_KEY;
+        const previousExtractor = process.env.COVER_EXTRACTOR_URL;
+        process.env.MINIMAX_API_KEY = "test-key";
+        process.env.COVER_EXTRACTOR_URL = "https://extractor.example/audio";
+        const calls: string[] = [];
+        globalThis.fetch = async (url: string | URL | Request, init?: RequestInit) => {
+            const urlStr = url.toString();
+            calls.push(urlStr);
+            if (urlStr === "https://extractor.example/audio") {
+                assert.deepEqual(JSON.parse(String(init?.body)), {
+                    url: "https://youtu.be/example"
+                });
+                return new Response(JSON.stringify({ audio_url: "https://cdn.example/song.mp3" }), {
+                    status: 200,
+                    headers: { "Content-Type": "application/json" }
+                });
+            }
+            return new Response(
+                JSON.stringify({
+                    data: { cover_feature_id: "cover-youtube", formatted_lyrics: "[Verse]\nyt" }
+                }),
+                { status: 200, headers: { "Content-Type": "application/json" } }
+            );
+        };
+
+        try {
+            const form = new FormData();
+            form.set("source_kind", "youtube");
+            form.set("audio_url", "https://youtu.be/example");
+            const resp = await handleRequest(
+                new Request("http://localhost/api/music-cover/preprocess", {
+                    method: "POST",
+                    body: form
+                })
+            );
+            const body = JSON.parse(await readBody(resp));
+
+            assert.equal(resp.status, 200);
+            assert.deepEqual(calls, [
+                "https://extractor.example/audio",
+                `${MINIMAX_BASE}/v1/music_cover_preprocess`
+            ]);
+            assert.equal(body.cover_feature_id, "cover-youtube");
+            assert.equal(body.lyrics, "[Verse]\nyt");
+        } finally {
+            globalThis.fetch = originalFetch;
+            if (previousApiKey === undefined) delete process.env.MINIMAX_API_KEY;
+            else process.env.MINIMAX_API_KEY = previousApiKey;
+            if (previousExtractor === undefined) delete process.env.COVER_EXTRACTOR_URL;
+            else process.env.COVER_EXTRACTOR_URL = previousExtractor;
+        }
+    });
+
+    it("rejects music cover upload with named validation errors", async () => {
+        const previousApiKey = process.env.MINIMAX_API_KEY;
+        process.env.MINIMAX_API_KEY = "test-key";
+        try {
+            const cases: Array<{ form: FormData; error: string; }> = [];
+
+            const missing = new FormData();
+            missing.set("source_kind", "upload");
+            cases.push({ form: missing, error: "audio file required" });
+
+            const badType = new FormData();
+            badType.set("source_kind", "upload");
+            badType.set(
+                "audio",
+                new File([new Uint8Array([1])], "bad.txt", { type: "text/plain" })
+            );
+            cases.push({ form: badType, error: "audio type must be MP3, M4A, MP4, or WAV" });
+
+            const huge = new FormData();
+            huge.set("source_kind", "upload");
+            huge.set("audio", fileWithSize("huge.mp3", "audio/mpeg", 51 * 1024 * 1024));
+            cases.push({ form: huge, error: "audio too large: max 50 MB" });
+
+            const invalidSource = new FormData();
+            invalidSource.set("source_kind", "vinyl");
+            cases.push({ form: invalidSource, error: "source kind invalid" });
+
+            for (const item of cases) {
+                const resp = await handleRequest(
+                    new Request("http://localhost/api/music-cover/preprocess", {
+                        method: "POST",
+                        body: item.form
+                    })
+                );
+                const body = JSON.parse(await readBody(resp));
+                assert.equal(resp.status, 400);
+                assert.equal(body.error, item.error);
+            }
         } finally {
             if (previousApiKey === undefined) delete process.env.MINIMAX_API_KEY;
             else process.env.MINIMAX_API_KEY = previousApiKey;
@@ -2574,6 +3175,38 @@ describe("Integration: chat with agent loop + persistence", () => {
         }
     });
 
+    it("persists queued steering messages after a chat turn", async () => {
+        const sessionId = `steer-drain-session-${Date.now()}`;
+        createSession(requireDb(), sessionId, "Steer Drain");
+        globalThis.fetch = async () => anthropicResponse(anthropicTextSse(["short plan"]));
+
+        try {
+            const steer = await handleRequest(
+                makeRequest(
+                    "POST",
+                    "/api/steer",
+                    { message: "make it shorter" },
+                    { "X-Session-Id": sessionId }
+                )
+            );
+            assert.equal(steer.status, 200);
+
+            const chat = await handleChat(
+                makeRequest("POST", "/api/chat", {
+                    messages: [{ role: "user", content: "write a plan" }]
+                }),
+                "test-key",
+                sessionId
+            );
+            await readBody(chat);
+
+            const rows = getMessages(requireDb(), sessionId);
+            assert.ok(rows.some((row) => row.role === "user" && row.content === "make it shorter"));
+        } finally {
+            globalThis.fetch = REAL_FETCH;
+        }
+    });
+
     it("persists fallback instead of empty thinking-only assistant response", async () => {
         const sessionId = `thinking-only-session-${Date.now()}`;
         const sseChunks = [
@@ -3629,6 +4262,36 @@ describe("Session, draft, and create-history APIs", () => {
         assert.equal(archiveResp.status, 200);
     });
 
+    it("reports session and draft route validation failures", async () => {
+        const db = requireDb();
+        const session = createSession(db, "session-route-errors", "Session Route Errors");
+        const badRename = await handleRequest(
+            new Request(`http://localhost/api/sessions/${session.id}`, {
+                method: "PATCH",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify(null)
+            })
+        );
+        assert.equal(badRename.status, 400);
+        assert.deepEqual(await readJson(badRename), { error: "session must be an object" });
+
+        const missingDelete = await handleRequest(
+            new Request("http://localhost/api/sessions/missing-session", { method: "DELETE" })
+        );
+        assert.equal(missingDelete.status, 404);
+        assert.deepEqual(await readJson(missingDelete), { error: "Not found" });
+
+        const badDraft = await handleRequest(
+            new Request("http://localhost/api/draft/chat", {
+                method: "PUT",
+                headers: { "Content-Type": "application/json" },
+                body: "{"
+            })
+        );
+        assert.equal(badDraft.status, 400);
+        assert.match((await readJson(badDraft) as { error: string; }).error, /JSON/);
+    });
+
     it("activates session and returns 404 for archived/missing id", async () => {
         // Create a second session to activate
         const session2Resp = await handleRequest(
@@ -3859,6 +4522,206 @@ describe("Session, draft, and create-history APIs", () => {
         );
     });
 
+    it("rejects invalid upload media for profile, analyze, and reference endpoints", async () => {
+        const sessionId = "upload-validation-session";
+        const database = requireDb();
+        createSession(database, sessionId, "Upload validation");
+        setActiveSessionId(database, sessionId);
+
+        const avatarMissing = new FormData();
+        let resp = await handleRequest(
+            formRequest("/api/profile/avatar", avatarMissing, sessionId)
+        );
+        assert.equal(resp.status, 400);
+        assert.equal(((await readJson(resp)) as { error: string; }).error, "avatar file required");
+
+        const avatarBad = new FormData();
+        avatarBad.set("avatar", new File([new Uint8Array([1])], "bad.txt", { type: "text/plain" }));
+        resp = await handleRequest(formRequest("/api/profile/avatar", avatarBad, sessionId));
+        assert.equal(resp.status, 400);
+        assert.equal(
+            ((await readJson(resp)) as { error: string; }).error,
+            "avatar image type invalid"
+        );
+
+        const avatarHuge = new FormData();
+        avatarHuge.set("avatar", fileWithSize("huge.png", "image/png", 3 * 1024 * 1024));
+        resp = await handleRequest(formRequest("/api/profile/avatar", avatarHuge, sessionId));
+        assert.equal(resp.status, 400);
+        assert.equal(
+            ((await readJson(resp)) as { error: string; }).error,
+            "avatar image too large"
+        );
+
+        const avatarMalformedProfile = new FormData();
+        avatarMalformedProfile.set(
+            "avatar",
+            new File([new Uint8Array([1])], "avatar.png", { type: "image/png" })
+        );
+        avatarMalformedProfile.set("profile", "not-json");
+        resp = await handleRequest(
+            formRequest("/api/profile/avatar", avatarMalformedProfile, sessionId)
+        );
+        assert.equal(resp.status, 400);
+        assert.match(((await readJson(resp)) as { error: string; }).error, /JSON|Unexpected token/);
+
+        const analyzeMissing = new FormData();
+        resp = await handleRequest(formRequest("/api/analyze-image", analyzeMissing, sessionId));
+        assert.equal(resp.status, 400);
+        assert.equal(((await readJson(resp)) as { error: string; }).error, "image file required");
+
+        const analyzeBad = new FormData();
+        analyzeBad.set("image", new File([new Uint8Array([1])], "bad.txt", { type: "text/plain" }));
+        resp = await handleRequest(formRequest("/api/analyze-image", analyzeBad, sessionId));
+        assert.equal(resp.status, 400);
+        assert.equal(
+            ((await readJson(resp)) as { error: string; }).error,
+            "image type must be PNG, JPG, GIF, or WebP"
+        );
+
+        const analyzeHuge = new FormData();
+        analyzeHuge.set("image", fileWithSize("huge.png", "image/png", 21 * 1024 * 1024));
+        resp = await handleRequest(formRequest("/api/analyze-image", analyzeHuge, sessionId));
+        assert.equal(resp.status, 400);
+        assert.equal(((await readJson(resp)) as { error: string; }).error, "image too large");
+
+        const analyzeForeignSession = new FormData();
+        analyzeForeignSession.set(
+            "image",
+            new File([new Uint8Array([1])], "ok.png", { type: "image/png" })
+        );
+        resp = await handleRequest(
+            formRequest("/api/analyze-image", analyzeForeignSession, "missing-upload-session")
+        );
+        assert.equal(resp.status, 400);
+        assert.equal(((await readJson(resp)) as { error: string; }).error, "session not found");
+
+        const referenceMissing = new FormData();
+        resp = await handleRequest(
+            formRequest("/api/reference-image", referenceMissing, sessionId)
+        );
+        assert.equal(resp.status, 400);
+        assert.equal(
+            ((await readJson(resp)) as { error: string; }).error,
+            "reference image required"
+        );
+
+        const referenceBad = new FormData();
+        referenceBad.set(
+            "image",
+            new File([new Uint8Array([1])], "bad.gif", { type: "image/gif" })
+        );
+        resp = await handleRequest(formRequest("/api/reference-image", referenceBad, sessionId));
+        assert.equal(resp.status, 400);
+        assert.equal(
+            ((await readJson(resp)) as { error: string; }).error,
+            "reference image must be PNG or JPG"
+        );
+
+        const referenceHuge = new FormData();
+        referenceHuge.set("image", fileWithSize("huge.jpg", "image/jpeg", 21 * 1024 * 1024));
+        resp = await handleRequest(formRequest("/api/reference-image", referenceHuge, sessionId));
+        assert.equal(resp.status, 400);
+        assert.equal(
+            ((await readJson(resp)) as { error: string; }).error,
+            "reference image too large"
+        );
+
+        const referenceForeignSession = new FormData();
+        referenceForeignSession.set(
+            "image",
+            new File([new Uint8Array([1])], "ok.jpg", { type: "image/jpeg" })
+        );
+        resp = await handleRequest(
+            formRequest("/api/reference-image", referenceForeignSession, "missing-upload-session")
+        );
+        assert.equal(resp.status, 400);
+        assert.equal(((await readJson(resp)) as { error: string; }).error, "session not found");
+    });
+
+    it("rejects profile avatar generation when image quota is exhausted", async () => {
+        const prevKey = process.env.MINIMAX_API_KEY;
+        const database = requireDb();
+        const sessionId = "profile-avatar-quota-session";
+        createSession(database, sessionId, "Avatar Quota");
+        setActiveSessionId(database, sessionId);
+        process.env.MINIMAX_API_KEY = "test-key";
+        database.prepare("DELETE FROM daily_usage WHERE feature = 'image'").run();
+        for (let i = 0; i < 100; i++) trackUsage(database, "image");
+        try {
+            const resp = await handleRequest(
+                new Request("http://localhost/api/profile/avatar/generate", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json", "X-Session-Id": sessionId },
+                    body: JSON.stringify({ username: "GamerKid" })
+                })
+            );
+            assert.equal(resp.status, 429);
+            assert.equal(
+                ((await resp.json()) as { error: string; }).error,
+                "Daily image quota is used up."
+            );
+        } finally {
+            if (prevKey) process.env.MINIMAX_API_KEY = prevKey;
+            else delete process.env.MINIMAX_API_KEY;
+        }
+    });
+
+    it("returns profile avatar generation provider errors and releases quota", async () => {
+        const prevFetch = globalThis.fetch;
+        const prevKey = process.env.MINIMAX_API_KEY;
+        const database = requireDb();
+        const sessionId = "profile-avatar-provider-error-session";
+        createSession(database, sessionId, "Avatar Provider Error");
+        setActiveSessionId(database, sessionId);
+        process.env.MINIMAX_API_KEY = "test-key";
+        database.prepare("DELETE FROM daily_usage WHERE feature = 'image'").run();
+        globalThis.fetch = async () =>
+            new Response(
+                JSON.stringify({ base_resp: { status_code: 1004, status_msg: "login fail" } }),
+                { status: 200, headers: { "Content-Type": "application/json" } }
+            );
+        try {
+            const before = getUsageToday(database).image ?? 0;
+            const resp = await handleRequest(
+                new Request("http://localhost/api/profile/avatar/generate", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json", "X-Session-Id": sessionId },
+                    body: JSON.stringify({ username: "GamerKid" })
+                })
+            );
+            assert.equal(resp.status, 502);
+            assert.match(
+                ((await resp.json()) as { error: string; }).error,
+                /Couldn't generate the image/
+            );
+            assert.equal(getUsageToday(database).image ?? 0, before);
+        } finally {
+            globalThis.fetch = prevFetch;
+            if (prevKey) process.env.MINIMAX_API_KEY = prevKey;
+            else delete process.env.MINIMAX_API_KEY;
+        }
+    });
+
+    it("rejects malformed profile avatar generation JSON", async () => {
+        const prevKey = process.env.MINIMAX_API_KEY;
+        process.env.MINIMAX_API_KEY = "test-key";
+        try {
+            const resp = await handleRequest(
+                new Request("http://localhost/api/profile/avatar/generate", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: "{"
+                })
+            );
+            assert.equal(resp.status, 400);
+            assert.match(((await resp.json()) as { error: string; }).error, /JSON/);
+        } finally {
+            if (prevKey) process.env.MINIMAX_API_KEY = prevKey;
+            else delete process.env.MINIMAX_API_KEY;
+        }
+    });
+
     it("generates profile avatars through MiniMax image generation", async () => {
         const prevFetch = globalThis.fetch;
         const prevKey = process.env.MINIMAX_API_KEY;
@@ -3925,6 +4788,15 @@ describe("Session, draft, and create-history APIs", () => {
         }
     });
 
+    it("lists async TTS tasks for the active session", async () => {
+        const db = requireDb();
+        const sessionId = resolveSessionId(new Request("http://localhost/api/state"), db);
+        const resp = await handleRequest(new Request("http://localhost/api/async-tts-tasks"));
+        assert.equal(resp.status, 200);
+        assert.deepEqual((await readJson(resp) as { tasks: unknown[]; }).tasks, []);
+        assert.equal(typeof sessionId, "string");
+    });
+
     it("saves and clears active-session drafts", async () => {
         const putResp = await handleRequest(
             new Request("http://localhost/api/draft/chat", {
@@ -3967,6 +4839,12 @@ describe("Session, draft, and create-history APIs", () => {
             new Request("http://localhost/api/create-history/hist_1", { method: "DELETE" })
         );
         assert.equal(delResp.status, 200);
+
+        const missingResp = await handleRequest(
+            new Request("http://localhost/api/create-history/missing-history", { method: "DELETE" })
+        );
+        assert.equal(missingResp.status, 404);
+        assert.deepEqual(await readJson(missingResp), { error: "Not found" });
     });
 
     it("create-history API response includes origin field", async () => {
@@ -4231,6 +5109,29 @@ describe("GET /api/quota", () => {
         }
     });
 
+    it("returns 502 when MiniMax quota JSON parsing fails", async () => {
+        const prevFetch = globalThis.fetch;
+        const prevKey = process.env.MINIMAX_API_KEY;
+        process.env.MINIMAX_API_KEY = "test-key";
+        globalThis.fetch = async () =>
+            ({
+                ok: true,
+                status: 200,
+                json: async () => {
+                    throw new Error("bad json");
+                }
+            }) as Response;
+        try {
+            const resp = await handleRequest(new Request("http://localhost/api/quota"));
+            assert.equal(resp.status, 502);
+            assert.deepEqual(await resp.json(), { error: "Failed to fetch quota" });
+        } finally {
+            globalThis.fetch = prevFetch;
+            if (prevKey) process.env.MINIMAX_API_KEY = prevKey;
+            else delete process.env.MINIMAX_API_KEY;
+        }
+    });
+
     it("returns 502 when MiniMax quota API fails", async () => {
         const mockResp: Response = { ok: false, status: 500 } as unknown as Response;
         const prevFetch = globalThis.fetch;
@@ -4246,6 +5147,38 @@ describe("GET /api/quota", () => {
             if (prevKey) process.env.MINIMAX_API_KEY = prevKey;
             else delete process.env.MINIMAX_API_KEY;
         }
+    });
+});
+
+describe("handleNodeRequest", () => {
+    it("rejects malformed encoded traversal before building a Request", async () => {
+        const headers: Record<string, string> = {};
+        const res = {
+            statusCode: 200,
+            headersSent: false,
+            setHeader(key: string, value: string) {
+                headers[key] = value;
+            },
+            end(body?: string) {
+                this.headersSent = true;
+                this.body = body;
+            },
+            on() {
+                return this;
+            },
+            body: undefined as string | undefined
+        };
+        const req = {
+            method: "GET",
+            url: "/%E0%A4%A%2e%2e/secret",
+            headers: {}
+        };
+
+        await handleNodeRequest(req as never, res as never);
+
+        assert.equal(res.statusCode, 404);
+        assert.equal(headers["Content-Type"], "application/json");
+        assert.deepEqual(JSON.parse(res.body ?? "{}"), { error: "Not found" });
     });
 });
 

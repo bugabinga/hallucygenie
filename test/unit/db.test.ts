@@ -1,6 +1,5 @@
 // HallucyGenie — Database tests (migrations, CRUD, quotas)
 
-import { Database } from "bun:sqlite";
 import assert from "node:assert/strict";
 import {
     copyFileSync,
@@ -13,6 +12,7 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { DatabaseSync as Database } from "node:sqlite";
 import { beforeEach, describe, it } from "node:test";
 
 import {
@@ -45,6 +45,7 @@ import {
     releaseQuota,
     renameSession,
     runMigrations,
+    runTransaction,
     saveAsset,
     saveAsyncTtsTask,
     saveDraft,
@@ -415,6 +416,21 @@ describe("User profile state", () => {
     });
 
     it("rejects raw asset data and invalid asset avatar refs", () => {
+        assert.throws(
+            () =>
+                saveUserProfile(db, {
+                    username: "data:audio/mpeg;base64,abc"
+                }),
+            /profile must not contain raw asset data/
+        );
+        assert.throws(
+            () =>
+                saveUserProfile(db, {
+                    username: "x",
+                    avatar: "asset_123abc"
+                }),
+            /avatar must be an object/
+        );
         assert.throws(
             () =>
                 saveUserProfile(db, {
@@ -895,6 +911,57 @@ describe("QUOTAS constant", () => {
     });
 });
 
+// ── Transaction helper ──────────────────────────────────────────────
+
+describe("runTransaction", () => {
+    it("commits successful work and rolls back thrown work", () => {
+        const db = freshDb();
+        db.exec("CREATE TABLE tx_test (value TEXT NOT NULL)");
+
+        assert.equal(
+            runTransaction(db, () => db.prepare("INSERT INTO tx_test VALUES ('ok')").run().changes),
+            1
+        );
+        assert.throws(
+            () =>
+                runTransaction(db, () => {
+                    db.prepare("INSERT INTO tx_test VALUES ('nope')").run();
+                    throw new Error("boom");
+                }),
+            /boom/
+        );
+
+        assert.deepEqual(db.prepare("SELECT value FROM tx_test").all().map((row) => ({ ...row })), [
+            { value: "ok" }
+        ]);
+        db.close();
+    });
+
+    it("uses savepoints inside an existing transaction", () => {
+        const db = freshDb();
+        db.exec("CREATE TABLE tx_test (value TEXT NOT NULL)");
+
+        runTransaction(db, () => {
+            db.prepare("INSERT INTO tx_test VALUES ('outer')").run();
+            assert.throws(
+                () =>
+                    runTransaction(db, () => {
+                        db.prepare("INSERT INTO tx_test VALUES ('inner')").run();
+                        throw new Error("nested");
+                    }),
+                /nested/
+            );
+            db.prepare("INSERT INTO tx_test VALUES ('after')").run();
+        });
+
+        assert.deepEqual(db.prepare("SELECT value FROM tx_test").all().map((row) => ({ ...row })), [
+            { value: "outer" },
+            { value: "after" }
+        ]);
+        db.close();
+    });
+});
+
 // ── Atomic quota consumption ────────────────────────────────────────
 
 describe("consumeQuota", () => {
@@ -1003,7 +1070,7 @@ describe("saveAsset + getAssets + getAsset", () => {
         assert.deepEqual(assets, []);
     });
 
-    it("getAsset returns undefined for unknown id", () => {
+    it("getAsset returns null for unknown id", () => {
         const asset = getAsset(db, "nonexistent");
         assert.equal(asset, null);
     });
@@ -1157,6 +1224,11 @@ describe("saveAsset + getAssets + getAsset", () => {
 describe("Mutation-strength DB invariants", () => {
     it("autoNameSession only allows default sessions", () => {
         const db = freshDb();
+        const defaultSession = createSession(db, undefined, "New Chat");
+        const autoNamed = autoNameSession(db, defaultSession.id, "  Boss Fight  ");
+        assert.equal(autoNamed.name, "Boss Fight");
+        assert.equal(autoNamed.name_source, "auto");
+
         const session = createSession(db, undefined, "Manual");
         renameSession(db, session.id, "Manual Name");
         assert.throws(

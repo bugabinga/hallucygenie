@@ -1,5 +1,5 @@
 // MiniMax API mocks for E2E tests.
-// Bun's native fetch is not reliably intercepted by nock, so patch fetch directly.
+// Patch fetch directly instead of relying on HTTP interception.
 
 const MINIMAX_BASE = "https://api.minimax.io";
 const GENERATED_IMAGE_PNG = new Uint8Array(
@@ -8,6 +8,7 @@ const GENERATED_IMAGE_PNG = new Uint8Array(
         "base64"
     )
 );
+const GENERATED_VIDEO_MP4 = new Uint8Array(Buffer.from("fake-mp4-data"));
 let previousFetch: typeof fetch | null = null;
 
 export interface MinimaxMockCall {
@@ -140,6 +141,22 @@ function minimaxResponse(url: URL, init?: RequestInit): Response | null {
                 base_resp: { status_code: 0 }
             });
 
+        case "/v1/video_generation":
+            return jsonResponse({ task_id: "video-task-e2e", base_resp: { status_code: 0 } });
+
+        case "/v1/query/video_generation":
+            return jsonResponse({
+                status: "success",
+                file_id: "video-file-e2e",
+                base_resp: { status_code: 0 }
+            });
+
+        case "/v1/files/retrieve":
+            return jsonResponse({
+                download_url: "https://example.com/generated/test-video.mp4",
+                base_resp: { status_code: 0 }
+            });
+
         case "/v1/coding_plan/search":
             return jsonResponse({
                 data: {
@@ -205,6 +222,12 @@ export function setupMinimaxMocks(): void {
             return new Response(GENERATED_IMAGE_PNG, {
                 status: 200,
                 headers: { "Content-Type": "image/png" }
+            });
+        }
+        if (url.href === "https://example.com/generated/test-video.mp4") {
+            return new Response(GENERATED_VIDEO_MP4, {
+                status: 200,
+                headers: { "Content-Type": "video/mp4" }
             });
         }
         return previousFetch?.(input, init);

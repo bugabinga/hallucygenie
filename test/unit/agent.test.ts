@@ -920,6 +920,16 @@ describe("runAgentLoop", () => {
         assert.ok(compact.includes("Generated audio"));
     });
 
+    it("compacts video tool results before model replay", () => {
+        const compact = compactToolResultForModel("generate_video", {
+            type: "video",
+            content: "https://hailuo-video.example/trailer.mp4"
+        });
+        assert.equal(compact.includes("https://"), false);
+        assert.ok(compact.includes("Generated video with generate_video"));
+        assert.ok(compact.includes("tool card"));
+    });
+
     it("compacts image tool results before model replay", () => {
         const compact = compactToolResultForModel("generate_image", {
             type: "image",
@@ -2347,6 +2357,28 @@ describe("buildContext tool edge cases", () => {
         assert.equal((result[1] as ContextToolMessage).tool_call_id, "nonexistent");
     });
 
+    it("assistant with tool_calls pulls following matching tool results", () => {
+        const messages: ChatMessage[] = [
+            { role: "system" as const, content: "a" },
+            {
+                role: "assistant" as const,
+                content: "",
+                tool_calls: [
+                    { id: "tc1", name: "gen", input: {} },
+                    { id: "tc2", name: "tts", input: {} }
+                ]
+            },
+            { role: "tool" as const, content: "image", tool_call_id: "tc1" },
+            { role: "tool" as const, content: "audio", tool_call_id: "tc2" }
+        ];
+
+        const result = buildContext(messages, 1000);
+        assert.deepEqual(
+            result.map((msg) => msg.role),
+            ["system", "assistant", "tool", "tool"]
+        );
+    });
+
     it("assistant with tool_calls but no tool results included", () => {
         const messages: ChatMessage[] = [
             { role: "system" as const, content: "a" },
@@ -2469,8 +2501,9 @@ describe("toAnthropicPayload edge cases", () => {
         // Assistant with empty content → should have content: [{type: "text", text: ""}]
         const assistantMsg = msgs.find((m) => m.role === "assistant");
         assert.ok(assistantMsg);
-        assert.equal((assistantMsg?.content as AnthropicTextBlock[])[0]?.type, "text");
-        assert.equal((assistantMsg?.content as AnthropicTextBlock[])[0]?.text, "");
+        const content = assistantMsg.content as AnthropicTextBlock[];
+        assert.equal(content[0]?.type, "text");
+        assert.equal(content[0]?.text, "");
     });
 
     it("consecutive tool results coalesce into single user message", () => {
@@ -3233,6 +3266,55 @@ describe("SSE parser error paths", () => {
         const toolStartEvents = ev10.filter((e) => e.type === "tool_start");
         assert.equal(toolStartEvents[0].id, "tu_mal");
         assert.equal(ev10[ev10.length - 1].type, "done");
+    });
+
+    it("tool call with no input delta defaults to empty object", async () => {
+        const first = new Response(
+            new ReadableStream({
+                start(controller) {
+                    controller.enqueue(
+                        sseEvent("content_block_start", {
+                            type: "content_block_start",
+                            index: 0,
+                            content_block: {
+                                type: "tool_use",
+                                id: "tu_empty",
+                                name: "generate_image"
+                            }
+                        })
+                    );
+                    controller.enqueue(
+                        sseEvent("content_block_stop", { type: "content_block_stop", index: 0 })
+                    );
+                    controller.enqueue(
+                        sseEvent("message_delta", {
+                            type: "message_delta",
+                            delta: { stop_reason: "tool_use" }
+                        })
+                    );
+                    controller.enqueue(sseEvent("message_stop", { type: "message_stop" }));
+                    controller.close();
+                }
+            }),
+            { status: 200, headers: { "Content-Type": "text/event-stream" } }
+        );
+        const second = anthropicResponse(textResponse(["Done"]));
+        let n = 0;
+        globalThis.fetch = async (url: string | URL | Request) => {
+            if (url.toString().includes("/anthropic/v1/messages")) {
+                return ++n === 1 ? first : second;
+            }
+            return new Response(
+                JSON.stringify({ data: { image_urls: ["https://example.com/img.png"] } }),
+                {
+                    status: 200,
+                    headers: { "Content-Type": "application/json" }
+                }
+            );
+        };
+        const { events, onEvent } = collectEvents();
+        await runAgentLoop([{ role: "user", content: "draw" }], "test-key", onEvent);
+        assert.equal(events.find((event) => event.type === "tool_start")?.id, "tu_empty");
     });
 
     // --- Mutation kill targets ---
