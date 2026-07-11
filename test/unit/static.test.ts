@@ -1413,6 +1413,8 @@ describe("GitHub Actions health", () => {
         assert.match(agentsYml, /uses: jdx\/mise-action@v4\.2\.0/);
         assert.match(agentsYml, /client-id: \$\{\{ secrets\.AGENT_BOT_APP_ID \}\}/);
         assert.doesNotMatch(agentsYml, /app-id:/);
+        assert.equal((agentsYml.match(/persist-credentials: false/g) ?? []).length, 5);
+        assert.equal((agentsYml.match(/git config credential\.helper/g) ?? []).length, 4);
         assert.equal((agentsYml.match(/mise run check --fix\n\s+mise run test/g) ?? []).length, 8);
         assert.doesNotMatch(agentsYml, /mise run fmt \|\| true|mise run ready|mise run fix/);
         assert.match(slopChopperAgent, /Run "mise run check --fix" && "mise run test" after/);
