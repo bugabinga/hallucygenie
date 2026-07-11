@@ -335,13 +335,23 @@ export function prepareExistingPr(
     return undefined;
 }
 
-export function runPi(role: PiRole, args: string[], timeout: number): void {
+export function runPi(
+    role: PiRole,
+    args: string[],
+    timeout: number,
+    opts: { allowFail?: boolean; } = {}
+): boolean {
     const label = role === "analyze" ? "Pass 1 (analyze)" : "Pass 2 (code)";
     const result = spawnSync("pi", args, {
         stdio: "inherit",
         env: { ...process.env, PI_OFFLINE: "1", PI_CODING_AGENT_DIR: agentDir },
         timeout
     });
+
+    const fail = (code: number) => {
+        if (opts.allowFail) return false;
+        process.exit(code);
+    };
 
     if (result.error) {
         const code = (result.error as NodeJS.ErrnoException).code;
@@ -353,18 +363,20 @@ export function runPi(role: PiRole, args: string[], timeout: number): void {
         } else {
             console.error(`\n❌ ${label} FAILED: ${code}`);
         }
-        process.exit(1);
+        return fail(1);
     }
 
     if (result.signal) {
         console.error(`\n❌ ${label} KILLED by signal ${result.signal}`);
-        process.exit(1);
+        return fail(1);
     }
 
     if (result.status && result.status !== 0) {
         console.error(`\n❌ ${label} exited with code ${result.status}`);
-        process.exit(result.status);
+        return fail(result.status);
     }
+
+    return true;
 }
 
 export function readFindings(context: string): string {
