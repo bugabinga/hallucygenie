@@ -36,12 +36,13 @@ jobs:
             - uses: actions/create-github-app-token@v3
               id: app-token
               with:
-                  app-id: ${{ secrets.AGENT_BOT_APP_ID }}
+                  client-id: ${{ secrets.AGENT_BOT_APP_ID }}
                   private-key: ${{ secrets.AGENT_BOT_PRIVATE_KEY }}
             - uses: actions/checkout@v6.0.3
               with:
                   token: ${{ steps.app-token.outputs.token }}
-            - uses: jdx/mise-action@v3
+                  persist-credentials: false
+            - uses: jdx/mise-action@v4.2.0
               with:
                   cache: true
             - run: mise run setup
@@ -64,6 +65,7 @@ jobs:
               run: |
                   git config user.name "hallucygenie-agent-bot[bot]"
                   git config user.email "${{ secrets.AGENT_BOT_APP_ID }}+hallucygenie-agent-bot[bot]@users.noreply.github.com"
+                  git config credential.helper '!f() { echo username=x-access-token; echo "password=$GH_TOKEN"; }; f'
                   if [ -f /tmp/pi-agent-existing-pr-branch ]; then
                       PR_NUMBER=$(cat /tmp/pi-agent-existing-pr-number)
                       BRANCH=$(cat /tmp/pi-agent-existing-pr-branch)
@@ -113,12 +115,13 @@ jobs:
             - uses: actions/create-github-app-token@v3
               id: app-token
               with:
-                  app-id: ${{ secrets.AGENT_BOT_APP_ID }}
+                  client-id: ${{ secrets.AGENT_BOT_APP_ID }}
                   private-key: ${{ secrets.AGENT_BOT_PRIVATE_KEY }}
             - uses: actions/checkout@v6.0.3
               with:
                   token: ${{ steps.app-token.outputs.token }}
-            - uses: jdx/mise-action@v3
+                  persist-credentials: false
+            - uses: jdx/mise-action@v4.2.0
               with:
                   cache: true
             - run: mise run setup
@@ -141,6 +144,7 @@ jobs:
               run: |
                   git config user.name "hallucygenie-agent-bot[bot]"
                   git config user.email "${{ secrets.AGENT_BOT_APP_ID }}+hallucygenie-agent-bot[bot]@users.noreply.github.com"
+                  git config credential.helper '!f() { echo username=x-access-token; echo "password=$GH_TOKEN"; }; f'
                   if [ -f /tmp/pi-agent-existing-pr-branch ]; then
                       PR_NUMBER=$(cat /tmp/pi-agent-existing-pr-number)
                       BRANCH=$(cat /tmp/pi-agent-existing-pr-branch)
@@ -189,12 +193,13 @@ jobs:
             - uses: actions/create-github-app-token@v3
               id: app-token
               with:
-                  app-id: ${{ secrets.AGENT_BOT_APP_ID }}
+                  client-id: ${{ secrets.AGENT_BOT_APP_ID }}
                   private-key: ${{ secrets.AGENT_BOT_PRIVATE_KEY }}
             - uses: actions/checkout@v6.0.3
               with:
                   token: ${{ steps.app-token.outputs.token }}
-            - uses: jdx/mise-action@v3
+                  persist-credentials: false
+            - uses: jdx/mise-action@v4.2.0
               with:
                   cache: true
             - run: mise run setup
@@ -217,6 +222,7 @@ jobs:
               run: |
                   git config user.name "hallucygenie-agent-bot[bot]"
                   git config user.email "${{ secrets.AGENT_BOT_APP_ID }}+hallucygenie-agent-bot[bot]@users.noreply.github.com"
+                  git config credential.helper '!f() { echo username=x-access-token; echo "password=$GH_TOKEN"; }; f'
                   if [ -f /tmp/pi-agent-existing-pr-branch ]; then
                       PR_NUMBER=$(cat /tmp/pi-agent-existing-pr-number)
                       BRANCH=$(cat /tmp/pi-agent-existing-pr-branch)
@@ -265,12 +271,13 @@ jobs:
             - uses: actions/create-github-app-token@v3
               id: app-token
               with:
-                  app-id: ${{ secrets.AGENT_BOT_APP_ID }}
+                  client-id: ${{ secrets.AGENT_BOT_APP_ID }}
                   private-key: ${{ secrets.AGENT_BOT_PRIVATE_KEY }}
             - uses: actions/checkout@v6.0.3
               with:
                   token: ${{ steps.app-token.outputs.token }}
-            - uses: jdx/mise-action@v3
+                  persist-credentials: false
+            - uses: jdx/mise-action@v4.2.0
               with:
                   cache: true
             - run: mise run setup
@@ -293,6 +300,7 @@ jobs:
               run: |
                   git config user.name "hallucygenie-agent-bot[bot]"
                   git config user.email "${{ secrets.AGENT_BOT_APP_ID }}+hallucygenie-agent-bot[bot]@users.noreply.github.com"
+                  git config credential.helper '!f() { echo username=x-access-token; echo "password=$GH_TOKEN"; }; f'
                   if [ -f /tmp/pi-agent-existing-pr-branch ]; then
                       PR_NUMBER=$(cat /tmp/pi-agent-existing-pr-number)
                       BRANCH=$(cat /tmp/pi-agent-existing-pr-branch)
@@ -343,12 +351,13 @@ jobs:
             - uses: actions/create-github-app-token@v3
               id: app-token
               with:
-                  app-id: ${{ secrets.AGENT_BOT_APP_ID }}
+                  client-id: ${{ secrets.AGENT_BOT_APP_ID }}
                   private-key: ${{ secrets.AGENT_BOT_PRIVATE_KEY }}
             - uses: actions/checkout@v6.0.3
               with:
                   token: ${{ steps.app-token.outputs.token }}
-            - uses: jdx/mise-action@v3
+                  persist-credentials: false
+            - uses: jdx/mise-action@v4.2.0
               with:
                   cache: true
             - run: mise run setup

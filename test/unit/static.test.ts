@@ -1391,7 +1391,7 @@ describe("GitHub Actions health", () => {
     it("runs check, e2e matrix, and mutation through mise", () => {
         assert.doesNotMatch(ciYml, /MINIMAX_(?:API_)?KEY/);
         assert.doesNotMatch(dependabotYml, /MINIMAX_(?:API_)?KEY/);
-        assert.match(ciYml, /uses: jdx\/mise-action@v3/);
+        assert.match(ciYml, /uses: jdx\/mise-action@v4\.2\.0/);
         assert.match(ciYml, /run: mise run setup --js/);
         assert.match(ciYml, /run: mise run setup --browsers/);
         assert.match(ciYml, /run: mise run check/);
@@ -1410,7 +1410,11 @@ describe("GitHub Actions health", () => {
 
     it("agent PR workflows fix then test before commit", () => {
         assert.doesNotMatch(agentsYml, /browser-actions\/setup-chrome|Install sqruff|tool: just/);
-        assert.match(agentsYml, /uses: jdx\/mise-action@v3/);
+        assert.match(agentsYml, /uses: jdx\/mise-action@v4\.2\.0/);
+        assert.match(agentsYml, /client-id: \$\{\{ secrets\.AGENT_BOT_APP_ID \}\}/);
+        assert.doesNotMatch(agentsYml, /app-id:/);
+        assert.equal((agentsYml.match(/persist-credentials: false/g) ?? []).length, 5);
+        assert.equal((agentsYml.match(/git config credential\.helper/g) ?? []).length, 4);
         assert.equal((agentsYml.match(/mise run check --fix\n\s+mise run test/g) ?? []).length, 8);
         assert.doesNotMatch(agentsYml, /mise run fmt \|\| true|mise run ready|mise run fix/);
         assert.match(slopChopperAgent, /Run "mise run check --fix" && "mise run test" after/);
@@ -1418,7 +1422,7 @@ describe("GitHub Actions health", () => {
 
     it("caches deps and uploads mutation HTML artifacts", () => {
         assert.match(ciYml, /actions\/checkout@v6\.0\.3/);
-        assert.match(ciYml, /jdx\/mise-action@v3/);
+        assert.match(ciYml, /jdx\/mise-action@v4\.2\.0/);
         assert.match(ciYml, /cache: true/);
         assert.match(ciYml, /path: ~\/\.cache\/ms-playwright/);
         assert.match(
