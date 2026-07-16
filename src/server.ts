@@ -2261,7 +2261,7 @@ async function downloadAsset(
     if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
         throw new Error(`${label} asset URL must be http(s)`);
     }
-    const resp = await fetch(url);
+    const resp = await fetch(parsed.href);
     if (!resp.ok) throw new Error(`${label} download failed: ${resp.status}`);
     const mime = resp.headers.get("Content-Type")?.split(";")[0]?.trim().toLowerCase() ?? "";
     if (!allowedMimes.has(mime)) {
