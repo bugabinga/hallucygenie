@@ -305,6 +305,20 @@ describe("index.html health", () => {
         );
     });
 
+    it("voice-pitch slider has deep/normal/high range labels per HG-SPEC-016", () => {
+        const doc = parseIndex();
+        const pitchRange = doc.querySelector("#voice-pitch");
+        assert.ok(pitchRange, "#voice-pitch must exist");
+        const labels = Array.from(
+            pitchRange!.parentElement!.querySelectorAll(".range-labels span")
+        ).map((s) => visibleText(s));
+        assert.deepEqual(
+            labels,
+            ["deep", "normal", "high"],
+            "voice-pitch slider ticks must be deep/normal/high per spec"
+        );
+    });
+
     it("groups related Create image helper text tightly before the action", () => {
         const doc = parseIndex();
         const group = doc.querySelector("#create-image-form .create-option-group");
