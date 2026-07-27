@@ -8,19 +8,19 @@
         "prepare": "git rev-parse --git-dir >/dev/null 2>&1 || exit 0; lefthook install"
     },
     "devDependencies": {
-        "@biomejs/biome": "2.5.3",
+        "@biomejs/biome": "2.5.5",
         "@stryker-mutator/core": "^9.6.1",
         "@stryker-mutator/typescript-checker": "^9.6.1",
         "@types/nock": "^11.1.0",
         "@types/node": "^26.1.1",
-        "dprint": "0.55.1",
+        "dprint": "0.55.2",
         "esbuild": "^0.28.1",
-        "happy-dom": "^20.10.6",
+        "happy-dom": "^20.11.1",
         "lefthook": "^2.1.10",
         "nock": "^14.0.16",
-        "playwright": "^1.61.1"
+        "playwright": "^1.62.0"
     },
     "dependencies": {
-        "marked": "18.0.6"
+        "marked": "18.0.7"
     }
 }
