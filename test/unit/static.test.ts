@@ -267,6 +267,7 @@ describe("index.html health", () => {
 
     it("uses kid-friendly controls for bounded Create params", () => {
         const doc = parseIndex();
+        assert.equal(doc.querySelector("#img-ratio")?.tagName.toLowerCase(), "select");
         assert.equal(doc.querySelector("#img-count")?.tagName.toLowerCase(), "select");
         assert.equal(doc.querySelector("#img-size")?.tagName.toLowerCase(), "select");
         assert.equal(doc.querySelector("#img-seed")?.getAttribute("type"), "hidden");
@@ -288,6 +289,34 @@ describe("index.html health", () => {
                 group.getAttribute("label")
             ),
             ["English", "Deutsch", "Europe", "Rest"]
+        );
+    });
+
+    it("voice-volume slider has low/normal/loud range labels per HG-SPEC-016", () => {
+        const doc = parseIndex();
+        const volumeRange = doc.querySelector("#voice-volume");
+        assert.ok(volumeRange, "#voice-volume must exist");
+        const labels = Array.from(
+            volumeRange!.parentElement!.querySelectorAll(".range-labels span")
+        ).map((s) => visibleText(s));
+        assert.deepEqual(
+            labels,
+            ["low", "normal", "loud"],
+            "voice-volume slider ticks must be low/normal/loud per spec"
+        );
+    });
+
+    it("voice-pitch slider has deep/normal/high range labels per HG-SPEC-016", () => {
+        const doc = parseIndex();
+        const pitchRange = doc.querySelector("#voice-pitch");
+        assert.ok(pitchRange, "#voice-pitch must exist");
+        const labels = Array.from(
+            pitchRange!.parentElement!.querySelectorAll(".range-labels span")
+        ).map((s) => visibleText(s));
+        assert.deepEqual(
+            labels,
+            ["deep", "normal", "high"],
+            "voice-pitch slider ticks must be deep/normal/high per spec"
         );
     });
 
