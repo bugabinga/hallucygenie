@@ -2173,13 +2173,6 @@ async function runE2ETests(): Promise<void> {
             );
 
             await generateResponse;
-            // waitForResponse resolves after the body is read, but the click handler's
-            // .finally() runs as a separate microtask. Drain the queue before checking
-            // button state to avoid a race on Firefox.
-            await page.waitForFunction(
-                () => !(document.querySelector("#profile-generate") as HTMLButtonElement)?.disabled,
-                { timeout: 5000 }
-            );
             await expectEnabled(page.locator("#profile-generate"));
             await expectHidden(page, "#profile-avatar-preview.is-pending");
             assertEqual(

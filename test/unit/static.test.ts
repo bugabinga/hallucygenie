@@ -267,6 +267,7 @@ describe("index.html health", () => {
 
     it("uses kid-friendly controls for bounded Create params", () => {
         const doc = parseIndex();
+        assert.equal(doc.querySelector("#img-ratio")?.tagName.toLowerCase(), "select");
         assert.equal(doc.querySelector("#img-count")?.tagName.toLowerCase(), "select");
         assert.equal(doc.querySelector("#img-size")?.tagName.toLowerCase(), "select");
         assert.equal(doc.querySelector("#img-seed")?.getAttribute("type"), "hidden");
