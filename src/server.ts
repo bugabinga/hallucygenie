@@ -71,6 +71,10 @@ function truncateLogText(text: string, max = 500): string {
     return text.length > max ? `${text.slice(0, max)}…` : text;
 }
 
+function errorMessage(err: unknown): string {
+    return err instanceof Error ? err.message : String(err);
+}
+
 function longTextSummary(text: string): string {
     const compact = text.replace(/\s+/g, " ").trim();
     return `${compact.slice(0, 180)}${compact.length > 180 ? "…" : ""} (${text.length} chars)`;
@@ -1399,7 +1403,7 @@ async function handleProfileAvatarUpload(req: Request, database: Database): Prom
         const profile = saveProfileAvatar(database, profileInput, assetId);
         return jsonResponse({ profile, assetUrl: saved.content });
     } catch (err) {
-        return jsonResponse({ error: String(err instanceof Error ? err.message : err) }, 400);
+        return jsonResponse({ error: errorMessage(err) }, 400);
     }
 }
 
@@ -1426,7 +1430,7 @@ async function handleAnalyzeImageUpload(req: Request, database: Database): Promi
         if (!assetId) throw new Error("analyze image asset save failed");
         return jsonResponse({ assetId, assetUrl: saved.content });
     } catch (err) {
-        return jsonResponse({ error: String(err instanceof Error ? err.message : err) }, 400);
+        return jsonResponse({ error: errorMessage(err) }, 400);
     }
 }
 
@@ -1457,7 +1461,7 @@ async function handleReferenceImageUpload(req: Request, database: Database): Pro
         if (!assetId) throw new Error("reference image asset save failed");
         return jsonResponse({ assetId, assetUrl: saved.content });
     } catch (err) {
-        return jsonResponse({ error: String(err instanceof Error ? err.message : err) }, 400);
+        return jsonResponse({ error: errorMessage(err) }, 400);
     }
 }
 
@@ -1539,7 +1543,7 @@ async function handleMusicCoverPreprocess(req: Request, apiKey: string): Promise
         }
         return jsonResponse(await musicCoverPreprocess(source, apiKey));
     } catch (err) {
-        const error = String(err instanceof Error ? err.message : err);
+        const error = errorMessage(err);
         log.warn("music cover preprocess failed", { sourceKind, error: truncateLogText(error) });
         return jsonResponse({ error }, 400);
     }
@@ -1570,7 +1574,7 @@ async function handleProfileAvatarGenerate(req: Request, database: Database): Pr
         const savedProfile = saveProfileAvatar(database, profile, assetId);
         return jsonResponse({ profile: savedProfile, assetUrl: saved.content });
     } catch (err) {
-        return jsonResponse({ error: String(err instanceof Error ? err.message : err) }, 400);
+        return jsonResponse({ error: errorMessage(err) }, 400);
     }
 }
 
@@ -1684,7 +1688,7 @@ export async function handleRequest(req: Request): Promise<Response> {
                 return jsonResponse(saveUserProfile(database, parsed));
             } catch (err) {
                 return jsonResponse(
-                    { error: String(err instanceof Error ? err.message : err) },
+                    { error: errorMessage(err) },
                     400
                 );
             }
@@ -1727,7 +1731,7 @@ export async function handleRequest(req: Request): Promise<Response> {
                 });
             } catch (err) {
                 return jsonResponse(
-                    { error: String(err instanceof Error ? err.message : err) },
+                    { error: errorMessage(err) },
                     400
                 );
             }
@@ -1766,7 +1770,7 @@ export async function handleRequest(req: Request): Promise<Response> {
                 });
             } catch (err) {
                 return jsonResponse(
-                    { error: String(err instanceof Error ? err.message : err) },
+                    { error: errorMessage(err) },
                     400
                 );
             }
@@ -2247,42 +2251,32 @@ async function readResponseBytesCapped(resp: Response, maxBytes: number): Promis
     return Buffer.concat(chunks.map((chunk) => Buffer.from(chunk)));
 }
 
-async function downloadImageAsset(url: string): Promise<{ buf: Buffer; mime: string; }> {
-    const parsed = new URL(url);
-    if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
-        throw new Error("image asset URL must be http(s)");
+async function downloadAsset(
+    url: string,
+    allowedMimes: Set<string>,
+    maxBytes: number,
+    label: string
+): Promise<{ buf: Buffer; mime: string; }> {
+    if (!url.startsWith("http://") && !url.startsWith("https://")) {
+        throw new Error(`${label} asset URL must be http(s)`);
     }
-
     const resp = await fetch(url);
-    if (!resp.ok) throw new Error(`image download failed: ${resp.status}`);
-
+    if (!resp.ok) throw new Error(`${label} download failed: ${resp.status}`);
     const mime = resp.headers.get("Content-Type")?.split(";")[0]?.trim().toLowerCase() ?? "";
-    if (!GENERATED_IMAGE_MIMES.has(mime)) {
-        throw new Error(`image download returned ${mime || "unknown"}`);
+    if (!allowedMimes.has(mime)) {
+        throw new Error(`${label} download returned ${mime || "unknown"}`);
     }
     const contentLength = Number(resp.headers.get("Content-Length") ?? "0");
-    if (contentLength > MAX_GENERATED_IMAGE_BYTES) throw new Error("image download too large");
+    if (contentLength > maxBytes) throw new Error(`${label} download too large`);
+    return { buf: await readResponseBytesCapped(resp, maxBytes), mime };
+}
 
-    return { buf: await readResponseBytesCapped(resp, MAX_GENERATED_IMAGE_BYTES), mime };
+async function downloadImageAsset(url: string): Promise<{ buf: Buffer; mime: string; }> {
+    return downloadAsset(url, GENERATED_IMAGE_MIMES, MAX_GENERATED_IMAGE_BYTES, "image");
 }
 
 async function downloadVideoAsset(url: string): Promise<{ buf: Buffer; mime: string; }> {
-    const parsed = new URL(url);
-    if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
-        throw new Error("video asset URL must be http(s)");
-    }
-
-    const resp = await fetch(url);
-    if (!resp.ok) throw new Error(`video download failed: ${resp.status}`);
-
-    const mime = resp.headers.get("Content-Type")?.split(";")[0]?.trim().toLowerCase() ?? "";
-    if (!GENERATED_VIDEO_MIMES.has(mime)) {
-        throw new Error(`video download returned ${mime || "unknown"}`);
-    }
-    const contentLength = Number(resp.headers.get("Content-Length") ?? "0");
-    if (contentLength > MAX_GENERATED_VIDEO_BYTES) throw new Error("video download too large");
-
-    return { buf: await readResponseBytesCapped(resp, MAX_GENERATED_VIDEO_BYTES), mime };
+    return downloadAsset(url, GENERATED_VIDEO_MIMES, MAX_GENERATED_VIDEO_BYTES, "video");
 }
 
 function audioMimeForFilename(filename: string): string | null {
@@ -2317,21 +2311,13 @@ function extractAudioFromTar(buf: Buffer): { buf: Buffer; mime: string; } {
 }
 
 async function downloadAudioAsset(url: string): Promise<{ buf: Buffer; mime: string; }> {
-    const parsed = new URL(url);
-    if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
-        throw new Error("audio asset URL must be http(s)");
-    }
-
-    const resp = await fetch(url);
-    if (!resp.ok) throw new Error(`audio download failed: ${resp.status}`);
-
-    const mime = resp.headers.get("Content-Type")?.split(";")[0]?.trim().toLowerCase() ?? "";
-    if (!GENERATED_AUDIO_MIMES.has(mime) && !GENERATED_AUDIO_BUNDLE_MIMES.has(mime)) {
-        throw new Error(`audio download returned ${mime || "unknown"}`);
-    }
-    const contentLength = Number(resp.headers.get("Content-Length") ?? "0");
-    if (contentLength > MAX_GENERATED_AUDIO_BYTES) throw new Error("audio download too large");
-    const buf = await readResponseBytesCapped(resp, MAX_GENERATED_AUDIO_BYTES);
+    const allowedMimes = new Set([...GENERATED_AUDIO_MIMES, ...GENERATED_AUDIO_BUNDLE_MIMES]);
+    const { buf, mime } = await downloadAsset(
+        url,
+        allowedMimes,
+        MAX_GENERATED_AUDIO_BYTES,
+        "audio"
+    );
     if (GENERATED_AUDIO_BUNDLE_MIMES.has(mime)) return extractAudioFromTar(buf);
     return { buf, mime };
 }

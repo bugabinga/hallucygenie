@@ -47,7 +47,7 @@ export function runMigrations(db: Database, migrationsDir: string): void {
         version: number;
     }>;
     for (const row of rows) {
-        applied.add(row.version as number);
+        applied.add(row.version);
     }
 
     // Read and sort migration files

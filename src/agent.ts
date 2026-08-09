@@ -782,7 +782,6 @@ export async function runAgentLoop(
         // stop_reason is "end_turn" or no more tool calls
         if (!visibleTextContent && thinkingContent.trim()) {
             textContent = "I got an empty final answer. Please try again.";
-            emittedTextContent = textContent;
             await onEvent({ type: "text", content: textContent });
         }
 
