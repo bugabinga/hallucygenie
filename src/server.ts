@@ -2257,8 +2257,7 @@ async function downloadAsset(
     maxBytes: number,
     label: string
 ): Promise<{ buf: Buffer; mime: string; }> {
-    const parsed = new URL(url);
-    if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
+    if (!url.startsWith("http://") && !url.startsWith("https://")) {
         throw new Error(`${label} asset URL must be http(s)`);
     }
     const resp = await fetch(url);
