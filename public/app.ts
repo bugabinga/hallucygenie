@@ -440,7 +440,7 @@ export function renderProfileAvatar(profile = currentProfile): HTMLElement {
     if (/^asset_[0-9a-f-]+$/i.test(profile.avatar.value)) {
         const img = createElement("img", {
             class: "profile-avatar-img",
-            src: `/asset/${profile.avatar.value}`,
+            src: assetUrlForSession(`/asset/${profile.avatar.value}`),
             alt: "",
             loading: "lazy"
         }) as HTMLImageElement;
@@ -2101,7 +2101,7 @@ export function init(): void {
 
     function updateProfileAvatarPreview(profile: UserProfile): void {
         if (profile.avatar.value) {
-            profileAvatarImg.src = `/asset/${profile.avatar.value}`;
+            profileAvatarImg.src = assetUrlForSession(`/asset/${profile.avatar.value}`);
             profileAvatarImg.hidden = false;
             profileAvatarFallback.hidden = true;
             return;
