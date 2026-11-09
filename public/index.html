@@ -117,8 +117,8 @@
                             <div class="onboarding-emoji" aria-hidden="true">🎨</div>
                             <h2>Make cool stuff!</h2>
                             <p>
-                                Generate images, music, voices, and search the web — all in one
-                                place!
+                                Generate images, write lyrics, make voices, and search the web —
+                                all in one place!
                             </p>
                             <button class="btn-primary" id="onboarding-try-create" type="button">
                                 See what I can do! →
@@ -156,7 +156,7 @@
                     <div class="message-bubble">
                         <div class="message-content">
                             Hey! 👋 I'm HallucyGenie. Ask me anything — I can chat, make images
-                            🔥, do voices 🎙️, and create music 🎵
+                            🔥, do voices 🎙️, and write lyrics 📝
                         </div>
                     </div>
                 </div>
@@ -259,8 +259,9 @@
                             covering your chat. Video now offers short clips in 768p or sharper 2K.
                         </p>
                         <p>
-                            HallucyGenie can help make images, videos, voices, long narration,
-                            music, lyrics, searches, and image ideas.
+                            Write or edit lyrics in Create → Lyrics. Images, videos, voices, long
+                            narration, search, and image analysis stay available. Music audio and
+                            covers are temporarily unavailable; your saved songs still play.
                         </p>
                         <ul>
                             <li>Use reference pictures to keep a character or photo in the art.</li>
@@ -429,7 +430,7 @@
                             aria-controls="create-music-form"
                             tabindex="-1"
                         >
-                            🎵 Music
+                            📝 Lyrics
                         </button>
                         <button
                             id="create-tab-video"
@@ -452,8 +453,9 @@
                             aria-selected="false"
                             aria-controls="create-cover-form"
                             tabindex="-1"
+                            disabled
                         >
-                            🎧 Cover Song
+                            🎧 Cover Song unavailable
                         </button>
                         <button
                             id="create-tab-voice"
@@ -630,26 +632,25 @@
                         >
                             <div class="create-recent" data-kind="music"></div>
                             <div class="form-group">
-                                <label for="music-prompt">Describe the music</label>
+                                <label for="music-prompt">Describe your song</label>
                                 <textarea
                                     id="music-prompt"
                                     rows="2"
-                                    placeholder="Upbeat electronic chiptune gaming music"
+                                    placeholder="Upbeat electronic chiptune gaming song"
                                 ></textarea>
                             </div>
                             <div class="form-group">
-                                <label for="music-lyrics"
-                                >Lyrics (optional, empty = instrumental)</label>
+                                <label for="music-lyrics">Lyrics</label>
                                 <textarea
                                     id="music-lyrics"
                                     rows="3"
                                     placeholder="Verse:... Chorus:..."
                                 ></textarea>
                             </div>
-                            <button type="button" id="write-lyrics-btn" class="btn-secondary">
+                            <button type="button" id="write-lyrics-btn" class="btn-primary">
                                 Write lyrics for me ✨
                             </button>
-                            <button type="submit" class="btn-primary">Generate music 🎵</button>
+                            <p class="field-help">Music generation is temporarily unavailable.</p>
                         </form>
                         <form
                             id="create-video-form"
@@ -698,13 +699,14 @@
                             hidden
                         >
                             <div class="create-recent" data-kind="cover"></div>
-                            <h3 id="music-cover-title">Cover a song</h3>
+                            <h3 id="music-cover-title">Cover Song unavailable</h3>
                             <p class="field-help cover-intro">
-                                Pick one song source, prepare lyrics, then make a new version.
+                                Cover Song is temporarily unavailable. Existing audio stays in
+                                Assets and chat history.
                             </p>
                             <div class="form-group">
                                 <label for="cover-source-kind">Source</label>
-                                <select id="cover-source-kind">
+                                <select id="cover-source-kind" disabled>
                                     <option value="direct">Audio URL</option>
                                     <option value="upload">Audio file</option>
                                     <option value="youtube">YouTube link</option>
@@ -717,11 +719,17 @@
                                     type="url"
                                     inputmode="url"
                                     placeholder="https://..."
+                                    disabled
                                 />
                             </div>
                             <div class="form-group cover-file-group">
                                 <label for="cover-audio-file">Audio file</label>
-                                <input id="cover-audio-file" type="file" accept="audio/*" />
+                                <input
+                                    id="cover-audio-file"
+                                    type="file"
+                                    accept="audio/*"
+                                    disabled
+                                />
                             </div>
                             <div class="form-group">
                                 <label for="cover-style">New style</label>
@@ -729,14 +737,20 @@
                                     id="cover-style"
                                     rows="2"
                                     placeholder="Spooky boss battle chiptune"
+                                    disabled
                                 ></textarea>
                             </div>
-                            <button id="cover-preprocess" class="btn-secondary" type="button">
+                            <button
+                                id="cover-preprocess"
+                                class="btn-secondary"
+                                type="button"
+                                disabled
+                            >
                                 Prepare cover lyrics
                             </button>
                             <input id="cover-feature-id" type="hidden" />
                             <p id="cover-status" class="field-help" role="status">
-                                Prepare a source before generating a cover.
+                                Cover Song is temporarily unavailable.
                             </p>
                             <div class="form-group">
                                 <label for="cover-lyrics">Cover lyrics</label>
@@ -744,10 +758,11 @@
                                     id="cover-lyrics"
                                     rows="4"
                                     placeholder="Lyrics appear here after prepare"
+                                    disabled
                                 ></textarea>
                             </div>
                             <button id="cover-generate" class="btn-primary" type="button" disabled>
-                                Prepare source first 🎧
+                                Cover Song unavailable 🎧
                             </button>
                         </form>
                         <form

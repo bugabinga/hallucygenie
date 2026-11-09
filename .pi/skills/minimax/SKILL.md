@@ -143,7 +143,14 @@ Unsupported TTS models returned `{"base_resp":{"status_code":2061,"status_msg":"
 - `prompt_optimizer`: boolean.
 - Image-to-image: `subject_reference: [{ type: "character", image_file }]`; image file can be public URL or data URL, JPG/JPEG/PNG, <10MB, best with single front-facing portrait.
 
-## Music Generation
+## Lyrics and temporarily disabled music
+
+- HallucyGenie writes/edits lyrics through `MiniMax-M3.1-Flash` at `POST /anthropic/v1/messages`, returning only text blocks.
+- Music audio, cover generation, and cover preprocessing are disabled before upstream calls, in both UI and direct API execution.
+- No legacy lyrics API or automatic PAYG fallback is used; saved media/history remains available.
+- Re-enabling music requires a separately approved backend/access solution.
+
+### Legacy provider music API
 
 - Access change effective 2026-08-20: paid Music Generation and Lyrics Generation APIs are closed to new users; existing paying users may continue.
 - Free music APIs were discontinued.
@@ -158,7 +165,7 @@ Unsupported TTS models returned `{"base_resp":{"status_code":2061,"status_msg":"
 Legacy-account API contract:
 
 - `POST /v1/music_generation`
-- HallucyGenie model: `music-2.6`.
+- Historical HallucyGenie music model: `music-2.6`; current audio generation is disabled.
 - Docs model enum: `music-2.6`, `music-cover`, `music-2.6-free`, `music-cover-free`.
 - IMPORTANT: instrumental flag is `is_instrumental`, not `instrumental`.
 - `output_format`: `hex` (default) or `url`; URL expires 24h.

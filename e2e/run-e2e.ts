@@ -1490,7 +1490,7 @@ async function runE2ETests(): Promise<void> {
     );
 
     await runTest(
-        "create music uses structured multiline lyrics",
+        "lyrics form sends multiline lyrics without generating music",
         async () => {
             const page = await newPage(browser, { viewport: { width: 1280, height: 800 } });
             await waitForApp(page, { dismissOnboarding: true });
@@ -1504,36 +1504,23 @@ async function runE2ETests(): Promise<void> {
             const createToolRequest = page.waitForRequest(
                 (req) => req.url().includes("/api/create-tool") && req.method() === "POST"
             );
-            await page.click("#create-music-form button[type='submit']");
-            await expectHidden(page, "#create-modal");
+            await page.locator("#create-music-form").evaluate((form) => {
+                form.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
+            });
             const requestBody = JSON.parse((await createToolRequest).postData() ?? "{}");
-            assertEqual(requestBody.tool_name, "generate_music", "Music create tool");
-            assertEqual(requestBody.input.prompt, "boss fight intro", "Music prompt");
-            assertEqual(requestBody.input.lyrics, lyrics, "Music lyrics preserved");
+            assertEqual(requestBody.tool_name, "generate_lyrics", "Lyrics create tool");
+            assertEqual(requestBody.input.prompt, "boss fight intro", "Lyrics prompt");
+            assertEqual(requestBody.input.lyrics, lyrics, "Lyrics preserved");
+            assertEqual(requestBody.input.mode, "edit", "Lyrics edit mode");
             const userText =
                 (await page.locator(".message--user .message-content").last().textContent()) ?? "";
-            if (/Use generate_music|Tool params:/i.test(userText)) {
-                throw new Error(`Music message leaked internals: ${userText}`);
+            if (/Use generate_lyrics|Tool params:/i.test(userText)) {
+                throw new Error(`Lyrics message leaked internals: ${userText}`);
             }
-            await expectVisible(page, ".tool-card:has(.tool-result-audio)");
-            const widths = await page.evaluate(() => {
-                const row = document.querySelector(
-                    ".message--assistant:has(.tool-result-audio)"
-                ) as HTMLElement;
-                const bubble = row.querySelector(".message-bubble") as HTMLElement;
-                const card = row.querySelector(".tool-card") as HTMLElement;
-                return {
-                    row: row.getBoundingClientRect().width,
-                    bubble: bubble.getBoundingClientRect().width,
-                    card: card.getBoundingClientRect().width
-                };
-            });
-            if (widths.bubble / widths.row < 0.7) {
-                throw new Error(`Music tool bubble too narrow: ${JSON.stringify(widths)}`);
-            }
-            if (widths.card / widths.bubble < 0.85) {
-                throw new Error(`Music tool card too narrow: ${JSON.stringify(widths)}`);
-            }
+            await page.waitForFunction(() =>
+                (document.querySelector("#music-lyrics") as HTMLTextAreaElement | null)?.value
+                    .includes("Verse one")
+            );
 
             await page.close();
         },
@@ -1541,128 +1528,27 @@ async function runE2ETests(): Promise<void> {
     );
 
     await runTest(
-        "cover direct URL preprocess fills cover feature id",
+        "Cover Song is disabled and cannot open its panel",
         async () => {
             const page = await newPage(browser);
             await waitForApp(page, { dismissOnboarding: true });
-            resetMinimaxMockCalls();
-
             await page.click("#create-btn");
-            await page.click(".create-tab[data-tab='cover']");
-            await expectVisible(page, "#create-cover-form");
-            await page.selectOption("#cover-source-kind", "direct");
-            await page.fill("#cover-audio-url", "https://example.com/source-song.mp3");
-            const preprocessRequest = page.waitForRequest(
-                (req) =>
-                    req.url().includes("/api/music-cover/preprocess") && req.method() === "POST"
-            );
-            await page.click("#cover-preprocess");
-            await preprocessRequest;
-            await page.waitForFunction(
-                () =>
-                    (document.querySelector("#cover-feature-id") as HTMLInputElement)?.value
-                        === "cover-e2e-1"
-            );
-            assertEqual(
-                await page.inputValue("#cover-feature-id"),
-                "cover-e2e-1",
-                "Cover feature id field"
-            );
-            const minimaxCall = getMinimaxMockCalls().find((call) =>
-                call.url.includes("/v1/music_cover_preprocess")
-            );
-            if (!minimaxCall) throw new Error("MiniMax cover preprocess was not called");
-            const payload = JSON.parse(minimaxCall.body);
-            assertEqual(
-                payload.audio_url,
-                "https://example.com/source-song.mp3",
-                "Cover audio URL"
-            );
-            if (payload.audio_base64) {
-                throw new Error(
-                    `Direct cover preprocess should not upload audio bytes: ${minimaxCall.body}`
-                );
-            }
-
+            await expectDisabled(page.locator(".create-tab[data-tab=\"cover\"]"));
+            await expectVisible(page, "#create-modal");
             await page.close();
         },
         results
     );
 
     await runTest(
-        "cover song uses separate tab and local file source",
+        "Cover Song disabled controls cannot submit",
         async () => {
             const page = await newPage(browser);
             await waitForApp(page, { dismissOnboarding: true });
-
             await page.click("#create-btn");
-            await page.click(".create-tab[data-tab='cover']");
-            await expectVisible(page, "#create-cover-form");
-            await expectHidden(page, "#create-music-form #cover-source-kind");
-            await page.selectOption("#cover-source-kind", "direct");
-            await page.setInputFiles("#cover-audio-file", {
-                name: "song.mp3",
-                mimeType: "audio/mpeg",
-                buffer: Buffer.from("fake-audio")
-            });
-            assertEqual(
-                await page.locator("#cover-source-kind").inputValue(),
-                "upload",
-                "Cover source switches to upload"
-            );
-            resetMinimaxMockCalls();
-            const preprocessRequest = page.waitForRequest(
-                (req) =>
-                    req.url().includes("/api/music-cover/preprocess") && req.method() === "POST"
-            );
-            await page.click("#cover-preprocess");
-            await preprocessRequest;
-            await page.waitForFunction(
-                () =>
-                    (document.querySelector("#cover-status")?.textContent ?? "").includes(
-                        "Ready"
-                    )
-                    && (
-                        document.querySelector("#cover-lyrics") as HTMLTextAreaElement | null
-                    )?.value.includes("Verse, cover ready")
-            );
-            const minimaxCall = getMinimaxMockCalls().find((call) =>
-                call.url.includes("/v1/music_cover_preprocess")
-            );
-            if (!minimaxCall) throw new Error("MiniMax cover preprocess was not called");
-            const payload = JSON.parse(minimaxCall.body);
-            if (!payload.audio_base64 || payload.audio_url) {
-                throw new Error(
-                    `Cover preprocess did not use uploaded audio: ${minimaxCall.body}`
-                );
-            }
-
-            await page.fill("#cover-style", "glitchy chiptune boss remix");
-            const createToolRequest = page.waitForRequest(
-                (req) => req.url().includes("/api/create-tool") && req.method() === "POST"
-            );
-            await page.click("#cover-generate");
-            await expectHidden(page, "#create-modal");
-            const requestBody = JSON.parse((await createToolRequest).postData() ?? "{}");
-            assertEqual(requestBody.tool_name, "generate_music_cover", "Cover create tool");
-            assertEqual(
-                requestBody.input.prompt,
-                "glitchy chiptune boss remix",
-                "Cover prompt"
-            );
-            assertEqual(requestBody.input.cover_feature_id, "cover-e2e-1", "Cover feature id");
-            if (!String(requestBody.input.lyrics ?? "").includes("Verse, cover ready")) {
-                throw new Error(`Cover lyrics missing: ${JSON.stringify(requestBody)}`);
-            }
-            const userText =
-                (await page.locator(".message--user .message-content").last().textContent()) ?? "";
-            if (/Use generate_music_cover|Tool params:/i.test(userText)) {
-                throw new Error(`Cover message leaked internals: ${userText}`);
-            }
-            await page.locator(".tool-card:has(.tool-result-audio)").last().waitFor({
-                state: "visible"
-            });
-
+            await expectDisabled(page.locator(".create-tab[data-tab=\"cover\"]"));
+            await expectDisabled(page.locator("#cover-preprocess"));
+            await expectDisabled(page.locator("#cover-generate"));
             await page.close();
         },
         results

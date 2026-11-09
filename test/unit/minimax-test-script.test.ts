@@ -9,7 +9,6 @@ import {
     imageDataUrlFromUrl,
     imageUrlSummary,
     main,
-    musicInstrumentalPayload,
     statusLine,
     textSummary,
     vlmPayload
@@ -51,13 +50,6 @@ describe("minimax-test script formatting", () => {
         assert.equal(textSummary(""), "missing");
     });
 
-    it("uses current instrumental music payload shape", () => {
-        const payload = musicInstrumentalPayload();
-        assert.equal(payload.is_instrumental, true);
-        assert.equal("instrumental" in payload, false);
-        assert.equal("lyrics" in payload, false);
-    });
-
     it("uses VLM data-url payload shape", () => {
         const payload = vlmPayload("data:image/png;base64,abc=");
         assert.equal(payload.prompt, "Describe this image in one short sentence.");
@@ -96,8 +88,10 @@ describe("minimax-test script formatting", () => {
             if (url.endsWith("/v1/image_generation")) {
                 return new Response(JSON.stringify({ data: { image_urls: [] } }));
             }
-            if (url.endsWith("/v1/music_generation")) {
-                return new Response(JSON.stringify({ data: { audio: "ff" } }));
+            if (url.endsWith("/anthropic/v1/messages")) {
+                return new Response(
+                    JSON.stringify({ content: [{ type: "text", text: "Lyrics only" }] })
+                );
             }
             if (url.startsWith("https://www.gstatic.com/")) {
                 return new Response(new Uint8Array([1]), { status: 200 });
@@ -194,12 +188,10 @@ describe("minimax-test script formatting", () => {
                     { status: 200, headers: { "Content-Type": "application/json" } }
                 );
             }
-            if (url.endsWith("/v1/music_generation")) {
+            if (url.endsWith("/anthropic/v1/messages")) {
+                assert.equal(JSON.parse(String(init?.body)).model, "MiniMax-M3.1-Flash");
                 return new Response(
-                    JSON.stringify({
-                        base_resp: { status_code: 0, status_msg: "ok" },
-                        data: { audio: "abcd" }
-                    }),
+                    JSON.stringify({ content: [{ type: "text", text: "Lyrics only" }] }),
                     { status: 200, headers: { "Content-Type": "application/json" } }
                 );
             }

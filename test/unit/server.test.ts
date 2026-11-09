@@ -1148,92 +1148,102 @@ describe("SSE streaming from Anthropic endpoint", () => {
         }
     });
 
-    it("executes explicit generate_lyrics directive with required prompt", async () => {
-        let lyricsPayload: Record<string, unknown> | null = null;
-        globalThis.fetch = async (_url: string | URL | Request, init?: RequestInit) => {
-            lyricsPayload = JSON.parse(String(init?.body));
-            return new Response(JSON.stringify({ lyrics: "cat song" }), {
-                status: 200,
-                headers: { "Content-Type": "application/json" }
-            });
+    it("executes explicit lyrics directive through the text model and stores history", async () => {
+        const sessionId = "explicit-lyrics-session";
+        let lyricsCalls = 0;
+        let legacyLyricsCalls = 0;
+        globalThis.fetch = async (url, init) => {
+            if (url.toString().includes("/anthropic/v1/messages")) {
+                lyricsCalls++;
+                const body = JSON.parse(String(init?.body));
+                if (body.max_tokens === 2048) {
+                    assert.deepEqual(JSON.parse(body.messages[0].content), {
+                        prompt: "write me a song about cats",
+                        mode: "write_full_song"
+                    });
+                    return new Response(
+                        JSON.stringify({
+                            content: [{ type: "text", text: "[Verse] Cat song" }]
+                        }),
+                        { status: 200, headers: { "Content-Type": "application/json" } }
+                    );
+                }
+                return anthropicResponse(anthropicTextSse(["Cats"]));
+            }
+            if (url.toString().includes("/v1/lyrics_generation")) legacyLyricsCalls++;
+            throw new Error(`unexpected fetch `);
         };
 
         try {
             const resp = await handleChat(
-                makeRequest(
-                    "POST",
-                    "/api/chat",
-                    {
-                        messages: [
-                            {
-                                role: "user",
-                                content:
-                                    "Use generate_lyrics with lyrics: write me a song about cats"
-                            }
-                        ]
-                    },
-                    { "X-Session-Id": "explicit-lyrics-session" }
-                ),
+                makeRequest("POST", "/api/chat", {
+                    messages: [{
+                        role: "user",
+                        content: "Use generate_lyrics with lyrics: write me a song about cats"
+                    }]
+                }, { "X-Session-Id": sessionId }),
                 "test-key",
-                "explicit-lyrics-session"
+                sessionId
             );
-            const body = await readBody(resp);
-            assert.ok(body.includes("cat song"));
-            assert.deepEqual(lyricsPayload, {
-                mode: "write_full_song",
-                prompt: "write me a song about cats"
-            });
+            assert.match(await readBody(resp), /Cat song/);
+            assert.equal(legacyLyricsCalls, 0);
+            assert.ok(lyricsCalls >= 1);
+            const rows = getMessages(requireDb(), sessionId);
+            assert.ok(rows.some((row) => row.role === "tool" && row.content.includes("Cat song")));
         } finally {
             globalThis.fetch = REAL_FETCH;
         }
     });
 
-    it("executes Create tool endpoint with origin=create and exact multiline params", async () => {
-        const sessionId = "create-tool-multiline-session";
-        const db = requireDb();
-        createSession(db, sessionId, "Create Tool Multiline");
-        const lyrics = "Verse one, with comma\nChorus line, still here";
-        const previousApiKey = process.env.MINIMAX_API_KEY;
-        process.env.MINIMAX_API_KEY = "test-key";
-        let musicPayload: Record<string, unknown> | null = null;
-        globalThis.fetch = async (_url: string | URL | Request, init?: RequestInit) => {
-            musicPayload = JSON.parse(String(init?.body));
-            return new Response(JSON.stringify({ data: { audio: "ff" } }), {
-                status: 200,
-                headers: { "Content-Type": "application/json" }
-            });
+    it("rejects Create music before naming, quota, assets, or upstream", async () => {
+        const sessionId = "disabled-create-music";
+        const database = requireDb();
+        createSession(database, sessionId, "Disabled music");
+        const usageBefore = getUsageToday(database).music ?? 0;
+        let calls = 0;
+        globalThis.fetch = async () => {
+            calls++;
+            return new Response("{}", { status: 200 });
         };
-
         try {
-            const resp = await handleRequest(
-                makeRequest(
-                    "POST",
-                    "/api/create-tool",
-                    {
-                        tool_name: "generate_music",
-                        input: { prompt: "boss fight", lyrics }
-                    },
-                    { "X-Session-Id": sessionId }
-                )
-            );
-            const body = await readBody(resp);
-
-            assert.equal(musicPayload?.lyrics, lyrics);
-            assert.equal(musicPayload?.is_instrumental, false);
-            assert.ok(body.includes("tool_result"));
-            assert.equal(body.includes("Use generate_music"), false);
-            const rows = getMessages(db, sessionId);
+            const response = await handleRequest(makeRequest("POST", "/api/create-tool", {
+                tool_name: "generate_music",
+                input: { prompt: "boss fight" }
+            }, { "X-Session-Id": sessionId }));
+            assert.equal(response.status, 503);
             assert.equal(
-                rows.some((row) => row.role === "user"),
-                false
+                (await readJson(response) as { error: string; }).error,
+                "Music generation and covers are temporarily disabled."
             );
-            const history = listToolInputHistory(db, sessionId, { kind: "music" });
-            assert.equal(history[0]?.origin, "create");
-            assert.equal(JSON.parse(history[0]?.input_json).lyrics, lyrics);
+            assert.equal(calls, 0);
+            assert.equal(getAssets(database, sessionId).length, 0);
+            assert.equal(getUsageToday(database).music ?? 0, usageBefore);
         } finally {
             globalThis.fetch = REAL_FETCH;
-            if (previousApiKey === undefined) delete process.env.MINIMAX_API_KEY;
-            else process.env.MINIMAX_API_KEY = previousApiKey;
+        }
+    });
+
+    it("rejects explicit legacy music directives before upstream work", async () => {
+        let calls = 0;
+        globalThis.fetch = async () => {
+            calls++;
+            return new Response("{}", { status: 200 });
+        };
+        try {
+            const response = await handleChat(
+                makeRequest("POST", "/api/chat", {
+                    messages: [{
+                        role: "user",
+                        content: "Use generate_music with prompt: boss fight"
+                    }]
+                }, { "X-Session-Id": "disabled-legacy-music" }),
+                "test-key",
+                "disabled-legacy-music"
+            );
+            assert.equal(response.status, 503);
+            assert.equal(calls, 0);
+        } finally {
+            globalThis.fetch = REAL_FETCH;
         }
     });
 
@@ -1682,66 +1692,6 @@ describe("SSE streaming from Anthropic endpoint", () => {
         }
     });
 
-    it("reports restricted music and lyrics through Create without a PAYG retry", async () => {
-        const previousApiKey = process.env.MINIMAX_API_KEY;
-        const previousPaygKey = process.env.MINIMAX_PAYG_KEY;
-        process.env.MINIMAX_API_KEY = "subscription-test-key";
-        process.env.MINIMAX_PAYG_KEY = "payg-must-not-be-used";
-        try {
-            for (const toolName of ["generate_music", "generate_lyrics"]) {
-                const sessionId = `restricted-${toolName}`;
-                const database = requireDb();
-                createSession(database, sessionId, "Restricted music");
-                const calls: string[] = [];
-                globalThis.fetch = async (_url, init) => {
-                    calls.push(_url.toString());
-                    assert.equal(
-                        new Headers(init?.headers).get("Authorization"),
-                        "Bearer subscription-test-key"
-                    );
-                    return new Response(
-                        JSON.stringify({
-                            base_resp: {
-                                status_code: 2153,
-                                status_msg: "This Music API is no longer available to new users."
-                            }
-                        }),
-                        { status: 410, headers: { "Content-Type": "application/json" } }
-                    );
-                };
-                const response = await handleRequest(makeRequest("POST", "/api/create-tool", {
-                    tool_name: toolName,
-                    input: { prompt: "A short friendly greeting" }
-                }, { "X-Session-Id": sessionId }));
-                const body = await readBody(response);
-                const endpoint = toolName === "generate_music"
-                    ? "/v1/music_generation"
-                    : "/v1/lyrics_generation";
-                // Session naming can call the text model; media submission must not retry.
-                assert.equal(
-                    calls.filter((url) => url.endsWith(endpoint)).length,
-                    1,
-                    calls.join("\n")
-                );
-                assert.ok(body.includes("aren't available for this account"));
-                assert.ok(body.includes("\"type\":\"error\""));
-                assert.equal(body.includes("Try a shorter"), false);
-                assert.equal(body.includes("Try a different topic"), false);
-                assert.equal(body.includes("This Music API"), false);
-                assert.equal(getAssets(database, sessionId).length, 0);
-                const history = listToolInputHistory(database, sessionId);
-                assert.equal(history[0]?.status, "failed");
-                assert.equal(history[0]?.provider_status_code, 2153);
-            }
-        } finally {
-            globalThis.fetch = REAL_FETCH;
-            if (previousApiKey === undefined) delete process.env.MINIMAX_API_KEY;
-            else process.env.MINIMAX_API_KEY = previousApiKey;
-            if (previousPaygKey === undefined) delete process.env.MINIMAX_PAYG_KEY;
-            else process.env.MINIMAX_PAYG_KEY = previousPaygKey;
-        }
-    });
-
     it("executes Create video, downloads asset, and keeps provider URL out of history", async () => {
         const sessionId = "create-video-session";
         const database = requireDb();
@@ -1945,303 +1895,30 @@ describe("SSE streaming from Anthropic endpoint", () => {
         }
     });
 
-    it("reports music cover extractor status", async () => {
-        const previous = process.env.COVER_EXTRACTOR_URL;
-        delete process.env.COVER_EXTRACTOR_URL;
-        try {
-            const resp = await handleRequest(makeRequest("GET", "/api/music-cover/status"));
-            const body = JSON.parse(await readBody(resp));
-            assert.equal(body.youtubeEnabled, false);
-        } finally {
-            if (previous === undefined) delete process.env.COVER_EXTRACTOR_URL;
-            else process.env.COVER_EXTRACTOR_URL = previous;
-        }
-    });
-
-    it("preprocesses music cover direct audio URL", async () => {
-        const originalFetch = globalThis.fetch;
-        const previousApiKey = process.env.MINIMAX_API_KEY;
-        process.env.MINIMAX_API_KEY = "test-key";
-        let payload: Record<string, unknown> | null = null;
-        globalThis.fetch = async (_url: string | URL | Request, init?: RequestInit) => {
-            payload = JSON.parse(String(init?.body));
-            return new Response(
-                JSON.stringify({
-                    data: { cover_feature_id: "cover-1", formatted_lyrics: "[Verse]\nhi" }
-                }),
-                { status: 200, headers: { "Content-Type": "application/json" } }
-            );
+    it("reports disabled cover status and rejects preprocessing before form parsing or upstream", async () => {
+        let calls = 0;
+        globalThis.fetch = async () => {
+            calls++;
+            return new Response("{}", { status: 200 });
         };
-
         try {
-            const form = new FormData();
-            form.set("source_kind", "direct");
-            form.set("audio_url", "https://example.com/source.mp3");
-            const resp = await handleRequest(
-                new Request("http://localhost/api/music-cover/preprocess", {
-                    method: "POST",
-                    body: form
-                })
-            );
-            const body = JSON.parse(await readBody(resp));
+            const status = await handleRequest(makeRequest("GET", "/api/music-cover/status"));
+            assert.deepEqual(await readJson(status), { enabled: false, youtubeEnabled: false });
 
-            assert.equal(payload?.model, "music-cover");
-            assert.equal(payload?.audio_url, "https://example.com/source.mp3");
-            assert.equal(body.cover_feature_id, "cover-1");
-            assert.equal(body.lyrics, "[Verse]\nhi");
-        } finally {
-            globalThis.fetch = originalFetch;
-            if (previousApiKey === undefined) delete process.env.MINIMAX_API_KEY;
-            else process.env.MINIMAX_API_KEY = previousApiKey;
-        }
-    });
-
-    it("rejects malformed music cover preprocess requests before provider use", async () => {
-        const previousApiKey = process.env.MINIMAX_API_KEY;
-        const previousExtractor = process.env.COVER_EXTRACTOR_URL;
-        process.env.MINIMAX_API_KEY = "test-key";
-        process.env.COVER_EXTRACTOR_URL = "https://extractor.example/audio";
-        const originalFetch = globalThis.fetch;
-        globalThis.fetch = async () =>
-            new Response(JSON.stringify({}), {
-                status: 200,
-                headers: { "Content-Type": "application/json" }
-            });
-
-        try {
-            const cases: Array<[FormData, string]> = [];
-            const direct = new FormData();
-            direct.set("source_kind", "direct");
-            cases.push([direct, "audio URL required"]);
-
-            const upload = new FormData();
-            upload.set("source_kind", "upload");
-            cases.push([upload, "audio file required"]);
-
-            const youtube = new FormData();
-            youtube.set("source_kind", "youtube");
-            cases.push([youtube, "YouTube URL required"]);
-
-            const invalid = new FormData();
-            invalid.set("source_kind", "cassette");
-            cases.push([invalid, "source kind invalid"]);
-
-            const sidecar = new FormData();
-            sidecar.set("source_kind", "youtube");
-            sidecar.set("audio_url", "https://youtu.be/no-audio");
-            cases.push([sidecar, "cover extractor returned no audio"]);
-
-            for (const [form, error] of cases) {
-                const resp = await handleRequest(
-                    new Request("http://localhost/api/music-cover/preprocess", {
-                        method: "POST",
-                        body: form
-                    })
-                );
-                const body = JSON.parse(await readBody(resp));
-                assert.equal(resp.status, 400, error);
-                assert.equal(body.error, error);
-            }
-        } finally {
-            globalThis.fetch = originalFetch;
-            if (previousApiKey === undefined) delete process.env.MINIMAX_API_KEY;
-            else process.env.MINIMAX_API_KEY = previousApiKey;
-            if (previousExtractor === undefined) delete process.env.COVER_EXTRACTOR_URL;
-            else process.env.COVER_EXTRACTOR_URL = previousExtractor;
-        }
-    });
-
-    it("preprocesses music cover uploaded audio", async () => {
-        const originalFetch = globalThis.fetch;
-        const previousApiKey = process.env.MINIMAX_API_KEY;
-        process.env.MINIMAX_API_KEY = "test-key";
-        let payload: Record<string, unknown> | null = null;
-        globalThis.fetch = async (_url: string | URL | Request, init?: RequestInit) => {
-            payload = JSON.parse(String(init?.body));
-            return new Response(
-                JSON.stringify({
-                    data: { cover_feature_id: "cover-upload", formatted_lyrics: "[Verse]\nupload" }
-                }),
-                { status: 200, headers: { "Content-Type": "application/json" } }
-            );
-        };
-
-        try {
-            const form = new FormData();
-            form.set("source_kind", "upload");
-            form.set(
-                "audio",
-                new File([new Uint8Array([1, 2, 3])], "source.mp3", { type: "audio/mpeg" })
-            );
-            const resp = await handleRequest(
-                new Request("http://localhost/api/music-cover/preprocess", {
-                    method: "POST",
-                    body: form
-                })
-            );
-            const body = JSON.parse(await readBody(resp));
-
-            assert.equal(resp.status, 200);
-            assert.equal(payload?.model, "music-cover");
-            assert.match(String(payload?.audio_base64), /^[A-Za-z0-9+/=]+$/);
-            assert.equal(body.cover_feature_id, "cover-upload");
-            assert.equal(body.lyrics, "[Verse]\nupload");
-        } finally {
-            globalThis.fetch = originalFetch;
-            if (previousApiKey === undefined) delete process.env.MINIMAX_API_KEY;
-            else process.env.MINIMAX_API_KEY = previousApiKey;
-        }
-    });
-
-    it("preprocesses music cover YouTube audio through extractor sidecar", async () => {
-        const originalFetch = globalThis.fetch;
-        const previousApiKey = process.env.MINIMAX_API_KEY;
-        const previousExtractor = process.env.COVER_EXTRACTOR_URL;
-        process.env.MINIMAX_API_KEY = "test-key";
-        process.env.COVER_EXTRACTOR_URL = "https://extractor.example/audio";
-        const calls: string[] = [];
-        globalThis.fetch = async (url: string | URL | Request, init?: RequestInit) => {
-            const urlStr = url.toString();
-            calls.push(urlStr);
-            if (urlStr === "https://extractor.example/audio") {
-                assert.deepEqual(JSON.parse(String(init?.body)), {
-                    url: "https://youtu.be/example"
-                });
-                return new Response(JSON.stringify({ audio_url: "https://cdn.example/song.mp3" }), {
-                    status: 200,
-                    headers: { "Content-Type": "application/json" }
-                });
-            }
-            return new Response(
-                JSON.stringify({
-                    data: { cover_feature_id: "cover-youtube", formatted_lyrics: "[Verse]\nyt" }
-                }),
-                { status: 200, headers: { "Content-Type": "application/json" } }
-            );
-        };
-
-        try {
-            const form = new FormData();
-            form.set("source_kind", "youtube");
-            form.set("audio_url", "https://youtu.be/example");
-            const resp = await handleRequest(
-                new Request("http://localhost/api/music-cover/preprocess", {
-                    method: "POST",
-                    body: form
-                })
-            );
-            const body = JSON.parse(await readBody(resp));
-
-            assert.equal(resp.status, 200);
-            assert.deepEqual(calls, [
-                "https://extractor.example/audio",
-                `${MINIMAX_BASE}/v1/music_cover_preprocess`
-            ]);
-            assert.equal(body.cover_feature_id, "cover-youtube");
-            assert.equal(body.lyrics, "[Verse]\nyt");
-        } finally {
-            globalThis.fetch = originalFetch;
-            if (previousApiKey === undefined) delete process.env.MINIMAX_API_KEY;
-            else process.env.MINIMAX_API_KEY = previousApiKey;
-            if (previousExtractor === undefined) delete process.env.COVER_EXTRACTOR_URL;
-            else process.env.COVER_EXTRACTOR_URL = previousExtractor;
-        }
-    });
-
-    it("rejects music cover upload with named validation errors", async () => {
-        const previousApiKey = process.env.MINIMAX_API_KEY;
-        process.env.MINIMAX_API_KEY = "test-key";
-        try {
-            const cases: Array<{ form: FormData; error: string; }> = [];
-
-            const missing = new FormData();
-            missing.set("source_kind", "upload");
-            cases.push({ form: missing, error: "audio file required" });
-
-            const badType = new FormData();
-            badType.set("source_kind", "upload");
-            badType.set(
-                "audio",
-                new File([new Uint8Array([1])], "bad.txt", { type: "text/plain" })
-            );
-            cases.push({ form: badType, error: "audio type must be MP3, M4A, MP4, or WAV" });
-
-            const huge = new FormData();
-            huge.set("source_kind", "upload");
-            huge.set("audio", fileWithSize("huge.mp3", "audio/mpeg", 51 * 1024 * 1024));
-            cases.push({ form: huge, error: "audio too large: max 50 MB" });
-
-            const invalidSource = new FormData();
-            invalidSource.set("source_kind", "vinyl");
-            cases.push({ form: invalidSource, error: "source kind invalid" });
-
-            for (const item of cases) {
-                const resp = await handleRequest(
-                    new Request("http://localhost/api/music-cover/preprocess", {
-                        method: "POST",
-                        body: item.form
-                    })
-                );
-                const body = JSON.parse(await readBody(resp));
-                assert.equal(resp.status, 400);
-                assert.equal(body.error, item.error);
-            }
-        } finally {
-            if (previousApiKey === undefined) delete process.env.MINIMAX_API_KEY;
-            else process.env.MINIMAX_API_KEY = previousApiKey;
-        }
-    });
-
-    it("executes Create music cover generation and saves asset", async () => {
-        const sessionId = "create-tool-cover-session";
-        const db = requireDb();
-        createSession(db, sessionId, "Create Tool Cover");
-        let payload: Record<string, unknown> | null = null;
-        const originalFetch = globalThis.fetch;
-        const previousApiKey = process.env.MINIMAX_API_KEY;
-        process.env.MINIMAX_API_KEY = "test-key";
-        globalThis.fetch = async (_url: string | URL | Request, init?: RequestInit) => {
-            payload = JSON.parse(String(init?.body));
-            return new Response(JSON.stringify({ data: { audio: "ff" } }), {
-                status: 200,
-                headers: { "Content-Type": "application/json" }
-            });
-        };
-
-        try {
-            const resp = await handleRequest(
-                makeRequest(
-                    "POST",
-                    "/api/create-tool",
-                    {
-                        tool_name: "generate_music_cover",
-                        input: {
-                            prompt: "spooky boss battle",
-                            lyrics: "[Verse]\nhi",
-                            cover_feature_id: "cover-1"
-                        }
-                    },
-                    { "X-Session-Id": sessionId }
+            const response = await handleRequest(
+                new Request(
+                    "http://localhost/api/music-cover/preprocess",
+                    { method: "POST", body: "not multipart" }
                 )
             );
-            const body = await readBody(resp);
-
-            assert.equal(payload?.model, "music-cover");
-            assert.equal(payload?.cover_feature_id, "cover-1");
-            assert.ok(body.includes("tool_result"));
-            const asset = getAssets(db, sessionId).at(-1);
-            assert.ok(asset);
-            assert.equal(asset.type, "music");
-            assert.equal(asset.tool_name, "generate_music_cover");
-            assert.ok(asset.params_json);
-            const params = JSON.parse(asset.params_json);
-            assert.equal(params.cover_feature_id_present, true);
-            const history = listToolInputHistory(db, sessionId, { kind: "cover" });
-            assert.equal(history[0]?.tool_name, "generate_music_cover");
+            assert.equal(response.status, 503);
+            assert.equal(
+                (await readJson(response) as { error: string; }).error,
+                "Music generation and covers are temporarily disabled."
+            );
+            assert.equal(calls, 0);
         } finally {
-            globalThis.fetch = originalFetch;
-            if (previousApiKey === undefined) delete process.env.MINIMAX_API_KEY;
-            else process.env.MINIMAX_API_KEY = previousApiKey;
+            globalThis.fetch = REAL_FETCH;
         }
     });
 
@@ -2257,10 +1934,15 @@ describe("SSE streaming from Anthropic endpoint", () => {
         const previousApiKey = process.env.MINIMAX_API_KEY;
         process.env.MINIMAX_API_KEY = "test-key";
         globalThis.fetch = async () =>
-            new Response(JSON.stringify({ lyrics: "Verse one\nChorus" }), {
-                status: 200,
-                headers: { "Content-Type": "application/json" }
-            });
+            new Response(
+                JSON.stringify({
+                    content: [{ type: "text", text: "Verse one\nChorus" }]
+                }),
+                {
+                    status: 200,
+                    headers: { "Content-Type": "application/json" }
+                }
+            );
 
         try {
             const resp = await handleRequest(

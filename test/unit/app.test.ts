@@ -1235,9 +1235,9 @@ function setupDOM(): { win: Window; doc: Document; errors: string[]; } {
         </div>
         <div class="create-tabs">
           <button class="create-tab active" data-tab="image">🎨 Image</button>
-          <button class="create-tab" data-tab="music">🎵 Music</button>
+          <button class="create-tab" data-tab="music">📝 Lyrics</button>
           <button class="create-tab" data-tab="video">🎬 Video</button>
-          <button class="create-tab" data-tab="cover">🎧 Cover Song</button>
+          <button id="create-tab-cover" class="create-tab" data-tab="cover" disabled aria-disabled="true">🎧 Cover Song</button>
           <button class="create-tab" data-tab="voice">🎤 Voice</button>
           <button class="create-tab" data-tab="analyze">🔎 Analyze</button>
           <button class="create-tab" data-tab="search">🔍 Search</button>
@@ -1284,15 +1284,15 @@ function setupDOM(): { win: Window; doc: Document; errors: string[]; } {
             <select id="video-resolution"><option value="768p">768p</option><option value="2k">2k</option></select>
           </form>
           <form id="create-cover-form" class="create-panel" data-panel="cover" hidden>
-            <select id="cover-source-kind"><option value="direct">Audio URL</option><option value="upload">Audio file</option><option value="youtube">YouTube link</option></select>
+            <select id="cover-source-kind" disabled><option value="direct">Audio URL</option><option value="upload">Audio file</option><option value="youtube">YouTube link</option></select>
             <div class="cover-url-group"><input id="cover-audio-url" /></div>
             <div class="cover-file-group"><input id="cover-audio-file" type="file" /></div>
             <textarea id="cover-style"></textarea>
-            <button id="cover-preprocess" type="button">Prepare cover lyrics</button>
+            <button id="cover-preprocess" type="button" disabled>Prepare cover lyrics</button>
             <input id="cover-feature-id" type="hidden" />
             <p id="cover-status" role="status"></p>
             <textarea id="cover-lyrics"></textarea>
-            <button id="cover-generate" type="button" disabled>Prepare source first 🎧</button>
+            <button id="cover-generate" type="button" disabled>Cover Song unavailable 🎧</button>
           </form>
           <form id="create-voice-form" class="create-panel" data-panel="voice" hidden>
             <div class="form-group">
@@ -3413,8 +3413,8 @@ describe("init event binding", () => {
                 }
             },
             {
-                tool_name: "generate_music",
-                input: { prompt: "boss music", lyrics: "la la" }
+                tool_name: "generate_lyrics",
+                input: { prompt: "boss music", mode: "edit", lyrics: "la la" }
             },
             {
                 tool_name: "generate_video",
@@ -3516,22 +3516,11 @@ describe("init event binding", () => {
         doc.querySelector("#write-lyrics-btn")?.dispatchEvent(new win.Event("click"));
         assert.match(
             doc.querySelector("#error-toast-message")?.textContent ?? "",
-            /Describe the music/
+            /Describe the song/
         );
 
-        const coverSourceKind = doc.querySelector("#cover-source-kind") as HTMLSelectElement;
-        coverSourceKind.value = "direct";
-        doc.querySelector("#cover-preprocess")?.dispatchEvent(new win.Event("click"));
-        assert.match(
-            doc.querySelector("#error-toast-message")?.textContent ?? "",
-            /Paste an audio or YouTube URL/
-        );
-
-        doc.querySelector("#cover-generate")?.dispatchEvent(new win.Event("click"));
-        assert.match(
-            doc.querySelector("#error-toast-message")?.textContent ?? "",
-            /Prepare the cover/
-        );
+        assert.equal((doc.querySelector("#cover-preprocess") as HTMLButtonElement).disabled, true);
+        assert.equal((doc.querySelector("#cover-generate") as HTMLButtonElement).disabled, true);
         assert.equal(calls.includes("/api/create-tool"), false);
     });
 
@@ -3926,9 +3915,12 @@ describe("init event binding", () => {
                 }
             })
         );
-        assert.equal((doc.querySelector("#music-prompt") as HTMLTextAreaElement).value, "reggae");
-        assert.equal((doc.querySelector("#cover-feature-id") as HTMLInputElement).value, "cover_1");
-        assert.equal(doc.querySelector<HTMLElement>("[data-panel=\"cover\"]")?.hidden, false);
+        assert.equal((doc.querySelector("#music-prompt") as HTMLTextAreaElement).value, "");
+        assert.equal(doc.querySelector<HTMLElement>("[data-panel=\"cover\"]")?.hidden, true);
+        assert.match(
+            doc.querySelector("#error-toast-message")?.textContent ?? "",
+            /temporarily unavailable/
+        );
 
         doc.dispatchEvent(
             new win.CustomEvent("hallucygenie:tweak-tool", {
@@ -4295,7 +4287,7 @@ describe("init event binding", () => {
         assert.equal(lyrics.value, "better lyrics");
     });
 
-    it("create controls apply presets, reject bad pauses, and send cover generation", async () => {
+    it("create controls apply presets, reject bad pauses, and disable Cover Song", async () => {
         setupFullDOM();
         const bodies: unknown[] = [];
         globalThis.fetch = (url: string, init?: RequestInit) => {
@@ -4325,139 +4317,136 @@ describe("init event binding", () => {
             /0.01 to 99.99/
         );
 
-        (doc.querySelector("#cover-feature-id") as HTMLInputElement).value = "cover_1";
-        (doc.querySelector("#cover-style") as HTMLTextAreaElement).value = "ska";
-        (doc.querySelector("#cover-lyrics") as HTMLTextAreaElement).value = "la la";
-        doc.querySelector("#cover-generate")?.dispatchEvent(new win.Event("click"));
-        await new Promise((resolve) => setTimeout(resolve, 20));
-        assert.deepEqual(bodies[0], {
-            tool_name: "generate_music_cover",
-            input: { prompt: "ska", lyrics: "la la", cover_feature_id: "cover_1" }
-        });
+        assert.equal((doc.querySelector("#cover-generate") as HTMLButtonElement).disabled, true);
+        assert.deepEqual(bodies, []);
     });
 
-    it("cover controls validate source, URL changes, prepare failures, and generate fields", async () => {
+    it("Cover Song controls stay disabled", () => {
         setupFullDOM();
+        globalThis.fetch = () =>
+            Promise.resolve(
+                new Response(
+                    JSON.stringify({
+                        version: 1,
+                        username: "",
+                        interests: "",
+                        hates: "",
+                        favorites: "",
+                        avatar: { type: "asset", value: "" },
+                        updatedAt: 0
+                    }),
+                    { status: 200, headers: { "Content-Type": "application/json" } }
+                )
+            );
+        init();
+        assert.equal((doc.querySelector("#cover-preprocess") as HTMLButtonElement).disabled, true);
+        assert.equal((doc.querySelector("#cover-generate") as HTMLButtonElement).disabled, true);
+    });
+
+    it("Cover Song controls do not invoke the preprocess route after initialization", () => {
+        setupFullDOM();
+        const calls: string[] = [];
         globalThis.fetch = (url: string) => {
-            if (url === "/api/music-cover/preprocess") {
-                return Promise.resolve(
-                    new Response(JSON.stringify({ error: "bad cover" }), { status: 500 })
-                );
-            }
-            return Promise.resolve(new Response(JSON.stringify({}), { status: 200 }));
+            calls.push(url);
+            const body = url === "/api/profile"
+                ? {
+                    version: 1,
+                    username: "",
+                    interests: "",
+                    hates: "",
+                    favorites: "",
+                    avatar: { type: "asset", value: "" },
+                    updatedAt: 0
+                }
+                : {};
+            return Promise.resolve(new Response(JSON.stringify(body), { status: 200 }));
         };
         init();
-
-        const sourceKind = doc.querySelector("#cover-source-kind") as HTMLSelectElement;
-        const url = doc.querySelector("#cover-audio-url") as HTMLInputElement;
-        const file = doc.querySelector("#cover-audio-file") as HTMLInputElement;
-        const status = doc.querySelector("#cover-status") as HTMLElement;
-        const generate = doc.querySelector("#cover-generate") as HTMLButtonElement;
-
-        sourceKind.value = "upload";
-        sourceKind.dispatchEvent(new win.Event("change", { bubbles: true }));
-        assert.equal(status.textContent, "Prepare the cover source first.");
-
-        doc.querySelector("#cover-preprocess")?.dispatchEvent(new win.Event("click"));
-        assert.match(
-            doc.querySelector("#error-toast-message")?.textContent ?? "",
-            /Choose an audio file/
-        );
-
-        sourceKind.value = "direct";
-        sourceKind.dispatchEvent(new win.Event("change", { bubbles: true }));
-        doc.querySelector("#cover-preprocess")?.dispatchEvent(new win.Event("click"));
-        assert.match(
-            doc.querySelector("#error-toast-message")?.textContent ?? "",
-            /Paste an audio/
-        );
-
-        Object.defineProperty(file, "files", {
-            value: [new win.File(["mp3"], "song.mp3", { type: "audio/mpeg" })],
-            configurable: true
-        });
-        file.dispatchEvent(new win.Event("change", { bubbles: true }));
-        assert.equal(sourceKind.value, "upload");
-        assert.match(status.textContent ?? "", /Audio file selected/);
-
-        sourceKind.value = "upload";
-        url.value = "https://example.com/song.mp3";
-        url.dispatchEvent(new win.Event("input", { bubbles: true }));
-        assert.equal(sourceKind.value, "direct");
-        assert.match(status.textContent ?? "", /URL changed/);
-
-        doc.querySelector("#cover-preprocess")?.dispatchEvent(new win.Event("click"));
-        await new Promise((resolve) => setTimeout(resolve, 30));
-        assert.match(status.textContent ?? "", /Prepare failed: bad cover/);
-
-        generate.disabled = false;
-        doc.querySelector("#cover-generate")?.dispatchEvent(new win.Event("click"));
-        assert.match(
-            doc.querySelector("#error-toast-message")?.textContent ?? "",
-            /Prepare the cover source/
-        );
-
-        (doc.querySelector("#cover-feature-id") as HTMLInputElement).value = "cover_1";
-        doc.querySelector("#cover-generate")?.dispatchEvent(new win.Event("click"));
-        assert.match(
-            doc.querySelector("#error-toast-message")?.textContent ?? "",
-            /Describe the new style/
-        );
-
-        (doc.querySelector("#cover-style") as HTMLTextAreaElement).value = "rock";
-        doc.querySelector("#cover-generate")?.dispatchEvent(new win.Event("click"));
-        assert.match(
-            doc.querySelector("#error-toast-message")?.textContent ?? "",
-            /lyrics are required/
-        );
+        (doc.querySelector("#cover-preprocess") as HTMLButtonElement).click();
+        assert.equal(calls.includes("/api/music-cover/preprocess"), false);
+        globalThis.fetch = ORIGINAL_FETCH;
     });
 
-    it("cover prepare prefers selected file over source dropdown", async () => {
-        setupFullDOM();
-        let body: FormData | null = null;
-        globalThis.fetch = (url: string, init?: RequestInit) => {
-            if (url === "/api/music-cover/preprocess") {
-                body = init?.body as FormData;
-                return Promise.resolve(
-                    new Response(JSON.stringify({ cover_feature_id: "cover-1", lyrics: "la" }), {
-                        status: 200,
-                        headers: { "Content-Type": "application/json" }
-                    })
-                );
+    it(
+        "restores saved cover fields without re-enabling Cover Song",
+        { timeout: 1500 },
+        async () => {
+            setupFullDOM();
+            doc.querySelector("header")?.insertAdjacentHTML(
+                "beforeend",
+                "<select id=\"session-select\"></select>"
+            );
+            const calls: string[] = [];
+            globalThis.fetch = (url: string) => {
+                calls.push(url);
+                if (url === "/api/profile") {
+                    return Promise.resolve(
+                        new Response(
+                            JSON.stringify({
+                                version: 1,
+                                username: "",
+                                interests: "",
+                                hates: "",
+                                favorites: "",
+                                avatar: { type: "asset", value: "" },
+                                updatedAt: 0
+                            })
+                        )
+                    );
+                }
+                if (url === "/api/sessions") {
+                    return Promise.resolve(
+                        new Response(JSON.stringify({ sessions: [], activeSessionId: "" }))
+                    );
+                }
+                const body = url === "/api/draft/create"
+                    ? {
+                        draft: {
+                            selectedTab: "cover",
+                            image: { prompt: "", aspect_ratio: "16:9" },
+                            music: {
+                                prompt: "",
+                                lyrics: "",
+                                cover_feature_id: "saved-feature",
+                                cover_lyrics: "saved lyrics"
+                            },
+                            voice: { text: "", speed: "1.0" },
+                            search: { query: "" }
+                        }
+                    }
+                    : {};
+                return Promise.resolve(new Response(JSON.stringify(body), { status: 200 }));
+            };
+            const modal = doc.querySelector("#create-modal") as HTMLElement;
+            const feature = doc.querySelector("#cover-feature-id") as HTMLInputElement;
+            const restored = new Promise<void>((resolve) => {
+                const observer = new win.MutationObserver(() => {
+                    if (feature.value === "saved-feature") {
+                        observer.disconnect();
+                        resolve();
+                    }
+                });
+                observer.observe(modal, { attributes: true, subtree: true });
+            });
+            init();
+            await restored;
+            (doc.querySelector("#create-btn") as HTMLButtonElement).click();
+            assert.equal(feature.value, "saved-feature");
+            assert.equal(
+                (doc.querySelector("#cover-lyrics") as HTMLTextAreaElement).value,
+                "saved lyrics"
+            );
+            assert.equal(modal.dataset.tabOpen, "image");
+            assert.equal((doc.querySelector("#create-cover-form") as HTMLFormElement).hidden, true);
+            for (const id of ["create-tab-cover", "cover-preprocess", "cover-generate"]) {
+                assert.equal((doc.querySelector(`#${id}`) as HTMLButtonElement).disabled, true);
             }
-            if (url === "/api/profile") {
-                return Promise.resolve(
-                    new Response(
-                        JSON.stringify({
-                            version: 1,
-                            username: "",
-                            interests: "",
-                            hates: "",
-                            favorites: "",
-                            avatar: { type: "asset", value: "" },
-                            updatedAt: 0
-                        }),
-                        { status: 200, headers: { "Content-Type": "application/json" } }
-                    )
-                );
-            }
-            return Promise.resolve(new Response(JSON.stringify({}), { status: 200 }));
-        };
-        init();
-        const input = doc.querySelector("#cover-audio-file");
-        const file = new win.File([new Uint8Array([1])], "song.mp3", { type: "audio/mpeg" });
-        Object.defineProperty(input, "files", { value: [file], configurable: true });
-        input.dispatchEvent(new win.Event("change"));
-        doc.querySelector("#cover-preprocess").dispatchEvent(new win.Event("click"));
-        await new Promise((resolve) => setTimeout(resolve, 20));
-
-        assert.ok(body);
-        assert.equal(body.get("source_kind"), "upload");
-        assert.equal(String(body.get("audio")), "[object Blob]");
-        assert.equal(doc.querySelector("#cover-generate").disabled, false);
-        input.dispatchEvent(new win.Event("change"));
-        assert.equal(doc.querySelector("#cover-generate").disabled, true);
-    });
+            (doc.querySelector("#cover-preprocess") as HTMLButtonElement).click();
+            (doc.querySelector("#cover-generate") as HTMLButtonElement).click();
+            assert.equal(calls.includes("/api/music-cover/preprocess"), false);
+            assert.equal(calls.includes("/api/create-tool"), false);
+        }
+    );
 
     it("voice composer inserts pauses only between words", () => {
         setupFullDOM();
@@ -5097,12 +5086,21 @@ describe("init accessibility behavior", () => {
         const searchTab = doc.querySelector(
             ".create-tab[data-tab=\"search\"]"
         ) as HTMLButtonElement;
+        const videoTab = doc.querySelector(".create-tab[data-tab=\"video\"]") as HTMLButtonElement;
+        const coverTab = doc.querySelector(".create-tab[data-tab=\"cover\"]") as HTMLButtonElement;
+        coverTab.disabled = true;
 
         imageTab.dispatchEvent(
             new win.KeyboardEvent("keydown", { key: "ArrowRight", bubbles: true, cancelable: true })
         );
         assert.equal(doc.activeElement, musicTab);
         assert.equal(musicTab.getAttribute("aria-selected"), "true");
+
+        musicTab.dispatchEvent(
+            new win.KeyboardEvent("keydown", { key: "ArrowRight", bubbles: true, cancelable: true })
+        );
+        assert.equal(doc.activeElement, videoTab);
+        assert.equal(coverTab.disabled, true);
 
         musicTab.dispatchEvent(
             new win.KeyboardEvent("keydown", { key: "ArrowLeft", bubbles: true, cancelable: true })

@@ -77,9 +77,6 @@ import { Readable } from "node:stream";
 import { createLogger, nextReqId } from "./log.ts";
 
 const log = createLogger({ service: "hallucygenie" });
-function truncateLogText(text: string, max = 500): string {
-    return text.length > max ? `${text.slice(0, max)}…` : text;
-}
 
 function longTextSummary(text: string): string {
     const compact = text.replace(/\s+/g, " ").trim();
@@ -119,7 +116,7 @@ import {
     safeToolResultForUser,
     type SteerQueue
 } from "./agent.ts";
-import { MINIMAX_BASE, musicCoverPreprocess, type ToolResult, VIDEO_MODEL } from "./tools.ts";
+import { MINIMAX_BASE, MUSIC_DISABLED_MESSAGE, type ToolResult, VIDEO_MODEL } from "./tools.ts";
 
 const steerQueues = new Map<string, SteerQueue>();
 
@@ -1004,6 +1001,9 @@ function handleDirectToolExecution(
     origin: "chat" | "create",
     clearCreateDraftOnSuccess: boolean
 ): Response {
+    if (directive.name === "generate_music" || directive.name === "generate_music_cover") {
+        return jsonResponse({ error: MUSIC_DISABLED_MESSAGE }, 503);
+    }
     const { readable, writable } = new TransformStream<Uint8Array, Uint8Array>();
     const writer = writable.getWriter();
     const encoder = new TextEncoder();
@@ -1208,6 +1208,9 @@ async function handleCreateTool(
     }
     const normalized = normalizeCreateToolExecution(parsed);
     if (typeof normalized === "string") return jsonResponse({ error: normalized }, 400);
+    if (normalized.name === "generate_music" || normalized.name === "generate_music_cover") {
+        return jsonResponse({ error: MUSIC_DISABLED_MESSAGE }, 503);
+    }
     const sessionId = resolveSessionId(req, database);
     if (countSessionUserMessages(database, sessionId) === 0) {
         void autoNameDefaultSession(
@@ -1342,18 +1345,6 @@ const AVATAR_IMAGE_MIMES = ["image/png", "image/jpeg", "image/webp", "image/gif"
 const ANALYZE_IMAGE_MIMES = ["image/png", "image/jpeg", "image/webp", "image/gif"];
 const REFERENCE_IMAGE_MIMES = ["image/png", "image/jpeg"];
 
-function isCoverAudioMime(mime: string): boolean {
-    return [
-        "audio/mpeg",
-        "audio/mp3",
-        "audio/mp4",
-        "audio/m4a",
-        "audio/x-m4a",
-        "audio/wav",
-        "audio/x-wav"
-    ].includes(mime);
-}
-
 function profileAvatarPrompt(profile: ReturnType<typeof getUserProfile>): string {
     const parts = [
         profile.username ? `username: ${profile.username}` : "kid gamer creator",
@@ -1468,90 +1459,6 @@ async function handleReferenceImageUpload(req: Request, database: Database): Pro
         return jsonResponse({ assetId, assetUrl: saved.content });
     } catch (err) {
         return jsonResponse({ error: String(err instanceof Error ? err.message : err) }, 400);
-    }
-}
-
-async function coverSourceFromSidecar(
-    url: string
-): Promise<{ audio_url?: string; audio_base64?: string; }> {
-    const sidecar = process.env.COVER_EXTRACTOR_URL;
-    if (!sidecar) throw new Error("Cover extractor is not configured.");
-    const resp = await fetch(sidecar, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ url })
-    });
-    if (!resp.ok) throw new Error(`cover extractor failed: ${resp.status}`);
-    const data = (await resp.json()) as { audio_url?: string; audio_base64?: string; };
-    if (!data.audio_url && !data.audio_base64) {
-        throw new Error("cover extractor returned no audio");
-    }
-    return data;
-}
-
-async function handleMusicCoverPreprocess(req: Request, apiKey: string): Promise<Response> {
-    let sourceKind = "direct";
-    try {
-        const form = await req.formData();
-        sourceKind = String(form.get("source_kind") ?? "direct");
-        let source: { audio_url?: string; audio_base64?: string; };
-        if (sourceKind === "direct") {
-            const audioUrl = String(form.get("audio_url") ?? "").trim();
-            if (!/^https?:\/\//i.test(audioUrl)) {
-                log.warn("music cover preprocess rejected", {
-                    sourceKind,
-                    error: "audio_url required"
-                });
-                return jsonResponse({ error: "audio URL required" }, 400);
-            }
-            source = { audio_url: audioUrl };
-        } else if (sourceKind === "upload") {
-            const file = form.get("audio");
-            if (!(file instanceof File)) {
-                log.warn("music cover preprocess rejected", {
-                    sourceKind,
-                    error: "audio file required"
-                });
-                return jsonResponse({ error: "audio file required" }, 400);
-            }
-            const metadata = { sourceKind, mime: file.type, size: file.size };
-            if (!isCoverAudioMime(file.type)) {
-                log.warn("music cover preprocess rejected", {
-                    ...metadata,
-                    error: "audio type invalid"
-                });
-                return jsonResponse({ error: "audio type must be MP3, M4A, MP4, or WAV" }, 400);
-            }
-            if (file.size > 50 * 1024 * 1024) {
-                log.warn("music cover preprocess rejected", {
-                    ...metadata,
-                    error: "audio too large"
-                });
-                return jsonResponse({ error: "audio too large: max 50 MB" }, 400);
-            }
-            source = { audio_base64: Buffer.from(await file.arrayBuffer()).toString("base64") };
-        } else if (sourceKind === "youtube") {
-            const url = String(form.get("audio_url") ?? "").trim();
-            if (!/^https?:\/\//i.test(url)) {
-                log.warn("music cover preprocess rejected", {
-                    sourceKind,
-                    error: "youtube url required"
-                });
-                return jsonResponse({ error: "YouTube URL required" }, 400);
-            }
-            source = await coverSourceFromSidecar(url);
-        } else {
-            log.warn("music cover preprocess rejected", {
-                sourceKind,
-                error: "source_kind invalid"
-            });
-            return jsonResponse({ error: "source kind invalid" }, 400);
-        }
-        return jsonResponse(await musicCoverPreprocess(source, apiKey));
-    } catch (err) {
-        const error = String(err instanceof Error ? err.message : err);
-        log.warn("music cover preprocess failed", { sourceKind, error: truncateLogText(error) });
-        return jsonResponse({ error }, 400);
     }
 }
 
@@ -1675,13 +1582,11 @@ export async function handleRequest(req: Request): Promise<Response> {
         }
 
         if (path === "/api/music-cover/status" && method === "GET") {
-            return jsonResponse({ youtubeEnabled: Boolean(process.env.COVER_EXTRACTOR_URL) });
+            return jsonResponse({ enabled: false, youtubeEnabled: false });
         }
 
         if (path === "/api/music-cover/preprocess" && method === "POST") {
-            const apiKey = process.env.MINIMAX_API_KEY;
-            if (!apiKey) return jsonResponse({ error: "MINIMAX_API_KEY not configured" }, 503);
-            return handleMusicCoverPreprocess(req, apiKey);
+            return jsonResponse({ error: MUSIC_DISABLED_MESSAGE }, 503);
         }
 
         if (path === "/api/profile" && method === "PUT") {
@@ -2164,7 +2069,8 @@ function assetParamsJson(
     }
     if (toolName === "generate_lyrics") {
         return JSON.stringify({
-            endpoint: "lyrics_generation",
+            endpoint: "anthropic/v1/messages",
+            model: MINIMAX_MODEL,
             mode: stringParam(args, "mode") ?? null,
             prompt: prompt ?? stringParam(args, "prompt") ?? null,
             title: stringParam(args, "title") ?? null,

@@ -26,8 +26,6 @@ interface ToolResult {
 
 type CreateToolName =
     | "generate_image"
-    | "generate_music"
-    | "generate_music_cover"
     | "generate_video"
     | "text_to_speech"
     | "generate_long_speech"
@@ -554,20 +552,26 @@ function renderToolTweakButton(
     input: Record<string, unknown>
 ): HTMLElement | null {
     if (!TWEAKABLE_TOOL_KINDS[toolName]) return null;
+    const unavailable = toolName === "generate_music" || toolName === "generate_music_cover";
     const button = createElement(
         "button",
         {
             type: "button",
             class: "tool-tweak-button",
-            "data-tool-name": toolName
+            "data-tool-name": toolName,
+            ...(unavailable
+                ? { disabled: "", title: "Music and Cover Song are temporarily unavailable." }
+                : {})
         },
-        ["Tweak"]
+        [unavailable ? "Temporarily unavailable" : "Tweak"]
     );
-    button.addEventListener("click", () => {
-        document.dispatchEvent(
-            new CustomEvent("hallucygenie:tweak-tool", { detail: { toolName, input } })
-        );
-    });
+    if (!unavailable) {
+        button.addEventListener("click", () => {
+            document.dispatchEvent(
+                new CustomEvent("hallucygenie:tweak-tool", { detail: { toolName, input } })
+            );
+        });
+    }
     return button;
 }
 
@@ -1673,7 +1677,7 @@ function clearChatUi(): void {
     list.innerHTML = `
         <div class="message message--assistant message--welcome">
             <div class="message-avatar" aria-hidden="true">🧞</div>
-            <div class="message-bubble"><div class="message-content">Hey! 👋 I'm HallucyGenie. Ask me anything — I can chat, make images 🔥, do voices 🎙️, and create music 🎵</div></div>
+            <div class="message-bubble"><div class="message-content">Hey! 👋 I'm HallucyGenie. Ask me anything — I can chat, make images 🔥, do voices 🎙️, and write lyrics 📝</div></div>
         </div>`;
 }
 
@@ -2328,6 +2332,8 @@ export function init(): void {
     const tabs = createModal.querySelectorAll<HTMLButtonElement>(".create-tab");
     const panels = createModal.querySelectorAll<HTMLElement>(".create-panel");
     function setCreateTab(tabName: string): void {
+        const tab = Array.from(tabs).find((item) => item.dataset.tab === tabName);
+        if (tab?.disabled) tabName = "image";
         tabs.forEach((t) => {
             const selected = t.dataset.tab === tabName;
             t.classList.toggle("active", selected);
@@ -2343,8 +2349,9 @@ export function init(): void {
     }
 
     function moveCreateTab(from: HTMLButtonElement, delta: number): void {
-        const index = Array.from(tabs).indexOf(from);
-        const next = tabs[(index + delta + tabs.length) % tabs.length];
+        const enabledTabs = Array.from(tabs).filter((tab) => !tab.disabled);
+        const index = enabledTabs.indexOf(from);
+        const next = enabledTabs[(index + delta + enabledTabs.length) % enabledTabs.length];
         next?.focus();
         setCreateTab(next?.dataset.tab ?? "image");
         void putDraft("create", createDraftFromDom());
@@ -2415,14 +2422,9 @@ export function init(): void {
     const coverSourceKind = $("#cover-source-kind") as HTMLSelectElement;
     const coverAudioUrl = $("#cover-audio-url") as HTMLInputElement;
     const coverAudioFile = $("#cover-audio-file") as HTMLInputElement;
-    const coverUrlGroup = document.querySelector<HTMLElement>(".cover-url-group");
-    const coverFileGroup = document.querySelector<HTMLElement>(".cover-file-group");
     const coverStyle = $("#cover-style") as HTMLTextAreaElement;
-    const coverPreprocess = $("#cover-preprocess") as HTMLButtonElement;
     const coverFeatureId = $("#cover-feature-id") as HTMLInputElement;
-    const coverStatus = $("#cover-status") as HTMLElement;
     const coverLyrics = $("#cover-lyrics") as HTMLTextAreaElement;
-    const coverGenerate = $("#cover-generate") as HTMLButtonElement;
     const voiceTextInput = $("#voice-text") as HTMLTextAreaElement;
     const voiceSpeedInput = $("#voice-speed") as HTMLSelectElement;
     const voiceIdInput = document.querySelector<HTMLSelectElement>("#voice-id");
@@ -2449,37 +2451,6 @@ export function init(): void {
     let analyzeAssetUrl = "";
     const persistCreateDraft = debounce(() => void putDraft("create", createDraftFromDom()), 200);
     const persistChatDraft = debounce(() => void putDraft("chat", { text: input.value }), 200);
-
-    void fetch("/api/music-cover/status")
-        .then((resp) => resp.json())
-        .then((data: { youtubeEnabled?: boolean; }) => {
-            const youtube = coverSourceKind.querySelector(
-                "option[value=\"youtube\"]"
-            ) as HTMLOptionElement | null;
-            if (youtube && !data.youtubeEnabled) {
-                youtube.disabled = true;
-                youtube.textContent = "YouTube link (extractor off)";
-            }
-        })
-        .catch(() => undefined);
-
-    function updateCoverSourceVisibility(): void {
-        const upload = coverSourceKind.value === "upload";
-        if (coverUrlGroup) coverUrlGroup.hidden = upload;
-        if (coverFileGroup) coverFileGroup.hidden = !upload;
-    }
-
-    function updateCoverGenerateUi(): void {
-        const ready = Boolean(coverFeatureId.value.trim());
-        coverGenerate.disabled = !ready;
-        coverGenerate.textContent = ready ? "Generate cover 🎧" : "Prepare source first 🎧";
-    }
-
-    function resetCoverPreparedState(message = "Prepare the cover source first."): void {
-        coverFeatureId.value = "";
-        coverStatus.textContent = message;
-        updateCoverGenerateUi();
-    }
 
     function updateLyricsButton(): void {
         writeLyricsBtn.textContent = musicLyricsInput.value.trim()
@@ -2590,7 +2561,6 @@ export function init(): void {
             setCreateTab("search");
         }
         updateLyricsButton();
-        updateCoverGenerateUi();
         void putDraft("create", createDraftFromDom());
     }
 
@@ -2604,6 +2574,10 @@ export function init(): void {
             input?: Record<string, unknown>;
         };
         if (!detail?.toolName || !detail.input) return;
+        if (detail.toolName === "generate_music" || detail.toolName === "generate_music_cover") {
+            showError("Music and Cover Song are temporarily unavailable.");
+            return;
+        }
         openCreateModal();
         fillCreateFormFromToolInput(detail.toolName, detail.input);
     });
@@ -2754,14 +2728,12 @@ export function init(): void {
             updateImageReferenceUi();
             updateImageCreateUi();
             updateLyricsButton();
-            updateCoverGenerateUi();
             setCreateTab(createDraft.selectedTab || "image");
         } else {
             applyCreateDraft(defaultCreateDraft());
             updateImageReferenceUi();
             updateImageCreateUi();
             updateLyricsButton();
-            updateCoverGenerateUi();
             setCreateTab("image");
         }
     }
@@ -2864,30 +2836,9 @@ export function init(): void {
     void refreshSessions().catch(() => undefined);
     void restoreDrafts().catch(() => undefined);
 
-    updateCoverSourceVisibility();
     updateLyricsButton();
-    updateCoverGenerateUi();
     musicLyricsInput.addEventListener("input", updateLyricsButton);
     musicLyricsInput.addEventListener("change", updateLyricsButton);
-    coverSourceKind.addEventListener("change", () => {
-        updateCoverSourceVisibility();
-        resetCoverPreparedState();
-        persistCreateDraft();
-    });
-    coverAudioFile.addEventListener("change", () => {
-        if (coverAudioFile.files?.[0]) {
-            coverSourceKind.value = "upload";
-            updateCoverSourceVisibility();
-            resetCoverPreparedState("Audio file selected. Prepare it before generating.");
-        }
-        persistCreateDraft();
-    });
-    coverAudioUrl.addEventListener("input", () => {
-        if (!coverAudioUrl.value.trim()) return;
-        if (coverSourceKind.value === "upload") coverSourceKind.value = "direct";
-        updateCoverSourceVisibility();
-        resetCoverPreparedState("URL changed. Prepare it before generating.");
-    });
     voiceInsertPause?.addEventListener("click", insertVoicePause);
     voiceInsertInterjection?.addEventListener("click", insertVoiceInterjection);
 
@@ -2982,12 +2933,7 @@ export function init(): void {
 
     createMusicForm.addEventListener("submit", (e) => {
         e.preventDefault();
-        const prompt = musicPromptInput.value.trim();
-        const lyrics = musicLyricsInput.value.trim();
-        if (prompt) {
-            closeCreateModal();
-            void sendCreateTool("generate_music", { prompt, lyrics }, `Create music: ${prompt}`);
-        }
+        writeLyrics();
     });
 
     createVideoForm.addEventListener("submit", (e) => {
@@ -3008,11 +2954,11 @@ export function init(): void {
     });
 
     // Lyrics helper — writes from empty field or edits current lyrics.
-    writeLyricsBtn.addEventListener("click", () => {
+    function writeLyrics(): void {
         const prompt = musicPromptInput.value.trim();
         const currentLyrics = musicLyricsInput.value.trim();
         if (!prompt) {
-            showError("Describe the music first so I can write matching lyrics! ✍️");
+            showError("Describe the song first so I can write matching lyrics! ✍️");
             musicPromptInput.focus();
             return;
         }
@@ -3035,84 +2981,9 @@ export function init(): void {
                 setLyricsWriteResolve(null);
             }
         );
-    });
+    }
 
-    coverPreprocess.addEventListener("click", async () => {
-        const form = new FormData();
-        const file = coverAudioFile.files?.[0];
-        const sourceKind = file ? "upload" : coverSourceKind.value;
-        coverSourceKind.value = sourceKind;
-        updateCoverSourceVisibility();
-        form.set("source_kind", sourceKind);
-        if (sourceKind === "upload") {
-            if (!file) {
-                showError("Choose an audio file first 🎵");
-                coverAudioFile.focus();
-                return;
-            }
-            form.set("audio", file);
-        } else {
-            const url = coverAudioUrl.value.trim();
-            if (!url) {
-                showError("Paste an audio or YouTube URL first 🎵");
-                coverAudioUrl.focus();
-                return;
-            }
-            form.set("audio_url", url);
-        }
-        coverPreprocess.disabled = true;
-        coverStatus.textContent = "Preparing cover...";
-        try {
-            const resp = await fetch("/api/music-cover/preprocess", {
-                method: "POST",
-                body: form
-            });
-            const data = (await resp.json()) as {
-                cover_feature_id?: string;
-                lyrics?: string;
-                error?: string;
-            };
-            if (!resp.ok) throw new Error(data.error ?? "cover prepare failed");
-            coverFeatureId.value = data.cover_feature_id ?? "";
-            coverLyrics.value = data.lyrics ?? "";
-            coverStatus.textContent = "Ready. Edit lyrics/style, then generate.";
-            updateCoverGenerateUi();
-            void putDraft("create", createDraftFromDom());
-        } catch (err) {
-            const message = String(err instanceof Error ? err.message : err);
-            resetCoverPreparedState(`Prepare failed: ${message}`);
-            showError(message);
-        } finally {
-            coverPreprocess.disabled = false;
-        }
-    });
-
-    coverGenerate.addEventListener("click", () => {
-        const prompt = coverStyle.value.trim();
-        const lyrics = coverLyrics.value.trim();
-        const featureId = coverFeatureId.value.trim();
-        if (!featureId) {
-            showError("Prepare the cover source first 🎵");
-            coverPreprocess.focus();
-            return;
-        }
-        if (!prompt) {
-            showError("Describe the new style first 🎵");
-            coverStyle.focus();
-            return;
-        }
-        if (!lyrics) {
-            showError("Cover lyrics are required 🎵");
-            coverLyrics.focus();
-            return;
-        }
-        closeCreateModal();
-        void sendCreateTool(
-            "generate_music_cover",
-            { prompt, lyrics, cover_feature_id: featureId },
-            `Create cover: ${prompt}`
-        );
-    });
+    writeLyricsBtn.addEventListener("click", writeLyrics);
 
     createVoiceForm.addEventListener("submit", (e) => {
         e.preventDefault();

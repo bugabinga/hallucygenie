@@ -5,8 +5,14 @@
 import type { UserProfile } from "./db.ts";
 import { createLogger } from "./log.ts";
 import type { ChatMessage } from "./server.ts";
-import { executeTool, getToolDefinitions, MINIMAX_BASE } from "./tools.ts";
-export { MINIMAX_BASE };
+import {
+    executeTool,
+    getToolDefinitions,
+    MINIMAX_BASE,
+    MINIMAX_MODEL,
+    MUSIC_DISABLED_MESSAGE
+} from "./tools.ts";
+export { MINIMAX_BASE, MINIMAX_MODEL };
 import type { ToolResult } from "./tools.ts";
 
 const log = createLogger({ service: "agent" });
@@ -25,12 +31,12 @@ Rules:
 
 Tool rules:
 - If the user asks to generate, create, make, draw, render, or use generate_image for an image, MUST call generate_image. Do not answer with text only.
-- If the user asks to generate, create, make, or use generate_music for music/song/audio bed, MUST call generate_music. Do not answer with text only.
+- Music audio and cover generation are temporarily disabled. Explain this clearly when asked; offer written lyrics instead, without claiming that lyrics are audio.
 - If the user asks to generate, create, make, or use generate_lyrics for lyrics/song words/song lyrics, MUST call generate_lyrics. Do not answer with text only.
 - If the user asks for short voice, speech, narration, TTS, or use text_to_speech, MUST call text_to_speech. For long narration/scripts over ~1000 chars or use generate_long_speech, MUST call generate_long_speech. Do not answer with text only.
 - If the user asks to generate, create, make, or use generate_video for a video, MUST call generate_video. Do not answer with text only.
 - If the user asks to analyze, inspect, describe, or use analyze_image for an image URL, MUST call analyze_image with image_url and a concise prompt. Do not answer from the URL alone.
-- For image/music/voice/analysis requests, craft strong prompts yourself if needed, then call the tool.
+- For image/lyrics/voice/analysis requests, craft strong prompts yourself if needed, then call the tool.
 - Never claim media was generated unless the matching tool returned a result.
 - Never output fake placeholders like <image>, <audio>, <music>, or <response>.
 - After an image/audio/music tool result, do not embed markdown images, raw URLs, <img>, <audio>, or duplicate media in your text. The tool card already shows it.
@@ -42,12 +48,12 @@ Tool rules:
 
 Product help:
 - HallucyGenie has Chat, Create, Assets, Profile, and Sessions.
-- Create has Image, Music, Video, Voice, Analyze, Search, and Assets tabs.
+- Create has Image, Lyrics, Video, Voice, Analyze, Search, and Assets; Cover Song is disabled.
 - Image makes thumbnails, avatars, logos, and game art; count controls how many pictures.
-- Music makes new songs from prompt/lyrics. Voice makes short speech or long narration. Analyze explains an uploaded image or image URL. Search finds web facts.
+- Lyrics writes or edits song words as text. Music audio and covers are unavailable. Voice makes short speech or long narration. Analyze explains an uploaded image or image URL. Search finds web facts.
 - Assets keeps generated/downloaded media. Tool cards show previews, input details, and Tweak to reopen Create with the same params.
 - Profile stores name, interests, dislikes, style ingredients, and avatar. Sessions separate projects.
-- Quota can run out for image, speech, and music.
+- Quota can run out for text, image, speech, and video.
 - Raw media bytes must stay in asset storage. Never ask the user to paste data URLs.`;
 
 function quotedProfileLine(label: string, value: string): string | null {
@@ -95,7 +101,6 @@ export function buildSystemPrompt(
 
 // ── Configuration ────────────────────────────────────────────────────
 
-export const MINIMAX_MODEL = "MiniMax-M3.1-Flash";
 export const MINIMAX_OUTPUT_TOKENS = 4096;
 
 // ── Types ────────────────────────────────────────────────────────────
@@ -120,23 +125,16 @@ export function safeToolResultForUser(toolName: string, result: ToolResult): Too
     if (result.type !== "error") return result;
 
     log.warn("tool returned error", { toolName, error: truncateLogText(result.content) });
-    if (result.content.startsWith("Invalid ")) return result;
-    if (
-        (toolName === "generate_music" || toolName === "generate_lyrics")
-        && result.provider?.status_code === 2153
-    ) {
-        return {
-            type: "error",
-            content: "MiniMax says music and lyrics generation aren't available for this account.",
-            provider: result.provider
-        };
+    if (result.content.startsWith("Invalid ") || result.content === MUSIC_DISABLED_MESSAGE) {
+        return result;
     }
 
     const ERROR_MESSAGES: Record<string, string> = {
         generate_image: "Couldn't generate the image. Try a shorter, clearer prompt.",
         text_to_speech: "Couldn't generate voice audio. Try shorter text.",
         generate_long_speech: "Couldn't generate long narration. Try shorter text.",
-        generate_music: "Couldn't generate music. Try a shorter prompt or lyrics.",
+        generate_music: MUSIC_DISABLED_MESSAGE,
+        generate_music_cover: MUSIC_DISABLED_MESSAGE,
         generate_lyrics: "Couldn't generate lyrics. Try a different topic.",
         analyze_image: "Couldn't analyze the image. Try a direct JPG, PNG, GIF, or WebP URL.",
         generate_video: "Couldn't generate the video. Try a shorter, clearer prompt."

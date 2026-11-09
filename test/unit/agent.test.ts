@@ -25,7 +25,7 @@ import {
     toAnthropicPayload
 } from "../../src/agent.ts";
 import type { AgentEvent, OnBeforeTool } from "../../src/agent.ts";
-import { getToolDefinitions } from "../../src/tools.ts";
+import { getToolDefinitions, MUSIC_DISABLED_MESSAGE } from "../../src/tools.ts";
 
 type ProviderDiagnosticResult = { provider?: { status_msg?: string; }; };
 type ContextToolMessage = {
@@ -284,25 +284,13 @@ describe("safeToolResultForUser", () => {
         assert.match(result.content, /omit seed/);
     });
 
-    it("gives non-retry copy for MiniMax permanent music access errors", () => {
-        for (const toolName of ["generate_music", "generate_lyrics"]) {
-            const provider = {
-                stage: toolName === "generate_music" ? "Music generation" : "Lyrics generation",
-                status_code: 2153,
-                status_msg: "This Music API is no longer available to new users."
-            };
+    it("preserves the disabled music error", () => {
+        for (const toolName of ["generate_music", "generate_music_cover"]) {
             const result = safeToolResultForUser(toolName, {
                 type: "error",
-                content: `${provider.stage} failed: ${provider.status_msg}`,
-                provider
+                content: MUSIC_DISABLED_MESSAGE
             });
-
-            assert.equal(
-                result.content,
-                "MiniMax says music and lyrics generation aren't available for this account."
-            );
-            assert.doesNotMatch(result.content, /try|shorter|different topic/i);
-            assert.deepEqual(result.provider, provider);
+            assert.equal(result.content, MUSIC_DISABLED_MESSAGE);
         }
     });
 });
@@ -1004,7 +992,7 @@ describe("runAgentLoop", () => {
         });
         assert.equal(result.type, "error");
         assert.equal(result.content.includes("base_resp"), false);
-        assert.ok(result.content.includes("Couldn't generate music"));
+        assert.equal(result.content, MUSIC_DISABLED_MESSAGE);
     });
 
     it("keeps provider failure diagnostics for every media tool", () => {
@@ -1013,7 +1001,7 @@ describe("runAgentLoop", () => {
                 "generate_image",
                 "text_to_speech",
                 "generate_long_speech",
-                "generate_music",
+                "generate_music_cover",
                 "generate_lyrics",
                 "analyze_image",
                 "generate_video"
@@ -1937,9 +1925,14 @@ describe("System Prompt", () => {
 
     it("SYSTEM_PROMPT forces media generation through tools", () => {
         assert.ok(SYSTEM_PROMPT.includes("MUST call generate_image"));
-        assert.ok(SYSTEM_PROMPT.includes("MUST call generate_music"));
+        assert.equal(SYSTEM_PROMPT.includes("MUST call generate_music"), false);
         assert.ok(SYSTEM_PROMPT.includes("MUST call generate_lyrics"));
+        assert.ok(SYSTEM_PROMPT.includes("temporarily disabled"));
         assert.ok(SYSTEM_PROMPT.includes("MUST call text_to_speech"));
+        assert.equal(
+            getToolDefinitions().some((tool) => tool.name === "generate_music"),
+            false
+        );
         assert.ok(SYSTEM_PROMPT.includes("Never claim media was generated"));
         assert.ok(SYSTEM_PROMPT.includes("Never output fake placeholders"));
         assert.ok(
@@ -1951,7 +1944,7 @@ describe("System Prompt", () => {
         for (
             const text of [
                 "Chat, Create, Assets, Profile, and Sessions",
-                "Image, Music, Video, Voice, Analyze, Search, and Assets tabs",
+                "Image, Lyrics, Video, Voice, Analyze, Search, and Assets",
                 "Tool cards show previews, input details, and Tweak",
                 "Raw media bytes must stay in asset storage",
                 "Quota can run out"
@@ -3450,13 +3443,19 @@ describe("SSE parser error paths", () => {
         );
         const second = anthropicResponse(textResponse(["Here are the lyrics!"]));
         let n = 0;
-        globalThis.fetch = async (url: string | URL | Request) => {
-            if (url.toString().includes("/anthropic/v1/messages")) {
-                return ++n === 1 ? first : second;
-            }
+        globalThis.fetch = async (url: string | URL | Request, init?: RequestInit) => {
+            const request = JSON.parse(String(init?.body));
+            if (request.stream === true) return ++n === 1 ? first : second;
+            assert.ok(url.toString().includes("/anthropic/v1/messages"));
             return new Response(
                 JSON.stringify({
-                    lyrics: "Verse: Happy birthday to you\nChorus: Happy birthday!"
+                    content: [
+                        { type: "thinking", thinking: "draft" },
+                        {
+                            type: "text",
+                            text: "Verse: Happy birthday to you\nChorus: Happy birthday!"
+                        }
+                    ]
                 }),
                 { status: 200, headers: { "Content-Type": "application/json" } }
             );
@@ -3479,62 +3478,37 @@ describe("SSE parser error paths", () => {
         assert.ok(toolResult.result?.content.includes("Happy birthday"));
     });
 
-    it("agent sequences generate_lyrics then generate_music in one turn", async () => {
-        // Simulate agent asking to first get lyrics then generate music
-        const first = anthropicResponse(
-            toolUseResponse("tu_1", "generate_lyrics", "{\"prompt\":\"epic adventure song\"}")
-        );
-        const second = anthropicResponse(
-            toolUseResponse(
-                "tu_2",
-                "generate_music",
-                JSON.stringify({
-                    prompt: "epic adventure song",
-                    lyrics: "[Verse]\nWe are heroes"
-                })
-            )
-        );
-        const third = anthropicResponse(textResponse(["Done!"]));
-        let n = 0;
-        globalThis.fetch = async (url: string | URL | Request) => {
-            if (url.toString().includes("/anthropic/v1/messages")) {
-                const resp = ++n === 1 ? first : n === 2 ? second : third;
-                return resp;
-            }
-            if (url.toString().includes("/v1/lyrics_generation")) {
-                return new Response(
-                    JSON.stringify({ lyrics: "[Verse]\nWe are heroes\n[Verse]\nWe win today" }),
-                    { status: 200, headers: { "Content-Type": "application/json" } }
-                );
-            }
-            return new Response(JSON.stringify({ data: { audio: "4d75736963" } }), {
-                status: 200,
-                headers: { "Content-Type": "application/json" }
-            });
-        };
-        const { events, onEvent } = collectEvents();
-        await runAgentLoop(
-            [{ role: "user", content: "write me lyrics then generate the music" }],
-            "test-key",
-            onEvent
-        );
-        const lyricsToolStart = events.filter(
-            (e) => e.type === "tool_start" && e.name === "generate_lyrics"
-        );
-        const musicToolStart = events.filter(
-            (e) => e.type === "tool_start" && e.name === "generate_music"
-        );
-        const lyricsResult = events.find(
-            (e) => e.type === "tool_result" && e.name === "generate_lyrics"
-        );
-        const musicResult = events.find(
-            (e) => e.type === "tool_result" && e.name === "generate_music"
-        );
-        assert.ok(lyricsToolStart.length >= 1, "should call generate_lyrics");
-        assert.ok(musicToolStart.length >= 1, "should call generate_music");
-        assert.ok(lyricsResult, "should return lyrics result");
-        assert.equal(lyricsResult.result?.type, "text");
-        assert.ok(musicResult, "should return music result");
-        assert.equal(musicResult.result?.type, "audio");
-    });
+    for (const toolName of ["generate_music", "generate_music_cover"]) {
+        it(`returns disabled ${toolName} result without a legacy media request`, async () => {
+            const first = anthropicResponse(
+                toolUseResponse(
+                    "tu_music",
+                    toolName,
+                    JSON.stringify({
+                        prompt: "epic adventure",
+                        lyrics: "[Verse] Hello",
+                        cover_feature_id: "saved-feature"
+                    })
+                )
+            );
+            const second = anthropicResponse(textResponse(["Lyrics are available instead."]));
+            let modelCalls = 0;
+            let legacyCalls = 0;
+            globalThis.fetch = async (url: string | URL | Request) => {
+                if (url.toString().includes("/anthropic/v1/messages")) {
+                    return ++modelCalls === 1 ? first : second;
+                }
+                legacyCalls++;
+                throw new Error("Disabled music tool made an upstream media request");
+            };
+            const { events, onEvent } = collectEvents();
+            await runAgentLoop([{ role: "user", content: "make music" }], "test-key", onEvent);
+            const result = events.find(event =>
+                event.type === "tool_result" && event.name === toolName
+            );
+            assert.equal(result?.result?.content, MUSIC_DISABLED_MESSAGE);
+            assert.equal(legacyCalls, 0);
+            assert.equal(modelCalls, 2);
+        });
+    }
 });

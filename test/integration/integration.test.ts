@@ -9,7 +9,13 @@ import { createServer } from "node:http";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { connect } from "node:net";
 import { after, before, describe, it } from "node:test";
-import { createSession, getMessages, getOrCreateActiveSessionId, saveAsset } from "../../src/db.ts";
+import {
+    createSession,
+    getMessages,
+    getOrCreateActiveSessionId,
+    renameSession,
+    saveAsset
+} from "../../src/db.ts";
 import { getDb, handleNodeRequest, initDatabase, resetStateForTesting } from "../../src/server.ts";
 
 let server: ReturnType<typeof createServer>;
@@ -342,113 +348,140 @@ describe("GET /api/quota", () => {
     });
 });
 
-describe("Music cover HTTP flow", () => {
-    it("reports YouTube extractor disabled when COVER_EXTRACTOR_URL is missing", async () => {
-        const oldExtractor = process.env.COVER_EXTRACTOR_URL;
-        delete process.env.COVER_EXTRACTOR_URL;
-        try {
-            const r = await api("GET", "/api/music-cover/status");
-            assert.equal(r.status, 200);
-            assert.equal(bodyAs<Record<string, unknown>>(r.body).youtubeEnabled, false);
-        } finally {
-            if (oldExtractor) process.env.COVER_EXTRACTOR_URL = oldExtractor;
-            else delete process.env.COVER_EXTRACTOR_URL;
-        }
+describe("Lyrics and disabled music HTTP flow", () => {
+    it("reports music covers disabled", async () => {
+        const response = await api("GET", "/api/music-cover/status");
+        assert.equal(response.status, 200);
+        assert.equal(bodyAs<Record<string, unknown>>(response.body).enabled, false);
+        assert.equal(bodyAs<Record<string, unknown>>(response.body).youtubeEnabled, false);
     });
 
-    it("preprocesses a direct audio URL through real HTTP server", async () => {
-        const oldKey = process.env.MINIMAX_API_KEY;
-        const oldFetch = globalThis.fetch;
-        process.env.MINIMAX_API_KEY = "test-key";
-        let providerBody: Record<string, unknown> | null = null;
-        globalThis.fetch = async (input: RequestInfo | URL, init?: RequestInit) => {
-            if (String(input).startsWith(baseUrl)) return oldFetch(input, init);
-            providerBody = JSON.parse(String(init?.body));
-            return new Response(
-                JSON.stringify({
-                    data: {
-                        cover_feature_id: "cover-integration",
-                        formatted_lyrics: "[Verse]\nhi"
-                    },
-                    base_resp: { status_code: 0 }
-                }),
-                { status: 200, headers: { "Content-Type": "application/json" } }
-            );
+    it("rejects cover preprocessing sources without upstream requests", async () => {
+        const originalFetch = globalThis.fetch;
+        let upstreamCalls = 0;
+        globalThis.fetch = async (input, init) => {
+            if (String(input).startsWith(baseUrl)) return originalFetch(input, init);
+            upstreamCalls++;
+            throw new Error("Disabled cover must not contact upstream");
         };
-
         try {
-            const form = new FormData();
-            form.set("source_kind", "direct");
-            form.set("audio_url", "https://example.com/source.mp3");
-            const resp = await oldFetch(`${baseUrl}/api/music-cover/preprocess`, {
-                method: "POST",
-                body: form
-            });
-            const body = await resp.json();
-
-            assert.equal(resp.status, 200);
-            assert.deepEqual(providerBody, {
-                model: "music-cover",
-                audio_url: "https://example.com/source.mp3"
-            });
-            assert.equal(body.cover_feature_id, "cover-integration");
-            assert.equal(body.lyrics, "[Verse]\nhi");
+            for (const source of ["direct", "upload", "youtube"]) {
+                const form = new FormData();
+                form.set("source_kind", source);
+                const response = await originalFetch(`${baseUrl}/api/music-cover/preprocess`, {
+                    method: "POST",
+                    body: form
+                });
+                assert.equal(response.status, 503);
+                assert.match((await response.json()).error, /temporarily disabled/);
+            }
+            assert.equal(upstreamCalls, 0);
         } finally {
-            globalThis.fetch = oldFetch;
-            if (oldKey) process.env.MINIMAX_API_KEY = oldKey;
-            else delete process.env.MINIMAX_API_KEY;
+            globalThis.fetch = originalFetch;
         }
     });
 
-    it("generates cover music through Create tool endpoint and saves asset", async () => {
+    it("rejects music and covers before naming, quotas, or assets", async () => {
         const oldKey = process.env.MINIMAX_API_KEY;
-        const oldFetch = globalThis.fetch;
-        process.env.MINIMAX_API_KEY = "test-key";
+        process.env.MINIMAX_API_KEY = "subscription-test-key";
+        const originalFetch = globalThis.fetch;
+        let upstreamCalls = 0;
+        globalThis.fetch = async (input, init) => {
+            if (String(input).startsWith(baseUrl)) return originalFetch(input, init);
+            upstreamCalls++;
+            throw new Error("Disabled music must not contact upstream");
+        };
+        try {
+            const db = getDb();
+            assert.ok(db);
+            for (const name of ["generate_music", "generate_music_cover"]) {
+                const sessionId = `disabled-http-${name}`;
+                createSession(db, sessionId, "Disabled music");
+                const response = await api(
+                    "POST",
+                    "/api/create-tool",
+                    JSON.stringify({
+                        tool_name: name,
+                        input: {
+                            prompt: "A short greeting",
+                            lyrics: "[Verse]\\nHello",
+                            cover_feature_id: "unused"
+                        }
+                    }),
+                    { "X-Session-Id": sessionId }
+                );
+                assert.equal(response.status, 503);
+                assert.match(
+                    bodyAs<Record<string, string>>(response.body).error,
+                    /temporarily disabled/
+                );
+                assert.deepEqual(getMessages(db, sessionId), []);
+                const assets = await api("GET", "/assets", undefined, {
+                    "X-Session-Id": sessionId
+                });
+                assert.deepEqual(bodyAs<{ assets: unknown[]; }>(assets.body).assets, []);
+            }
+            assert.equal(upstreamCalls, 0);
+        } finally {
+            globalThis.fetch = originalFetch;
+            if (oldKey === undefined) delete process.env.MINIMAX_API_KEY;
+            else process.env.MINIMAX_API_KEY = oldKey;
+        }
+    });
+
+    it("writes lyrics through the text model and persists the result over real HTTP", async () => {
+        const oldKey = process.env.MINIMAX_API_KEY;
+        process.env.MINIMAX_API_KEY = "subscription-test-key";
+        const originalFetch = globalThis.fetch;
         const db = getDb();
         assert.ok(db);
-        const sessionId = "integration-cover-session";
-        createSession(db, sessionId, "Cover Test");
-        let providerBody: Record<string, unknown> | null = null;
-        globalThis.fetch = async (input: RequestInfo | URL, init?: RequestInit) => {
-            if (String(input).startsWith(baseUrl)) return oldFetch(input, init);
-            providerBody = JSON.parse(String(init?.body));
+        const sessionId = "lyrics-http-session";
+        createSession(db, sessionId, "Lyrics");
+        renameSession(db, sessionId, "Lyrics");
+        let calls = 0;
+        globalThis.fetch = async (input, init) => {
+            if (String(input).startsWith(baseUrl)) return originalFetch(input, init);
+            calls++;
+            assert.equal(String(input), "https://api.minimax.io/anthropic/v1/messages");
+            assert.equal(
+                new Headers(init?.headers).get("Authorization"),
+                "Bearer subscription-test-key"
+            );
+            const payload = JSON.parse(String(init?.body));
+            assert.equal(payload.model, "MiniMax-M3.1-Flash");
+            assert.equal(JSON.parse(payload.messages[0].content).prompt, "A greeting for a friend");
             return new Response(
-                JSON.stringify({ data: { audio: "ff" }, base_resp: { status_code: 0 } }),
-                { status: 200, headers: { "Content-Type": "application/json" } }
+                JSON.stringify({
+                    content: [
+                        { type: "thinking", thinking: "not public lyrics" },
+                        { type: "text", text: "[Verse]\\nHello my friend" }
+                    ]
+                }),
+                { headers: { "Content-Type": "application/json" } }
             );
         };
-
         try {
-            const r = await api(
-                "POST",
-                "/api/create-tool",
-                JSON.stringify({
-                    tool_name: "generate_music_cover",
-                    input: {
-                        prompt: "spooky boss battle",
-                        lyrics: "[Verse]\nhi",
-                        cover_feature_id: "cover-integration"
-                    }
-                }),
-                { "X-Session-Id": sessionId }
+            const response = await originalFetch(`${baseUrl}/api/create-tool`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json", "X-Session-Id": sessionId },
+                body: JSON.stringify({
+                    tool_name: "generate_lyrics",
+                    input: { prompt: "A greeting for a friend" }
+                })
+            });
+            const sse = await response.text();
+            assert.equal(response.status, 200);
+            assert.ok(sse.includes("\"type\":\"text\""));
+            assert.ok(sse.includes("Hello my friend"));
+            assert.equal(sse.includes("not public lyrics"), false);
+            assert.equal(calls, 1);
+            assert.ok(
+                getMessages(db, sessionId).some(row => row.content.includes("Hello my friend"))
             );
-            assert.equal(r.status, 200);
-            assert.equal(providerBody?.model, "music-cover");
-            assert.equal(providerBody?.cover_feature_id, "cover-integration");
-
-            const assets = await api("GET", "/assets", undefined, { "X-Session-Id": sessionId });
-            assert.equal(assets.status, 200);
-            const cover = bodyAs<Record<string, unknown>>(assets.body).assets.find(
-                (asset: { tool_name: string; }) => asset.tool_name === "generate_music_cover"
-            );
-            assert.ok(cover);
-            assert.equal(cover.type, "music");
-            assert.equal(cover.params.cover_feature_id_present, true);
-            assert.equal(String(cover.url).startsWith("/asset/"), true);
         } finally {
-            globalThis.fetch = oldFetch;
-            if (oldKey) process.env.MINIMAX_API_KEY = oldKey;
-            else delete process.env.MINIMAX_API_KEY;
+            globalThis.fetch = originalFetch;
+            if (oldKey === undefined) delete process.env.MINIMAX_API_KEY;
+            else process.env.MINIMAX_API_KEY = oldKey;
         }
     });
 });

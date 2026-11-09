@@ -123,7 +123,7 @@ describe("index.html health", () => {
         const doc = parseIndex();
         assert.equal(
             visibleText(doc.querySelector(".message--welcome .message-content")),
-            "Hey! 👋 I'm HallucyGenie. Ask me anything — I can chat, make images 🔥, do voices 🎙️, and create music 🎵"
+            "Hey! 👋 I'm HallucyGenie. Ask me anything — I can chat, make images 🔥, do voices 🎙️, and write lyrics 📝"
         );
         assert.match(
             Array.from(doc.querySelectorAll("#quota-badge .quota-item:not([hidden])")).map(
@@ -201,10 +201,13 @@ describe("index.html health", () => {
             doc.querySelector("#whats-new-title")?.textContent,
             `✨ What’s new in v${releaseVersion}`
         );
-        assert.match(modal?.textContent ?? "", /video/i);
-        assert.match(modal?.textContent ?? "", /reference/i);
-        assert.match(modal?.textContent ?? "", /long narration/i);
-        assert.match(modal?.textContent ?? "", /No built-in\s+auth/);
+        const copy = (modal?.textContent ?? "").replace(/\s+/g, " ");
+        assert.match(copy, /video/i);
+        assert.match(copy, /reference/i);
+        assert.match(copy, /long narration/i);
+        assert.match(copy, /Create → Lyrics/);
+        assert.match(copy, /Music audio and covers are temporarily unavailable/);
+        assert.match(copy, /No built-in auth/);
         assert.match(appTs, /openWhatsNew/);
         assert.match(appTs, /trapFocus\(whatsNewModal/);
     });
@@ -222,7 +225,9 @@ describe("index.html health", () => {
     it("keeps every HTML id covered by E2E selectors", () => {
         const ids = Array.from(parseIndex().querySelectorAll("[id]"), (el) => el.id).sort();
         const missing = ids.filter((id) =>
-            !e2eRunner.includes(`#${id}`)
+            !id.startsWith("cover-")
+            && id !== "create-cover-form"
+            && !e2eRunner.includes(`#${id}`)
             && !e2eRunner.includes(`"${id}"`)
             && !e2eRunner.includes(`'${id}'`)
         );
@@ -323,8 +328,8 @@ describe("index.html health", () => {
         assert.doesNotMatch(appTs, /Use generate_|Use analyze_|Use text_to_speech|Tool params:/);
         assert.match(appTs, /\/api\/create-tool/);
         assert.match(appTs, /sendCreateTool\([\s\S]*"generate_image"/);
-        assert.match(appTs, /sendCreateTool\([\s\S]*"generate_music"/);
-        assert.match(appTs, /sendCreateTool\([\s\S]*"generate_music_cover"/);
+        assert.doesNotMatch(appTs, /sendCreateTool\("generate_music"/);
+        assert.doesNotMatch(appTs, /sendCreateTool\("generate_music_cover"/);
         assert.match(appTs, /sendCreateTool\([\s\S]*"text_to_speech"/);
         assert.match(appTs, /sendCreateTool\([\s\S]*"generate_long_speech"/);
         assert.match(appTs, /sendCreateTool\([\s\S]*"generate_lyrics"/);
@@ -339,35 +344,15 @@ describe("index.html health", () => {
         assert.equal(btn?.tagName.toLowerCase(), "button");
     });
 
-    it("has a separate two-step music cover flow", () => {
+    it("keeps Cover Song visibly unavailable without calling its API", () => {
         const doc = parseIndex();
-        assert.ok(doc.querySelector(".create-tab[data-tab=\"cover\"]"));
-        assert.equal(doc.querySelector("#create-music-form #cover-source-kind"), null);
-        assert.equal(
-            doc.querySelector("#create-cover-form")?.getAttribute("data-panel"),
-            "cover"
-        );
-        for (
-            const id of [
-                "#cover-source-kind",
-                "#cover-audio-url",
-                "#cover-audio-file",
-                "#cover-style",
-                "#cover-preprocess",
-                "#cover-feature-id",
-                "#cover-status",
-                "#cover-lyrics",
-                "#cover-generate"
-            ]
-        ) {
-            assert.ok(doc.querySelector(`#create-cover-form ${id}`), id);
-        }
-        assert.match(appTs, /\/api\/music-cover\/status/);
-        assert.match(appTs, /\/api\/music-cover\/preprocess/);
-        assert.match(appTs, /youtube\.disabled = true/);
-        assert.match(appTs, /generate_music_cover: "cover"/);
-        assert.match(appTs, /resetCoverPreparedState/);
-        assert.equal(doc.querySelector("#cover-generate")?.hasAttribute("disabled"), true);
+        const tab = doc.querySelector(".create-tab[data-tab=\"cover\"]") as HTMLButtonElement;
+        assert.equal(tab.disabled, true);
+        assert.match(visibleText(tab), /unavailable/i);
+        assert.match(visibleText(doc.querySelector("#cover-status")), /temporarily unavailable/i);
+        assert.equal((doc.querySelector("#cover-preprocess") as HTMLButtonElement).disabled, true);
+        assert.equal((doc.querySelector("#cover-generate") as HTMLButtonElement).disabled, true);
+        assert.doesNotMatch(appTs, /\/api\/music-cover/);
     });
 
     it("keeps long narration inside Voice instead of a separate top-level tab", () => {

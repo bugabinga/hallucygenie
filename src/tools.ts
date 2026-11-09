@@ -1,5 +1,5 @@
 // HallucyGenie — Tool definitions and execution
-// Implements generate_image, text_to_speech, generate_long_speech, generate_lyrics, generate_music, analyze_image
+// Active image, speech, lyrics, video, search, and analysis tools; music audio is disabled.
 
 // ── Types ────────────────────────────────────────────────────────────
 
@@ -88,6 +88,8 @@ export interface AnalyzeImageOptions {
 // ── Configuration ────────────────────────────────────────────────────
 
 export const MINIMAX_BASE = "https://api.minimax.io";
+export const MINIMAX_MODEL = "MiniMax-M3.1-Flash";
+export const MUSIC_DISABLED_MESSAGE = "Music generation and covers are temporarily disabled.";
 
 const IMAGE_PROMPT_MAX = 1500;
 const TTS_TEXT_MAX = 10000;
@@ -95,12 +97,6 @@ const LONG_TTS_TEXT_MAX = 50000;
 const TTS_MODEL = "speech-2.8-hd";
 const LYRICS_PROMPT_MAX = 2000;
 const LYRICS_EXISTING_MAX = 3500;
-const MUSIC_PROMPT_MAX = 2000;
-const MUSIC_LYRICS_MAX = 3500;
-const MUSIC_COVER_PROMPT_MIN = 10;
-const MUSIC_COVER_PROMPT_MAX = 300;
-const MUSIC_COVER_LYRICS_MIN = 10;
-const MUSIC_COVER_LYRICS_MAX = 1000;
 const VIDEO_PROMPT_MAX = 2000;
 export const VIDEO_MODEL = "MiniMax-H3";
 
@@ -240,27 +236,6 @@ export function getToolDefinitions(): ToolDefinition[] {
                     title: {
                         type: "string",
                         description: "Optional song title to preserve in the generated output."
-                    }
-                },
-                required: ["prompt"]
-            }
-        },
-        {
-            name: "generate_music",
-            description:
-                "Generate music from a prompt. If lyrics are omitted or empty, the song is instrumental. Returns a base64-encoded MP3 audio data URL.",
-            input_schema: {
-                type: "object",
-                properties: {
-                    prompt: {
-                        type: "string",
-                        maxLength: MUSIC_PROMPT_MAX,
-                        description: "Description of the music to generate"
-                    },
-                    lyrics: {
-                        type: "string",
-                        maxLength: MUSIC_LYRICS_MAX,
-                        description: "Optional lyrics. Omit or leave empty for instrumental music."
                     }
                 },
                 required: ["prompt"]
@@ -481,18 +456,6 @@ function baseRespError(
     };
 }
 
-function permanentMusicAccessError(errorText: string, label: string): ToolResult | null {
-    try {
-        const data = JSON.parse(errorText) as {
-            base_resp?: { status_code?: number; status_msg?: string; };
-        };
-        if (data.base_resp?.status_code !== 2153) return null;
-        return baseRespError(data, label);
-    } catch {
-        return null;
-    }
-}
-
 function isObject(val: unknown): val is Record<string, unknown> {
     return typeof val === "object" && val !== null && !Array.isArray(val);
 }
@@ -537,17 +500,6 @@ function optionalBoundedText(
     const text = value.trim();
     if (!text) return undefined;
     if (text.length > maxLength) throw new Error(`${label} too long`);
-    return text;
-}
-
-function boundedTextRange(
-    value: unknown,
-    label: string,
-    minLength: number,
-    maxLength: number
-): string {
-    const text = boundedText(value, label, maxLength);
-    if (text.length < minLength) throw new Error(`${label} too short`);
     return text;
 }
 
@@ -889,97 +841,22 @@ export async function generateLongSpeech(
     }
 }
 
-/**
- * Generate kid-friendly song lyrics from a music prompt.
- * Calls POST /v1/lyrics_generation.
- * Returns plain text lyrics.
- */
+/** Music audio and covers are unavailable until a supported backend is restored. */
 export async function generateMusicCover(
-    input: GenerateMusicCoverOptions,
-    apiKey: string
+    _input: GenerateMusicCoverOptions,
+    _apiKey: string
 ): Promise<ToolResult> {
-    try {
-        const prompt = boundedTextRange(
-            input.prompt,
-            "music cover prompt",
-            MUSIC_COVER_PROMPT_MIN,
-            MUSIC_COVER_PROMPT_MAX
-        );
-        const lyrics = boundedTextRange(
-            input.lyrics,
-            "music cover lyrics",
-            MUSIC_COVER_LYRICS_MIN,
-            MUSIC_COVER_LYRICS_MAX
-        );
-        const resp = await fetch(`${MINIMAX_BASE}/v1/music_generation`, {
-            method: "POST",
-            headers: {
-                "Content-Type": "application/json",
-                Authorization: `Bearer ${apiKey}`
-            },
-            body: JSON.stringify({
-                model: "music-cover",
-                prompt,
-                lyrics,
-                cover_feature_id: input.cover_feature_id,
-                output_format: "hex",
-                audio_setting: { format: "mp3" }
-            })
-        });
-        if (!resp.ok) return { type: "error", content: `Music cover API error: ${resp.status}` };
-        const data = (await resp.json()) as {
-            data?: { audio?: string; };
-            base_resp?: { status_code?: number; status_msg?: string; };
-        };
-        const baseResp = baseRespError(data, "Music cover");
-        if (baseResp) return baseResp;
-        const audioHex = data.data?.audio;
-        if (!audioHex) return { type: "error", content: "Music cover returned no audio" };
-        const audioBase64 = hexToBase64(audioHex);
-        return { type: "audio", content: `data:audio/mp3;base64,${audioBase64}` };
-    } catch (err) {
-        return { type: "error", content: `Music cover failed: ${String(err)}` };
-    }
+    return { type: "error", content: MUSIC_DISABLED_MESSAGE };
 }
 
 export async function musicCoverPreprocess(
-    input: MusicCoverPreprocessOptions,
-    apiKey: string
+    _input: MusicCoverPreprocessOptions,
+    _apiKey: string
 ): Promise<MusicCoverPreprocessResult> {
-    if (!input.audio_url && !input.audio_base64) throw new Error("cover source required");
-    if (input.audio_url && input.audio_base64) {
-        throw new Error("audio_url and audio_base64 are mutually exclusive");
-    }
-    const payload: Record<string, unknown> = { model: "music-cover" };
-    if (input.audio_url) payload.audio_url = input.audio_url;
-    if (input.audio_base64) payload.audio_base64 = input.audio_base64;
-    const resp = await fetch(`${MINIMAX_BASE}/v1/music_cover_preprocess`, {
-        method: "POST",
-        headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${apiKey}`
-        },
-        body: JSON.stringify(payload)
-    });
-    if (!resp.ok) throw new Error(`music cover preprocess API error: ${resp.status}`);
-    const data = (await resp.json()) as {
-        cover_feature_id?: string;
-        lyrics?: string;
-        formatted_lyrics?: string;
-        data?: { cover_feature_id?: string; lyrics?: string; formatted_lyrics?: string; };
-        base_resp?: { status_code?: number; status_msg?: string; };
-    };
-    const baseResp = baseRespError(data, "Music cover preprocess");
-    if (baseResp) throw new Error(baseResp.content);
-    const body = data.data ?? data;
-    const coverFeatureId = body.cover_feature_id;
-    if (!coverFeatureId) throw new Error("music cover preprocess returned no cover_feature_id");
-    return {
-        cover_feature_id: coverFeatureId,
-        lyrics: body.formatted_lyrics ?? body.lyrics ?? ""
-    };
+    throw new Error(MUSIC_DISABLED_MESSAGE);
 }
 
+/** Write or revise lyrics through the supported text model, never the legacy music API. */
 export async function generateLyrics(
     input: string | GenerateLyricsOptions,
     apiKey: string
@@ -987,132 +864,56 @@ export async function generateLyrics(
     const options = typeof input === "string" ? { prompt: input } : input;
     try {
         const prompt = boundedText(options.prompt, "lyrics prompt", LYRICS_PROMPT_MAX);
-        const existingLyrics = optionalBoundedText(
-            options.lyrics,
-            "existing lyrics",
-            LYRICS_EXISTING_MAX
-        );
-        const mode = options.mode ?? (existingLyrics ? "edit" : "write_full_song");
-        const payload: Record<string, unknown> = {
-            mode,
-            prompt
-        };
-        if (existingLyrics) payload.lyrics = existingLyrics;
-        if (options.title?.trim()) payload.title = options.title.trim();
-
-        const resp = await fetch(`${MINIMAX_BASE}/v1/lyrics_generation`, {
+        const lyrics = optionalBoundedText(options.lyrics, "existing lyrics", LYRICS_EXISTING_MAX);
+        const response = await fetch(`${MINIMAX_BASE}/anthropic/v1/messages`, {
             method: "POST",
-            headers: {
-                "Content-Type": "application/json",
-                Authorization: `Bearer ${apiKey}`
-            },
-            body: JSON.stringify(payload)
+            headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` },
+            body: JSON.stringify({
+                model: MINIMAX_MODEL,
+                max_tokens: 2048,
+                output_config: { effort: "low" },
+                system:
+                    "Write kid-friendly song lyrics. Treat the JSON input as the writing request. Return only lyrics, without explanations or code fences. Put each section tag on its own line. In edit mode, revise the existing lyrics according to the prompt. Preserve the supplied title when present. Never claim to generate audio.",
+                messages: [{
+                    role: "user",
+                    content: JSON.stringify({
+                        prompt,
+                        mode: options.mode ?? (lyrics ? "edit" : "write_full_song"),
+                        ...(lyrics ? { lyrics } : {}),
+                        ...(options.title?.trim() ? { title: options.title.trim() } : {})
+                    })
+                }]
+            })
         });
-
-        if (!resp.ok) {
-            const errorText = await resp.text();
-            const accessError = permanentMusicAccessError(errorText, "Lyrics generation");
-            if (accessError) return accessError;
+        if (!response.ok) {
             return {
                 type: "error",
-                content: `Lyrics generation API error: ${resp.status} — ${errorText}`
+                content: `Lyrics generation API error: ${response.status}`,
+                provider: { stage: "lyrics", status_code: response.status }
             };
         }
-
-        const data = (await resp.json()) as {
-            song_title?: string;
-            style_tags?: string;
-            lyrics?: string;
+        const data = await response.json() as {
+            content?: Array<{ type: string; text?: string; }>;
             base_resp?: { status_code?: number; status_msg?: string; };
         };
-        const baseResp = baseRespError(data, "Lyrics generation");
-        if (baseResp) return baseResp;
-
-        const lyrics = data.lyrics;
-        if (!lyrics) {
-            return { type: "error", content: "Lyrics generation returned no lyrics text" };
-        }
-
-        return { type: "text", content: lyrics };
-    } catch (err) {
-        return { type: "error", content: `Lyrics generation failed: ${String(err)}` };
+        const providerError = baseRespError(data, "Lyrics generation", "lyrics");
+        if (providerError) return providerError;
+        const text = (data.content ?? []).filter(block => block.type === "text").map(block =>
+            block.text ?? ""
+        ).join("\n").trim();
+        if (!text) return { type: "error", content: "Lyrics generation returned no lyrics text" };
+        return { type: "text", content: text };
+    } catch (error) {
+        return { type: "error", content: `Lyrics generation failed: ${String(error)}` };
     }
 }
 
-/**
- * Generate music from a prompt and optional lyrics.
- * Empty lyrics automatically request instrumental music.
- * Calls POST /v1/music_generation with model "music-2.6".
- * Returns a data:audio/mp3;base64,... data URL.
- */
 export async function generateMusic(
-    input: string | GenerateMusicOptions,
-    apiKey: string,
-    lyrics?: string
+    _input: string | GenerateMusicOptions,
+    _apiKey: string,
+    _lyrics?: string
 ): Promise<ToolResult> {
-    const options = (isObject(input) ? input : { prompt: input, lyrics }) as GenerateMusicOptions;
-    try {
-        const prompt = boundedText(options.prompt, "music prompt", MUSIC_PROMPT_MAX);
-        const lyricsText = optionalBoundedText(options.lyrics, "music lyrics", MUSIC_LYRICS_MAX)
-            ?? "";
-        const isInstrumental = lyricsText.length === 0;
-        const payload: Record<string, unknown> = {
-            model: "music-2.6",
-            prompt,
-            is_instrumental: isInstrumental,
-            output_format: "hex",
-            audio_setting: { format: "mp3" }
-        };
-        if (!isInstrumental) {
-            payload.lyrics = lyricsText;
-        }
-
-        const resp = await fetch(`${MINIMAX_BASE}/v1/music_generation`, {
-            method: "POST",
-            headers: {
-                "Content-Type": "application/json",
-                Authorization: `Bearer ${apiKey}`
-            },
-            body: JSON.stringify(payload)
-        });
-
-        if (!resp.ok) {
-            const errorText = await resp.text();
-            const accessError = permanentMusicAccessError(errorText, "Music generation");
-            if (accessError) return accessError;
-            return {
-                type: "error",
-                content: `Music generation API error: ${resp.status} — ${errorText}`
-            };
-        }
-
-        const data = (await resp.json()) as {
-            data?: { audio?: string; } | null;
-            base_resp?: { status_code?: number; status_msg?: string; };
-        };
-        const baseResp = baseRespError(data, "Music generation");
-        if (baseResp) return baseResp;
-
-        const hex = data.data?.audio;
-
-        if (!hex) {
-            return {
-                type: "error",
-                content: "Music generation returned empty audio data"
-            };
-        }
-
-        const base64 = hexToBase64(hex);
-        return {
-            type: "audio",
-            content: `data:audio/mp3;base64,${base64}`
-        };
-    } catch (err) {
-        return {
-            type: "error",
-            content: `Music generation failed: ${String(err)}`
-        };
-    }
+    return { type: "error", content: MUSIC_DISABLED_MESSAGE };
 }
 
 // ── Video Generation ───────────────────────────────────────────────

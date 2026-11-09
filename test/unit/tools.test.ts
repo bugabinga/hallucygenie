@@ -13,6 +13,8 @@ import {
     generateVideo,
     getToolDefinitions,
     MINIMAX_BASE,
+    MINIMAX_MODEL,
+    MUSIC_DISABLED_MESSAGE,
     musicCoverPreprocess,
     textToSpeech,
     webSearch
@@ -68,9 +70,10 @@ function schemaFor(
 // ── Tool definitions ─────────────────────────────────────────────────
 
 describe("getToolDefinitions", () => {
-    it("returns eight live tool definitions", () => {
+    it("returns seven live tool definitions without music generation", () => {
         const defs = getToolDefinitions();
-        assert.equal(defs.length, 8);
+        assert.equal(defs.length, 7);
+        assert.equal(defs.some((tool) => tool.name === "generate_music"), false);
         assert.equal(
             defs.some((tool) => tool.name === "analyze_image"),
             true
@@ -144,23 +147,6 @@ describe("getToolDefinitions", () => {
         assert.deepEqual(schema.required, ["prompt"]);
     });
 
-    it("defines generate_music with correct schema", () => {
-        const defs = getToolDefinitions();
-        const music = defs.find((d) => d.name === "generate_music");
-        assert.ok(music);
-        assert.equal(music.name, "generate_music");
-        const schema = music.input_schema as {
-            type: string;
-            properties: Record<string, unknown>;
-            required: string[];
-        };
-        assert.equal(schema.type, "object");
-        assert.ok(schema.properties.prompt);
-        assert.ok(schema.properties.lyrics);
-        assert.equal("instrumental" in schema.properties, false);
-        assert.deepEqual(schema.required, ["prompt"]);
-    });
-
     it("defines analyze_image with correct schema", () => {
         const defs = getToolDefinitions();
         const analyze = defs.find((d) => d.name === "analyze_image");
@@ -189,269 +175,6 @@ describe("getToolDefinitions", () => {
         for (const def of defs) {
             assert.ok(def.description.length > 0);
         }
-    });
-
-    it("keeps the full Anthropic tool schema contract stable", () => {
-        assert.deepEqual(getToolDefinitions(), [
-            {
-                name: "generate_image",
-                description:
-                    "Generate an image from a text prompt. Returns the URL of the generated image.",
-                input_schema: {
-                    type: "object",
-                    properties: {
-                        prompt: {
-                            type: "string",
-                            maxLength: 1500,
-                            description: "Text description of the image to generate"
-                        },
-                        aspect_ratio: {
-                            type: "string",
-                            enum: ["1:1", "16:9", "4:3", "3:2", "2:3", "3:4", "9:16", "21:9"],
-                            description: "Output aspect ratio. Defaults to 16:9 for Create UI."
-                        },
-                        n: {
-                            type: "number",
-                            minimum: 1,
-                            maximum: 9,
-                            description:
-                                "Number of images. If n is greater than 1, omit seed so images differ."
-                        },
-                        seed: {
-                            type: "number",
-                            description:
-                                "Optional reproducibility seed. Use only when generating one image; omit when n is greater than 1."
-                        },
-                        width: { type: "number", minimum: 512, maximum: 2048 },
-                        height: { type: "number", minimum: 512, maximum: 2048 },
-                        prompt_optimizer: { type: "boolean" }
-                    },
-                    required: ["prompt"]
-                }
-            },
-            {
-                name: "text_to_speech",
-                description:
-                    "Convert text to speech audio. Returns a base64-encoded MP3 audio data URL.",
-                input_schema: {
-                    type: "object",
-                    properties: {
-                        text: {
-                            type: "string",
-                            maxLength: 10000,
-                            description: "The text to convert to speech"
-                        },
-                        voice_id: {
-                            type: "string",
-                            description:
-                                "Voice ID to use. Defaults to \"English_expressive_narrator\"."
-                        },
-                        speed: {
-                            type: "number",
-                            minimum: 0.5,
-                            maximum: 2,
-                            description: "Speech speed multiplier. Defaults to 1."
-                        },
-                        volume: {
-                            type: "number",
-                            exclusiveMinimum: 0,
-                            maximum: 10,
-                            description: "Speech volume. Defaults to MiniMax service default."
-                        },
-                        pitch: {
-                            type: "number",
-                            minimum: -12,
-                            maximum: 12,
-                            description:
-                                "Speech pitch adjustment. Defaults to MiniMax service default."
-                        }
-                    },
-                    required: ["text"]
-                }
-            },
-            {
-                name: "generate_long_speech",
-                description:
-                    "Convert long narration text to speech with MiniMax async TTS. Returns a provider audio download URL that HallucyGenie saves as an audio asset.",
-                input_schema: {
-                    type: "object",
-                    properties: {
-                        text: {
-                            type: "string",
-                            maxLength: 50000,
-                            description: "Long narration text to convert to speech"
-                        },
-                        voice_id: {
-                            type: "string",
-                            description:
-                                "Voice ID to use. Defaults to \"English_expressive_narrator\"."
-                        },
-                        speed: { type: "number", minimum: 0.5, maximum: 2 },
-                        volume: { type: "number", exclusiveMinimum: 0, maximum: 10 },
-                        pitch: { type: "number", minimum: -12, maximum: 12 }
-                    },
-                    required: ["text"]
-                }
-            },
-            {
-                name: "generate_lyrics",
-                description:
-                    "Generate kid-friendly song lyrics from a music prompt. Returns plain text lyrics ready for editing or use in music generation.",
-                input_schema: {
-                    type: "object",
-                    properties: {
-                        prompt: {
-                            type: "string",
-                            maxLength: 2000,
-                            description:
-                                "Description or topic for the lyrics (e.g., 'a happy birthday song', 'an adventure theme')."
-                        },
-                        mode: {
-                            type: "string",
-                            enum: ["write_full_song", "edit"],
-                            description:
-                                "Generation mode. Defaults to write_full_song unless existing lyrics are provided."
-                        },
-                        lyrics: {
-                            type: "string",
-                            maxLength: 3500,
-                            description: "Existing lyrics to edit or continue when mode is edit."
-                        },
-                        title: {
-                            type: "string",
-                            description: "Optional song title to preserve in the generated output."
-                        }
-                    },
-                    required: ["prompt"]
-                }
-            },
-            {
-                name: "generate_music",
-                description:
-                    "Generate music from a prompt. If lyrics are omitted or empty, the song is instrumental. Returns a base64-encoded MP3 audio data URL.",
-                input_schema: {
-                    type: "object",
-                    properties: {
-                        prompt: {
-                            type: "string",
-                            maxLength: 2000,
-                            description: "Description of the music to generate"
-                        },
-                        lyrics: {
-                            type: "string",
-                            maxLength: 3500,
-                            description:
-                                "Optional lyrics. Omit or leave empty for instrumental music."
-                        }
-                    },
-                    required: ["prompt"]
-                }
-            },
-            {
-                name: "generate_video",
-                description:
-                    "Generate a short video from a text prompt. Returns a provider download URL that HallucyGenie saves as a video asset.",
-                input_schema: {
-                    type: "object",
-                    properties: {
-                        prompt: {
-                            type: "string",
-                            maxLength: 2000,
-                            description: "Text description of the video to generate"
-                        },
-                        duration: {
-                            type: "number",
-                            enum: [4, 6, 10],
-                            description: "Video length preset in seconds. Defaults to 4."
-                        },
-                        resolution: {
-                            type: "string",
-                            enum: ["768p", "2k"],
-                            description: "Video quality preset. Defaults to 768p."
-                        }
-                    },
-                    required: ["prompt"]
-                }
-            },
-            {
-                name: "analyze_image",
-                description:
-                    "Analyze an HTTPS image URL and answer a prompt about what is visible. Returns text only.",
-                input_schema: {
-                    type: "object",
-                    properties: {
-                        image_url: {
-                            type: "string",
-                            description: "HTTPS URL of a JPG, PNG, GIF, or WebP image to analyze."
-                        },
-                        prompt: {
-                            type: "string",
-                            description:
-                                "Question or instruction about the image. Defaults to a concise description."
-                        }
-                    },
-                    required: ["image_url"]
-                }
-            },
-            {
-                name: "web_search",
-                description: "Search the web for information. Returns formatted search results.",
-                input_schema: {
-                    type: "object",
-                    properties: {
-                        query: {
-                            type: "string",
-                            description: "The search query"
-                        }
-                    },
-                    required: ["query"]
-                }
-            }
-        ]);
-    });
-});
-
-describe("permanent music access errors", () => {
-    beforeEach(() => {
-        originalFetch = globalThis.fetch;
-    });
-
-    afterEach(() => {
-        globalThis.fetch = originalFetch;
-    });
-
-    const responseBody = {
-        base_resp: {
-            status_code: 2153,
-            status_msg:
-                "This Music API is no longer available to new users. Existing paying customers can continue using it."
-        }
-    };
-
-    it("preserves MiniMax 2153 diagnostics for HTTP 410 music and lyrics responses", async () => {
-        globalThis.fetch = async () => jsonResponse(responseBody, 410);
-        const music = await generateMusic("instrumental game music", API_KEY);
-        assert.equal(music.type, "error");
-        assert.equal(music.provider?.status_code, 2153);
-        assert.equal(music.provider?.status_msg, responseBody.base_resp.status_msg);
-
-        globalThis.fetch = async () => jsonResponse(responseBody, 410);
-        const lyrics = await generateLyrics("a song about space", API_KEY);
-        assert.equal(lyrics.type, "error");
-        assert.equal(lyrics.provider?.status_code, 2153);
-        assert.equal(lyrics.provider?.status_msg, responseBody.base_resp.status_msg);
-    });
-
-    it("leaves unrelated non-2xx provider errors unchanged", async () => {
-        const unrelated = { base_resp: { status_code: 2001, status_msg: "invalid prompt" } };
-        mockFetch(jsonResponse(unrelated, 400));
-        const result = await generateMusic("instrumental game music", API_KEY);
-        assert.equal(result.type, "error");
-        assert.equal(
-            result.content,
-            `Music generation API error: 400 — ${JSON.stringify(unrelated)}`
-        );
-        assert.equal(result.provider, undefined);
     });
 });
 
@@ -518,21 +241,6 @@ describe("MiniMax parameter contract", () => {
         generate_lyrics: {
             supported: ["prompt", "mode", "lyrics", "title"],
             forbidden: [],
-            required: ["prompt"]
-        },
-        generate_music: {
-            supported: ["prompt", "lyrics"],
-            forbidden: [
-                "is_instrumental",
-                "instrumental",
-                "lyrics_optimizer",
-                "audio_setting",
-                "stream",
-                "output_format",
-                "audio_url",
-                "audio_base64",
-                "cover_feature_id"
-            ],
             required: ["prompt"]
         },
         generate_video: {
@@ -624,48 +332,6 @@ describe("MiniMax parameter contract", () => {
         assert.equal("output_format" in body.voice_setting, false);
     });
 
-    it("keeps music cover/raw params out and derives instrumental state", async () => {
-        let capturedBody = "";
-        globalThis.fetch = async (_url: string | URL | Request, init?: RequestInit) => {
-            capturedBody = init?.body as string;
-            return jsonResponse({ data: { audio: "4d75736963" } });
-        };
-
-        await generateMusic(
-            {
-                prompt: "boss fight",
-                lyrics: "   ",
-                is_instrumental: false,
-                instrumental: false,
-                lyrics_optimizer: true,
-                audio_setting: { sample_rate: 44100 },
-                output_format: "wav",
-                audio_url: "https://example.com/ref.mp3",
-                audio_base64: "AAAA",
-                cover_feature_id: "cover-1",
-                stream: true
-            } as unknown as Parameters<typeof generateMusic>[0],
-            API_KEY
-        );
-        const body = JSON.parse(capturedBody);
-        assert.equal(body.is_instrumental, true);
-        assert.equal("lyrics" in body, false);
-        assert.equal(body.output_format, "hex");
-        assert.deepEqual(body.audio_setting, { format: "mp3" });
-        for (
-            const key of [
-                "instrumental",
-                "lyrics_optimizer",
-                "audio_url",
-                "audio_base64",
-                "cover_feature_id",
-                "stream"
-            ]
-        ) {
-            assert.equal(key in body, false, `${key} should stay omitted`);
-        }
-    });
-
     it("rejects over-limit MiniMax text before fetch", async () => {
         let called = false;
         globalThis.fetch = async () => {
@@ -676,44 +342,10 @@ describe("MiniMax parameter contract", () => {
         const image = await generateImage({ prompt: "x".repeat(1501) }, API_KEY);
         const speech = await textToSpeech({ text: "x".repeat(10001) }, API_KEY);
         const lyrics = await generateLyrics({ prompt: "x".repeat(2001) }, API_KEY);
-        const music = await generateMusic({ prompt: "x".repeat(2001) }, API_KEY);
-
         assert.equal(called, false);
         assert.equal(image.type, "error");
         assert.equal(speech.type, "error");
         assert.equal(lyrics.type, "error");
-        assert.equal(music.type, "error");
-    });
-
-    it("rejects invalid music cover text before fetch", async () => {
-        let called = false;
-        globalThis.fetch = async () => {
-            called = true;
-            return jsonResponse({ data: { audio: "00" } });
-        };
-
-        const shortPrompt = await generateMusicCover(
-            { prompt: "short", lyrics: "valid lyric", cover_feature_id: "cover-1" },
-            API_KEY
-        );
-        const longPrompt = await generateMusicCover(
-            { prompt: "x".repeat(301), lyrics: "valid lyric", cover_feature_id: "cover-1" },
-            API_KEY
-        );
-        const shortLyrics = await generateMusicCover(
-            { prompt: "valid style", lyrics: "short", cover_feature_id: "cover-1" },
-            API_KEY
-        );
-        const longLyrics = await generateMusicCover(
-            { prompt: "valid style", lyrics: "x".repeat(1001), cover_feature_id: "cover-1" },
-            API_KEY
-        );
-
-        assert.equal(called, false);
-        assert.equal(shortPrompt.type, "error");
-        assert.equal(longPrompt.type, "error");
-        assert.equal(shortLyrics.type, "error");
-        assert.equal(longLyrics.type, "error");
     });
 });
 
@@ -755,29 +387,29 @@ describe("executeTool", () => {
         assert.ok(result.content.startsWith("data:audio/mp3;base64,"));
     });
 
-    it("dispatches to generate_music", async () => {
-        globalThis.fetch = async () => jsonResponse({ data: { audio: "4d75736963" } });
+    it("dispatches disabled music and cover without upstream calls", async () => {
+        let calls = 0;
+        globalThis.fetch = async () => {
+            calls++;
+            return jsonResponse({});
+        };
 
-        const result = await executeTool("generate_music", { prompt: "upbeat tune" }, API_KEY);
-        assert.equal(result.type, "audio");
-        assert.ok(result.content.startsWith("data:audio/mp3;base64,"));
-    });
-
-    it("dispatches to generate_music_cover", async () => {
-        globalThis.fetch = async () => jsonResponse({ data: { audio: "4d75736963" } });
-
-        const result = await executeTool(
-            "generate_music_cover",
-            { prompt: "boss fight", lyrics: "valid lyric", cover_feature_id: "cover-1" },
-            API_KEY
+        assert.deepEqual(
+            await executeTool("generate_music", { prompt: "upbeat tune" }, API_KEY),
+            { type: "error", content: MUSIC_DISABLED_MESSAGE }
         );
-        assert.equal(result.type, "audio");
-        assert.ok(result.content.startsWith("data:audio/mp3;base64,"));
+        assert.deepEqual(
+            await executeTool("generate_music_cover", {}, API_KEY),
+            { type: "error", content: MUSIC_DISABLED_MESSAGE }
+        );
+        assert.equal(calls, 0);
     });
 
     it("dispatches to generate_lyrics", async () => {
         globalThis.fetch = async () =>
-            jsonResponse({ lyrics: "Verse: Hello world\nChorus: Hello again!" });
+            jsonResponse({
+                content: [{ type: "text", text: "Verse: Hello world\nChorus: Hello again!" }]
+            });
 
         const result = await executeTool("generate_lyrics", { prompt: "a happy song" }, API_KEY);
         assert.equal(result.type, "text");
@@ -1147,377 +779,40 @@ describe("textToSpeech", () => {
 
 // ── generateMusic ────────────────────────────────────────────────────
 
-describe("generateMusic", () => {
-    beforeEach(() => {
-        originalFetch = globalThis.fetch;
-    });
-
-    afterEach(() => {
-        globalThis.fetch = originalFetch;
-    });
-
-    it("calls correct API endpoint and returns base64 audio", async () => {
-        let capturedUrl = "";
-        let capturedInit: RequestInit | undefined;
-        // Hex for "Music" = 4d75736963
-        globalThis.fetch = async (url: string | URL | Request, init?: RequestInit) => {
-            capturedUrl = url.toString();
-            capturedInit = init;
-            return jsonResponse({ data: { audio: "4d75736963" } });
+describe("disabled music generation", () => {
+    it("returns the disabled error without calling upstream", async () => {
+        let calls = 0;
+        globalThis.fetch = async () => {
+            calls++;
+            return jsonResponse({});
         };
 
         const result = await generateMusic("upbeat electronic", API_KEY);
-        assert.equal(result.type, "audio");
-        assert.ok(result.content.startsWith("data:audio/mp3;base64,"));
-
-        const base64Part = result.content.replace("data:audio/mp3;base64,", "");
-        const decoded = Buffer.from(base64Part, "base64").toString("utf8");
-        assert.equal(decoded, "Music");
-
-        assert.ok(capturedUrl.includes("/v1/music_generation"));
-        assert.equal(capturedInit?.method, "POST");
-
-        const body = JSON.parse(capturedInit?.body as string);
-        assert.equal(body.model, "music-2.6");
-        assert.equal(body.prompt, "upbeat electronic");
-        assert.equal("lyrics" in body, false);
-        assert.equal(body.is_instrumental, true);
-        assert.equal("instrumental" in body, false);
-    });
-
-    it("includes lyrics when provided", async () => {
-        let capturedBody = "";
-        globalThis.fetch = async (_url: string | URL | Request, init?: RequestInit) => {
-            capturedBody = init?.body as string;
-            return jsonResponse({ data: { audio: "4d75736963" } });
-        };
-
-        await generateMusic("a song", API_KEY, "la la la lyrics");
-        const body = JSON.parse(capturedBody);
-        assert.equal(body.lyrics, "la la la lyrics");
-        assert.equal(body.is_instrumental, false);
-        assert.equal("instrumental" in body, false);
-    });
-
-    it("auto-requests instrumental music when lyrics are empty", async () => {
-        let capturedBody = "";
-        globalThis.fetch = async (_url: string | URL | Request, init?: RequestInit) => {
-            capturedBody = init?.body as string;
-            return jsonResponse({ data: { audio: "4d75736963" } });
-        };
-
-        await generateMusic({ prompt: "a song", lyrics: "   " }, API_KEY);
-        const body = JSON.parse(capturedBody);
-        assert.equal("lyrics" in body, false);
-        assert.equal(body.is_instrumental, true);
-        assert.equal("instrumental" in body, false);
-    });
-
-    it("sends Authorization Bearer header with API key", async () => {
-        let capturedInit: RequestInit | undefined;
-        globalThis.fetch = async (_url: string | URL | Request, init?: RequestInit) => {
-            capturedInit = init;
-            return jsonResponse({ data: { audio: "4d75736963" } });
-        };
-
-        await generateMusic("test", API_KEY);
-        const headers = capturedInit?.headers as Record<string, string>;
-        assert.equal(headers.Authorization, `Bearer ${API_KEY}`);
-    });
-
-    it("handles API error response", async () => {
-        mockFetch(jsonResponse({ error: "server error" }, 500));
-
-        const result = await generateMusic("test", API_KEY);
-        assert.equal(result.type, "error");
-        assert.ok(result.content.includes("500"));
-    });
-
-    it("handles MiniMax base_resp error response", async () => {
-        mockFetch(
-            jsonResponse({
-                data: null,
-                base_resp: { status_code: 2013, status_msg: "invalid params, lyrics is required" }
-            })
-        );
-
-        const result = await generateMusic("test", API_KEY);
-        assert.equal(result.type, "error");
-        assert.ok(result.content.includes("lyrics is required"));
-    });
-
-    it("handles network failure", async () => {
-        globalThis.fetch = async () => {
-            throw new Error("Connection reset");
-        };
-
-        const result = await generateMusic("test", API_KEY);
-        assert.equal(result.type, "error");
-        assert.ok(result.content.includes("Connection reset"));
-    });
-
-    it("handles empty audio in response", async () => {
-        mockFetch(jsonResponse({ data: { audio: "" } }));
-
-        const result = await generateMusic("test", API_KEY);
-        assert.equal(result.type, "error");
-        assert.ok(result.content.includes("empty audio"));
-    });
-
-    it("handles missing audio field in response", async () => {
-        mockFetch(jsonResponse({ data: {} }));
-
-        const result = await generateMusic("test", API_KEY);
-        assert.equal(result.type, "error");
-        assert.ok(result.content.includes("empty audio"));
-    });
-
-    it("handles malformed response (no data field)", async () => {
-        mockFetch(jsonResponse({}));
-
-        const result = await generateMusic("test", API_KEY);
-        assert.equal(result.type, "error");
-        assert.ok(result.content.includes("empty audio"));
-    });
-
-    it("returns correct MIME type in data URL", async () => {
-        globalThis.fetch = async () => jsonResponse({ data: { audio: "4d75736963" } });
-
-        const result = await generateMusic("test", API_KEY);
-        assert.ok(result.content.startsWith("data:audio/mp3;base64,"));
-        assert.equal(result.type, "audio");
+        assert.deepEqual(result, { type: "error", content: MUSIC_DISABLED_MESSAGE });
+        assert.equal(calls, 0);
     });
 });
 
 // ── music cover ─────────────────────────────────────────────────────
 
-describe("music cover", () => {
-    beforeEach(() => {
-        originalFetch = globalThis.fetch;
-    });
-
-    afterEach(() => {
-        globalThis.fetch = originalFetch;
-    });
-
-    it("preprocesses direct audio URL with music-cover model", async () => {
-        let capturedBody = "";
-        globalThis.fetch = async (_url: string | URL | Request, init?: RequestInit) => {
-            capturedBody = init?.body as string;
-            return jsonResponse({
-                data: { cover_feature_id: "cover-1", formatted_lyrics: "[Verse]\nhi" }
-            });
-        };
-
-        const result = await musicCoverPreprocess(
-            { audio_url: "https://example.com/a.mp3" },
-            API_KEY
-        );
-
-        assert.equal(result.cover_feature_id, "cover-1");
-        assert.equal(result.lyrics, "[Verse]\nhi");
-        const body = JSON.parse(capturedBody);
-        assert.equal(body.model, "music-cover");
-        assert.equal(body.audio_url, "https://example.com/a.mp3");
-    });
-
-    it("generates cover from cover_feature_id", async () => {
-        let capturedUrl = "";
-        let capturedBody = "";
-        let capturedInit: RequestInit | undefined;
-        globalThis.fetch = async (url: string | URL | Request, init?: RequestInit) => {
-            capturedUrl = url.toString();
-            capturedBody = init?.body as string;
-            capturedInit = init;
-            return jsonResponse({ data: { audio: "4d75736963" } });
-        };
-
-        const result = await generateMusicCover(
-            { prompt: "spooky boss battle", lyrics: "[Verse]\nhi", cover_feature_id: "cover-1" },
-            API_KEY
-        );
-
-        const expectedBase64 = Buffer.from("4d75736963", "hex").toString("base64");
-        assert.deepEqual(result, {
-            type: "audio",
-            content: `data:audio/mp3;base64,${expectedBase64}`
-        });
-        assert.ok(capturedUrl.endsWith("/v1/music_generation"));
-        assert.equal(capturedInit?.method, "POST");
-        const body = JSON.parse(capturedBody);
-        assert.deepEqual(body, {
-            model: "music-cover",
-            cover_feature_id: "cover-1",
-            prompt: "spooky boss battle",
-            lyrics: "[Verse]\nhi",
-            output_format: "hex",
-            audio_setting: { format: "mp3" }
-        });
-        assert.equal(body.output_format, "hex");
-        assert.deepEqual(body.audio_setting, { format: "mp3" });
-        const headers = capturedInit?.headers as Record<string, string>;
-        assert.equal(headers.Authorization, `Bearer ${API_KEY}`);
-        assert.equal(headers["Content-Type"], "application/json");
-    });
-
-    it("reports music cover API failures", async () => {
-        globalThis.fetch = async () => new Response("broken", { status: 503 });
-
-        const result = await generateMusicCover(
-            { prompt: "spooky boss", lyrics: "[Verse]\nhi", cover_feature_id: "cover-1" },
-            API_KEY
-        );
-
-        assert.deepEqual(result, { type: "error", content: "Music cover API error: 503" });
-    });
-
-    it("reports music cover base_resp failures", async () => {
-        mockFetch(jsonResponse({ base_resp: { status_code: 2013, status_msg: "bad cover" } }));
-
-        const result = await generateMusicCover(
-            { prompt: "spooky boss", lyrics: "[Verse]\nhi", cover_feature_id: "cover-1" },
-            API_KEY
-        );
-
-        assert.deepEqual(result, {
-            type: "error",
-            content: "Music cover failed: bad cover",
-            provider: { stage: "Music cover", status_code: 2013, status_msg: "bad cover" }
-        });
-    });
-
-    it("reports music cover responses with no audio", async () => {
-        mockFetch(jsonResponse({ data: {} }));
-
-        const result = await generateMusicCover(
-            { prompt: "spooky boss", lyrics: "[Verse]\nhi", cover_feature_id: "cover-1" },
-            API_KEY
-        );
-
-        assert.deepEqual(result, { type: "error", content: "Music cover returned no audio" });
-    });
-
-    it("reports music cover network failures", async () => {
+describe("disabled music cover", () => {
+    it("rejects generation and preprocessing without calling upstream", async () => {
+        let calls = 0;
         globalThis.fetch = async () => {
-            throw new Error("offline");
+            calls++;
+            return jsonResponse({});
         };
 
-        const result = await generateMusicCover(
-            { prompt: "spooky boss", lyrics: "[Verse]\nhi", cover_feature_id: "cover-1" },
+        const generated = await generateMusicCover(
+            { prompt: "spooky boss", lyrics: "[Verse] hi", cover_feature_id: "cover-1" },
             API_KEY
         );
-
-        assert.deepEqual(result, {
-            type: "error",
-            content: "Music cover failed: Error: offline"
-        });
-    });
-
-    it("preprocesses audio_base64 and preserves formatted lyrics priority", async () => {
-        let capturedUrl = "";
-        let capturedBody = "";
-        let capturedInit: RequestInit | undefined;
-        globalThis.fetch = async (url: string | URL | Request, init?: RequestInit) => {
-            capturedUrl = url.toString();
-            capturedBody = init?.body as string;
-            capturedInit = init;
-            return jsonResponse({
-                data: {
-                    cover_feature_id: "cover-2",
-                    lyrics: "raw",
-                    formatted_lyrics: "formatted"
-                }
-            });
-        };
-
-        const result = await musicCoverPreprocess({ audio_base64: "QUJD" }, API_KEY);
-
-        assert.deepEqual(result, { cover_feature_id: "cover-2", lyrics: "formatted" });
-        assert.ok(capturedUrl.endsWith("/v1/music_cover_preprocess"));
-        assert.equal(capturedInit?.method, "POST");
-        assert.deepEqual(JSON.parse(capturedBody), {
-            model: "music-cover",
-            audio_base64: "QUJD"
-        });
-        const headers = capturedInit?.headers as Record<string, string>;
-        assert.equal(headers.Authorization, `Bearer ${API_KEY}`);
-        assert.equal(headers["Content-Type"], "application/json");
-    });
-
-    it("preprocess returns raw lyrics fallback and empty default", async () => {
-        globalThis.fetch = async () =>
-            jsonResponse({ data: { cover_feature_id: "cover-3", lyrics: "raw" } });
-        assert.deepEqual(
-            await musicCoverPreprocess({ audio_url: "https://example.com/a.mp3" }, API_KEY),
-            {
-                cover_feature_id: "cover-3",
-                lyrics: "raw"
-            }
-        );
-
-        globalThis.fetch = async () => jsonResponse({ data: { cover_feature_id: "cover-4" } });
-        assert.deepEqual(
-            await musicCoverPreprocess({ audio_url: "https://example.com/a.mp3" }, API_KEY),
-            {
-                cover_feature_id: "cover-4",
-                lyrics: ""
-            }
-        );
-    });
-
-    it("parses top-level preprocess response", async () => {
-        globalThis.fetch = async () =>
-            jsonResponse({ cover_feature_id: "cover-top", formatted_lyrics: "[Verse]\ntop" });
-
-        assert.deepEqual(
-            await musicCoverPreprocess({ audio_url: "https://example.com/a.mp3" }, API_KEY),
-            {
-                cover_feature_id: "cover-top",
-                lyrics: "[Verse]\ntop"
-            }
-        );
-    });
-
-    it("rejects preprocess without source", async () => {
-        await assert.rejects(() => musicCoverPreprocess({}, API_KEY), /cover source required/);
-    });
-
-    it("rejects preprocess with both audio sources before fetch", async () => {
-        let called = false;
-        globalThis.fetch = async () => {
-            called = true;
-            return jsonResponse({ data: { cover_feature_id: "cover-1" } });
-        };
-
-        await assert.rejects(
-            () =>
-                musicCoverPreprocess(
-                    { audio_url: "https://example.com/a.mp3", audio_base64: "QUJD" },
-                    API_KEY
-                ),
-            /audio_url and audio_base64 are mutually exclusive/
-        );
-        assert.equal(called, false);
-    });
-
-    it("reports preprocess HTTP, base_resp, and missing-id failures", async () => {
-        globalThis.fetch = async () => new Response("broken", { status: 502 });
         await assert.rejects(
             () => musicCoverPreprocess({ audio_url: "https://example.com/a.mp3" }, API_KEY),
-            /music cover preprocess API error: 502/
+            new RegExp(MUSIC_DISABLED_MESSAGE)
         );
-
-        mockFetch(jsonResponse({ base_resp: { status_code: 2013, status_msg: "bad source" } }));
-        await assert.rejects(
-            () => musicCoverPreprocess({ audio_url: "https://example.com/a.mp3" }, API_KEY),
-            /Music cover preprocess failed: bad source/
-        );
-
-        mockFetch(jsonResponse({ data: {} }));
-        await assert.rejects(
-            () => musicCoverPreprocess({ audio_url: "https://example.com/a.mp3" }, API_KEY),
-            /music cover preprocess returned no cover_feature_id/
-        );
+        assert.deepEqual(generated, { type: "error", content: MUSIC_DISABLED_MESSAGE });
+        assert.equal(calls, 0);
     });
 });
 
@@ -1532,174 +827,81 @@ describe("generateLyrics", () => {
         globalThis.fetch = originalFetch;
     });
 
-    it("calls correct API endpoint and returns lyrics text", async () => {
+    it("uses text model with authenticated JSON request and returns only text blocks", async () => {
         let capturedUrl = "";
         let capturedInit: RequestInit | undefined;
-        globalThis.fetch = async (url: string | URL | Request, init?: RequestInit) => {
+        globalThis.fetch = async (url, init) => {
             capturedUrl = url.toString();
             capturedInit = init;
             return jsonResponse({
-                song_title: "Hello Song",
-                style_tags: "Pop, Happy",
-                lyrics: "Verse: Hello world\nChorus: Hello again!",
-                base_resp: { status_code: 0, status_msg: "success" }
+                content: [
+                    { type: "thinking", thinking: "plan" },
+                    { type: "text", text: "[Verse] Hello" },
+                    { type: "text", text: "[Chorus] Again" }
+                ]
             });
         };
 
-        const result = await generateLyrics("a happy birthday song", API_KEY);
+        const result = await generateLyrics({
+            prompt: "make this chorus stronger",
+            mode: "edit",
+            lyrics: "[Chorus] Old words",
+            title: "Victory Song"
+        }, API_KEY);
+        const body = JSON.parse(String(capturedInit?.body));
+        assert.equal(capturedUrl, `${MINIMAX_BASE}/anthropic/v1/messages`);
+        assert.equal(new Headers(capturedInit?.headers).get("Authorization"), `Bearer ${API_KEY}`);
+        assert.equal(body.model, MINIMAX_MODEL);
+        assert.equal(body.max_tokens, 2048);
+        assert.deepEqual(body.output_config, { effort: "low" });
+        assert.deepEqual(JSON.parse(body.messages[0].content), {
+            prompt: "make this chorus stronger",
+            mode: "edit",
+            lyrics: "[Chorus] Old words",
+            title: "Victory Song"
+        });
         assert.equal(result.type, "text");
-        assert.ok(result.content.includes("Hello world"));
-
-        assert.ok(capturedUrl.includes("/v1/lyrics_generation"));
-        assert.equal(capturedInit?.method, "POST");
-
-        const body = JSON.parse(capturedInit?.body as string);
-        assert.equal(body.mode, "write_full_song");
-        assert.equal(body.prompt, "a happy birthday song");
-        assert.equal("model" in body, false);
-
-        const headers = capturedInit?.headers as Record<string, string>;
-        assert.equal(headers.Authorization, `Bearer ${API_KEY}`);
+        assert.equal(result.content, "[Verse] Hello\n[Chorus] Again");
     });
 
-    it("includes optional title and edit lyrics fields", async () => {
-        let capturedBody = "";
-        globalThis.fetch = async (_url: string | URL | Request, init?: RequestInit) => {
-            capturedBody = init?.body as string;
-            return jsonResponse({ lyrics: "Some lyrics" });
+    it("validates input before fetch and reports provider failures", async () => {
+        let calls = 0;
+        globalThis.fetch = async () => {
+            calls++;
+            throw new Error("offline");
         };
-
-        await generateLyrics(
-            {
-                prompt: "make this chorus stronger",
-                mode: "edit",
-                lyrics: "[Chorus]\nWe win today",
-                title: "Victory Song"
-            },
+        const missingPrompt = await generateLyrics(" ", API_KEY);
+        const longPrompt = await generateLyrics("x".repeat(2001), API_KEY);
+        const longExistingLyrics = await generateLyrics(
+            { prompt: "revise", lyrics: "x".repeat(3501) },
             API_KEY
         );
-        const body = JSON.parse(capturedBody);
-        assert.equal(body.mode, "edit");
-        assert.equal(body.lyrics, "[Chorus]\nWe win today");
-        assert.equal(body.title, "Victory Song");
-    });
+        assert.equal(missingPrompt.type, "error");
+        assert.equal(longPrompt.type, "error");
+        assert.equal(longExistingLyrics.type, "error");
+        assert.equal(calls, 0);
 
-    it("omits optional edit fields when not provided", async () => {
-        let capturedBody = "";
-        globalThis.fetch = async (_url: string | URL | Request, init?: RequestInit) => {
-            capturedBody = init?.body as string;
-            return jsonResponse({ lyrics: "Some lyrics" });
-        };
+        globalThis.fetch = async () => jsonResponse({}, 502);
+        const http = await generateLyrics("song", API_KEY);
+        assert.equal(http.provider?.status_code, 502);
 
-        await generateLyrics("a fun song", API_KEY);
-        const body = JSON.parse(capturedBody);
-        assert.equal(body.mode, "write_full_song");
-        assert.equal("lyrics" in body, false);
-        assert.equal("title" in body, false);
-    });
+        globalThis.fetch = async () => new Response("not json", { status: 200 });
+        const invalidJson = await generateLyrics("song", API_KEY);
+        assert.equal(invalidJson.type, "error");
 
-    it("accepts string input shorthand", async () => {
-        let capturedBody = "";
-        globalThis.fetch = async (_url: string | URL | Request, init?: RequestInit) => {
-            capturedBody = init?.body as string;
-            return jsonResponse({ lyrics: "Lyrics here" });
-        };
-
-        await generateLyrics("a song about friendship", API_KEY);
-        const body = JSON.parse(capturedBody);
-        assert.equal(body.prompt, "a song about friendship");
-    });
-
-    it("sends Authorization Bearer header with API key", async () => {
-        let capturedInit: RequestInit | undefined;
-        globalThis.fetch = async (_url: string | URL | Request, init?: RequestInit) => {
-            capturedInit = init;
-            return jsonResponse({ lyrics: "Test lyrics" });
-        };
-
-        await generateLyrics("test", API_KEY);
-        const headers = capturedInit?.headers as Record<string, string>;
-        assert.equal(headers.Authorization, `Bearer ${API_KEY}`);
-    });
-
-    it("handles API error response", async () => {
-        mockFetch(jsonResponse({ error: "server error" }, 500));
-
-        const result = await generateLyrics("test", API_KEY);
-        assert.equal(result.type, "error");
-        assert.ok(result.content.includes("500"));
-    });
-
-    it("handles MiniMax base_resp error response", async () => {
-        mockFetch(
-            jsonResponse({
-                data: null,
-                base_resp: { status_code: 2001, status_msg: "invalid prompt" }
-            })
-        );
-
-        const result = await generateLyrics("test", API_KEY);
-        assert.equal(result.type, "error");
-        assert.ok(result.content.includes("invalid prompt"));
-    });
-
-    it("handles network failure", async () => {
         globalThis.fetch = async () => {
-            throw new Error("Connection reset");
+            throw new Error("offline");
         };
+        const network = await generateLyrics("song", API_KEY);
+        assert.equal(network.type, "error");
+        assert.match(network.content, /offline/);
+    });
 
-        const result = await generateLyrics("test", API_KEY);
+    it("returns an error for an empty text response", async () => {
+        mockFetch(jsonResponse({ content: [{ type: "thinking", thinking: "plan" }] }));
+        const result = await generateLyrics("song", API_KEY);
         assert.equal(result.type, "error");
-        assert.ok(result.content.includes("Connection reset"));
-    });
-
-    it("handles empty lyrics in response", async () => {
-        mockFetch(jsonResponse({ lyrics: "" }));
-
-        const result = await generateLyrics("test", API_KEY);
-        assert.equal(result.type, "error");
-        assert.ok(result.content.includes("no lyrics text"));
-    });
-
-    it("handles missing lyrics field in response", async () => {
-        mockFetch(jsonResponse({ song_title: "No Lyrics" }));
-
-        const result = await generateLyrics("test", API_KEY);
-        assert.equal(result.type, "error");
-        assert.ok(result.content.includes("no lyrics text"));
-    });
-
-    it("handles malformed response (no data field)", async () => {
-        mockFetch(jsonResponse({}));
-
-        const result = await generateLyrics("test", API_KEY);
-        assert.equal(result.type, "error");
-        assert.ok(result.content.includes("no lyrics text"));
-    });
-
-    it("returns lyrics text on success", async () => {
-        globalThis.fetch = async () =>
-            jsonResponse({
-                lyrics: "Verse: Jump up and down\nChorus: We are champions!"
-            });
-
-        const result = await generateLyrics("a fun gaming anthem", API_KEY);
-        assert.equal(result.type, "text");
-        assert.ok(result.content.includes("Jump up and down"));
-        assert.ok(result.content.includes("We are champions"));
-    });
-
-    it("snapshot: generate_lyrics result format", async () => {
-        globalThis.fetch = async () =>
-            jsonResponse({
-                lyrics: "Verse: Happy birthday to you!\nChorus: Happy birthday!"
-            });
-
-        const result = await generateLyrics("a birthday song", API_KEY);
-        assert.deepEqual(result, {
-            type: "text",
-            content: "Verse: Happy birthday to you!\nChorus: Happy birthday!"
-        });
+        assert.match(result.content, /no lyrics text/);
     });
 });
 
@@ -1736,16 +938,6 @@ describe("Tool result snapshots", () => {
         assert.equal(result.type, "audio");
         // Verify exact base64 encoding
         const expectedBase64 = Buffer.from("48656c6c6f", "hex").toString("base64");
-        assert.equal(result.content, `data:audio/mp3;base64,${expectedBase64}`);
-    });
-
-    it("snapshot: generate_music result", async () => {
-        // Use known hex: "Music" = 4d75736963
-        globalThis.fetch = async () => jsonResponse({ data: { audio: "4d75736963" } });
-
-        const result = await generateMusic("chill beats", API_KEY, "la la la");
-        assert.equal(result.type, "audio");
-        const expectedBase64 = Buffer.from("4d75736963", "hex").toString("base64");
         assert.equal(result.content, `data:audio/mp3;base64,${expectedBase64}`);
     });
 
@@ -1789,7 +981,7 @@ describe("Audio hex-to-base64 conversion", () => {
         const longHex = "fffb90440003000".repeat(100);
         globalThis.fetch = async () => jsonResponse({ data: { audio: longHex } });
 
-        const result = await generateMusic("test", API_KEY);
+        const result = await textToSpeech("test", API_KEY);
         assert.equal(result.type, "audio");
         const base64Part = result.content.replace("data:audio/mp3;base64,", "");
         const decoded = Buffer.from(base64Part, "base64").toString("hex");
@@ -2372,98 +1564,6 @@ describe("MINIMAX_BASE", () => {
     it("is a non-empty string", () => {
         assert.equal(typeof MINIMAX_BASE, "string");
         assert.ok(MINIMAX_BASE.length > 0);
-    });
-});
-
-// ── generateMusic HTTP structure ────────────────────────────────────
-
-describe("generateMusic HTTP request structure", () => {
-    beforeEach(() => {
-        originalFetch = globalThis.fetch;
-    });
-
-    afterEach(() => {
-        globalThis.fetch = originalFetch;
-    });
-
-    it("POSTs to correct endpoint with music-2.6 model", async () => {
-        let capturedUrl = "";
-        let capturedInit: RequestInit | undefined;
-        globalThis.fetch = async (url: string | URL | Request, init?: RequestInit) => {
-            capturedUrl = url.toString();
-            capturedInit = init;
-            return jsonResponse({ data: { audio: "4d75736963" } });
-        };
-
-        await generateMusic("epic gaming theme", API_KEY);
-
-        assert.ok(
-            capturedUrl.includes("/v1/music_generation"),
-            "should call music generation endpoint"
-        );
-        assert.equal(capturedInit?.method, "POST", "should use POST method");
-
-        const body = JSON.parse(capturedInit?.body as string);
-        assert.equal(body.model, "music-2.6", "should specify music-2.6 model");
-        assert.equal(body.prompt, "epic gaming theme", "should include prompt in body");
-    });
-
-    it("sends Authorization Bearer header", async () => {
-        let capturedHeaders: Record<string, string> = {};
-        globalThis.fetch = async (_url: string | URL | Request, init?: RequestInit) => {
-            capturedHeaders = init?.headers as Record<string, string>;
-            return jsonResponse({ data: { audio: "4d75736963" } });
-        };
-
-        await generateMusic("test", API_KEY);
-
-        assert.ok(
-            capturedHeaders.Authorization?.startsWith("Bearer "),
-            "should have Authorization Bearer header"
-        );
-        assert.ok(
-            capturedHeaders.Authorization?.includes(API_KEY),
-            "Authorization header should contain API key"
-        );
-        assert.equal(
-            capturedHeaders["Content-Type"],
-            "application/json",
-            "should have Content-Type header"
-        );
-    });
-
-    it("sends is_instrumental=true and omits lyrics when lyrics are not provided", async () => {
-        let capturedBody = "";
-        globalThis.fetch = async (_url: string | URL | Request, init?: RequestInit) => {
-            capturedBody = init?.body as string;
-            return jsonResponse({ data: { audio: "4d75736963" } });
-        };
-
-        await generateMusic("song", API_KEY);
-
-        const body = JSON.parse(capturedBody);
-        assert.equal("lyrics" in body, false, "should omit lyrics for instrumental music");
-        assert.equal(body.is_instrumental, true, "should auto-enable instrumental mode");
-        assert.equal("instrumental" in body, false, "should not send stale field name");
-    });
-
-    it("includes lyrics field when provided", async () => {
-        let capturedBody = "";
-        globalThis.fetch = async (_url: string | URL | Request, init?: RequestInit) => {
-            capturedBody = init?.body as string;
-            return jsonResponse({ data: { audio: "4d75736963" } });
-        };
-
-        await generateMusic("song", API_KEY, "verse one, chorus one");
-
-        const body = JSON.parse(capturedBody);
-        assert.equal(body.lyrics, "verse one, chorus one", "should include lyrics when provided");
-        assert.equal(
-            body.is_instrumental,
-            false,
-            "should disable instrumental mode when lyrics exist"
-        );
-        assert.equal("instrumental" in body, false, "should not send stale field name");
     });
 });
 

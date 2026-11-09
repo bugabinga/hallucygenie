@@ -10,8 +10,9 @@
 >> ~~ The Machine
 
 HallucyGenie is a kid-friendly MiniMax web UI for chat, images, reference-image
-pictures, voice, long narration, music, cover songs, lyrics, video, image
-analysis, web search, and local generated assets.
+pictures, voice, long narration, lyrics, video, image analysis, web search,
+and local generated assets.
+Music audio and cover generation are temporarily disabled; existing saved media remains available.
 
 ## Run locally
 
@@ -44,7 +45,7 @@ Then open <http://localhost:3000>.
 
 • `MINIMAX_API_KEY`: required. Consumes real MiniMax quota.
 • `PORT`: optional. Defaults to `3000`.
-• `COVER_EXTRACTOR_URL`: optional sidecar for YouTube cover-song preprocessing.
+• `COVER_EXTRACTOR_URL`: reserved; cover processing is currently disabled.
 
 MiniMax music and lyrics APIs are closed to new users since 2026-08-20; existing paying accounts may continue.
 Changing prompts or model names does not restore access for restricted accounts.
@@ -52,7 +53,9 @@ See [MiniMax's access notice](https://platform.minimax.io/docs/api-reference/mus
 
 ## Models and billing
 
-Chat uses `MiniMax-M3.1-Flash`; images use `image-01`; speech uses `speech-2.8-hd`.
+Chat and lyrics use `MiniMax-M3.1-Flash`; images use `image-01`; speech uses `speech-2.8-hd`.
+Lyrics are written or edited as text through the normal chat API, not the restricted legacy lyrics endpoint.
+Music and cover tools are disabled in the UI, model tool list, and direct API execution.
 Video uses base `MiniMax-H3` through the V2 API, with 4/6/10-second presets and 768p/2K quality.
 Default video request: 4 seconds, 768p, 16:9.
 H3 completed successfully with the operator's Explore subscription key; 2K and longer videos use more quota.

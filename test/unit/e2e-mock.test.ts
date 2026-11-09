@@ -34,9 +34,6 @@ describe("E2E MiniMax fetch mocks", () => {
             ["/anthropic/v1/messages", { method: "POST", body: "{}" }],
             ["/v1/image_generation", { method: "POST", body: JSON.stringify({ n: 3 }) }],
             ["/v1/t2a_v2", { method: "POST", body: "{}" }],
-            ["/v1/lyrics_generation", { method: "POST", body: "{}" }],
-            ["/v1/music_generation", { method: "POST", body: "{}" }],
-            ["/v1/music_cover_preprocess", { method: "POST", body: "{}" }],
             ["/v2/video_generation", { method: "POST", body: "{}" }],
             ["/v2/query/video_generation/video-task-e2e", { method: "GET" }],
             ["/v1/files/retrieve", { method: "GET" }],
@@ -60,6 +57,16 @@ describe("E2E MiniMax fetch mocks", () => {
         assert.equal(getMinimaxMockCalls().length, endpoints.length);
         resetMinimaxMockCalls();
         assert.deepEqual(getMinimaxMockCalls(), []);
+    });
+
+    it("rejects any attempt to use the retired music provider routes", async () => {
+        setupMinimaxMocks();
+        for (const path of ["lyrics_generation", "music_generation", "music_cover_preprocess"]) {
+            await assert.rejects(
+                fetch(`https://api.minimax.io/v1/${path}`, { method: "POST", body: "{}" }),
+                /Legacy music API must not be called/
+            );
+        }
     });
 
     it("handles malformed JSON bodies and falls back for unmatched URLs", async () => {

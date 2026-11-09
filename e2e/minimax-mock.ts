@@ -86,6 +86,12 @@ function requestBody(init?: RequestInit): Record<string, unknown> {
 function minimaxResponse(url: URL, init?: RequestInit): Response | null {
     switch (url.pathname) {
         case "/anthropic/v1/messages":
+            if (requestBody(init).stream !== true) {
+                return jsonResponse({
+                    model: "MiniMax-M3.1-Flash",
+                    content: [{ type: "text", text: "Verse one, game on\nChorus, win the fight" }]
+                });
+            }
             return new Response(
                 anthropicTextSSE("Hello! I'm HallucyGenie, your gaming buddy! 🎮 How can I help?"),
                 {
@@ -119,27 +125,9 @@ function minimaxResponse(url: URL, init?: RequestInit): Response | null {
             });
 
         case "/v1/lyrics_generation":
-            return jsonResponse({
-                lyrics: "Verse one, game on\nChorus, win the fight",
-                base_resp: { status_code: 0 }
-            });
-
         case "/v1/music_generation":
-            return jsonResponse({
-                data: {
-                    audio: Buffer.from("fake-music-data").toString("hex")
-                },
-                base_resp: { status_code: 0 }
-            });
-
         case "/v1/music_cover_preprocess":
-            return jsonResponse({
-                data: {
-                    cover_feature_id: "cover-e2e-1",
-                    formatted_lyrics: "Verse, cover ready\nChorus, remix go"
-                },
-                base_resp: { status_code: 0 }
-            });
+            throw new Error("Legacy music API must not be called");
 
         case "/v2/video_generation":
             return jsonResponse({ task_id: "video-task-e2e" });

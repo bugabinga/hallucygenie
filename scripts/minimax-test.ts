@@ -1,5 +1,7 @@
 // HallucyGenie — MiniMax live API smoke test
 
+import { generateLyrics, MINIMAX_MODEL } from "../src/tools.ts";
+
 type JsonObject = Record<string, unknown>;
 
 const MINIMAX_BASE = "https://api.minimax.io";
@@ -165,22 +167,12 @@ async function testImage(): Promise<void> {
     console.log(`image_urls: ${imageUrlSummary(data?.image_urls)}`);
 }
 
-export function musicInstrumentalPayload(): JsonObject {
-    return {
-        model: "music-2.6",
-        prompt: "short upbeat chiptune game loop",
-        is_instrumental: true,
-        output_format: "hex"
-    };
-}
-
-async function testMusic(): Promise<void> {
-    printSection("Music /v1/music_generation instrumental");
-    console.log("Payload: is_instrumental=true, no lyrics");
-    const result = await postJson("/v1/music_generation", musicInstrumentalPayload());
-    printResult(result);
-    const data = result.data.data as JsonObject | undefined;
-    console.log(`audio: ${hexSummary(data?.audio)}`);
+async function testLyrics(): Promise<void> {
+    printSection(`Lyrics ${MINIMAX_MODEL}`);
+    const result = await generateLyrics("Write four short greeting-song lines.", apiKey());
+    console.log(`result: ${result.type}`);
+    if (result.type !== "text") throw new Error(result.content);
+    console.log(`lyrics: ${textSummary(result.content)}`);
 }
 
 async function testVlm(): Promise<void> {
@@ -199,7 +191,7 @@ export async function main(): Promise<void> {
     await testQuota();
     await testTts();
     await testImage();
-    await testMusic();
+    await testLyrics();
     await testVlm();
 }
 
