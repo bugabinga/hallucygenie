@@ -597,19 +597,20 @@ async function runE2ETests(): Promise<void> {
                     return new Response(
                         new ReadableStream({
                             start(controller) {
-                                setTimeout(
-                                    () =>
+                                (globalThis as unknown as {
+                                    layoutTestStream: { text: () => void; finish: () => void; };
+                                }).layoutTestStream = {
+                                    text: () =>
                                         controller.enqueue(
                                             encoder.encode(
                                                 "data: {\"delta\":\"Layout stable\"}\n\n"
                                             )
                                         ),
-                                    150
-                                );
-                                setTimeout(() => {
-                                    controller.enqueue(encoder.encode("data: [DONE]\n\n"));
-                                    controller.close();
-                                }, 1000);
+                                    finish: () => {
+                                        controller.enqueue(encoder.encode("data: [DONE]\n\n"));
+                                        controller.close();
+                                    }
+                                };
                             }
                         }),
                         { status: 200, headers: { "Content-Type": "text/event-stream" } }
@@ -658,6 +659,10 @@ async function runE2ETests(): Promise<void> {
             await page.press("#chat-input", "Enter");
             await page.waitForSelector("#typing-indicator.is-visible", { timeout: 5000 });
             const duringThinking = await measure();
+            await page.evaluate(() =>
+                (globalThis as unknown as { layoutTestStream: { text: () => void; }; })
+                    .layoutTestStream.text()
+            );
             await page.waitForFunction(
                 () => {
                     const list = document.querySelector("#message-list") as HTMLElement;
@@ -686,6 +691,10 @@ async function runE2ETests(): Promise<void> {
                 });
                 assertEqual(unobstructed, true, `${selector} unobstructed during streaming`);
             }
+            await page.evaluate(() =>
+                (globalThis as unknown as { layoutTestStream: { finish: () => void; }; })
+                    .layoutTestStream.finish()
+            );
             await page.waitForFunction(
                 () =>
                     !document

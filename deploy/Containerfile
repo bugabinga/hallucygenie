@@ -17,6 +17,8 @@ RUN npm exec -- esbuild public/app.ts \
     --minify
 
 FROM node:${NODE_VERSION}-bookworm-slim AS runtime
+RUN apt-get update && apt-get install -y --no-install-recommends ffmpeg \
+    && rm -rf /var/lib/apt/lists/*
 ARG VERSION=1.0.0
 WORKDIR /app
 ENV NODE_ENV=production \

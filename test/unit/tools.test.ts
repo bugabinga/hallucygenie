@@ -260,9 +260,13 @@ describe("MiniMax parameter contract", () => {
     };
 
     for (const [toolName, { supported, forbidden, required }] of Object.entries(contract)) {
-        it(`${toolName} schema matches covered MiniMax parameter subset`, () => {
+        it(`${toolName} schema matches covered provider and local parameters`, () => {
             const schema = schemaFor(toolName);
-            assert.deepEqual(Object.keys(schema.properties).sort(), [...supported].sort());
+            const local = toolName === "generate_image" ? ["reference_asset_id"] : [];
+            assert.deepEqual(
+                Object.keys(schema.properties).sort(),
+                [...supported, ...local].sort()
+            );
             assert.deepEqual(schema.required, required);
             for (const param of forbidden) {
                 assert.equal(param in schema.properties, false, `${toolName} exposes ${param}`);

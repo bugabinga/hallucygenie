@@ -132,13 +132,26 @@ let currentProfile: UserProfile = {
 };
 
 export function createApiHeaders(): Record<string, string> {
+    const selected = typeof document === "undefined"
+        ? null
+        : document.querySelector<HTMLSelectElement>("#session-select");
+    const session = selected?.dataset.sessionId || selected?.value;
     return {
-        "Content-Type": "application/json"
+        "Content-Type": "application/json",
+        ...(session ? { "X-Session-Id": session } : {})
     };
 }
 
+export function assetUrlForSession(url: string): string {
+    const session = createApiHeaders()["X-Session-Id"];
+    if (!session || !url.startsWith("/asset/")) return url;
+    const value = new URL(url, "http://localhost");
+    value.searchParams.set("session_id", session);
+    return `${value.pathname}${value.search}`;
+}
+
 export async function fetchHistory(): Promise<HistoryMessage[]> {
-    const resp = await fetch("/api/history");
+    const resp = await fetch("/api/history", { headers: createApiHeaders() });
     if (!resp.ok) {
         throw new Error(`Failed to load history: ${resp.status}`);
     }
@@ -241,7 +254,7 @@ function draftApiEnabled(): boolean {
 async function getDraft(kind: "chat" | "create"): Promise<unknown | null> {
     if (!draftApiEnabled()) return null;
     try {
-        const resp = await fetch(`/api/draft/${kind}`);
+        const resp = await fetch(`/api/draft/${kind}`, { headers: createApiHeaders() });
         if (!resp.ok) return null;
         return ((await resp.json()) as { draft: unknown | null; }).draft;
     } catch {
@@ -617,7 +630,7 @@ export function renderToolResult(
         for (const url of urls) {
             const img = createElement("img", {
                 class: "tool-result-image",
-                src: url,
+                src: assetUrlForSession(url),
                 alt: "Generated image",
                 loading: "lazy"
             });
@@ -629,14 +642,14 @@ export function renderToolResult(
         const audio = createElement("audio", {
             class: "tool-result-audio",
             controls: "",
-            src: result.content
+            src: assetUrlForSession(result.content)
         });
         body.appendChild(audio);
     } else if (result.type === "video") {
         const video = createElement("video", {
             class: "tool-result-video",
             controls: "",
-            src: result.content,
+            src: assetUrlForSession(result.content),
             preload: "metadata"
         });
         body.appendChild(video);
@@ -684,7 +697,7 @@ export function openLightbox(src: string): void {
     const lightbox = $("#lightbox");
     const img = $("#lightbox-img") as HTMLImageElement;
     lightboxReturnFocus = document.activeElement as HTMLElement | null;
-    img.src = src;
+    img.src = assetUrlForSession(src);
     lightbox.hidden = false;
     lightbox.querySelector<HTMLElement>(".lightbox-close")?.focus();
 }
@@ -777,6 +790,7 @@ function isReferenceImageAsset(asset: Asset): boolean {
 }
 
 function renderAssetPreview(asset: Asset, url: string): HTMLElement {
+    url = assetUrlForSession(url);
     if (asset.type === "video") {
         const video = document.createElement("video");
         video.className = "asset-video";
@@ -895,7 +909,7 @@ function renderAssetCard(asset: Asset): HTMLElement {
 
     const download = document.createElement("a");
     download.className = "asset-download";
-    download.href = asset.download_url;
+    download.href = assetUrlForSession(asset.download_url);
     download.download = asset.filename;
     download.textContent = "Download";
     card.appendChild(download);
@@ -909,7 +923,7 @@ export function loadAssets(): void {
     grid.innerHTML = "";
     empty.hidden = true;
 
-    fetch("/assets")
+    fetch("/assets", { headers: createApiHeaders() })
         .then((r) => r.json() as Promise<{ assets: Asset[]; }>)
         .then(({ assets }) => {
             if (!assets.length) {
@@ -955,6 +969,7 @@ export function showError(message: string, duration = 4000): void {
 // ── Chat State ───────────────────────────────────────────────────────
 
 let isStreaming = false;
+let activeStreamController: AbortController | null = null;
 let _currentAssistantEl: HTMLElement | null = null;
 let currentAssistantContent: HTMLElement | null = null;
 const activeToolCards = new Map<string, HTMLElement>();
@@ -975,71 +990,85 @@ async function streamSseRequest(
     body: unknown,
     onEvent?: (event: SSEEvent) => void
 ): Promise<void> {
-    const resp = await fetch(path, {
-        method: "POST",
-        headers: createApiHeaders(),
-        body: JSON.stringify(body)
-    });
+    const controller = new AbortController();
+    activeStreamController = controller;
+    try {
+        const resp = await fetch(path, {
+            method: "POST",
+            headers: createApiHeaders(),
+            body: JSON.stringify(body),
+            signal: controller.signal
+        });
+        if (controller.signal.aborted) {
+            await resp.body?.cancel();
+            return;
+        }
 
-    if (resp.status === 400) {
-        const parsed = await resp.json().catch(() => null);
-        streamHadError = true;
-        showError(parsed?.error ?? "Session expired — please reload the page 🔄");
-        finishStreaming();
-        return;
-    }
+        if (resp.status === 400) {
+            const parsed = await resp.json().catch(() => null);
+            streamHadError = true;
+            showError(parsed?.error ?? "Session expired — please reload the page 🔄");
+            finishStreaming();
+            return;
+        }
 
-    if (!resp.ok) {
-        const parsed = await resp.json().catch(() => null);
-        const msg = parsed?.error ?? `Something went wrong (${resp.status}). Try again! 🤷`;
-        streamHadError = true;
-        showError(msg);
-        finishStreaming();
-        return;
-    }
+        if (!resp.ok) {
+            const parsed = await resp.json().catch(() => null);
+            const msg = parsed?.error ?? `Something went wrong (${resp.status}). Try again! 🤷`;
+            streamHadError = true;
+            showError(msg);
+            finishStreaming();
+            return;
+        }
 
-    if (!resp.body) {
-        streamHadError = true;
-        showError("No response from server 😴");
-        finishStreaming();
-        return;
-    }
+        if (!resp.body) {
+            streamHadError = true;
+            showError("No response from server 😴");
+            finishStreaming();
+            return;
+        }
 
-    const reader = resp.body.getReader();
-    const decoder = new TextDecoder();
-    let buffer = "";
+        const reader = resp.body.getReader();
+        const decoder = new TextDecoder();
+        let buffer = "";
 
-    while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
+        while (true) {
+            const { done, value } = await reader.read();
+            if (controller.signal.aborted) return;
+            if (done) break;
 
-        buffer += decoder.decode(value, { stream: true });
+            buffer += decoder.decode(value, { stream: true });
 
-        // Process complete events from buffer
-        // SSE events end with \n\n
-        const parts = buffer.split("\n\n");
-        // Keep the last (potentially incomplete) part in the buffer
-        buffer = parts.pop() ?? "";
+            // Process complete events from buffer
+            // SSE events end with \n\n
+            const parts = buffer.split("\n\n");
+            // Keep the last (potentially incomplete) part in the buffer
+            buffer = parts.pop() ?? "";
 
-        for (const part of parts) {
-            const events = [...parseSSEChunk(`${part}\n\n`)];
+            for (const part of parts) {
+                const events = [...parseSSEChunk(`${part}\n\n`)];
+                for (const event of events) {
+                    onEvent?.(event);
+                    handleSSEEvent(event);
+                }
+            }
+        }
+
+        // Process any remaining buffer
+        if (buffer.trim()) {
+            const events = [...parseSSEChunk(buffer)];
             for (const event of events) {
                 onEvent?.(event);
                 handleSSEEvent(event);
             }
         }
-    }
 
-    // Process any remaining buffer
-    if (buffer.trim()) {
-        const events = [...parseSSEChunk(buffer)];
-        for (const event of events) {
-            onEvent?.(event);
-            handleSSEEvent(event);
-        }
+        if (isStreaming) finishStreaming();
+    } catch (error) {
+        if (!controller.signal.aborted) throw error;
+    } finally {
+        if (activeStreamController === controller) activeStreamController = null;
     }
-
-    if (isStreaming) finishStreaming();
 }
 
 export async function streamChat(
@@ -1916,20 +1945,30 @@ export function init(): void {
     const sessionSelect = document.querySelector<HTMLSelectElement>("#session-select");
     const sessionNew = document.querySelector<HTMLButtonElement>("#session-new");
 
-    async function refreshSessions(): Promise<void> {
+    let sessionRefresh = 0;
+    async function refreshSessions(keepSelection = false): Promise<void> {
+        const revision = ++sessionRefresh;
+        const selected = keepSelection
+            ? sessionSelect?.dataset.sessionId || sessionSelect?.value
+            : "";
         const data = await fetchSessions();
-        if (!sessionSelect) return;
+        if (!sessionSelect || revision !== sessionRefresh) return;
+        const displayed = selected && data.sessions.some(item => item.id === selected)
+            ? selected
+            : data.activeSessionId;
+        sessionSelect.dataset.sessionId = displayed;
         sessionSelect.innerHTML = "";
         for (const session of data.sessions) {
             const option = document.createElement("option");
             option.value = session.id;
             option.textContent = session.name;
-            option.selected = session.id === data.activeSessionId;
+            option.selected = session.id === displayed;
             sessionSelect.appendChild(option);
         }
     }
 
     async function reloadActiveSessionUi(): Promise<void> {
+        activeStreamController?.abort();
         clearChatUi();
         await loadHistory();
         await restoreDrafts();
@@ -1938,13 +1977,28 @@ export function init(): void {
     }
 
     async function switchSession(id: string): Promise<void> {
-        if (isStreaming && !confirm("A response is still running. Switch chats anyway?")) return;
-        await activateSession(id);
-        await refreshSessions();
-        await reloadActiveSessionUi();
+        const previous = sessionSelect?.dataset.sessionId;
+        if (isStreaming && !confirm("A response is still running. Switch chats anyway?")) {
+            if (sessionSelect && previous) sessionSelect.value = previous;
+            return;
+        }
+        ++sessionRefresh;
+        activeStreamController?.abort();
+        try {
+            await activateSession(id);
+            await refreshSessions();
+            await reloadActiveSessionUi();
+        } catch (error) {
+            if (sessionSelect && previous) sessionSelect.value = previous;
+            if (isStreaming && (!activeStreamController || activeStreamController.signal.aborted)) {
+                streamHadError = true;
+                finishStreaming();
+            }
+            throw error;
+        }
     }
 
-    refreshSessionsAfterDone = () => void refreshSessions().catch(() => undefined);
+    refreshSessionsAfterDone = () => void refreshSessions(true).catch(() => undefined);
 
     sessionSelect?.addEventListener("change", () => {
         void switchSession(sessionSelect.value).catch(() => showError("Failed to switch chat 😕"));
@@ -1953,8 +2007,9 @@ export function init(): void {
         if (isStreaming && !confirm("A response is still running. Start a new chat anyway?")) {
             return;
         }
+        activeStreamController?.abort();
         void createNewSession()
-            .then(refreshSessions)
+            .then(() => refreshSessions())
             .then(reloadActiveSessionUi)
             .catch(() => showError("Failed to create chat 😕"));
     });
@@ -2658,7 +2713,7 @@ export function init(): void {
             analyzeFileStatus.textContent = `Selected ${file.name}`;
             analyzeFilePreview.innerHTML = "";
             const preview = document.createElement("img");
-            preview.src = uploaded.assetUrl;
+            preview.src = assetUrlForSession(uploaded.assetUrl);
             preview.alt = `Selected image: ${file.name}`;
             analyzeFilePreview.appendChild(preview);
             analyzeFilePreview.hidden = false;
@@ -2691,7 +2746,7 @@ export function init(): void {
         imgReferencePreview.hidden = !assetUrl;
         if (!assetUrl) return;
         const img = document.createElement("img");
-        img.src = assetUrl;
+        img.src = assetUrlForSession(assetUrl);
         img.alt = "Selected reference image";
         imgReferencePreview.appendChild(img);
     }

@@ -143,7 +143,12 @@ export function getToolDefinitions(): ToolDefinition[] {
                     },
                     width: { type: "number", minimum: 512, maximum: 2048 },
                     height: { type: "number", minimum: 512, maximum: 2048 },
-                    prompt_optimizer: { type: "boolean" }
+                    prompt_optimizer: { type: "boolean" },
+                    reference_asset_id: {
+                        type: "string",
+                        description:
+                            "Optional stored current-session image asset to use as character reference."
+                    }
                 },
                 required: ["prompt"]
             }

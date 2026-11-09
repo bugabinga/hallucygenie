@@ -5,6 +5,8 @@
 ### Kid notes
 
 • Chats keep their own history when switching sessions.
+• Genie remembers Create results and complete lyrics when you continue chatting, even after an interrupted reply.
+• Genie can inspect saved pictures, transcribe saved speech, and combine video visuals with transcription of its audio track.
 • Keyboard focus stays inside the welcome tour while moving between steps.
 • Chat replies stream more reliably, with steering guidance inside the composer instead of a popup covering the chat.
 • Quota shows shared rolling and weekly percentages when MiniMax does not provide exact counts.
@@ -13,7 +15,9 @@
 
 ### Parent notes
 
-• Container runtime moves from Bun to Node 26.4.0.
+• Container runtime moves from Bun to Node 26.4.0; FFmpeg/FFprobe support stored-media inspection.
+• Saved tool observations are replayed as ordinary provenance-labelled text, not stale MiniMax tool IDs.
+• Older conversation records remain retrievable with explicit pagination; full submitted narration and profile text are retained.
 • Release publication pushes `v1.0.3` and `latest` from the same image.
 • Quadlet deployments can follow `latest` with Podman registry auto-updates, including future major versions.
 • Runtime env is unchanged; no built-in auth has been added.

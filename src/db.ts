@@ -581,6 +581,7 @@ export function saveMessage(
     thinking?: string | null
 ): void {
     assertMessageTextIsSafe(content, thinking);
+    if (toolCalls) assertNoRawAssetDataInMessage(toolCalls);
     db.prepare(
         `INSERT INTO messages (session_id, role, content, tool_calls_json, tool_call_id, thinking)
      VALUES (?, ?, ?, ?, ?, ?)`

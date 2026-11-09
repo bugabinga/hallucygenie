@@ -83,13 +83,6 @@ function* parseSSEChunk(chunk: string): Generator<SSEEvent> {
     }
 }
 
-// API helpers
-function createApiHeaders(): Record<string, string> {
-    return {
-        "Content-Type": "application/json"
-    };
-}
-
 // Tool emojis
 const TOOL_EMOJIS: Record<string, string> = {
     generate_image: "🎨",
@@ -208,8 +201,8 @@ describe("SSE Parsing", () => {
 // ── API Headers ────────────────────────────────────────────────────────
 
 describe("API Headers", () => {
-    it("includes content type only", () => {
-        const headers = createApiHeaders();
+    it("production headers include content type without a selected session", () => {
+        const headers = appCreateApiHeaders();
         assert.equal(headers["Content-Type"], "application/json");
         assert.equal("X-Session-Id" in headers, false);
     });
@@ -1104,6 +1097,7 @@ function createTestWindow(options?: ConstructorParameters<typeof Window>[0]): Wi
 import {
     autoResizeInput,
     closeLightbox,
+    createApiHeaders as appCreateApiHeaders,
     createElement,
     deleteProfile,
     fetchHistory,
@@ -4794,7 +4788,7 @@ describe("sendSteer", () => {
 });
 
 describe("fetchHistory", () => {
-    it("returns messages from API without request headers", async () => {
+    it("returns messages using production headers with no selected session", async () => {
         let request: RequestInit | undefined;
         globalThis.fetch = (_url: string, init?: RequestInit) => {
             request = init;
@@ -4807,7 +4801,7 @@ describe("fetchHistory", () => {
         };
 
         const msgs = await fetchHistory();
-        assert.equal(request, undefined);
+        assert.deepEqual(request?.headers, { "Content-Type": "application/json" });
         assert.equal(msgs.length, 1);
         assert.equal(msgs[0].role, "user");
         assert.equal(msgs[0].content, "hi");
@@ -5303,7 +5297,7 @@ describe("init accessibility behavior", () => {
         assert.equal(doc.activeElement, opener);
     });
 
-    it("blocks new session while streaming when confirmation is rejected", async () => {
+    it("keeps the displayed session when new-chat and switch confirmations are rejected", async () => {
         const { doc } = setupDOM();
         const sessionSelect = doc.createElement("select");
         sessionSelect.id = "session-select";
@@ -5312,6 +5306,7 @@ describe("init accessibility behavior", () => {
         doc.body.append(sessionSelect, sessionNew);
 
         let newSessionPosts = 0;
+        let activationPosts = 0;
         let confirmCalls = 0;
         let resolveChat!: (response: Response) => void;
         globalThis.confirm = () => {
@@ -5325,13 +5320,14 @@ describe("init accessibility behavior", () => {
                     resolveChat = resolve;
                 });
             }
+            if (url.includes("/activate")) activationPosts++;
             if (url === "/api/sessions" && init?.method === "POST") newSessionPosts += 1;
             if (url === "/api/sessions") {
                 return Promise.resolve(
                     new Response(
                         JSON.stringify({
                             activeSessionId: "s1",
-                            sessions: [{ id: "s1", name: "New Chat" }]
+                            sessions: [{ id: "s1", name: "New Chat" }, { id: "s2", name: "Other" }]
                         }),
                         { status: 200, headers: { "Content-Type": "application/json" } }
                     )
@@ -5378,12 +5374,20 @@ describe("init accessibility behavior", () => {
         };
 
         init();
+        await new Promise(resolve => setTimeout(resolve, 20));
+        assert.equal(sessionSelect.value, "s1", "displayed session initialized");
         const sendPromise = sendMessage("keep streaming");
         await Promise.resolve();
         sessionNew.click();
 
         assert.equal(confirmCalls, 1);
         assert.equal(newSessionPosts, 0);
+        sessionSelect.value = "s2";
+        sessionSelect.dispatchEvent(new Event("change", { bubbles: true }));
+        assert.equal(confirmCalls, 2);
+        assert.equal(activationPosts, 0);
+        assert.equal(sessionSelect.value, "s1");
+        assert.equal(appCreateApiHeaders()["X-Session-Id"], "s1");
 
         resolveChat(createSSEResponse([sseDone()]));
         await sendPromise;
@@ -5602,7 +5606,7 @@ describe("loadAssets", () => {
         // Wait for async fetch + render
         await new Promise((r) => setTimeout(r, 50));
 
-        assert.equal(requestOpts, undefined);
+        assert.deepEqual(requestOpts?.headers, { "Content-Type": "application/json" });
 
         const cards = doc.querySelectorAll(".asset-card");
         assert.equal(cards.length, 3, "should render asset cards");

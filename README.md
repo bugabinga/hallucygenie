@@ -67,6 +67,11 @@ The app uses `MINIMAX_API_KEY` only; it does not automatically retry requests wi
 • Back up `data/` before upgrading.
 • Bind-mounted `data/` must be writable by container user `node` (UID 1000).
 • Raw generated media stays in asset storage, not prompts or chat context.
+• Chat retains Create inputs, complete text/results, visible reasoning, errors, and stored asset handles, including after interrupted replies.
+• `read_conversation` retrieves older records and session-scoped media metadata; `inspect_asset` reads actual images, speech, and MP4 visuals plus speech from its audio track.
+• Audio inspection uses speech recognition, not arbitrary music/sound analysis; video visuals are sampled at 2 fps.
+• Media inspection needs `ffmpeg` and `ffprobe` on local development hosts; the runtime image includes both.
+• Inspection supports images up to 20 MiB and inline MP4 up to 45 MiB; unsupported media reports an error rather than invented observations.
 • No built-in auth. Run on localhost or a trusted network only.
 
 ## Release

@@ -4,7 +4,7 @@ import assert from "node:assert/strict";
 import { existsSync, rmSync } from "node:fs";
 import type { AddressInfo } from "node:net";
 import { join } from "node:path";
-import { after, before, beforeEach, describe, it } from "node:test";
+import { after, afterEach, before, beforeEach, describe, it } from "node:test";
 import { MINIMAX_MODEL } from "../../src/agent.ts";
 import {
     createSession,
@@ -751,8 +751,11 @@ describe("404 handling", () => {
 
 describe("POST /api/steer", () => {
     it("returns ok response with valid message", async () => {
+        const session = createSession(requireDb());
         const resp = await handleRequest(
-            makeRequest("POST", "/api/steer", { message: "test steer" })
+            makeRequest("POST", "/api/steer", { message: "test steer" }, {
+                "X-Session-Id": session.id
+            })
         );
         assert.equal(resp.status, 200);
         const body = (await readJson(resp)) as { ok: boolean; };
@@ -1607,7 +1610,7 @@ describe("SSE streaming from Anthropic endpoint", () => {
         }
     });
 
-    it("executes long narration async TTS, extracts bundle audio, and stores compact history", async () => {
+    it("executes long narration async TTS and retains the complete submitted script", async () => {
         const sessionId = "long-tts-session";
         const database = requireDb();
         createSession(database, sessionId, "Long TTS");
@@ -1685,9 +1688,13 @@ describe("SSE streaming from Anthropic endpoint", () => {
             assert.equal(assets[0]?.size_bytes, 3);
             assert.equal(tasks[0]?.status, "succeeded");
             assert.equal(tasks[0]?.asset_id, assets[0]?.id);
-            assert.equal(history[0]?.input_json.includes("text_summary"), true);
-            assert.equal(history[0]?.input_json.includes(longText), false);
-            assert.equal(serializedRows.includes(longText), false);
+            assert.equal(JSON.parse(history[0]?.input_json).text, longText);
+            assert.ok(
+                rows.some(row =>
+                    row.tool_calls_json
+                    && JSON.parse(row.tool_calls_json)[0].input.text === longText
+                )
+            );
             assert.equal(serializedRows.includes("https://cdn.example/tts.tar"), false);
         } finally {
             globalThis.fetch = REAL_FETCH;
@@ -2795,17 +2802,31 @@ describe("Database Initialization", () => {
 // -- Step 2: Session Validation Middleware ----------------------------
 
 describe("Session Validation", () => {
+    let previousKey = process.env.MINIMAX_API_KEY;
+    let previousFetch = globalThis.fetch;
     beforeEach(() => {
         ensureTestDb();
+        previousKey = process.env.MINIMAX_API_KEY;
+        previousFetch = globalThis.fetch;
+        process.env.MINIMAX_API_KEY = "test-session-validation-key";
+        globalThis.fetch = async (url) => {
+            assert.equal(String(url), `${MINIMAX_BASE}/anthropic/v1/messages`);
+            return anthropicResponse(anthropicTextSse(["Session accepted."]));
+        };
+    });
+    afterEach(() => {
+        globalThis.fetch = previousFetch;
+        if (previousKey === undefined) delete process.env.MINIMAX_API_KEY;
+        else process.env.MINIMAX_API_KEY = previousKey;
     });
 
     it("allows valid session ID on /api/chat", async () => {
         const req = makeRequest("POST", "/api/chat", {
             messages: [{ role: "user", content: "hi" }]
         });
-        // Should NOT return 400 -- it will fail at MiniMax API call but that's fine
         const resp = await handleRequest(req);
-        assert.notEqual(resp.status, 400, "should not return 400 with valid session");
+        assert.equal(resp.status, 200);
+        assert.match(await resp.text(), /Session accepted\./);
     });
 
     it("uses active session when X-Session-Id is missing on /api/chat", async () => {
@@ -2816,7 +2837,8 @@ describe("Session Validation", () => {
         };
         const req = new Request("http://localhost/api/chat", init);
         const resp = await handleRequest(req);
-        assert.notEqual(resp.status, 400);
+        assert.equal(resp.status, 200);
+        assert.match(await resp.text(), /Session accepted\./);
     });
 
     it("resolveSessionId prefers explicit session over active session", () => {
@@ -3362,11 +3384,12 @@ describe("Integration: chat with agent loop + persistence", () => {
             assert.ok(body.includes("/asset/"));
             assert.equal(body.includes("data:audio"), false);
             assert.equal(capturedAnthropicBodies[1]?.includes("data:audio"), false);
-            assert.ok(
-                capturedAnthropicBodies[1]?.includes("Generated audio with text_to_speech")
-            );
-
             const rows = getMessages(requireDb(), "media-compact-session");
+            const storedAudio = rows.find(row =>
+                row.role === "tool" && row.tool_call_id === "tc_audio_1"
+            );
+            assert.ok(storedAudio?.content.startsWith("/asset/"));
+            assert.ok(capturedAnthropicBodies[1]?.includes(storedAudio.content));
             assert.equal(
                 rows.some((row) => row.content.includes("data:audio")),
                 false
@@ -3415,9 +3438,12 @@ describe("POST /api/steer integration", () => {
         initDatabase(join(dir, "test.db"));
     });
 
-    it("queues a steer message for a session", async () => {
+    it("durably accepts a steer message for an existing session", async () => {
+        const session = createSession(requireDb());
         const resp = await handleRequest(
-            makeRequest("POST", "/api/steer", { message: "be more creative" })
+            makeRequest("POST", "/api/steer", { message: "be more creative" }, {
+                "X-Session-Id": session.id
+            })
         );
         assert.equal(resp.status, 200);
         const body = (await readJson(resp)) as { ok: boolean; };
@@ -3723,7 +3749,7 @@ describe("Coverage: History loading in handleChat", () => {
         }
     });
 
-    it("sanitizes assistant media markup when replaying history", async () => {
+    it("preserves historical image references as text, not native media blocks", async () => {
         const database = requireDb();
         saveMessage(
             database,
@@ -3745,9 +3771,12 @@ describe("Coverage: History loading in handleChat", () => {
             await handleChat(req, "test-key", "poison-history-session");
 
             const serialized = JSON.stringify(capturedPayload.messages);
-            assert.equal(serialized.includes("![cat]"), false);
-            assert.equal(serialized.includes("hailuo-image"), false);
-            assert.ok(serialized.includes("Generated media is shown in the tool card."));
+            assert.ok(serialized.includes("![cat]"));
+            assert.ok(serialized.includes("hailuo-image"));
+            const blocks = (capturedPayload.messages as Array<{ content: unknown; }>).flatMap(
+                message => Array.isArray(message.content) ? message.content : []
+            );
+            assert.ok(blocks.every((block: { type: string; }) => block.type === "text"));
         } finally {
             globalThis.fetch = REAL_FETCH;
         }
@@ -3932,8 +3961,9 @@ describe("Coverage: steer edge cases", () => {
     });
 
     it("steer with valid message returns 200", async () => {
+        const session = createSession(requireDb());
         const req = makeRequest("POST", "/api/steer", { message: "change topic" });
-        req.headers.set("X-Session-Id", "test");
+        req.headers.set("X-Session-Id", session.id);
         const resp = await handleRequest(req);
         assert.equal(resp.status, 200);
     });
