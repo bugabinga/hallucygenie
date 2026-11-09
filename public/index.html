@@ -74,6 +74,11 @@
                                 class="quota-used"
                             >—</span></span><span
                             class="quota-item"
+                            data-type="weekly"
+                            title="Weekly"
+                            hidden
+                        >Week <span class="quota-used">—</span></span><span
+                            class="quota-item"
                             data-type="video"
                             title="Video"
                         >🎬 <span class="quota-used">—</span></span></span>
@@ -202,17 +207,6 @@
                         </button>
                     </div>
                 </form>
-                <div id="steer-hint" class="steer-hint" hidden>
-                    <span class="steer-hint-text">💡 Type to steer the response</span>
-                    <button
-                        id="steer-close"
-                        class="steer-close"
-                        type="button"
-                        aria-label="Dismiss steer hint"
-                    >
-                        ✕
-                    </button>
-                </div>
             </footer>
 
             <div
@@ -261,8 +255,8 @@
                     <div class="whats-new-body">
                         <p>
                             <strong>Steadier chats!</strong> Switch between chats with their own
-                            history, enjoy smoother replies, and dismiss the steering hint when you
-                            do not need it.
+                            history and steer replies right in the message box, without a popup
+                            covering your chat.
                         </p>
                         <p>
                             HallucyGenie can help make images, videos, voices, long narration,

@@ -5,7 +5,10 @@ description: MiniMax API integration for HallucyGenie. Use when working with Min
 
 # MiniMax API — HallucyGenie
 
-Current docs crawl: 2026-06-11 from `https://platform.minimax.io/docs/llms.txt` into `~/.pi/research/pages/`. Cross-checked `MiniMax-AI/MiniMax-Coding-Plan-MCP` source via `git_clone_safe` on earlier crawls.
+Baseline docs crawl: 2026-06-11 from `https://platform.minimax.io/docs/llms.txt` into `~/.pi/research/pages/`.
+Music/lyrics access policy rechecked against official docs on 2026-11-09; see Music Generation below.
+Other API facts retain the baseline date.
+Cross-checked `MiniMax-AI/MiniMax-Coding-Plan-MCP` source via `git_clone_safe` on earlier crawls.
 
 ## Base URLs
 
@@ -138,6 +141,18 @@ Unsupported TTS models returned `{"base_resp":{"status_code":2061,"status_msg":"
 - Image-to-image: `subject_reference: [{ type: "character", image_file }]`; image file can be public URL or data URL, JPG/JPEG/PNG, <10MB, best with single front-facing portrait.
 
 ## Music Generation
+
+- Access change effective 2026-08-20: paid Music Generation and Lyrics Generation APIs are closed to new users; existing paying users may continue.
+- Free music APIs were discontinued.
+- Official notices: [Music Generation](https://platform.minimax.io/docs/api-reference/music-generation.md), [Lyrics Generation](https://platform.minimax.io/docs/api-reference/lyrics-generation.md).
+- [Model list](https://platform.minimax.io/docs/faq/models.md) labels music models retired but explicitly preserves the existing-paying-user exception.
+- `music-3.0` appears in the same legacy API contract; switching models does not bypass the access restriction.
+- HallucyGenie observed HTTP `410` with provider code `2153` for this restriction; the numeric code is an observation, not a published error-code definition.
+- No supported replacement hosted endpoint or Subscription Key migration was found.
+- MiniMax Audio is a consumer alternative; open-source MiniMax Music 3 is a separate self-hosting integration, not a drop-in API replacement.
+- Do not tell users to shorten or retry prompts when this permanent access restriction occurs.
+
+Legacy-account API contract:
 
 - `POST /v1/music_generation`
 - HallucyGenie model: `music-2.6`.

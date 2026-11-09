@@ -481,6 +481,18 @@ function baseRespError(
     };
 }
 
+function permanentMusicAccessError(errorText: string, label: string): ToolResult | null {
+    try {
+        const data = JSON.parse(errorText) as {
+            base_resp?: { status_code?: number; status_msg?: string; };
+        };
+        if (data.base_resp?.status_code !== 2153) return null;
+        return baseRespError(data, label);
+    } catch {
+        return null;
+    }
+}
+
 function isObject(val: unknown): val is Record<string, unknown> {
     return typeof val === "object" && val !== null && !Array.isArray(val);
 }
@@ -999,6 +1011,8 @@ export async function generateLyrics(
 
         if (!resp.ok) {
             const errorText = await resp.text();
+            const accessError = permanentMusicAccessError(errorText, "Lyrics generation");
+            if (accessError) return accessError;
             return {
                 type: "error",
                 content: `Lyrics generation API error: ${resp.status} — ${errorText}`
@@ -1064,6 +1078,8 @@ export async function generateMusic(
 
         if (!resp.ok) {
             const errorText = await resp.text();
+            const accessError = permanentMusicAccessError(errorText, "Music generation");
+            if (accessError) return accessError;
             return {
                 type: "error",
                 content: `Music generation API error: ${resp.status} — ${errorText}`

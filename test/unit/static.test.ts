@@ -125,7 +125,12 @@ describe("index.html health", () => {
             visibleText(doc.querySelector(".message--welcome .message-content")),
             "Hey! 👋 I'm HallucyGenie. Ask me anything — I can chat, make images 🔥, do voices 🎙️, and create music 🎵"
         );
-        assert.match(visibleText(doc.querySelector("#quota-badge")), /🧮\s*—\s*🎬\s*—/);
+        assert.match(
+            Array.from(doc.querySelectorAll("#quota-badge .quota-item:not([hidden])")).map(
+                visibleText
+            ).join(" "),
+            /🧮\s*—\s*🎬\s*—/
+        );
     });
 
     it("has no formatter-specific ignore comments", () => {
@@ -724,12 +729,6 @@ describe("index.html health", () => {
         assert.match(styleCss, /\.quota-badge \{[^}]*cursor: default;/);
     });
 
-    it("steering hint is outside input layout flow", () => {
-        assert.match(styleCss, /\.steer-hint \{[^}]*position: absolute;/);
-        assert.doesNotMatch(styleCss, /\.steer-hint \{[^}]*margin-top:/);
-        assert.doesNotMatch(styleCss, /\.steer-hint \{[^}]*animation:/);
-    });
-
     it("thinking indicator is accessible but not visual layout", () => {
         assert.match(indexHtml, /<footer id="input-area">[\s\S]*id="typing-indicator"/);
         assert.match(indexHtml, /id="typing-indicator"[\s\S]*role="status"/);
@@ -932,8 +931,7 @@ describe("font vendoring health", () => {
                 ".create-tab",
                 ".tool-card",
                 ".assets-empty",
-                ".error-toast",
-                ".steer-hint"
+                ".error-toast"
             ]
         ) {
             assert.ok(styleCss.includes(selector), `${selector} selector`);

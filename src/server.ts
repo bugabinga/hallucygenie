@@ -2,20 +2,30 @@
 const draftKind = (path: string): "chat" | "create" | null =>
     path === "/api/draft/chat" ? "chat" : path === "/api/draft/create" ? "create" : null;
 
-// Helper to map model remain entry to quota response slice
-const quotaEntry = (
-    m: {
-        current_interval_usage_count: number;
-        current_interval_total_count: number;
-        remains_time: number;
-    } | null
-) => m
-    ? {
-        used: m.current_interval_usage_count,
-        total: m.current_interval_total_count,
-        resetsInMs: m.remains_time
-    }
-    : null;
+interface ModelRemain {
+    model_name: string;
+    current_interval_usage_count: number;
+    current_interval_total_count: number;
+    current_interval_remaining_percent?: number;
+    remains_time: number;
+    current_weekly_usage_count?: number;
+    current_weekly_total_count?: number;
+    current_weekly_remaining_percent?: number;
+    weekly_remains_time?: number;
+}
+
+const quotaEntry = (m: ModelRemain | null, period: "interval" | "weekly" = "interval") => {
+    if (!m) return null;
+    const total = m[`current_${period}_total_count`];
+    const remainingPercent = m[`current_${period}_remaining_percent`];
+    if (period === "weekly" && total === undefined && remainingPercent === undefined) return null;
+    return {
+        used: m[`current_${period}_usage_count`] ?? 0,
+        total: total ?? 0,
+        remainingPercent,
+        resetsInMs: period === "weekly" ? m.weekly_remains_time : m.remains_time
+    };
+};
 
 // HallucyGenie — HTTP server with SSE chat proxy
 // Target: Node.js runtime
@@ -1605,17 +1615,14 @@ export async function handleRequest(req: Request): Promise<Response> {
                 return jsonResponse({ error: "Failed to fetch quota" }, 502);
             }
             const data = (await resp.json()) as {
-                model_remains: Array<{
-                    model_name: string;
-                    current_interval_total_count: number;
-                    current_interval_usage_count: number;
-                    remains_time: number;
-                }>;
+                model_remains: ModelRemain[];
             };
             const find = (name: string) =>
                 data.model_remains.find((m) => m.model_name === name) ?? null;
+            const general = find("general") ?? data.model_remains[0] ?? null;
             return jsonResponse({
-                general: quotaEntry(find("general") ?? data.model_remains[0] ?? null),
+                general: quotaEntry(general),
+                weekly: quotaEntry(general, "weekly"),
                 video: quotaEntry(find("video"))
             });
         } catch (err) {

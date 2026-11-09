@@ -1348,23 +1348,18 @@ function setStreamingUI(streaming: boolean): void {
     const input = $("#chat-input") as HTMLTextAreaElement;
     const sendBtn = $("#send-button") as HTMLButtonElement;
     const typingIndicator = $("#typing-indicator");
-    const steerHint = $("#steer-hint");
-
     if (streaming) {
         input.disabled = false; // Allow typing during streaming for steering
         input.placeholder = "💡 Type to steer the response...";
         sendBtn.disabled = true;
         typingIndicator.classList.add("is-visible");
         typingIndicator.setAttribute("aria-hidden", "false");
-        steerHint.hidden = steerHint.dataset.dismissed === "true";
     } else {
         input.disabled = false;
         input.placeholder = "Type a message...";
         sendBtn.disabled = true; // Will be enabled by input handler
         typingIndicator.classList.remove("is-visible");
         typingIndicator.setAttribute("aria-hidden", "true");
-        steerHint.hidden = true;
-        delete steerHint.dataset.dismissed;
         input.focus();
     }
 }
@@ -1817,13 +1812,21 @@ function isCreateDraft(value: unknown): value is CreateDraft {
 
 // ── Quota Badge ──────────────────────────────────────────────────
 
+interface QuotaEntry {
+    used: number;
+    total: number;
+    remainingPercent?: number;
+}
+
 interface QuotaData {
-    general: { used: number; total: number; } | null;
-    video: { used: number; total: number; } | null;
+    general: QuotaEntry | null;
+    weekly: QuotaEntry | null;
+    video: QuotaEntry | null;
 }
 
 const QUOTA_LABELS: Record<keyof QuotaData, string> = {
     general: "General",
+    weekly: "Weekly",
     video: "Video"
 };
 
@@ -1833,10 +1836,7 @@ export async function updateQuotaBadge(): Promise<void> {
     const labels: string[] = [];
     try {
         const resp = await fetch("/api/quota");
-        if (!resp.ok) {
-            badge.setAttribute("aria-label", "Quota unavailable");
-            return;
-        }
+        if (!resp.ok) throw new Error("Quota unavailable");
         const data: QuotaData = await resp.json();
         const items = badge.querySelectorAll<HTMLSpanElement>(".quota-item[data-type]");
         for (const item of items) {
@@ -1845,10 +1845,28 @@ export async function updateQuotaBadge(): Promise<void> {
             const label = item.title || QUOTA_LABELS[type] || type;
             const used = item.querySelector(".quota-used");
             if (!used) continue;
+            item.hidden = !q;
             if (!q) {
                 used.textContent = "—";
                 item.className = "quota-item";
-                labels.push(`${label} quota unavailable`);
+                continue;
+            }
+            if (
+                typeof q.remainingPercent === "number" && Number.isFinite(q.remainingPercent)
+                && q.remainingPercent >= 0 && q.remainingPercent <= 100
+            ) {
+                const state = q.remainingPercent <= 5
+                    ? "critical"
+                    : q.remainingPercent <= 20
+                    ? "warning"
+                    : "ok";
+                used.textContent = `${q.remainingPercent}%`;
+                item.className = state === "critical"
+                    ? "quota-item critical"
+                    : state === "warning"
+                    ? "quota-item warn"
+                    : "quota-item";
+                labels.push(`${label}: ${q.remainingPercent}% remaining, ${state}`);
                 continue;
             }
             if (q.total === 0) {
@@ -1868,8 +1886,13 @@ export async function updateQuotaBadge(): Promise<void> {
                 : "quota-item";
             labels.push(`${label}: ${remaining} of ${q.total} remaining, ${state}`);
         }
-        badge.setAttribute("aria-label", labels.join(". "));
+        badge.setAttribute("aria-label", labels.join(". ") || "Quota unavailable");
     } catch {
+        for (const item of badge.querySelectorAll<HTMLSpanElement>(".quota-item[data-type]")) {
+            const used = item.querySelector(".quota-used");
+            if (used) used.textContent = "—";
+            item.className = "quota-item";
+        }
         badge.setAttribute("aria-label", "Quota unavailable");
     }
 }
@@ -1883,7 +1906,6 @@ export function init(): void {
     const lightbox = $("#lightbox");
     const lightboxClose = lightbox.querySelector(".lightbox-close") as HTMLElement;
     const lightboxBackdrop = lightbox.querySelector(".lightbox-backdrop") as HTMLElement;
-    const steerClose = $("#steer-close") as HTMLElement;
     const connectionStatus = $("#connection-status") as HTMLElement;
     const sessionSelect = document.querySelector<HTMLSelectElement>("#session-select");
     const sessionNew = document.querySelector<HTMLButtonElement>("#session-new");
@@ -2175,13 +2197,6 @@ export function init(): void {
             if (!profileModal.hidden) closeProfileModal();
             if (!createModal.hidden) closeCreateModal();
         }
-    });
-
-    // Steer close
-    steerClose.addEventListener("click", () => {
-        const steerHint = $("#steer-hint");
-        steerHint.hidden = true;
-        steerHint.dataset.dismissed = "true";
     });
 
     // ── Onboarding ──────────────────────────────────────────────────

@@ -155,8 +155,7 @@ textarea,
 .form-group label,
 .tool-card,
 .assets-empty,
-.error-toast,
-.steer-hint {
+.error-toast {
     font-family: var(--font-ui);
 }
 
@@ -1066,42 +1065,6 @@ textarea,
     cursor: not-allowed;
     opacity: 0.4;
     box-shadow: none;
-}
-
-/* ── Steer Hint ─────────────────────────────────────────────────────── */
-
-.steer-hint {
-    position: absolute;
-    left: var(--space-lg);
-    right: var(--space-lg);
-    bottom: calc(100% + var(--space-sm));
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    padding: var(--space-sm) var(--space-md);
-    background: linear-gradient(135deg, var(--color-tertiary-dark), var(--color-tertiary));
-    color: var(--color-text-inverse);
-    border-radius: var(--radius-sm);
-    font-size: 13px;
-    font-weight: 600;
-    box-shadow:
-        var(--shadow-sm),
-        var(--shadow-glow-tertiary);
-}
-
-.steer-close {
-    background: none;
-    border: none;
-    color: var(--color-text-inverse);
-    cursor: pointer;
-    font-size: 16px;
-    padding: var(--space-xs);
-    opacity: 0.6;
-    transition: opacity var(--snap);
-}
-
-.steer-close:hover {
-    opacity: 1;
 }
 
 @keyframes slide-up {

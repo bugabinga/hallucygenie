@@ -411,6 +411,50 @@ describe("getToolDefinitions", () => {
     });
 });
 
+describe("permanent music access errors", () => {
+    beforeEach(() => {
+        originalFetch = globalThis.fetch;
+    });
+
+    afterEach(() => {
+        globalThis.fetch = originalFetch;
+    });
+
+    const responseBody = {
+        base_resp: {
+            status_code: 2153,
+            status_msg:
+                "This Music API is no longer available to new users. Existing paying customers can continue using it."
+        }
+    };
+
+    it("preserves MiniMax 2153 diagnostics for HTTP 410 music and lyrics responses", async () => {
+        globalThis.fetch = async () => jsonResponse(responseBody, 410);
+        const music = await generateMusic("instrumental game music", API_KEY);
+        assert.equal(music.type, "error");
+        assert.equal(music.provider?.status_code, 2153);
+        assert.equal(music.provider?.status_msg, responseBody.base_resp.status_msg);
+
+        globalThis.fetch = async () => jsonResponse(responseBody, 410);
+        const lyrics = await generateLyrics("a song about space", API_KEY);
+        assert.equal(lyrics.type, "error");
+        assert.equal(lyrics.provider?.status_code, 2153);
+        assert.equal(lyrics.provider?.status_msg, responseBody.base_resp.status_msg);
+    });
+
+    it("leaves unrelated non-2xx provider errors unchanged", async () => {
+        const unrelated = { base_resp: { status_code: 2001, status_msg: "invalid prompt" } };
+        mockFetch(jsonResponse(unrelated, 400));
+        const result = await generateMusic("instrumental game music", API_KEY);
+        assert.equal(result.type, "error");
+        assert.equal(
+            result.content,
+            `Music generation API error: 400 — ${JSON.stringify(unrelated)}`
+        );
+        assert.equal(result.provider, undefined);
+    });
+});
+
 // ── MiniMax parameter contract ───────────────────────────────────────
 
 describe("MiniMax parameter contract", () => {

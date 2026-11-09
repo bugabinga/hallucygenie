@@ -5053,7 +5053,8 @@ describe("GET /api/quota", () => {
             const resp = await handleRequest(req);
             assert.equal(resp.status, 200);
             const body = (await resp.json()) as Record<string, unknown>;
-            assert.deepEqual(Object.keys(body).sort(), ["general", "video"]);
+            assert.deepEqual(Object.keys(body).sort(), ["general", "video", "weekly"]);
+            assert.equal(body.weekly, null);
             assert.equal((body.general as Record<string, number>).used, 17);
             assert.equal((body.general as Record<string, number>).total, 4500);
             assert.equal(body.video, null);
@@ -5075,6 +5076,11 @@ describe("GET /api/quota", () => {
                         model_name: "general",
                         current_interval_total_count: 0,
                         current_interval_usage_count: 0,
+                        current_interval_remaining_percent: 90,
+                        current_weekly_total_count: 0,
+                        current_weekly_usage_count: 0,
+                        current_weekly_remaining_percent: 84,
+                        weekly_remains_time: 596425385,
                         remains_time: 431284
                     },
                     {
@@ -5097,7 +5103,10 @@ describe("GET /api/quota", () => {
             const resp = await handleRequest(req);
             assert.equal(resp.status, 200);
             const body = (await resp.json()) as Record<string, Record<string, number>>;
-            assert.deepEqual(Object.keys(body).sort(), ["general", "video"]);
+            assert.deepEqual(Object.keys(body).sort(), ["general", "video", "weekly"]);
+            assert.equal(body.general.remainingPercent, 90);
+            assert.equal(body.weekly.remainingPercent, 84);
+            assert.equal(body.weekly.resetsInMs, 596425385);
             assert.equal(body.general.total, 0);
             assert.equal(body.general.used, 0);
             assert.equal(body.video.total, 0);

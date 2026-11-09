@@ -46,6 +46,10 @@ Then open <http://localhost:3000>.
 • `PORT`: optional. Defaults to `3000`.
 • `COVER_EXTRACTOR_URL`: optional sidecar for YouTube cover-song preprocessing.
 
+MiniMax music and lyrics APIs are closed to new users since 2026-08-20; existing paying accounts may continue.
+Changing prompts or model names does not restore access for restricted accounts.
+See [MiniMax's access notice](https://platform.minimax.io/docs/api-reference/music-generation.md).
+
 ## Data and backups
 
 • SQLite DB, generated assets, and pending video/long-narration tasks live under `data/`.

@@ -1152,6 +1152,7 @@ function setupDOM(): { win: Window; doc: Document; errors: string[]; } {
         <span id="connection-status" class="status-dot" title="Connected"></span>
         <button id="quota-badge">
           <span class="quota-item" data-type="general">🧮 <span class="quota-used">—</span></span>
+          <span class="quota-item" data-type="weekly" hidden>Week <span class="quota-used">—</span></span>
           <span class="quota-item" data-type="video">🎬 <span class="quota-used">—</span></span>
         </button>
         <button id="profile-btn" data-avatar="🎮">🎮 Profile</button>
@@ -1190,7 +1191,6 @@ function setupDOM(): { win: Window; doc: Document; errors: string[]; } {
         <button id="send-button" disabled></button>
       </div>
     </form>
-    <div id="steer-hint" hidden></div>
     <div id="message-list"></div>
     <div id="typing-indicator" role="status" aria-live="polite" aria-label="Genie is thinking" aria-hidden="true"></div>
     <div id="lightbox" role="dialog" aria-modal="true" aria-label="Image preview" hidden>
@@ -1202,7 +1202,6 @@ function setupDOM(): { win: Window; doc: Document; errors: string[]; } {
       <span id="error-toast-icon">😕</span>
       <span id="error-toast-message"></span>
     </div>
-    <button id="steer-close">×</button>
     <div id="profile-modal" role="dialog" aria-modal="true" aria-labelledby="profile-title" hidden>
       <div class="profile-backdrop"></div>
       <div class="profile-modal-content">
@@ -3266,20 +3265,6 @@ describe("init event binding", () => {
         closeBtn.dispatchEvent(new win.Event("click"));
 
         assert.ok(lightbox.hidden, "lightbox should be hidden after close click");
-    });
-
-    it("steer close click → hides steer hint", () => {
-        setupFullDOM();
-
-        const steerHint = doc.querySelector("#steer-hint");
-        steerHint.hidden = false;
-
-        init();
-
-        const steerClose = doc.querySelector("#steer-close");
-        steerClose.dispatchEvent(new win.Event("click"));
-
-        assert.ok(steerHint.hidden, "steer hint should be hidden");
     });
 
     it("pasted chat image uploads asset and starts analyze tool", async () => {
@@ -5474,11 +5459,62 @@ describe("updateQuotaBadge", () => {
         assert.equal(label.includes("unavailable"), false);
     });
 
-    it("does not crash on fetch failure", async () => {
-        setupDOM();
-        globalThis.fetch = () => Promise.reject(new Error("network fail"));
-        await updateQuotaBadge();
-        assert.ok(true, "should not throw");
+    it("renders rolling and weekly percentages, including exhausted quota", async () => {
+        const { doc } = setupDOM();
+        for (const remaining of [90, 20, 0]) {
+            globalThis.fetch = async () =>
+                new Response(JSON.stringify({
+                    general: { used: 0, total: 0, remainingPercent: remaining },
+                    weekly: { used: 0, total: 0, remainingPercent: 84 },
+                    video: null
+                }));
+            await updateQuotaBadge();
+            assert.equal(
+                doc.querySelector("[data-type=\"general\"] .quota-used")?.textContent,
+                `${remaining}%`
+            );
+            assert.equal(
+                doc.querySelector("[data-type=\"weekly\"] .quota-used")?.textContent,
+                "84%"
+            );
+            assert.equal(doc.querySelector("[data-type=\"weekly\"]")?.hidden, false);
+            assert.equal(doc.querySelector("[data-type=\"video\"]")?.hidden, true);
+            const state = remaining <= 5 ? "critical" : remaining <= 20 ? "warn" : "";
+            assert.equal(
+                doc.querySelector("[data-type=\"general\"]")?.className,
+                `quota-item${state ? ` ${state}` : ""}`
+            );
+            assert.match(
+                doc.querySelector("#quota-badge")?.getAttribute("aria-label") ?? "",
+                /Weekly: 84% remaining/
+            );
+        }
+    });
+
+    it("clears stale values after HTTP or network failure", async () => {
+        const { doc } = setupDOM();
+        for (const failure of ["http", "network"]) {
+            globalThis.fetch = async () =>
+                new Response(JSON.stringify({ general: { used: 1, total: 5 } }));
+            await updateQuotaBadge();
+            assert.equal(
+                doc.querySelector("[data-type=\"general\"] .quota-used")?.textContent,
+                "4"
+            );
+            globalThis.fetch = async () => {
+                if (failure === "network") throw new Error("network fail");
+                return new Response("unavailable", { status: 502 });
+            };
+            await updateQuotaBadge();
+            assert.equal(
+                doc.querySelector("[data-type=\"general\"] .quota-used")?.textContent,
+                "—"
+            );
+            assert.equal(
+                doc.querySelector("#quota-badge")?.getAttribute("aria-label"),
+                "Quota unavailable"
+            );
+        }
     });
 });
 

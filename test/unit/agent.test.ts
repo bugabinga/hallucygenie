@@ -283,6 +283,28 @@ describe("safeToolResultForUser", () => {
         assert.equal(result.type, "error");
         assert.match(result.content, /omit seed/);
     });
+
+    it("gives non-retry copy for MiniMax permanent music access errors", () => {
+        for (const toolName of ["generate_music", "generate_lyrics"]) {
+            const provider = {
+                stage: toolName === "generate_music" ? "Music generation" : "Lyrics generation",
+                status_code: 2153,
+                status_msg: "This Music API is no longer available to new users."
+            };
+            const result = safeToolResultForUser(toolName, {
+                type: "error",
+                content: `${provider.stage} failed: ${provider.status_msg}`,
+                provider
+            });
+
+            assert.equal(
+                result.content,
+                "MiniMax says music and lyrics generation aren't available for this account."
+            );
+            assert.doesNotMatch(result.content, /try|shorter|different topic/i);
+            assert.deepEqual(result.provider, provider);
+        }
+    });
 });
 
 describe("executeToolSafely", () => {

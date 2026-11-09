@@ -308,8 +308,6 @@ async function runE2ETests(): Promise<void> {
                     "#connection-status",
                     "#onboarding-slides",
                     "#chat-form",
-                    "#steer-hint",
-                    "#steer-close",
                     "#error-toast-icon",
                     "#whats-new-title",
                     "#profile-title",
@@ -659,9 +657,6 @@ async function runE2ETests(): Promise<void> {
             await page.fill("#chat-input", "Check layout stability");
             await page.press("#chat-input", "Enter");
             await page.waitForSelector("#typing-indicator.is-visible", { timeout: 5000 });
-            await expectVisible(page, "#steer-hint");
-            await page.click("#steer-close");
-            await expectHidden(page, "#steer-hint");
             const duringThinking = await measure();
             await page.waitForFunction(
                 () => {
@@ -681,6 +676,16 @@ async function runE2ETests(): Promise<void> {
             );
             await page.waitForTimeout(100);
             const beforeDone = await measure();
+            for (
+                const selector of ["#chat-input", ".message--assistant:last-child .message-content"]
+            ) {
+                const unobstructed = await page.locator(selector).evaluate((element) => {
+                    const r = element.getBoundingClientRect();
+                    const hit = document.elementFromPoint(r.x + r.width / 2, r.y + r.height / 2);
+                    return hit !== null && element.contains(hit);
+                });
+                assertEqual(unobstructed, true, `${selector} unobstructed during streaming`);
+            }
             await page.waitForFunction(
                 () =>
                     !document
@@ -793,26 +798,58 @@ async function runE2ETests(): Promise<void> {
             const page = await newPage(browser);
             await waitForApp(page, { dismissOnboarding: true });
 
-            // Inject a steer message directly
-            await page.evaluate(() => {
-                const msg = document.createElement("div");
-                msg.className = "message message--steer message--user";
-                msg.innerHTML = `
-                    <div class="message-avatar">💡</div>
-                    <div class="message-bubble">
-                        <div class="message-content">Steer test</div>
-                    </div>
-                `;
-                document.getElementById("message-list")?.appendChild(msg);
+            let received = "";
+            await page.route("**/api/steer", async (route) => {
+                received = route.request().postDataJSON().message;
+                await route.fulfill({ status: 200, json: { ok: true } });
             });
-
+            await page.evaluate(() => {
+                const originalFetch = fetch.bind(globalThis);
+                globalThis.fetch = async (input, init) => {
+                    const url = new URL(
+                        input instanceof Request ? input.url : String(input),
+                        location.href
+                    );
+                    if (url.pathname !== "/api/chat") return originalFetch(input, init);
+                    const encoder = new TextEncoder();
+                    return new Response(
+                        new ReadableStream({
+                            start(controller) {
+                                controller.enqueue(
+                                    encoder.encode("data: {\"delta\":\"A reply in progress\"}\n\n")
+                                );
+                                setTimeout(() => {
+                                    controller.enqueue(encoder.encode("data: [DONE]\n\n"));
+                                    controller.close();
+                                }, 3000);
+                            }
+                        }),
+                        { headers: { "Content-Type": "text/event-stream" } }
+                    );
+                };
+            });
+            await page.fill("#chat-input", "Start reply");
+            await page.press("#chat-input", "Enter");
+            await page.waitForSelector("#typing-indicator.is-visible");
+            assertEqual(
+                await page.locator("#chat-input").getAttribute("placeholder"),
+                "💡 Type to steer the response...",
+                "inline steering guidance"
+            );
+            await page.fill("#chat-input", "Steer test");
+            const steered = page.waitForResponse((response) =>
+                response.url().endsWith("/api/steer") && response.ok()
+            );
+            await page.press("#chat-input", "Enter");
+            await steered;
+            assertEqual(received, "Steer test", "steering request reaches API");
             const steerMsg = page.locator(".message--steer");
             await steerMsg.waitFor({ timeout: 5000 });
             const count = await steerMsg.count();
             if (count === 0) throw new Error("Steer message not found");
 
             const content = await page.textContent(".message--steer .message-content");
-            assertEqual(content, "Steer test", "Steer message content");
+            assertEqual(content?.trim(), "Steer test", "Steer message content");
 
             await page.close();
         },
@@ -1869,17 +1906,36 @@ async function runE2ETests(): Promise<void> {
 
     // Test 16: Quota badge shows in header
     await runTest(
-        "quota badge shows in header",
+        "quota badge shows rolling and weekly percentages",
         async () => {
             const page = await newPage(browser);
+            await page.route("**/api/quota", async (route) => {
+                await route.fulfill({
+                    status: 200,
+                    json: {
+                        general: { used: 0, total: 0, remainingPercent: 90 },
+                        weekly: { used: 0, total: 0, remainingPercent: 84 },
+                        video: null
+                    }
+                });
+            });
             await waitForApp(page, { dismissOnboarding: true });
-
-            // Wait for quota badge to be populated (async fetch from /api/quota)
-            const badge = page.locator("#quota-badge");
-            await badge.waitFor({ state: "visible", timeout: 5000 });
-
+            await page.waitForFunction(() =>
+                document.querySelector("[data-type=\"weekly\"] .quota-used")?.textContent === "84%"
+            );
             await expectVisible(page, ".quota-item[data-type='general']");
-            await expectVisible(page, ".quota-item[data-type='video']");
+            await expectVisible(page, ".quota-item[data-type='weekly']");
+            await expectHidden(page, ".quota-item[data-type='video']");
+            assertEqual(
+                await page.locator("[data-type=\"general\"] .quota-used").textContent(),
+                "90%",
+                "rolling quota percentage"
+            );
+            const label = await page.locator("#quota-badge").getAttribute("aria-label");
+            if (
+                !label?.includes("General: 90% remaining")
+                || !label.includes("Weekly: 84% remaining")
+            ) throw new Error("Quota window labels missing");
 
             await page.close();
         },

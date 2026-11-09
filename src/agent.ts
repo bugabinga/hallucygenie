@@ -121,6 +121,16 @@ export function safeToolResultForUser(toolName: string, result: ToolResult): Too
 
     log.warn("tool returned error", { toolName, error: truncateLogText(result.content) });
     if (result.content.startsWith("Invalid ")) return result;
+    if (
+        (toolName === "generate_music" || toolName === "generate_lyrics")
+        && result.provider?.status_code === 2153
+    ) {
+        return {
+            type: "error",
+            content: "MiniMax says music and lyrics generation aren't available for this account.",
+            provider: result.provider
+        };
+    }
 
     const ERROR_MESSAGES: Record<string, string> = {
         generate_image: "Couldn't generate the image. Try a shorter, clearer prompt.",

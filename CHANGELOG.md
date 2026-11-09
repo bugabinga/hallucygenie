@@ -5,7 +5,8 @@
 ### Kid notes
 
 • Chats keep their own history when switching sessions.
-• Chat replies stream more reliably, with clearer error handling and a dismissible steering hint.
+• Chat replies stream more reliably, with steering guidance inside the composer instead of a popup covering the chat.
+• Quota shows shared rolling and weekly percentages when MiniMax does not provide exact counts.
 
 ### Parent notes
 
@@ -13,6 +14,8 @@
 • Release publication pushes `v1.0.3` and `latest` from the same image.
 • Quadlet deployments can follow `latest` with Podman registry auto-updates, including future major versions.
 • Runtime env is unchanged; no built-in auth has been added.
+• MiniMax closed music and lyrics APIs to new users on 2026-08-20; affected accounts now see a clear unavailable-service message instead of prompt-retry advice.
+• Existing paying music accounts remain supported; no replacement hosted API was found in current docs.
 • Back up `data/` before upgrading; the non-root container needs write access to it.
 
 ### Database
