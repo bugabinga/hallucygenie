@@ -2215,6 +2215,7 @@ export function init(): void {
     function showSlide(idx: number): void {
         slides.forEach((s, i) => {
             s.classList.toggle("active", i === idx);
+            s.hidden = i !== idx;
         });
         dots.forEach((d, i) => {
             d.classList.toggle("active", i === idx);

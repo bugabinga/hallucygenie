@@ -5,6 +5,7 @@
 ### Kid notes
 
 • Chats keep their own history when switching sessions.
+• Keyboard focus stays inside the welcome tour while moving between steps.
 • Chat replies stream more reliably, with steering guidance inside the composer instead of a popup covering the chat.
 • Quota shows shared rolling and weekly percentages when MiniMax does not provide exact counts.
 • Chat and lyrics use MiniMax-M3.1-Flash; video uses MiniMax-H3 with 4, 6, or 10-second presets and 768p or 2K quality.

@@ -1168,9 +1168,11 @@ function setupDOM(): { win: Window; doc: Document; errors: string[]; } {
           </div>
           <div class="onboarding-slide" data-slide="1">
             <button class="btn-primary" id="onboarding-try-chat">Try it!</button>
+            <button class="btn-secondary onboarding-next">Show me Create →</button>
           </div>
           <div class="onboarding-slide" data-slide="2">
             <button class="btn-primary" id="onboarding-try-create">See!</button>
+            <button class="btn-secondary onboarding-next">One more thing →</button>
           </div>
           <div class="onboarding-slide" data-slide="3">
             <button class="btn-primary" id="onboarding-done">Start!</button>
@@ -5242,22 +5244,38 @@ describe("init accessibility behavior", () => {
         init();
 
         const onboarding = doc.querySelector("#onboarding") as HTMLElement;
-        const first = doc.querySelector(".onboarding-next") as HTMLButtonElement;
-        const last = doc.querySelector("#onboarding-done") as HTMLButtonElement;
+        const slides = Array.from(onboarding.querySelectorAll<HTMLElement>(".onboarding-slide"));
         const input = doc.querySelector("#chat-input") as HTMLTextAreaElement;
-
-        first.focus();
-        onboarding.dispatchEvent(
-            new win.KeyboardEvent("keydown", {
-                key: "Tab",
-                shiftKey: true,
-                bubbles: true,
-                cancelable: true
-            })
-        );
-        assert.equal(doc.activeElement, last);
-
-        last.click();
+        for (let index = 0; index < slides.length; index++) {
+            assert.deepEqual(slides.map(slide => slide.hidden), slides.map((_, i) => i !== index));
+            const buttons = slides[index].querySelectorAll<HTMLButtonElement>("button");
+            const first = buttons[0];
+            const last = buttons[buttons.length - 1];
+            first.focus();
+            onboarding.dispatchEvent(
+                new win.KeyboardEvent("keydown", {
+                    key: "Tab",
+                    shiftKey: true,
+                    bubbles: true,
+                    cancelable: true
+                })
+            );
+            assert.equal(doc.activeElement, last);
+            last.focus();
+            onboarding.dispatchEvent(
+                new win.KeyboardEvent("keydown", {
+                    key: "Tab",
+                    bubbles: true,
+                    cancelable: true
+                })
+            );
+            assert.equal(doc.activeElement, first);
+            if (index < slides.length - 1) {
+                const next = slides[index].querySelector<HTMLButtonElement>(".onboarding-next");
+                assert.ok(next);
+                next.click();
+            } else last.click();
+        }
         assert.equal(onboarding.hidden, true);
         assert.equal(doc.activeElement, input);
     });
