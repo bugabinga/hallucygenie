@@ -13,7 +13,6 @@ import {
     generateVideo,
     getToolDefinitions,
     MINIMAX_BASE,
-    MINIMAX_MODEL,
     MUSIC_DISABLED_MESSAGE,
     musicCoverPreprocess,
     textToSpeech,
@@ -846,12 +845,16 @@ describe("generateLyrics", () => {
             prompt: "make this chorus stronger",
             mode: "edit",
             lyrics: "[Chorus] Old words",
-            title: "Victory Song"
+            title: "  Victory Song  "
         }, API_KEY);
         const body = JSON.parse(String(capturedInit?.body));
         assert.equal(capturedUrl, `${MINIMAX_BASE}/anthropic/v1/messages`);
-        assert.equal(new Headers(capturedInit?.headers).get("Authorization"), `Bearer ${API_KEY}`);
-        assert.equal(body.model, MINIMAX_MODEL);
+        assert.equal(capturedInit?.method, "POST");
+        const headers = new Headers(capturedInit?.headers);
+        assert.equal(headers.get("Authorization"), `Bearer ${API_KEY}`);
+        assert.equal(headers.get("Content-Type"), "application/json");
+        assert.equal(body.model, "MiniMax-M3.1-Flash");
+        assert.equal(body.messages[0].role, "user");
         assert.equal(body.max_tokens, 2048);
         assert.deepEqual(body.output_config, { effort: "low" });
         assert.deepEqual(JSON.parse(body.messages[0].content), {
@@ -862,6 +865,49 @@ describe("generateLyrics", () => {
         });
         assert.equal(result.type, "text");
         assert.equal(result.content, "[Verse] Hello\n[Chorus] Again");
+    });
+
+    it("defaults to writing new lyrics and infers edits only from nonblank existing lyrics", async () => {
+        for (
+            const [input, expected] of [
+                ["  Game song  ", { prompt: "Game song", mode: "write_full_song" }],
+                [{ prompt: " Revise chorus ", lyrics: " Old words\n", title: " " }, {
+                    prompt: "Revise chorus",
+                    mode: "edit",
+                    lyrics: "Old words"
+                }],
+                [{ prompt: "New song", lyrics: " \n", title: " " }, {
+                    prompt: "New song",
+                    mode: "write_full_song"
+                }]
+            ] as const
+        ) {
+            let request = "";
+            globalThis.fetch = async (_url, init) => {
+                request = String(init?.body);
+                return jsonResponse({ content: [{ type: "text", text: "  [Verse] Hello\n" }] });
+            };
+            const result = await generateLyrics(input, API_KEY);
+            assert.deepEqual(result, { type: "text", content: "[Verse] Hello" });
+            const body = JSON.parse(request);
+            assert.deepEqual(JSON.parse(body.messages[0].content), expected);
+        }
+    });
+
+    it("does not report lyrics as successful when the provider envelope reports failure", async () => {
+        mockFetch(jsonResponse({
+            base_resp: { status_code: 1008, status_msg: "insufficient quota" },
+            content: [{ type: "text", text: "not valid lyrics" }]
+        }));
+        const result = await generateLyrics("A greeting song", API_KEY);
+        assert.equal(result.type, "error");
+        assert.ok(result.content.trim().length > 0);
+        assert.equal(result.content.includes("not valid lyrics"), false);
+        assert.deepEqual(result.provider, {
+            stage: "lyrics",
+            status_code: 1008,
+            status_msg: "insufficient quota"
+        });
     });
 
     it("validates input before fetch and reports provider failures", async () => {
@@ -883,7 +929,9 @@ describe("generateLyrics", () => {
 
         globalThis.fetch = async () => jsonResponse({}, 502);
         const http = await generateLyrics("song", API_KEY);
-        assert.equal(http.provider?.status_code, 502);
+        assert.equal(http.type, "error");
+        assert.ok(http.content.trim().length > 0);
+        assert.deepEqual(http.provider, { stage: "lyrics", status_code: 502 });
 
         globalThis.fetch = async () => new Response("not json", { status: 200 });
         const invalidJson = await generateLyrics("song", API_KEY);
@@ -897,11 +945,20 @@ describe("generateLyrics", () => {
         assert.match(network.content, /offline/);
     });
 
-    it("returns an error for an empty text response", async () => {
-        mockFetch(jsonResponse({ content: [{ type: "thinking", thinking: "plan" }] }));
-        const result = await generateLyrics("song", API_KEY);
-        assert.equal(result.type, "error");
-        assert.match(result.content, /no lyrics text/);
+    it("rejects missing, thinking-only, or whitespace-only lyrics responses", async () => {
+        for (
+            const response of [
+                {},
+                { content: [] },
+                { content: [{ type: "thinking", thinking: "plan" }] },
+                { content: [{ type: "text", text: " \n" }] }
+            ]
+        ) {
+            mockFetch(jsonResponse(response));
+            const result = await generateLyrics("song", API_KEY);
+            assert.equal(result.type, "error");
+            assert.match(result.content, /no lyrics text/);
+        }
     });
 });
 
