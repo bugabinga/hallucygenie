@@ -61,7 +61,12 @@ RELEASE_TAG=v1.0.2 mise run release --check ghcr.io/bugabinga/hallucygenie:v1.0.
 mise run release v1.0.2
 ```
 
-`mise run release` opens the release image in Chrome, asks for manual approval, tags, and pushes. Tag push publishes GHCR tags via `.github/workflows/release.yml`.
+`mise run release` opens the release image in Chrome, asks for manual approval, tags, and pushes.
+Tag push publishes the version tag and `ghcr.io/bugabinga/hallucygenie:latest` from the same image via `.github/workflows/release.yml`.
+For automatic updates, use `Image=ghcr.io/bugabinga/hallucygenie:latest` and `AutoUpdate=registry` in a Podman Quadlet, then enable the user `podman-auto-update.timer`.
+The next timer run follows newly published releases, including major versions; retain version tags for manual rollback.
+Publish the first `latest` image before switching an existing deployment.
+Runtime env is unchanged; backups remain required before upgrades.
 
 ## Commands
 

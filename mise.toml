@@ -211,7 +211,7 @@ description = "build, smoke, or push production image"
 usage = '''
 arg "[image]" default="hallucygenie:local" help="image tag"
 flag "--smoke" help="smoke-test an existing image"
-flag "--push" help="build and push ghcr.io/bugabinga/hallucygenie:vX.Y.Z"
+flag "--push" help="build and push ghcr.io/bugabinga/hallucygenie:vX.Y.Z and latest"
 '''
 run = '''
 set -e
@@ -243,7 +243,12 @@ if [ "${usage_push:-false}" = "true" ]; then
     RELEASE_TAG="$version" node scripts/release-check.ts
 fi
 podman build -f deploy/Containerfile --build-arg VERSION="$version" -t "$image" .
-if [ "${usage_push:-false}" = "true" ]; then podman push "$image"; fi
+if [ "${usage_push:-false}" = "true" ]; then
+    podman push "$image"
+    latest="${image%:*}:latest"
+    podman tag "$image" "$latest"
+    podman push "$latest"
+fi
 '''
 
 [tasks.release]

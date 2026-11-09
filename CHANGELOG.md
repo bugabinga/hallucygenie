@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased
+
+### Container
+
+• Release publication now pushes the version tag and `latest` from the same image.
+• Quadlet deployments can follow `latest` with Podman registry auto-updates, including future major versions.
+• Runtime env and database schema are unchanged.
+
 ## 1.0.2 - 2026-06-12
 
 First published release.

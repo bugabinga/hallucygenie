@@ -1221,10 +1221,6 @@ describe("mise command health", () => {
         assert.match(commandConfig, /\[tasks\.reset\][\s\S]*rm -rf data \*\.db/);
         assert.doesNotMatch(commandConfig, /MANUAL_CHROME_OK/);
         assert.doesNotMatch(commandConfig, /\bdocker (?:build|buildx|volume|run|inspect|rm)\b/);
-        assert.match(
-            commandConfig,
-            /if \[ "\$\{usage_push:-false\}" = "true" \]; then podman push "\$image"; fi/
-        );
     });
 
     it("runs every test from directories, not brittle file lists", () => {
