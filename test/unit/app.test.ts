@@ -3127,6 +3127,61 @@ describe("init event binding", () => {
         assert.equal(input.placeholder, "Say hi");
     });
 
+    it("pins multipart image uploads to the displayed project without overriding Content-Type", async () => {
+        setupFullDOM();
+        doc.querySelector("#create-analyze-form")?.insertAdjacentHTML(
+            "afterbegin",
+            "<button id=\"analyze-dropzone\" type=\"button\">Drop image</button><input id=\"analyze-file\" type=\"file\"><p id=\"analyze-file-status\"></p><div id=\"analyze-file-preview\" hidden></div>"
+        );
+        const uploads: Array<{ path: string; headers: Headers; }> = [];
+        globalThis.fetch = async (input, options) => {
+            const path = String(input);
+            if (options?.body instanceof FormData) {
+                uploads.push({ path, headers: new Headers(options.headers) });
+                return Response.json({
+                    assetId: "uploaded-image",
+                    assetUrl: "/asset/uploaded-image",
+                    profile: {
+                        version: 1,
+                        username: "",
+                        interests: "",
+                        hates: "",
+                        favorites: "",
+                        avatar: { type: "asset", value: "uploaded-image" },
+                        updatedAt: 0
+                    }
+                });
+            }
+            return Response.json({ messages: [], assets: [], items: [], draft: null });
+        };
+        init();
+        await new Promise(resolve => setTimeout(resolve, 20));
+        doc.body.insertAdjacentHTML(
+            "beforeend",
+            "<select id=\"session-select\" data-session-id=\"displayed-a\"><option value=\"displayed-a\" selected>A</option></select>"
+        );
+        for (const id of ["analyze-file", "img-reference-file", "profile-avatar-upload"]) {
+            const input = doc.querySelector(`#${id}`) as HTMLInputElement;
+            const file = new win.File(["png"], "project.png", { type: "image/png" });
+            Object.defineProperty(input, "files", { value: [file], configurable: true });
+            input.dispatchEvent(new win.Event("change", { bubbles: true }));
+            await new Promise(resolve => setTimeout(resolve, 30));
+        }
+        assert.deepEqual(uploads.map(upload => upload.path), [
+            "/api/analyze-image",
+            "/api/reference-image",
+            "/api/profile/avatar"
+        ]);
+        for (const upload of uploads) {
+            assert.equal(upload.headers.get("X-Session-Id"), "displayed-a", upload.path);
+            assert.equal(
+                upload.headers.has("Content-Type"),
+                false,
+                "browser owns multipart boundary"
+            );
+        }
+    });
+
     it("Create image reference upload validates, previews, fails, and clears", async () => {
         setupFullDOM();
         const calls: string[] = [];

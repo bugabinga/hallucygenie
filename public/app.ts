@@ -131,13 +131,15 @@ let currentProfile: UserProfile = {
     updatedAt: 0
 };
 
-export function createApiHeaders(): Record<string, string> {
+export function createApiHeaders(
+    contentType: string | null = "application/json"
+): Record<string, string> {
     const selected = typeof document === "undefined"
         ? null
         : document.querySelector<HTMLSelectElement>("#session-select");
     const session = selected?.dataset.sessionId || selected?.value;
     return {
-        "Content-Type": "application/json",
+        ...(contentType ? { "Content-Type": contentType } : {}),
         ...(session ? { "X-Session-Id": session } : {})
     };
 }
@@ -196,7 +198,11 @@ async function uploadProfileAvatar(file: File, profile: UserProfile): Promise<Us
     const body = new FormData();
     body.set("avatar", file);
     body.set("profile", JSON.stringify(profile));
-    const resp = await fetch("/api/profile/avatar", { method: "POST", body });
+    const resp = await fetch("/api/profile/avatar", {
+        method: "POST",
+        headers: createApiHeaders(null),
+        body
+    });
     if (!resp.ok) throw new Error(`Failed to upload avatar: ${resp.status}`);
     return ((await resp.json()) as { profile: UserProfile; }).profile;
 }
@@ -204,7 +210,11 @@ async function uploadProfileAvatar(file: File, profile: UserProfile): Promise<Us
 async function uploadAnalyzeImage(file: File): Promise<{ assetId: string; assetUrl: string; }> {
     const body = new FormData();
     body.set("image", file);
-    const resp = await fetch("/api/analyze-image", { method: "POST", body });
+    const resp = await fetch("/api/analyze-image", {
+        method: "POST",
+        headers: createApiHeaders(null),
+        body
+    });
     if (!resp.ok) throw new Error(`Failed to upload image: ${resp.status}`);
     return (await resp.json()) as { assetId: string; assetUrl: string; };
 }
@@ -212,7 +222,11 @@ async function uploadAnalyzeImage(file: File): Promise<{ assetId: string; assetU
 async function uploadReferenceImage(file: File): Promise<{ assetId: string; assetUrl: string; }> {
     const body = new FormData();
     body.set("image", file);
-    const resp = await fetch("/api/reference-image", { method: "POST", body });
+    const resp = await fetch("/api/reference-image", {
+        method: "POST",
+        headers: createApiHeaders(null),
+        body
+    });
     if (!resp.ok) throw new Error(`Failed to upload reference image: ${resp.status}`);
     return (await resp.json()) as { assetId: string; assetUrl: string; };
 }
