@@ -95,7 +95,7 @@ export function buildSystemPrompt(
 
 // ── Configuration ────────────────────────────────────────────────────
 
-export const MINIMAX_MODEL = "MiniMax-M3";
+export const MINIMAX_MODEL = "MiniMax-M3.1-Flash";
 export const MINIMAX_OUTPUT_TOKENS = 4096;
 
 // ── Types ────────────────────────────────────────────────────────────

@@ -73,7 +73,7 @@ function messageStart(): string {
                 type: "message",
                 role: "assistant",
                 content: [],
-                model: "MiniMax-M3",
+                model: "MiniMax-M3.1-Flash",
                 stop_reason: null
             }
         })
@@ -1305,7 +1305,7 @@ describe("runAgentLoop", () => {
         assert.equal(parsed.system[0].text, "You are helpful");
         // Messages should not contain system role
         assert.ok(!parsed.messages.some((m: { role: string; }) => m.role === "system"));
-        assert.equal(parsed.model, "MiniMax-M3");
+        assert.equal(parsed.model, "MiniMax-M3.1-Flash");
         assert.equal(parsed.max_tokens, 4096);
         assert.deepEqual(parsed.thinking, { type: "adaptive" });
         assert.equal(parsed.stream, true);
@@ -2636,12 +2636,14 @@ describe("toAnthropicPayload edge cases", () => {
         assert.equal(payload.max_tokens, 4096);
     });
 
-    it("sends M3 with adaptive thinking", () => {
+    it("sends M3.1-Flash with adaptive thinking and existing token limit", () => {
         const messages: ChatMessage[] = [{ role: "user" as const, content: "hi" }];
         const payload = toAnthropicPayload(messages, []);
         assert.equal(payload.model, MINIMAX_MODEL);
-        assert.equal(payload.model, "MiniMax-M3");
+        assert.equal(payload.model, "MiniMax-M3.1-Flash");
+        assert.equal(payload.max_tokens, 4096);
         assert.deepEqual(payload.thinking, { type: "adaptive" });
+        assert.equal(payload.output_config, undefined);
     });
 
     it("prompt caching adds cache_control to last tool only", () => {

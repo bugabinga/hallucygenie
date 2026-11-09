@@ -37,8 +37,8 @@ describe("E2E MiniMax fetch mocks", () => {
             ["/v1/lyrics_generation", { method: "POST", body: "{}" }],
             ["/v1/music_generation", { method: "POST", body: "{}" }],
             ["/v1/music_cover_preprocess", { method: "POST", body: "{}" }],
-            ["/v1/video_generation", { method: "POST", body: "{}" }],
-            ["/v1/query/video_generation", { method: "GET" }],
+            ["/v2/video_generation", { method: "POST", body: "{}" }],
+            ["/v2/query/video_generation/video-task-e2e", { method: "GET" }],
             ["/v1/files/retrieve", { method: "GET" }],
             ["/v1/coding_plan/search", { method: "POST", body: "{}" }],
             ["/v1/coding_plan/vlm", { method: "POST", body: "{}" }]

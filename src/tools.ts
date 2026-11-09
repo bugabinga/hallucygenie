@@ -59,8 +59,8 @@ export interface GenerateMusicOptions {
 
 export interface GenerateVideoOptions {
     prompt: string;
-    duration?: 6 | 10;
-    resolution?: "768p" | "1080p";
+    duration?: 4 | 6 | 10;
+    resolution?: "768p" | "2k";
 }
 
 export interface GenerateMusicCoverOptions {
@@ -102,7 +102,7 @@ const MUSIC_COVER_PROMPT_MAX = 300;
 const MUSIC_COVER_LYRICS_MIN = 10;
 const MUSIC_COVER_LYRICS_MAX = 1000;
 const VIDEO_PROMPT_MAX = 2000;
-const VIDEO_MODEL = "MiniMax-Hailuo-02";
+export const VIDEO_MODEL = "MiniMax-H3";
 
 // ── Auth note ───────────────────────────────────────────────────────
 //
@@ -280,12 +280,12 @@ export function getToolDefinitions(): ToolDefinition[] {
                     },
                     duration: {
                         type: "number",
-                        enum: [6, 10],
-                        description: "Video length preset in seconds. Defaults to 6."
+                        enum: [4, 6, 10],
+                        description: "Video length preset in seconds. Defaults to 4."
                     },
                     resolution: {
                         type: "string",
-                        enum: ["768p", "1080p"],
+                        enum: ["768p", "2k"],
                         description: "Video quality preset. Defaults to 768p."
                     }
                 },
@@ -502,17 +502,17 @@ function validateLyricsMode(value: unknown): GenerateLyricsOptions["mode"] | und
 }
 
 function validateVideoDuration(value: unknown): GenerateVideoOptions["duration"] | undefined {
-    return value === 6 || value === 10 ? value : undefined;
+    return value === 4 || value === 6 || value === 10 ? value : undefined;
 }
 
 function validateVideoResolution(value: unknown): GenerateVideoOptions["resolution"] | undefined {
-    return value === "768p" || value === "1080p" ? value : undefined;
+    return value === "768p" || value === "2k" ? value : undefined;
 }
 
 function providerVideoResolution(
     value: GenerateVideoOptions["resolution"] | undefined
-): "768P" | "1080P" {
-    return value === "1080p" ? "1080P" : "768P";
+): "768P" | "2K" {
+    return value === "2k" ? "2K" : "768P";
 }
 
 function hexToBase64(hex: string): string {
@@ -1124,17 +1124,15 @@ export interface GenerateVideoRuntimeOptions {
 
 type VideoCreateResponse = {
     task_id?: string;
-    data?: { task_id?: string; };
-    base_resp?: { status_code?: number; status_msg?: string; };
 };
 
 type VideoQueryResponse = {
-    status?: string;
-    task_status?: string;
-    file_id?: string;
-    message?: string;
-    data?: { status?: string; task_status?: string; file_id?: string; message?: string; };
-    base_resp?: { status_code?: number; status_msg?: string; };
+    task?: {
+        status?: string;
+        content?: { url?: string; };
+        message?: string;
+        error?: { message?: string; };
+    };
 };
 
 type FileRetrieveResponse = {
@@ -1146,10 +1144,6 @@ type FileRetrieveResponse = {
 
 function sleep(ms: number): Promise<void> {
     return new Promise((resolve) => setTimeout(resolve, ms));
-}
-
-function queryValue(data: VideoQueryResponse): VideoQueryResponse["data"] & VideoQueryResponse {
-    return { ...data, ...(data.data ?? {}) };
 }
 
 function fileDownloadUrl(data: FileRetrieveResponse): string | undefined {
@@ -1169,13 +1163,14 @@ export async function generateVideo(
     const options = (isObject(input) ? input : { prompt: input }) as GenerateVideoOptions;
     try {
         const prompt = boundedText(options.prompt, "video prompt", VIDEO_PROMPT_MAX);
-        const payload: Record<string, unknown> = {
+        const payload = {
             model: VIDEO_MODEL,
-            prompt,
-            duration: validateVideoDuration(options.duration) ?? 6,
-            resolution: providerVideoResolution(validateVideoResolution(options.resolution))
+            content: [{ type: "text", text: prompt }],
+            duration: validateVideoDuration(options.duration) ?? 4,
+            resolution: providerVideoResolution(validateVideoResolution(options.resolution)),
+            ratio: "16:9"
         };
-        const createResp = await fetch(`${MINIMAX_BASE}/v1/video_generation`, {
+        const createResp = await fetch(`${MINIMAX_BASE}/v2/video_generation`, {
             method: "POST",
             headers: {
                 "Content-Type": "application/json",
@@ -1191,21 +1186,17 @@ export async function generateVideo(
             };
         }
         const created = (await createResp.json()) as VideoCreateResponse;
-        const createBaseResp = baseRespError(created, "Video generation", "create");
-        if (createBaseResp) return createBaseResp;
-        const taskId = created.task_id ?? created.data?.task_id;
+        const taskId = created.task_id;
         if (!taskId) return { type: "error", content: "Video generation returned no task_id" };
 
-        const maxPolls = runtime.maxPolls ?? 90;
-        const pollDelayMs = runtime.pollDelayMs ?? 2000;
-        let fileId = "";
+        const maxPolls = Math.min(runtime.maxPolls ?? 60, 60);
+        const pollDelayMs = runtime.pollDelayMs ?? 10_000;
         for (let i = 0; i < maxPolls; i++) {
             if (i > 0 && pollDelayMs > 0) await sleep(pollDelayMs);
-            const queryUrl = new URL(`${MINIMAX_BASE}/v1/query/video_generation`);
-            queryUrl.searchParams.set("task_id", taskId);
-            const queryResp = await fetch(queryUrl, {
-                headers: { Authorization: `Bearer ${apiKey}` }
-            });
+            const queryResp = await fetch(
+                `${MINIMAX_BASE}/v2/query/video_generation/${encodeURIComponent(taskId)}`,
+                { headers: { Authorization: `Bearer ${apiKey}` } }
+            );
             if (!queryResp.ok) {
                 return {
                     type: "error",
@@ -1214,74 +1205,47 @@ export async function generateVideo(
                 };
             }
             const queried = (await queryResp.json()) as VideoQueryResponse;
-            const queryBaseResp = baseRespError(queried, "Video query", "query");
-            if (queryBaseResp) {
-                queryBaseResp.provider = { ...queryBaseResp.provider, task_id: taskId };
-                return queryBaseResp;
-            }
-            const q = queryValue(queried);
-            const status = String(q.status ?? q.task_status ?? "").toLowerCase();
-            if (status === "success" || status === "succeeded") {
-                fileId = q.file_id ?? "";
-                break;
-            }
-            if (status === "fail" || status === "failed" || status === "error") {
-                const statusMsg = q.message ?? status;
+            const task = queried.task;
+            if (!task?.status) {
                 return {
                     type: "error",
-                    content: `Video generation failed: ${statusMsg}`,
+                    content: "Video query returned no task status",
+                    provider: { stage: "query", status_msg: "missing task status", task_id: taskId }
+                };
+            }
+            const status = task.status.toLowerCase();
+            if (status === "succeeded") {
+                const url = task.content?.url;
+                if (!url) {
+                    return {
+                        type: "error",
+                        content: "Video query returned no output URL",
+                        provider: {
+                            stage: "query",
+                            status_msg: "missing output URL",
+                            task_id: taskId
+                        }
+                    };
+                }
+                return {
+                    type: "video",
+                    content: url,
+                    provider: { stage: "query", task_id: taskId }
+                };
+            }
+            if (status === "failed" || status === "cancelled" || status === "expired") {
+                const statusMsg = task.error?.message ?? task.message ?? status;
+                return {
+                    type: "error",
+                    content: `Video generation ${status}: ${statusMsg}`,
                     provider: { stage: "query", status_msg: statusMsg, task_id: taskId }
                 };
             }
         }
-        if (!fileId) {
-            return {
-                type: "error",
-                content: "Video generation timed out",
-                provider: { stage: "query", status_msg: "timeout", task_id: taskId }
-            };
-        }
-
-        const fileUrl = new URL(`${MINIMAX_BASE}/v1/files/retrieve`);
-        fileUrl.searchParams.set("file_id", fileId);
-        const fileResp = await fetch(fileUrl, {
-            headers: { Authorization: `Bearer ${apiKey}` }
-        });
-        if (!fileResp.ok) {
-            return {
-                type: "error",
-                content: `Video file API error: ${fileResp.status}`,
-                provider: {
-                    stage: "file",
-                    status_code: fileResp.status,
-                    task_id: taskId,
-                    file_id: fileId
-                }
-            };
-        }
-        const file = (await fileResp.json()) as FileRetrieveResponse;
-        const fileBaseResp = baseRespError(file, "Video file retrieve", "file");
-        if (fileBaseResp) {
-            fileBaseResp.provider = { ...fileBaseResp.provider, task_id: taskId, file_id: fileId };
-            return fileBaseResp;
-        }
-        const downloadUrl = fileDownloadUrl(file);
-        if (!downloadUrl) {
-            return {
-                type: "error",
-                content: "Video file retrieve returned no download_url",
-                provider: {
-                    stage: "file",
-                    status_msg: "missing download_url",
-                    task_id: taskId,
-                    file_id: fileId
-                }
-            };
-        }
         return {
-            type: "video",
-            content: downloadUrl,
-            provider: { stage: "file", task_id: taskId, file_id: fileId }
+            type: "error",
+            content: "Video generation timed out",
+            provider: { stage: "query", status_msg: "timeout", task_id: taskId }
         };
     } catch (err) {
         return { type: "error", content: `Video generation failed: ${String(err)}` };

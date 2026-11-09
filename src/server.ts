@@ -119,7 +119,7 @@ import {
     safeToolResultForUser,
     type SteerQueue
 } from "./agent.ts";
-import { MINIMAX_BASE, musicCoverPreprocess, type ToolResult } from "./tools.ts";
+import { MINIMAX_BASE, musicCoverPreprocess, type ToolResult, VIDEO_MODEL } from "./tools.ts";
 
 const steerQueues = new Map<string, SteerQueue>();
 
@@ -920,10 +920,10 @@ function normalizeCreateToolExecution(body: unknown): DirectToolExecution | stri
         const prompt = parseStringField(fields, "prompt", 2000);
         if (!prompt) return "prompt required";
         const args: Record<string, unknown> = { prompt };
-        const duration = optionalIntegerField(fields, "duration", 6, 10);
-        if (duration === 6 || duration === 10) args.duration = duration;
+        const duration = optionalIntegerField(fields, "duration", 4, 10);
+        if (duration === 4 || duration === 6 || duration === 10) args.duration = duration;
         const resolution = optionalStringField(fields, "resolution", 20);
-        if (resolution === "768p" || resolution === "1080p") args.resolution = resolution;
+        if (resolution === "768p" || resolution === "2k") args.resolution = resolution;
         return { name, args, prompt };
     }
 
@@ -2173,9 +2173,9 @@ function assetParamsJson(
     }
     if (toolName === "generate_video") {
         return JSON.stringify({
-            model: "MiniMax-Hailuo-02",
+            model: VIDEO_MODEL,
             prompt: prompt ?? stringParam(args, "prompt") ?? null,
-            duration: numberParam(args, "duration") ?? 6,
+            duration: numberParam(args, "duration") ?? 4,
             resolution: stringParam(args, "resolution") ?? "768p"
         });
     }

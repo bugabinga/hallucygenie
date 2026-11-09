@@ -34,7 +34,7 @@ function anthropicTextSSE(text: string): string {
                     type: "message",
                     role: "assistant",
                     content: [],
-                    model: "MiniMax-M3"
+                    model: "MiniMax-M3.1-Flash"
                 }
             }
         },
@@ -141,14 +141,15 @@ function minimaxResponse(url: URL, init?: RequestInit): Response | null {
                 base_resp: { status_code: 0 }
             });
 
-        case "/v1/video_generation":
-            return jsonResponse({ task_id: "video-task-e2e", base_resp: { status_code: 0 } });
+        case "/v2/video_generation":
+            return jsonResponse({ task_id: "video-task-e2e" });
 
-        case "/v1/query/video_generation":
+        case "/v2/query/video_generation/video-task-e2e":
             return jsonResponse({
-                status: "success",
-                file_id: "video-file-e2e",
-                base_resp: { status_code: 0 }
+                task: {
+                    status: "succeeded",
+                    content: { url: "https://example.com/generated/test-video.mp4" }
+                }
             });
 
         case "/v1/files/retrieve":

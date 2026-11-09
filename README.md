@@ -50,6 +50,14 @@ MiniMax music and lyrics APIs are closed to new users since 2026-08-20; existing
 Changing prompts or model names does not restore access for restricted accounts.
 See [MiniMax's access notice](https://platform.minimax.io/docs/api-reference/music-generation.md).
 
+## Models and billing
+
+Chat uses `MiniMax-M3.1-Flash`; images use `image-01`; speech uses `speech-2.8-hd`.
+Video uses base `MiniMax-H3` through the V2 API, with 4/6/10-second presets and 768p/2K quality.
+Default video request: 4 seconds, 768p, 16:9.
+H3 completed successfully with the operator's Explore subscription key; 2K and longer videos use more quota.
+The app uses `MINIMAX_API_KEY` only; it does not automatically retry requests with a PAYG key or switch billing sources.
+
 ## Data and backups
 
 • SQLite DB, generated assets, and pending video/long-narration tasks live under `data/`.

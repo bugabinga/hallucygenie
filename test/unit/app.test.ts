@@ -1280,8 +1280,8 @@ function setupDOM(): { win: Window; doc: Document; errors: string[]; } {
           </form>
           <form id="create-video-form" class="create-panel" data-panel="video" hidden>
             <textarea id="video-prompt"></textarea>
-            <select id="video-duration"><option value="6">6 seconds</option><option value="10">10 seconds</option></select>
-            <select id="video-resolution"><option value="768p">768p</option><option value="1080p">1080p</option></select>
+            <select id="video-duration"><option value="4">4 seconds</option><option value="6">6 seconds</option><option value="10">10 seconds</option></select>
+            <select id="video-resolution"><option value="768p">768p</option><option value="2k">2k</option></select>
           </form>
           <form id="create-cover-form" class="create-panel" data-panel="cover" hidden>
             <select id="cover-source-kind"><option value="direct">Audio URL</option><option value="upload">Audio file</option><option value="youtube">YouTube link</option></select>
@@ -3370,7 +3370,7 @@ describe("init event binding", () => {
 
         (doc.querySelector("#video-prompt") as HTMLTextAreaElement).value = "fox trailer";
         (doc.querySelector("#video-duration") as HTMLSelectElement).value = "10";
-        (doc.querySelector("#video-resolution") as HTMLSelectElement).value = "1080p";
+        (doc.querySelector("#video-resolution") as HTMLSelectElement).value = "2k";
         (doc.querySelector("#create-video-form") as HTMLFormElement).dispatchEvent(
             new win.Event("submit", { bubbles: true, cancelable: true })
         );
@@ -3418,7 +3418,7 @@ describe("init event binding", () => {
             },
             {
                 tool_name: "generate_video",
-                input: { prompt: "fox trailer", duration: 10, resolution: "1080p" }
+                input: { prompt: "fox trailer", duration: 10, resolution: "2k" }
             },
             {
                 tool_name: "text_to_speech",
@@ -3934,7 +3934,7 @@ describe("init event binding", () => {
             new win.CustomEvent("hallucygenie:tweak-tool", {
                 detail: {
                     toolName: "generate_video",
-                    input: { prompt: "space", duration: 10, resolution: "1080p" }
+                    input: { prompt: "space", duration: 10, resolution: "2k" }
                 }
             })
         );
@@ -4012,7 +4012,7 @@ describe("init event binding", () => {
                                     input: {
                                         prompt: "recent video",
                                         duration: 10,
-                                        resolution: "1080p"
+                                        resolution: "2k"
                                     }
                                 }
                             ]
@@ -4128,7 +4128,7 @@ describe("init event binding", () => {
                                 video: {
                                     prompt: "saved video",
                                     duration: "10",
-                                    resolution: "1080p"
+                                    resolution: "2k"
                                 },
                                 voice: {
                                     text: "",

@@ -1699,7 +1699,7 @@ function defaultCreateDraft(): CreateDraft {
             cover_feature_id: "",
             cover_lyrics: ""
         },
-        video: { prompt: "", duration: "6", resolution: "768p" },
+        video: { prompt: "", duration: "4", resolution: "768p" },
         voice: {
             text: "",
             speed: "1.0",
@@ -1788,8 +1788,10 @@ function applyCreateDraft(draft: CreateDraft): void {
     ($("#cover-feature-id") as HTMLInputElement).value = draft.music.cover_feature_id ?? "";
     ($("#cover-lyrics") as HTMLTextAreaElement).value = draft.music.cover_lyrics ?? "";
     ($("#video-prompt") as HTMLTextAreaElement).value = draft.video?.prompt ?? "";
-    ($("#video-duration") as HTMLSelectElement).value = draft.video?.duration ?? "6";
-    ($("#video-resolution") as HTMLSelectElement).value = draft.video?.resolution ?? "768p";
+    ($("#video-duration") as HTMLSelectElement).value = draft.video?.duration ?? "4";
+    ($("#video-resolution") as HTMLSelectElement).value = draft.video?.resolution === "2k"
+        ? "2k"
+        : "768p";
     ($("#voice-text") as HTMLTextAreaElement).value = draft.voice.text;
     ($("#voice-speed") as HTMLSelectElement).value = draft.voice.speed;
     const voiceId = document.querySelector("#voice-id") as HTMLSelectElement | null;
@@ -2567,8 +2569,8 @@ export function init(): void {
             setCreateTab(kind === "cover" ? "cover" : "music");
         } else if (kind === "video") {
             videoPromptInput.value = String(inputData.prompt ?? "");
-            videoDurationInput.value = String(inputData.duration ?? "6");
-            videoResolutionInput.value = String(inputData.resolution ?? "768p");
+            videoDurationInput.value = String(inputData.duration ?? "4");
+            videoResolutionInput.value = inputData.resolution === "2k" ? "2k" : "768p";
             setCreateTab("video");
         } else if (kind === "voice") {
             voiceTextInput.value = String(inputData.text ?? "");

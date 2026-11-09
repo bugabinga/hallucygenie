@@ -7,6 +7,7 @@
 • Chats keep their own history when switching sessions.
 • Chat replies stream more reliably, with steering guidance inside the composer instead of a popup covering the chat.
 • Quota shows shared rolling and weekly percentages when MiniMax does not provide exact counts.
+• Chat uses MiniMax-M3.1-Flash; video uses MiniMax-H3 with 4, 6, or 10-second presets and 768p or 2K quality.
 
 ### Parent notes
 
@@ -16,6 +17,9 @@
 • Runtime env is unchanged; no built-in auth has been added.
 • MiniMax closed music and lyrics APIs to new users on 2026-08-20; affected accounts now see a clear unavailable-service message instead of prompt-retry advice.
 • Existing paying music accounts remain supported; no replacement hosted API was found in current docs.
+• Video creation/query now uses the H3 V2 API and stores its output directly as a local asset; default video length is 4 seconds.
+• Explore remains the default credential; no automatic PAYG fallback was added.
+• Explicit testing of the supplied PAYG key also denied music and lyrics access with HTTP 410 / code 2153.
 • Back up `data/` before upgrading; the non-root container needs write access to it.
 
 ### Database

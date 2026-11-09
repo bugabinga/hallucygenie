@@ -1682,6 +1682,66 @@ describe("SSE streaming from Anthropic endpoint", () => {
         }
     });
 
+    it("reports restricted music and lyrics through Create without a PAYG retry", async () => {
+        const previousApiKey = process.env.MINIMAX_API_KEY;
+        const previousPaygKey = process.env.MINIMAX_PAYG_KEY;
+        process.env.MINIMAX_API_KEY = "subscription-test-key";
+        process.env.MINIMAX_PAYG_KEY = "payg-must-not-be-used";
+        try {
+            for (const toolName of ["generate_music", "generate_lyrics"]) {
+                const sessionId = `restricted-${toolName}`;
+                const database = requireDb();
+                createSession(database, sessionId, "Restricted music");
+                const calls: string[] = [];
+                globalThis.fetch = async (_url, init) => {
+                    calls.push(_url.toString());
+                    assert.equal(
+                        new Headers(init?.headers).get("Authorization"),
+                        "Bearer subscription-test-key"
+                    );
+                    return new Response(
+                        JSON.stringify({
+                            base_resp: {
+                                status_code: 2153,
+                                status_msg: "This Music API is no longer available to new users."
+                            }
+                        }),
+                        { status: 410, headers: { "Content-Type": "application/json" } }
+                    );
+                };
+                const response = await handleRequest(makeRequest("POST", "/api/create-tool", {
+                    tool_name: toolName,
+                    input: { prompt: "A short friendly greeting" }
+                }, { "X-Session-Id": sessionId }));
+                const body = await readBody(response);
+                const endpoint = toolName === "generate_music"
+                    ? "/v1/music_generation"
+                    : "/v1/lyrics_generation";
+                // Session naming can call the text model; media submission must not retry.
+                assert.equal(
+                    calls.filter((url) => url.endsWith(endpoint)).length,
+                    1,
+                    calls.join("\n")
+                );
+                assert.ok(body.includes("aren't available for this account"));
+                assert.ok(body.includes("\"type\":\"error\""));
+                assert.equal(body.includes("Try a shorter"), false);
+                assert.equal(body.includes("Try a different topic"), false);
+                assert.equal(body.includes("This Music API"), false);
+                assert.equal(getAssets(database, sessionId).length, 0);
+                const history = listToolInputHistory(database, sessionId);
+                assert.equal(history[0]?.status, "failed");
+                assert.equal(history[0]?.provider_status_code, 2153);
+            }
+        } finally {
+            globalThis.fetch = REAL_FETCH;
+            if (previousApiKey === undefined) delete process.env.MINIMAX_API_KEY;
+            else process.env.MINIMAX_API_KEY = previousApiKey;
+            if (previousPaygKey === undefined) delete process.env.MINIMAX_PAYG_KEY;
+            else process.env.MINIMAX_PAYG_KEY = previousPaygKey;
+        }
+    });
+
     it("executes Create video, downloads asset, and keeps provider URL out of history", async () => {
         const sessionId = "create-video-session";
         const database = requireDb();
@@ -1692,25 +1752,30 @@ describe("SSE streaming from Anthropic endpoint", () => {
         globalThis.fetch = async (url: string | URL | Request, init?: RequestInit) => {
             const urlStr = url.toString();
             calls.push(urlStr);
-            if (urlStr.endsWith("/v1/video_generation")) {
+            if (urlStr.endsWith("/v2/video_generation")) {
                 const payload = JSON.parse(String(init?.body));
-                assert.equal(payload.model, "MiniMax-Hailuo-02");
-                assert.equal(payload.prompt, "fox mascot intro");
+                assert.equal(payload.model, "MiniMax-H3");
+                assert.deepEqual(payload.content, [{ type: "text", text: "fox mascot intro" }]);
+                assert.equal(payload.duration, 4);
+                assert.equal(payload.resolution, "2K");
+                assert.equal(payload.ratio, "16:9");
                 return new Response(JSON.stringify({ task_id: "video-task-1" }), {
                     status: 200,
                     headers: { "Content-Type": "application/json" }
                 });
             }
-            if (urlStr.includes("/v1/query/video_generation")) {
-                return new Response(JSON.stringify({ status: "Success", file_id: "file-1" }), {
-                    status: 200,
-                    headers: { "Content-Type": "application/json" }
-                });
-            }
-            if (urlStr.includes("/v1/files/retrieve")) {
+            if (urlStr.endsWith("/v2/query/video_generation/video-task-1")) {
                 return new Response(
-                    JSON.stringify({ download_url: "https://cdn.example/output.mp4" }),
-                    { status: 200, headers: { "Content-Type": "application/json" } }
+                    JSON.stringify({
+                        task: {
+                            status: "succeeded",
+                            content: { url: "https://cdn.example/output.mp4" }
+                        }
+                    }),
+                    {
+                        status: 200,
+                        headers: { "Content-Type": "application/json" }
+                    }
                 );
             }
             if (urlStr === "https://cdn.example/output.mp4") {
@@ -1729,7 +1794,7 @@ describe("SSE streaming from Anthropic endpoint", () => {
                     "/api/create-tool",
                     {
                         tool_name: "generate_video",
-                        input: { prompt: "fox mascot intro", duration: 6, resolution: "768p" }
+                        input: { prompt: "fox mascot intro", duration: 4, resolution: "2k" }
                     },
                     { "X-Session-Id": sessionId }
                 )
@@ -1753,7 +1818,12 @@ describe("SSE streaming from Anthropic endpoint", () => {
             assert.equal(tasks.length, 1);
             assert.equal(tasks[0]?.status, "succeeded");
             assert.equal(tasks[0]?.asset_id, assets[0]?.id);
-            assert.ok(calls.some((url) => url.includes("task_id=video-task-1")));
+            assert.ok(calls.some((url) => url.endsWith("/v2/query/video_generation/video-task-1")));
+            assert.equal(calls.some((url) => url.includes("/v1/files/retrieve")), false);
+            const params = JSON.parse(assets[0]?.params_json ?? "{}");
+            assert.equal(params.model, "MiniMax-H3");
+            assert.equal(params.duration, 4);
+            assert.equal(params.resolution, "2k");
         } finally {
             globalThis.fetch = REAL_FETCH;
             if (previousApiKey === undefined) delete process.env.MINIMAX_API_KEY;
@@ -1769,23 +1839,22 @@ describe("SSE streaming from Anthropic endpoint", () => {
         process.env.MINIMAX_API_KEY = "test-key";
         globalThis.fetch = async (url: string | URL | Request) => {
             const urlStr = url.toString();
-            if (urlStr.endsWith("/v1/video_generation")) {
+            if (urlStr.endsWith("/v2/video_generation")) {
                 return new Response(JSON.stringify({ task_id: "video-task-file-url" }), {
                     status: 200,
                     headers: { "Content-Type": "application/json" }
                 });
             }
-            if (urlStr.includes("/v1/query/video_generation")) {
-                return new Response(JSON.stringify({ status: "Success", file_id: "file-local" }), {
-                    status: 200,
-                    headers: { "Content-Type": "application/json" }
-                });
-            }
-            if (urlStr.includes("/v1/files/retrieve")) {
-                return new Response(JSON.stringify({ download_url: "file:///tmp/output.mp4" }), {
-                    status: 200,
-                    headers: { "Content-Type": "application/json" }
-                });
+            if (urlStr.endsWith("/v2/query/video_generation/video-task-file-url")) {
+                return new Response(
+                    JSON.stringify({
+                        task: { status: "succeeded", content: { url: "file:///tmp/output.mp4" } }
+                    }),
+                    {
+                        status: 200,
+                        headers: { "Content-Type": "application/json" }
+                    }
+                );
             }
             throw new Error(`unexpected fetch ${urlStr}`);
         };
@@ -1822,15 +1891,17 @@ describe("SSE streaming from Anthropic endpoint", () => {
         process.env.MINIMAX_API_KEY = "test-key";
         globalThis.fetch = async (url: string | URL | Request) => {
             const urlStr = url.toString();
-            if (urlStr.endsWith("/v1/video_generation")) {
+            if (urlStr.endsWith("/v2/video_generation")) {
                 return new Response(JSON.stringify({ task_id: "video-task-sensitive" }), {
                     status: 200,
                     headers: { "Content-Type": "application/json" }
                 });
             }
-            if (urlStr.includes("/v1/query/video_generation")) {
+            if (urlStr.endsWith("/v2/query/video_generation/video-task-sensitive")) {
                 return new Response(
-                    JSON.stringify({ status: "Fail", message: "output new_sensitive" }),
+                    JSON.stringify({
+                        task: { status: "failed", error: { message: "output new_sensitive" } }
+                    }),
                     { status: 200, headers: { "Content-Type": "application/json" } }
                 );
             }

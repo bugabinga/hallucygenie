@@ -6,8 +6,8 @@ description: MiniMax API integration for HallucyGenie. Use when working with Min
 # MiniMax API — HallucyGenie
 
 Baseline docs crawl: 2026-06-11 from `https://platform.minimax.io/docs/llms.txt` into `~/.pi/research/pages/`.
-Music/lyrics access policy rechecked against official docs on 2026-11-09; see Music Generation below.
-Other API facts retain the baseline date.
+Models, M Plan billing, music access, and H3 V2 contracts rechecked on 2026-11-09.
+Unrevised API facts retain the baseline date.
 Cross-checked `MiniMax-AI/MiniMax-Coding-Plan-MCP` source via `git_clone_safe` on earlier crawls.
 
 ## Base URLs
@@ -34,8 +34,11 @@ Cross-checked `MiniMax-AI/MiniMax-Coding-Plan-MCP` source via `git_clone_safe` o
 ### Anthropic-compatible chat
 
 - `POST /anthropic/v1/messages`
-- Models: `MiniMax-M3`, `MiniMax-M2.7-highspeed`, `MiniMax-M2.7`, `MiniMax-M2.5-highspeed`, `MiniMax-M2.5`, `MiniMax-M2.1-highspeed`, `MiniMax-M2.1`, `MiniMax-M2`.
-- Context window: `MiniMax-M3` 1,000,000 tokens; M2.x 204,800 tokens. Max token count means input + output.
+- Current text models: `MiniMax-M3.1-Flash`, `MiniMax-M3`; older M2.x models are on retirement schedules.
+- `MiniMax-M3.1-Flash` always thinks and supports `output_config.effort`: `low`, `medium`, `high`, `xhigh`, `max` (default `max`).
+- HallucyGenie uses `MiniMax-M3.1-Flash` with adaptive thinking, streaming, and its existing 4096 output-token cap.
+- Current contract: https://platform.minimax.io/docs/api-reference/text-chat-anthropic.md
+- Context window: M3.1 Flash and M3 support 1,000,000 tokens; legacy M2.x 204,800 tokens. Max token count means input + output.
 - `max_tokens`: M3 recommended 131,072 and max 524,288; M2.x recommended 65,536 and max 204,800.
 - Highspeed M2.x output: ~100 tps. Standard M2.x: ~60 tps.
 - Supported params: `model`, `messages`, `max_tokens`, `stream`, `system`, `temperature`, `tool_choice`, `tools`, `top_p`, `metadata`, `thinking`.
@@ -91,7 +94,7 @@ Cross-checked `MiniMax-AI/MiniMax-Coding-Plan-MCP` source via `git_clone_safe` o
 
 ### Async long TTS
 
-- `POST /v1/t2a_async_v2` — create async speech task; direct text input max **50,000 characters**.
+- `POST /v1/t2a_async_v2` — create async speech task; current direct text input max **100,000 characters**; HallucyGenie intentionally retains its 50,000-character cap.
 - `text_file_id` input max **1,000,000 characters**; supported file formats: `txt`, `zip`.
 - Async `audio_setting.audio_sample_rate`: `8000|16000|22050|24000|32000|44100`; unlike sync TTS, async uses `audio_sample_rate`, not `sample_rate`.
 - Async `audio_setting.format`: `mp3|pcm|flac|wav|pcmu_raw|pcmu_wav|opus`; `voice_modify` supports `mp3|wav|flac` only.
@@ -175,28 +178,29 @@ Legacy-account API contract:
 - HallucyGenie uses direct internal endpoints:
   - `POST /v1/coding_plan/search` with `{ q }` → organic results.
   - `POST /v1/coding_plan/vlm` with `{ prompt, image_url }` → text description.
-- Current public docs describe MCP tool schema, not a stable OpenAPI contract for direct HTTP search/VLM endpoints.
+- Official M Plan CLI uses these exact direct routes: https://github.com/MiniMax-AI/cli/blob/main/src/client/endpoints.ts
+- Successful subscription-key search and image-understanding calls were observed on 2026-11-09; backend model selection is provider-managed.
 - `understand_image` docs accept `prompt` + `image_url`; docs say JPEG/PNG/GIF/WebP, max 20MB, HTTP/HTTPS URL or local file path in MCP.
 - Official `MiniMax-Coding-Plan-MCP` source currently normalizes `understand_image` input before the direct VLM call: HTTP/HTTPS URLs are downloaded, local files are read, existing data URLs pass through, and `/v1/coding_plan/vlm` receives `image_url` as a `data:image/{jpeg|png|webp};base64,...` URL. Raw public URLs can return `2013 invalid image URL` on the direct endpoint.
 - HallucyGenie must never persist or log raw image data. If it calls VLM directly, convert image bytes in memory only, send to provider only, and store compact text/history only.
 
 ## Video Generation
 
-- Current Token Plan docs say eligible video draws from shared coverage; new Ultra notes 5 video generations/day. Project has not live-tested video quota.
-- Create/query/download async flow: create task → `task_id` → query → `file_id` → download.
-- Endpoints:
-  - `POST /v1/video_generation` variants: text-to-video, image-to-video, first+last frame, subject-reference video.
-  - `GET /v1/query/video_generation` — query by `task_id`.
-  - `GET /v1/files/retrieve` — download/retrieve video by `file_id`.
-- Models:
-  - `MiniMax-Hailuo-2.3`: T2V + I2V; 1080p 6s, 768p 6s/10s.
-  - `MiniMax-Hailuo-2.3-Fast`: I2V; 1080p 6s, 768p 6s/10s.
-  - `MiniMax-Hailuo-02`: T2V + I2V; 1080p 6s, 768p 6s/10s, 512p 6s/10s.
+- Base `MiniMax-H3` is current; Highspeed/Lite/Max are distinct variants, not verified by a base-model test.
+- H3 is documented in M Plan Explore/Build; not included in Go or legacy Token Plan.
+- A base H3 4-second 768P task completed successfully with the operator's Explore key on 2026-11-09, resolving conflicting generic PAYG guidance for that tested case.
+- Create: `POST /v2/video_generation` with `model`, `content: [{type:"text",text:prompt}]`, `duration`, `resolution`, and text-to-video `ratio`.
+- Query: `GET /v2/query/video_generation/{task_id}`; success is `task.status: "succeeded"` with `task.content.url`.
+- H3 output is downloaded directly; do not use V1 `file_id` retrieval.
+- Base H3 supports 4–15 seconds and `768P`/`2K`; Genie exposes 4/6/10-second presets, defaults to 4 seconds and 768p, with 16:9 output.
+- Failed/cancelled/expired tasks are terminal; do not silently resubmit or switch credentials.
+- Contracts: https://platform.minimax.io/docs/api-reference/video-generation-v2-create.md and https://platform.minimax.io/docs/api-reference/video-generation-v2-query.md
+- Hailuo V1 remains a separate legacy contract, not compatible with H3 payload/query shapes.
 - Video Agent API: template-based videos; create + query endpoints. Example templates: `392747428568649728` Diving (image required, prompt not required), `393769180141805569` Run for Life (image + prompt required).
 
 ## File Management
 
-Used by async TTS/video and uploads.
+Used by async TTS, legacy video, and uploads; H3 V2 returns its output URL directly.
 
 - `POST /v1/files/upload`
 - `GET /v1/files/list`
@@ -212,9 +216,20 @@ Used by async TTS/video and uploads.
 - Upload formats by purpose: `voice_clone` and `prompt_audio` support `mp3|m4a|wav`; `t2a_async_input` text file for async long TTS; `t2a_async_input` supports `txt|zip` for async long TTS.
 - Limits: 100GB total capacity, 512MB single document.
 
-## Quotas — Token Plan
+## Quotas and billing — M Plan
 
-Current 2026-06-11 docs no longer publish fixed per-model daily/request quota tables.
+- Current tiers: Go, Explore, Build; text, image, audio, search, and understanding share plan usage, while H3 is included in Explore/Build.
+- Non-video usage has rolling 5-hour and weekly windows; video uses the weekly window.
+- Subscription keys consume plan quota and eligible credit packs; standard PAYG keys consume account balance.
+- PAYG-priced endpoints can still consume M Plan quota; a listed monetary price does not establish a PAYG-key requirement.
+- Do not automatically switch billing credentials after a failed request.
+- Music/lyrics access denial was observed with both the subscription and supplied PAYG key (HTTP 410, code 2153); this is not a general proof about every historical account.
+- Source: https://platform.minimax.io/docs/m-plan/faq.md
+
+### Historical Token Plan baseline (2026-06-11)
+
+The following retained observations predate M Plan and must not override current access restrictions.
+The 2026-06-11 docs no longer published fixed per-model daily/request quota tables.
 
 | Tier  | Price      | Quota windows                     | Agent usage | Resource coverage          |
 | ----- | ---------- | --------------------------------- | ----------- | -------------------------- |

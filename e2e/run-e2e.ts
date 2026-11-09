@@ -1398,7 +1398,7 @@ async function runE2ETests(): Promise<void> {
             await page.click(".create-tab[data-tab='video']");
             await page.fill("#video-prompt", "pixel kart victory lap");
             await page.selectOption("#video-duration", "10");
-            await page.selectOption("#video-resolution", "1080p");
+            await page.selectOption("#video-resolution", "2k");
             const createToolRequest = page.waitForRequest(
                 (req) => req.url().includes("/api/create-tool") && req.method() === "POST"
             );
@@ -1408,18 +1408,21 @@ async function runE2ETests(): Promise<void> {
             assertEqual(requestBody.tool_name, "generate_video", "Video create tool");
             assertEqual(requestBody.input.prompt, "pixel kart victory lap", "Video prompt");
             assertEqual(requestBody.input.duration, 10, "Video duration");
-            assertEqual(requestBody.input.resolution, "1080p", "Video resolution");
+            assertEqual(requestBody.input.resolution, "2k", "Video resolution");
             await expectVisible(page, ".tool-card:has(.tool-result-video)");
             const src = (await page.locator(".tool-result-video").getAttribute("src")) ?? "";
             if (!src.startsWith("/asset/asset_")) throw new Error(`Video src not stored: ${src}`);
 
             const videoCall = getMinimaxMockCalls().find((call) =>
-                call.url.includes("/v1/video_generation")
+                call.url.includes("/v2/video_generation")
             );
             if (!videoCall) throw new Error("MiniMax video generation was not called");
             const payload = JSON.parse(videoCall.body);
             assertEqual(payload.duration, 10, "MiniMax video duration");
-            assertEqual(payload.resolution, "1080P", "MiniMax video resolution");
+            assertEqual(payload.resolution, "2K", "MiniMax video resolution");
+            assertEqual(payload.model, "MiniMax-H3", "MiniMax video model");
+            assertEqual(payload.content[0].text, "pixel kart victory lap", "H3 text content");
+            assertEqual(payload.ratio, "16:9", "H3 aspect ratio");
 
             await page.click("#create-btn");
             await page.click(".create-tab[data-tab='video']");
@@ -1439,7 +1442,7 @@ async function runE2ETests(): Promise<void> {
             assertEqual(await page.inputValue("#video-duration"), "10", "Recent video duration");
             assertEqual(
                 await page.inputValue("#video-resolution"),
-                "1080p",
+                "2k",
                 "Recent video resolution"
             );
             await recent.locator(".recent-remove").first().click();
@@ -1787,7 +1790,7 @@ async function runE2ETests(): Promise<void> {
             const createDraftSaved = page.waitForResponse(
                 (res) => res.url().includes("/api/draft/create") && res.request().method() === "PUT"
             );
-            await page.selectOption("#video-resolution", "1080p");
+            await page.selectOption("#video-resolution", "2k");
             await createDraftSaved;
 
             await page.reload();
@@ -1811,7 +1814,7 @@ async function runE2ETests(): Promise<void> {
             );
             assertEqual(
                 await page.locator("#video-resolution").inputValue(),
-                "1080p",
+                "2k",
                 "Video draft resolution"
             );
 

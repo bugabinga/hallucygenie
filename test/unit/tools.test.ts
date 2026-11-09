@@ -361,12 +361,12 @@ describe("getToolDefinitions", () => {
                         },
                         duration: {
                             type: "number",
-                            enum: [6, 10],
-                            description: "Video length preset in seconds. Defaults to 6."
+                            enum: [4, 6, 10],
+                            description: "Video length preset in seconds. Defaults to 4."
                         },
                         resolution: {
                             type: "string",
-                            enum: ["768p", "1080p"],
+                            enum: ["768p", "2k"],
                             description: "Video quality preset. Defaults to 768p."
                         }
                     },
@@ -2100,24 +2100,19 @@ describe("generateVideo", () => {
         globalThis.fetch = originalFetch;
     });
 
-    it("creates, polls, retrieves, and returns provider download URL", async () => {
+    it("creates once, polls V2, and returns its output URL", async () => {
         const calls: string[] = [];
-        const bodies: unknown[] = [];
+        let createPayload: unknown;
         globalThis.fetch = async (url: string | URL | Request, init?: RequestInit) => {
             const urlStr = url.toString();
             calls.push(urlStr);
-            if (init?.body) bodies.push(JSON.parse(init.body as string));
-            if (urlStr.endsWith("/v1/video_generation")) {
-                return jsonResponse({ task_id: "task_1", base_resp: { status_code: 0 } });
+            if (urlStr.endsWith("/v2/video_generation")) {
+                createPayload = JSON.parse(String(init?.body));
+                return jsonResponse({ task_id: "task_/1" });
             }
-            if (urlStr.includes("/v1/query/video_generation")) {
-                return jsonResponse({ status: "Success", file_id: "file_1" });
-            }
-            if (urlStr.includes("/v1/files/retrieve")) {
+            if (urlStr.endsWith("/v2/query/video_generation/task_%2F1")) {
                 return jsonResponse({
-                    file_id: "file_1",
-                    filename: "output.mp4",
-                    download_url: "https://cdn.example/video.mp4"
+                    task: { status: "succeeded", content: { url: "https://cdn.example/video.mp4" } }
                 });
             }
             throw new Error(`unexpected fetch ${urlStr}`);
@@ -2127,94 +2122,189 @@ describe("generateVideo", () => {
             {
                 prompt: "A fox mascot jumps through a neon portal",
                 duration: 6,
-                resolution: "768p"
+                resolution: "2k"
             },
             API_KEY,
             { pollDelayMs: 0, maxPolls: 1 }
         );
 
-        assert.equal(result.type, "video");
-        assert.equal(result.content, "https://cdn.example/video.mp4");
-        assert.deepEqual(bodies[0], {
-            model: "MiniMax-Hailuo-02",
-            prompt: "A fox mascot jumps through a neon portal",
+        assert.deepEqual(createPayload, {
+            model: "MiniMax-H3",
+            content: [{ type: "text", text: "A fox mascot jumps through a neon portal" }],
             duration: 6,
-            resolution: "768P"
+            resolution: "2K",
+            ratio: "16:9"
         });
-        assert.ok(calls.some((url) => url.includes("task_id=task_1")));
-        assert.ok(calls.some((url) => url.includes("file_id=file_1")));
+        assert.deepEqual(result, {
+            type: "video",
+            content: "https://cdn.example/video.mp4",
+            provider: { stage: "query", task_id: "task_/1" }
+        });
+        assert.deepEqual(calls, [
+            `${MINIMAX_BASE}/v2/video_generation`,
+            `${MINIMAX_BASE}/v2/query/video_generation/task_%2F1`
+        ]);
     });
 
-    it("returns loud user-safe failure when provider task fails", async () => {
-        globalThis.fetch = async (url: string | URL | Request) => {
-            const urlStr = url.toString();
-            if (urlStr.endsWith("/v1/video_generation")) {
-                return jsonResponse({ task_id: "task_1" });
-            }
-            if (urlStr.includes("/v1/query/video_generation")) {
-                return jsonResponse({ status: "Fail", message: "quota gone" });
-            }
-            throw new Error(`unexpected fetch ${urlStr}`);
-        };
-
-        const result = await generateVideo("make a trailer", API_KEY, {
-            pollDelayMs: 0,
-            maxPolls: 1
-        });
-
-        assert.equal(result.type, "error");
-        assert.match(result.content, /Video generation failed/);
-    });
-
-    it("accepts nested MiniMax video response shapes and defaults invalid presets", async () => {
-        let polls = 0;
+    it("defaults invalid presets without expanding provider parameters", async () => {
         let createPayload: Record<string, unknown> | undefined;
         globalThis.fetch = async (url: string | URL | Request, init?: RequestInit) => {
-            const urlStr = url.toString();
-            if (urlStr.endsWith("/v1/video_generation")) {
-                createPayload = JSON.parse(String(init?.body ?? "{}"));
-                return jsonResponse({ data: { task_id: "nested-video-task" } });
+            if (url.toString().endsWith("/v2/video_generation")) {
+                createPayload = JSON.parse(String(init?.body));
+                return jsonResponse({ task_id: "task-defaults" });
             }
-            if (urlStr.includes("/v1/query/video_generation")) {
-                polls++;
-                return polls === 1
-                    ? jsonResponse({ data: { task_status: "Processing" } })
-                    : jsonResponse({
-                        data: { task_status: "Succeeded", file_id: "nested-video-file" }
-                    });
-            }
-            if (urlStr.includes("/v1/files/retrieve")) {
-                assert.ok(urlStr.includes("file_id=nested-video-file"));
-                return jsonResponse({
-                    data: { file: { download_url: "https://cdn.example/nested-video.mp4" } }
-                });
-            }
-            throw new Error(`unexpected fetch ${urlStr}`);
+            return jsonResponse({
+                task: { status: "succeeded", content: { url: "https://cdn.example/defaults.mp4" } }
+            });
         };
 
-        const result = await generateVideo(
-            { prompt: "Trailer", duration: 999 as 6, resolution: "4k" as "768p" },
+        await generateVideo(
+            { prompt: "Trailer", duration: 999 as 4, resolution: "4k" as "768p" },
             API_KEY,
-            { pollDelayMs: 0, maxPolls: 2 }
+            { pollDelayMs: 0, maxPolls: 1 }
         );
 
-        assert.equal(result.type, "video");
-        assert.equal(result.content, "https://cdn.example/nested-video.mp4");
-        assert.equal(polls, 2);
         assert.deepEqual(createPayload, {
-            model: "MiniMax-Hailuo-02",
-            prompt: "Trailer",
-            duration: 6,
-            resolution: "768P"
-        });
-        assert.deepEqual(result.provider, {
-            stage: "file",
-            task_id: "nested-video-task",
-            file_id: "nested-video-file"
+            model: "MiniMax-H3",
+            content: [{ type: "text", text: "Trailer" }],
+            duration: 4,
+            resolution: "768P",
+            ratio: "16:9"
         });
     });
 
-    it("wraps unexpected video exceptions", async () => {
+    for (const status of ["failed", "cancelled", "expired"]) {
+        it(`reports terminal ${status} task diagnostics`, async () => {
+            globalThis.fetch = async (url: string | URL | Request) => {
+                if (url.toString().endsWith("/v2/video_generation")) {
+                    return jsonResponse({ task_id: `task-${status}` });
+                }
+                return jsonResponse({
+                    task: { status, error: { message: `${status} by provider` } }
+                });
+            };
+
+            const result = await generateVideo("make a trailer", API_KEY, {
+                pollDelayMs: 0,
+                maxPolls: 1
+            });
+
+            assert.deepEqual(result, {
+                type: "error",
+                content: `Video generation ${status}: ${status} by provider`,
+                provider: {
+                    stage: "query",
+                    status_msg: `${status} by provider`,
+                    task_id: `task-${status}`
+                }
+            });
+        });
+    }
+
+    it("reports missing successful output", async () => {
+        globalThis.fetch = async (url: string | URL | Request) => {
+            if (url.toString().endsWith("/v2/video_generation")) {
+                return jsonResponse({ task_id: "task-empty" });
+            }
+            return jsonResponse({ task: { status: "succeeded", content: {} } });
+        };
+
+        assert.deepEqual(await generateVideo("x", API_KEY, { pollDelayMs: 0, maxPolls: 1 }), {
+            type: "error",
+            content: "Video query returned no output URL",
+            provider: { stage: "query", status_msg: "missing output URL", task_id: "task-empty" }
+        });
+    });
+
+    it("polls a pending H3 task until its output is ready", async () => {
+        let polls = 0;
+        globalThis.fetch = async (url) => {
+            if (url.toString().endsWith("/v2/video_generation")) {
+                return jsonResponse({ task_id: "pending-task" });
+            }
+            polls++;
+            return jsonResponse({
+                task: polls === 1
+                    ? { status: "processing" }
+                    : { status: "succeeded", content: { url: "https://cdn.example/ready.mp4" } }
+            });
+        };
+        const result = await generateVideo("x", API_KEY, { pollDelayMs: 0, maxPolls: 2 });
+        assert.equal(polls, 2);
+        assert.equal(result.type, "video");
+        assert.equal(result.content, "https://cdn.example/ready.mp4");
+    });
+
+    it("fails immediately for a malformed task query", async () => {
+        let polls = 0;
+        globalThis.fetch = async (url) => {
+            if (url.toString().endsWith("/v2/video_generation")) {
+                return jsonResponse({ task_id: "malformed-task" });
+            }
+            polls++;
+            return jsonResponse({});
+        };
+        const result = await generateVideo("x", API_KEY, { pollDelayMs: 0, maxPolls: 2 });
+        assert.equal(polls, 1);
+        assert.equal(result.type, "error");
+        assert.equal(result.provider?.status_msg, "missing task status");
+    });
+
+    it("times out pending tasks without resubmitting", async () => {
+        let creates = 0;
+        let queries = 0;
+        globalThis.fetch = async (url: string | URL | Request) => {
+            if (url.toString().endsWith("/v2/video_generation")) {
+                creates++;
+                return jsonResponse({ task_id: "task-pending" });
+            }
+            queries++;
+            return jsonResponse({ task: { status: "processing" } });
+        };
+
+        assert.deepEqual(await generateVideo("x", API_KEY, { pollDelayMs: 0, maxPolls: 2 }), {
+            type: "error",
+            content: "Video generation timed out",
+            provider: { stage: "query", status_msg: "timeout", task_id: "task-pending" }
+        });
+        assert.equal(creates, 1);
+        assert.equal(queries, 2);
+    });
+
+    it("bounds polling to 60 requests", async () => {
+        let queries = 0;
+        globalThis.fetch = async (url: string | URL | Request) => {
+            if (url.toString().endsWith("/v2/video_generation")) {
+                return jsonResponse({ task_id: "task-bounded" });
+            }
+            queries++;
+            return jsonResponse({ task: { status: "processing" } });
+        };
+
+        await generateVideo("x", API_KEY, { pollDelayMs: 0, maxPolls: 61 });
+        assert.equal(queries, 60);
+    });
+
+    it("reports V2 HTTP errors and unexpected exceptions", async () => {
+        globalThis.fetch = async () => new Response("broken", { status: 503 });
+        assert.deepEqual(await generateVideo("x", API_KEY), {
+            type: "error",
+            content: "Video generation API error: 503",
+            provider: { stage: "create", status_code: 503 }
+        });
+
+        globalThis.fetch = async (url: string | URL | Request) => {
+            if (url.toString().endsWith("/v2/video_generation")) {
+                return jsonResponse({ task_id: "task-query-http" });
+            }
+            return new Response("nope", { status: 502 });
+        };
+        assert.deepEqual(await generateVideo("x", API_KEY, { pollDelayMs: 0, maxPolls: 1 }), {
+            type: "error",
+            content: "Video query API error: 502",
+            provider: { stage: "query", status_code: 502, task_id: "task-query-http" }
+        });
+
         globalThis.fetch = async () => {
             throw new Error("socket gone");
         };
@@ -2224,149 +2314,11 @@ describe("generateVideo", () => {
         });
     });
 
-    it("reports every MiniMax video failure stage", async () => {
-        globalThis.fetch = async () => new Response("broken", { status: 503 });
-        assert.deepEqual(await generateVideo("x", API_KEY), {
-            type: "error",
-            content: "Video generation API error: 503",
-            provider: { stage: "create", status_code: 503 }
-        });
-
-        mockFetch(jsonResponse({ base_resp: { status_code: 1004, status_msg: "login fail" } }));
-        assert.deepEqual(await generateVideo("x", API_KEY), {
-            type: "error",
-            content: "Video generation failed: login fail",
-            provider: { stage: "create", status_code: 1004, status_msg: "login fail" }
-        });
-
-        mockFetch(jsonResponse({ data: {} }));
+    it("rejects missing task ids", async () => {
+        mockFetch(jsonResponse({ data: { task_id: "legacy-task" } }));
         assert.deepEqual(await generateVideo("x", API_KEY), {
             type: "error",
             content: "Video generation returned no task_id"
-        });
-
-        globalThis.fetch = async (url: string | URL | Request) => {
-            const urlStr = url.toString();
-            if (urlStr.endsWith("/v1/video_generation")) {
-                return jsonResponse({ task_id: "video-q-http" });
-            }
-            if (urlStr.includes("/v1/query/video_generation")) {
-                return new Response("nope", { status: 502 });
-            }
-            throw new Error(`unexpected fetch ${urlStr}`);
-        };
-        assert.deepEqual(await generateVideo("x", API_KEY, { pollDelayMs: 0, maxPolls: 1 }), {
-            type: "error",
-            content: "Video query API error: 502",
-            provider: { stage: "query", status_code: 502, task_id: "video-q-http" }
-        });
-
-        globalThis.fetch = async (url: string | URL | Request) => {
-            const urlStr = url.toString();
-            if (urlStr.endsWith("/v1/video_generation")) {
-                return jsonResponse({ task_id: "video-q-base" });
-            }
-            if (urlStr.includes("/v1/query/video_generation")) {
-                return jsonResponse({ base_resp: { status_code: 2013, status_msg: "bad query" } });
-            }
-            throw new Error(`unexpected fetch ${urlStr}`);
-        };
-        assert.deepEqual(await generateVideo("x", API_KEY, { pollDelayMs: 0, maxPolls: 1 }), {
-            type: "error",
-            content: "Video query failed: bad query",
-            provider: {
-                stage: "query",
-                status_code: 2013,
-                status_msg: "bad query",
-                task_id: "video-q-base"
-            }
-        });
-
-        globalThis.fetch = async (url: string | URL | Request) => {
-            const urlStr = url.toString();
-            if (urlStr.endsWith("/v1/video_generation")) {
-                return jsonResponse({ task_id: "video-timeout" });
-            }
-            if (urlStr.includes("/v1/query/video_generation")) {
-                return jsonResponse({ data: { status: "Processing" } });
-            }
-            throw new Error(`unexpected fetch ${urlStr}`);
-        };
-        assert.deepEqual(await generateVideo("x", API_KEY, { pollDelayMs: 0, maxPolls: 1 }), {
-            type: "error",
-            content: "Video generation timed out",
-            provider: { stage: "query", status_msg: "timeout", task_id: "video-timeout" }
-        });
-
-        globalThis.fetch = async (url: string | URL | Request) => {
-            const urlStr = url.toString();
-            if (urlStr.endsWith("/v1/video_generation")) {
-                return jsonResponse({ task_id: "video-file-http" });
-            }
-            if (urlStr.includes("/v1/query/video_generation")) {
-                return jsonResponse({ data: { status: "Success", file_id: "file-http" } });
-            }
-            if (urlStr.includes("/v1/files/retrieve")) return new Response("nope", { status: 500 });
-            throw new Error(`unexpected fetch ${urlStr}`);
-        };
-        assert.deepEqual(await generateVideo("x", API_KEY, { pollDelayMs: 0, maxPolls: 1 }), {
-            type: "error",
-            content: "Video file API error: 500",
-            provider: {
-                stage: "file",
-                status_code: 500,
-                task_id: "video-file-http",
-                file_id: "file-http"
-            }
-        });
-
-        globalThis.fetch = async (url: string | URL | Request) => {
-            const urlStr = url.toString();
-            if (urlStr.endsWith("/v1/video_generation")) {
-                return jsonResponse({ task_id: "video-file-base" });
-            }
-            if (urlStr.includes("/v1/query/video_generation")) {
-                return jsonResponse({ data: { status: "Success", file_id: "file-base" } });
-            }
-            if (urlStr.includes("/v1/files/retrieve")) {
-                return jsonResponse({
-                    base_resp: { status_code: 3001, status_msg: "missing file" }
-                });
-            }
-            throw new Error(`unexpected fetch ${urlStr}`);
-        };
-        assert.deepEqual(await generateVideo("x", API_KEY, { pollDelayMs: 0, maxPolls: 1 }), {
-            type: "error",
-            content: "Video file retrieve failed: missing file",
-            provider: {
-                stage: "file",
-                status_code: 3001,
-                status_msg: "missing file",
-                task_id: "video-file-base",
-                file_id: "file-base"
-            }
-        });
-
-        globalThis.fetch = async (url: string | URL | Request) => {
-            const urlStr = url.toString();
-            if (urlStr.endsWith("/v1/video_generation")) {
-                return jsonResponse({ task_id: "video-file-empty" });
-            }
-            if (urlStr.includes("/v1/query/video_generation")) {
-                return jsonResponse({ status: "Succeeded", file_id: "file-empty" });
-            }
-            if (urlStr.includes("/v1/files/retrieve")) return jsonResponse({ data: { file: {} } });
-            throw new Error(`unexpected fetch ${urlStr}`);
-        };
-        assert.deepEqual(await generateVideo("x", API_KEY, { pollDelayMs: 0, maxPolls: 1 }), {
-            type: "error",
-            content: "Video file retrieve returned no download_url",
-            provider: {
-                stage: "file",
-                status_msg: "missing download_url",
-                task_id: "video-file-empty",
-                file_id: "file-empty"
-            }
         });
     });
 });
