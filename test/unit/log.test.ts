@@ -1,6 +1,8 @@
 import assert from "node:assert/strict";
-import { existsSync, readFileSync, rmSync } from "node:fs";
-import { afterEach, describe, it } from "node:test";
+import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { afterEach, beforeEach, describe, it } from "node:test";
 import { createLogger as directCreateLogger, nextReqId } from "../../src/log.ts";
 
 const originalNodeEnv = process.env.NODE_ENV;
@@ -9,7 +11,14 @@ const originalStdoutWrite = process.stdout.write.bind(process.stdout);
 const originalStderrWrite = process.stderr.write.bind(process.stderr);
 const originalExit = process.exit;
 
+const originalCwd = process.cwd();
+let testDirectory: string;
 let importNonce = 0;
+
+beforeEach(() => {
+    testDirectory = mkdtempSync(join(tmpdir(), "hg-logger-test-"));
+    process.chdir(testDirectory);
+});
 
 async function freshLogModule() {
     importNonce++;
@@ -22,7 +31,8 @@ afterEach(() => {
     process.stdout.write = originalStdoutWrite as typeof process.stdout.write;
     process.stderr.write = originalStderrWrite as typeof process.stderr.write;
     process.exit = originalExit;
-    rmSync("logs", { recursive: true, force: true });
+    process.chdir(originalCwd);
+    rmSync(testDirectory, { recursive: true, force: true });
 });
 
 describe("logger", () => {
