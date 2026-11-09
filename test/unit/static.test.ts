@@ -1371,6 +1371,28 @@ describe("project metadata health", () => {
 });
 
 describe("GitHub Actions health", () => {
+    it("emits required status contexts and fails integration unless every dependency succeeds", () => {
+        const gate = ciYml.match(
+            /name: check \+ unit \+ integration \+ e2e\n([\s\S]*?)(?=\n    \w+:|$)/
+        )?.[1];
+        assert.ok(gate, "required integration status context missing");
+        assert.match(gate, /needs: \[check, e2e\]/);
+        assert.match(gate, /if: \$\{\{ always\(\) \}\}/);
+        assert.match(ciYml, /name: container build/);
+        const command = gate.match(/^\s+run: (.+)$/m)?.[1];
+        assert.ok(command);
+        for (const check of ["success", "failure", "cancelled", "skipped"]) {
+            for (const e2e of ["success", "failure", "cancelled", "skipped"]) {
+                const execute = () =>
+                    execFileSync("sh", ["-c", command], {
+                        env: { CHECK_RESULT: check, E2E_RESULT: e2e }
+                    });
+                if (check === "success" && e2e === "success") assert.doesNotThrow(execute);
+                else assert.throws(execute, `${check}/${e2e} must block integration`);
+            }
+        }
+    });
+
     it("runs check, e2e matrix, and mutation through mise", () => {
         assert.doesNotMatch(ciYml, /MINIMAX_(?:API_)?KEY/);
         assert.doesNotMatch(dependabotYml, /MINIMAX_(?:API_)?KEY/);
