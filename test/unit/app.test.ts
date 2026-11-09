@@ -5,7 +5,7 @@
 import assert from "node:assert/strict";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
-import { after, before, describe, it } from "node:test";
+import { after, afterEach, before, describe, it } from "node:test";
 import { fileURLToPath } from "node:url";
 import {
     imageCreateValidationError,
@@ -26,6 +26,29 @@ const ORIGINAL_FETCH = Object.getOwnPropertyDescriptor(globalThis, "fetch")?.val
 
 after(() => {
     globalThis.fetch = ORIGINAL_FETCH;
+});
+
+function waitForAppInit(win: Window): Promise<void> {
+    if (win.document.documentElement.dataset.hgReady === "1") return Promise.resolve();
+    return new Promise((resolve, reject) => {
+        const observer = new win.MutationObserver(() => {
+            if (win.document.documentElement.dataset.hgReady !== "1") return;
+            observer.disconnect();
+            clearTimeout(timeout);
+            resolve();
+        });
+        const timeout = setTimeout(() => {
+            observer.disconnect();
+            reject(new Error("App initialization did not finish"));
+        }, 2000);
+        observer.observe(win.document.documentElement, { attributes: true });
+    });
+}
+
+afterEach(async () => {
+    if (globalThis.document?.documentElement.dataset.hgReady === "0") {
+        await waitForAppInit(globalThis.window as unknown as Window);
+    }
 });
 
 function writeSnapshot(name: string, html: string): void {
@@ -3199,6 +3222,7 @@ describe("init event binding", () => {
         };
         init();
 
+        await waitForAppInit(win);
         const fileInput = doc.querySelector("#img-reference-file") as HTMLInputElement;
         const asset = doc.querySelector("#img-reference-asset") as HTMLInputElement;
         const status = doc.querySelector("#img-reference-status") as HTMLElement;
@@ -4481,6 +4505,7 @@ describe("init event binding", () => {
             });
             init();
             await restored;
+            await waitForAppInit(win);
             (doc.querySelector("#create-btn") as HTMLButtonElement).click();
             assert.equal(feature.value, "saved-feature");
             assert.equal(
@@ -5446,6 +5471,45 @@ describe("init accessibility behavior", () => {
 
         resolveChat(createSSEResponse([sseDone()]));
         await sendPromise;
+    });
+
+    it("reports readiness only after sessions, history and drafts finish loading", async () => {
+        const { doc } = setupDOM();
+        doc.body.insertAdjacentHTML("beforeend", "<select id=\"session-select\"></select>");
+        const pending = new Map<string, (response: Response) => void>();
+        globalThis.fetch = async (input) => {
+            const path = String(input);
+            if (["/api/sessions", "/api/history", "/api/draft/create"].includes(path)) {
+                return await new Promise<Response>(resolve => pending.set(path, resolve));
+            }
+            return Response.json({
+                version: 1,
+                username: "",
+                interests: "",
+                hates: "",
+                favorites: "",
+                avatar: { type: "asset", value: "" },
+                updatedAt: 0,
+                draft: null
+            });
+        };
+        init();
+        assert.notEqual(doc.documentElement.dataset.hgReady, "1");
+        pending.get("/api/sessions")!(Response.json({
+            activeSessionId: "ready-session",
+            sessions: [{ id: "ready-session", name: "Ready" }]
+        }));
+        await new Promise(resolve => setTimeout(resolve, 0));
+        assert.notEqual(doc.documentElement.dataset.hgReady, "1");
+        assert.ok(pending.has("/api/history"));
+        pending.get("/api/history")!(Response.json({ messages: [] }));
+        await new Promise(resolve => setTimeout(resolve, 0));
+        assert.notEqual(doc.documentElement.dataset.hgReady, "1");
+        assert.ok(pending.has("/api/draft/create"));
+        pending.get("/api/draft/create")!(Response.json({ draft: null }));
+        await new Promise(resolve => setTimeout(resolve, 0));
+        assert.equal(doc.documentElement.dataset.hgReady, "1");
+        assert.equal(appCreateApiHeaders()["X-Session-Id"], "ready-session");
     });
 
     for (const action of ["switch", "new"] as const) {

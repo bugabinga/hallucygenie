@@ -1898,17 +1898,24 @@ async function runE2ETests(): Promise<void> {
             const page = await newPage(browser);
             await waitForApp(page, { dismissOnboarding: true });
 
-            const startCount = await page.locator("#session-select option").count();
+            const sessionAReady = page.waitForResponse(
+                (res) => res.url().endsWith("/api/draft/create") && res.request().method() === "GET"
+            );
             const sessionACreated = page.waitForResponse(
                 (res) => res.url().includes("/api/sessions") && res.request().method() === "POST"
             );
             await page.click("#session-new");
-            await sessionACreated;
+            const sessionA = (await (await sessionACreated).json()).session.id as string;
             await page.waitForFunction(
-                (count) => document.querySelectorAll("#session-select option").length > count,
-                startCount
+                (id) =>
+                    (document.querySelector("#session-select") as HTMLSelectElement)?.value === id,
+                sessionA
             );
-            const sessionA = await page.locator("#session-select").inputValue();
+            assertEqual(
+                (await sessionAReady).request().headers()["x-session-id"],
+                sessionA,
+                "Session A drafts loaded"
+            );
             const messageA = `session A ${Date.now()}`;
             const chatA = page.waitForResponse(
                 (res) => res.url().includes("/api/chat") && res.request().method() === "POST"
@@ -1917,17 +1924,27 @@ async function runE2ETests(): Promise<void> {
             await page.press("#chat-input", "Enter");
             await chatA;
             await expectVisible(page, `.message--user:has-text('${messageA}')`);
+            await page.waitForFunction(() =>
+                !document.querySelector("#typing-indicator")?.classList.contains("is-visible")
+            );
 
+            const sessionBReady = page.waitForResponse(
+                (res) => res.url().endsWith("/api/draft/create") && res.request().method() === "GET"
+            );
             const sessionBCreated = page.waitForResponse(
                 (res) => res.url().includes("/api/sessions") && res.request().method() === "POST"
             );
             await page.click("#session-new");
-            await sessionBCreated;
+            const sessionB = (await (await sessionBCreated).json()).session.id as string;
             await page.waitForFunction(
-                (previous) =>
-                    (document.querySelector("#session-select") as HTMLSelectElement | null)?.value
-                        !== previous,
-                sessionA
+                (id) =>
+                    (document.querySelector("#session-select") as HTMLSelectElement)?.value === id,
+                sessionB
+            );
+            assertEqual(
+                (await sessionBReady).request().headers()["x-session-id"],
+                sessionB,
+                "Session B drafts loaded"
             );
             const messageB = `session B ${Date.now()}`;
             await page.waitForFunction((text) => !document.body.innerText.includes(text), messageA);
@@ -1938,6 +1955,9 @@ async function runE2ETests(): Promise<void> {
             await page.press("#chat-input", "Enter");
             await chatB;
             await expectVisible(page, `.message--user:has-text('${messageB}')`);
+            await page.waitForFunction(() =>
+                !document.querySelector("#typing-indicator")?.classList.contains("is-visible")
+            );
 
             await page.selectOption("#session-select", sessionA);
             await page.waitForFunction((text) => document.body.innerText.includes(text), messageA);

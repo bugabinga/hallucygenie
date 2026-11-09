@@ -1958,6 +1958,8 @@ export async function updateQuotaBadge(): Promise<void> {
 // ── Event Binding ────────────────────────────────────────────────────
 
 export function init(): void {
+    const readyRoot = document.documentElement;
+    readyRoot.dataset.hgReady = "0";
     const form = $("#chat-form") as HTMLFormElement;
     const input = $("#chat-input") as HTMLTextAreaElement;
     const _sendBtn = $("#send-button") as HTMLButtonElement;
@@ -2030,6 +2032,7 @@ export function init(): void {
         if (isStreaming && !confirm("A response is still running. Start a new chat anyway?")) {
             return;
         }
+        ++sessionRefresh;
         cancelActiveStream();
         void createNewSession()
             .then(() => refreshSessions())
@@ -2351,10 +2354,9 @@ export function init(): void {
     $("#onboarding-done").addEventListener("click", dismissOnboarding);
 
     // ── Load profile, then history so user bubbles use saved avatar ──
-    void fetchProfile()
+    const profileLoaded = fetchProfile()
         .then(setCurrentProfile)
-        .catch(() => undefined)
-        .finally(() => void loadHistory());
+        .catch(() => undefined);
 
     // Fetch and display quota badge (once on init — no polling interval)
     updateQuotaBadge();
@@ -2912,8 +2914,13 @@ export function init(): void {
         void putDraft("create", createDraftFromDom());
     });
 
-    void refreshSessions().catch(() => undefined);
-    void restoreDrafts().catch(() => undefined);
+    const initialRevision = sessionRefresh + 1;
+    const initialData = refreshSessions().catch(() => undefined).then(async () => {
+        await profileLoaded;
+        if (sessionRefresh !== initialRevision) return;
+        await loadHistory();
+        await restoreDrafts();
+    }).catch(() => undefined);
 
     updateLyricsButton();
     musicLyricsInput.addEventListener("input", updateLyricsButton);
@@ -3116,7 +3123,9 @@ export function init(): void {
 
     // Focus input
     input.focus();
-    document.documentElement.dataset.hgReady = "1";
+    void initialData.finally(() => {
+        readyRoot.dataset.hgReady = "1";
+    });
 }
 
 // ── Bootstrap ────────────────────────────────────────────────────────
