@@ -868,21 +868,26 @@ async function runE2ETests(): Promise<void> {
 
             const onboarding = page.locator("#onboarding");
             await onboarding.waitFor({ state: "visible", timeout: 10000 });
-            await expectVisible(page, ".onboarding-slide[data-slide='0'].active");
-
-            await page.click(".onboarding-slide[data-slide='0'] .onboarding-next");
-            await expectVisible(
-                page,
-                ".onboarding-slide[data-slide='1'].active #onboarding-try-chat"
-            );
-            await page.click(".onboarding-slide[data-slide='1'] .onboarding-next");
-            await expectVisible(
-                page,
-                ".onboarding-slide[data-slide='2'].active #onboarding-try-create"
-            );
-            await page.click(".onboarding-slide[data-slide='2'] .onboarding-next");
-            await expectVisible(page, ".onboarding-slide[data-slide='3'].active #onboarding-done");
-            await page.click("#onboarding-done");
+            for (let index = 0; index < 4; index++) {
+                const selector = `.onboarding-slide[data-slide='${index}'].active`;
+                await expectVisible(page, selector);
+                const buttons = page.locator(`${selector} button`);
+                await buttons.first().focus();
+                await page.keyboard.press("Shift+Tab");
+                assertEqual(
+                    await buttons.last().evaluate(button => button === document.activeElement),
+                    true,
+                    `Slide ${index} reverse focus wraps within active step`
+                );
+                await page.keyboard.press("Tab");
+                assertEqual(
+                    await buttons.first().evaluate(button => button === document.activeElement),
+                    true,
+                    `Slide ${index} forward focus wraps within active step`
+                );
+                if (index < 3) await page.click(`${selector} .onboarding-next`);
+                else await page.click("#onboarding-done");
+            }
 
             await onboarding.waitFor({ state: "hidden", timeout: 5000 });
             assertEqual(
