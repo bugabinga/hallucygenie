@@ -78,16 +78,18 @@ const TINY_PNG = Buffer.from([
     156,
     99,
     248,
-    15,
-    4,
+    207,
+    192,
+    240,
+    31,
     0,
-    9,
-    251,
-    3,
-    253,
-    167,
-    95,
-    88,
+    5,
+    0,
+    1,
+    255,
+    137,
+    153,
+    61,
     29,
     0,
     0,
@@ -597,19 +599,20 @@ async function runE2ETests(): Promise<void> {
                     return new Response(
                         new ReadableStream({
                             start(controller) {
-                                setTimeout(
-                                    () =>
+                                (globalThis as unknown as {
+                                    layoutTestStream: { text: () => void; finish: () => void; };
+                                }).layoutTestStream = {
+                                    text: () =>
                                         controller.enqueue(
                                             encoder.encode(
                                                 "data: {\"delta\":\"Layout stable\"}\n\n"
                                             )
                                         ),
-                                    150
-                                );
-                                setTimeout(() => {
-                                    controller.enqueue(encoder.encode("data: [DONE]\n\n"));
-                                    controller.close();
-                                }, 1000);
+                                    finish: () => {
+                                        controller.enqueue(encoder.encode("data: [DONE]\n\n"));
+                                        controller.close();
+                                    }
+                                };
                             }
                         }),
                         { status: 200, headers: { "Content-Type": "text/event-stream" } }
@@ -658,6 +661,10 @@ async function runE2ETests(): Promise<void> {
             await page.press("#chat-input", "Enter");
             await page.waitForSelector("#typing-indicator.is-visible", { timeout: 5000 });
             const duringThinking = await measure();
+            await page.evaluate(() =>
+                (globalThis as unknown as { layoutTestStream: { text: () => void; }; })
+                    .layoutTestStream.text()
+            );
             await page.waitForFunction(
                 () => {
                     const list = document.querySelector("#message-list") as HTMLElement;
@@ -686,6 +693,10 @@ async function runE2ETests(): Promise<void> {
                 });
                 assertEqual(unobstructed, true, `${selector} unobstructed during streaming`);
             }
+            await page.evaluate(() =>
+                (globalThis as unknown as { layoutTestStream: { finish: () => void; }; })
+                    .layoutTestStream.finish()
+            );
             await page.waitForFunction(
                 () =>
                     !document
@@ -1745,6 +1756,58 @@ async function runE2ETests(): Promise<void> {
                 throw new Error(`Generated lyrics draft did not survive reload: ${lyrics}`);
             }
 
+            const sessionA = await page.locator("#session-select").inputValue();
+            const pendingDraftWrites: Promise<unknown>[] = [];
+            page.on("request", request => {
+                if (request.url().endsWith("/api/draft/create") && request.method() === "PUT") {
+                    pendingDraftWrites.push(
+                        request.response().then(response => response?.finished())
+                    );
+                }
+            });
+            let releaseCreate!: () => void;
+            const createGate = new Promise<void>(resolve => {
+                releaseCreate = resolve;
+            });
+            await page.route("**/api/create-tool", async route => {
+                await createGate;
+                await route.abort().catch(() => undefined);
+            });
+            const improving = page.waitForRequest(request =>
+                request.url().endsWith("/api/create-tool")
+            );
+            await page.click("#write-lyrics-btn");
+            assertEqual(
+                (await improving).postDataJSON().input.mode,
+                "edit",
+                "Improving existing lyrics"
+            );
+            const savedBeforeCancel = page.waitForResponse(response =>
+                response.url().endsWith("/api/draft/create")
+                && response.request().method() === "PUT"
+            );
+            await page.click("#create-close");
+            await savedBeforeCancel;
+            const nextReady = page.waitForResponse(response =>
+                response.url().endsWith("/api/draft/create")
+                && response.request().method() === "GET"
+            );
+            page.once("dialog", dialog => {
+                void dialog.accept();
+            });
+            await page.click("#session-new");
+            await nextReady;
+            releaseCreate();
+            await page.unroute("**/api/create-tool");
+            await Promise.all(pendingDraftWrites);
+            const savedAfterCancel = await page.request.get(`${BASE_URL}/api/draft/create`, {
+                headers: { "X-Session-Id": sessionA }
+            });
+            assertEqual(
+                (await savedAfterCancel.json()).draft.music.lyrics,
+                lyrics,
+                "Cancelling improvement preserves original session lyrics"
+            );
             await page.close();
         },
         results
@@ -1889,17 +1952,24 @@ async function runE2ETests(): Promise<void> {
             const page = await newPage(browser);
             await waitForApp(page, { dismissOnboarding: true });
 
-            const startCount = await page.locator("#session-select option").count();
+            const sessionAReady = page.waitForResponse(
+                (res) => res.url().endsWith("/api/draft/create") && res.request().method() === "GET"
+            );
             const sessionACreated = page.waitForResponse(
                 (res) => res.url().includes("/api/sessions") && res.request().method() === "POST"
             );
             await page.click("#session-new");
-            await sessionACreated;
+            const sessionA = (await (await sessionACreated).json()).session.id as string;
             await page.waitForFunction(
-                (count) => document.querySelectorAll("#session-select option").length > count,
-                startCount
+                (id) =>
+                    (document.querySelector("#session-select") as HTMLSelectElement)?.value === id,
+                sessionA
             );
-            const sessionA = await page.locator("#session-select").inputValue();
+            assertEqual(
+                (await sessionAReady).request().headers()["x-session-id"],
+                sessionA,
+                "Session A drafts loaded"
+            );
             const messageA = `session A ${Date.now()}`;
             const chatA = page.waitForResponse(
                 (res) => res.url().includes("/api/chat") && res.request().method() === "POST"
@@ -1908,17 +1978,27 @@ async function runE2ETests(): Promise<void> {
             await page.press("#chat-input", "Enter");
             await chatA;
             await expectVisible(page, `.message--user:has-text('${messageA}')`);
+            await page.waitForFunction(() =>
+                !document.querySelector("#typing-indicator")?.classList.contains("is-visible")
+            );
 
+            const sessionBReady = page.waitForResponse(
+                (res) => res.url().endsWith("/api/draft/create") && res.request().method() === "GET"
+            );
             const sessionBCreated = page.waitForResponse(
                 (res) => res.url().includes("/api/sessions") && res.request().method() === "POST"
             );
             await page.click("#session-new");
-            await sessionBCreated;
+            const sessionB = (await (await sessionBCreated).json()).session.id as string;
             await page.waitForFunction(
-                (previous) =>
-                    (document.querySelector("#session-select") as HTMLSelectElement | null)?.value
-                        !== previous,
-                sessionA
+                (id) =>
+                    (document.querySelector("#session-select") as HTMLSelectElement)?.value === id,
+                sessionB
+            );
+            assertEqual(
+                (await sessionBReady).request().headers()["x-session-id"],
+                sessionB,
+                "Session B drafts loaded"
             );
             const messageB = `session B ${Date.now()}`;
             await page.waitForFunction((text) => !document.body.innerText.includes(text), messageA);
@@ -1929,6 +2009,9 @@ async function runE2ETests(): Promise<void> {
             await page.press("#chat-input", "Enter");
             await chatB;
             await expectVisible(page, `.message--user:has-text('${messageB}')`);
+            await page.waitForFunction(() =>
+                !document.querySelector("#typing-indicator")?.classList.contains("is-visible")
+            );
 
             await page.selectOption("#session-select", sessionA);
             await page.waitForFunction((text) => document.body.innerText.includes(text), messageA);
@@ -2016,10 +2099,49 @@ async function runE2ETests(): Promise<void> {
     );
 
     await runTest(
-        "profile avatar upload stores asset and updates preview",
+        "profile avatar upload stays readable in tab A after tab B activates another session",
         async () => {
             const page = await newPage(browser);
+            const assetResponses: Array<{ url: string; status: number; }> = [];
+            page.on("response", response => {
+                if (new URL(response.url()).pathname.startsWith("/asset/")) {
+                    assetResponses.push({ url: response.url(), status: response.status() });
+                }
+            });
             await waitForApp(page, { dismissOnboarding: true });
+            const sessionA = await page.locator("#session-select").inputValue();
+            const chatResponse = page.waitForResponse(
+                res => res.url().endsWith("/api/chat") && res.request().method() === "POST"
+            );
+            await page.fill("#chat-input", "Repaint my uploaded avatar in this chat");
+            await page.press("#chat-input", "Enter");
+            await chatResponse;
+            await page.waitForFunction(() =>
+                !document.querySelector("#typing-indicator")?.classList.contains("is-visible")
+            );
+            const otherTab = await newPage(browser);
+            await waitForApp(otherTab, { dismissOnboarding: true });
+            const otherReady = otherTab.waitForResponse(
+                res => res.url().endsWith("/api/draft/create") && res.request().method() === "GET"
+            );
+            const otherCreated = otherTab.waitForResponse(
+                res => res.url().endsWith("/api/sessions") && res.request().method() === "POST"
+            );
+            await otherTab.click("#session-new");
+            const sessionB = (await (await otherCreated).json()).session.id as string;
+            await otherReady;
+            assertEqual(
+                await otherTab.locator("#session-select").inputValue(),
+                sessionB,
+                "Tab B displays B"
+            );
+            if (sessionA === sessionB) throw new Error("Expected separate tab sessions");
+            await page.bringToFront();
+            assertEqual(
+                await page.locator("#session-select").inputValue(),
+                sessionA,
+                "Tab A still displays A"
+            );
 
             const initialProfileLoad = page.waitForResponse(
                 (res) => res.url().includes("/api/profile") && res.request().method() === "GET"
@@ -2046,7 +2168,13 @@ async function runE2ETests(): Promise<void> {
                 1,
                 "Profile avatar chooser input"
             );
-            assertEqual((await uploadResponse).status(), 200, "Profile avatar upload response");
+            const uploaded = await uploadResponse;
+            assertEqual(uploaded.status(), 200, "Profile avatar upload response");
+            assertEqual(
+                uploaded.request().headers()["x-session-id"],
+                sessionA,
+                "Upload belongs to A"
+            );
             await expectVisible(page, "#profile-avatar-img");
             const assetId = await page.inputValue("#profile-avatar-asset");
             if (!/^asset_[0-9a-f-]+$/i.test(assetId)) {
@@ -2057,6 +2185,66 @@ async function runE2ETests(): Promise<void> {
             if (!previewSrc.includes(`/asset/${assetId}`)) {
                 throw new Error(`Avatar upload preview did not use stored asset: ${previewSrc}`);
             }
+            const previewUrl = new URL(previewSrc, BASE_URL);
+            const previewAsset = await page.request.get(previewUrl.href);
+            assertEqual(
+                previewAsset.status(),
+                200,
+                "Uploaded avatar preview readable while B is active"
+            );
+            assertEqual(
+                (await previewAsset.body()).equals(TINY_PNG),
+                true,
+                "Uploaded avatar bytes preserved"
+            );
+            assertEqual(
+                previewUrl.searchParams.get("session_id"),
+                sessionA,
+                "Profile preview belongs to A"
+            );
+            const chatAvatar = page.locator(".message--user .profile-avatar-img").last();
+            if (await chatAvatar.count() === 0) {
+                throw new Error(`Missing chat avatar: ${
+                    JSON.stringify({
+                        assetResponses,
+                        avatars: await page.locator(".message--user .message-avatar")
+                            .allTextContents(),
+                        messages: await page.locator(".message--user").count()
+                    })
+                }`);
+            }
+            const chatAvatarUrl = new URL((await chatAvatar.getAttribute("src")) ?? "", BASE_URL);
+            assertEqual(
+                chatAvatarUrl.searchParams.get("session_id"),
+                sessionA,
+                "Chat avatar belongs to A"
+            );
+            assertEqual(
+                (await page.request.get(chatAvatarUrl.href)).status(),
+                200,
+                "Chat avatar readable while B is active"
+            );
+            await page.waitForFunction(() => {
+                const preview = document.querySelector("#profile-avatar-img") as HTMLImageElement;
+                return preview?.naturalWidth > 0;
+            });
+            await page.click("#profile-close");
+            await chatAvatar.scrollIntoViewIfNeeded();
+            await page.waitForFunction(() => {
+                const avatar = Array.from(
+                    document.querySelectorAll<HTMLImageElement>(
+                        ".message--user .profile-avatar-img"
+                    )
+                ).at(-1);
+                return !!avatar && avatar.naturalWidth > 0;
+            });
+            await page.click("#profile-btn");
+            assertEqual(
+                (await (await otherTab.request.get(`${BASE_URL}/api/state`)).json()).activeSession
+                    .id,
+                sessionB,
+                "Avatar reads do not change active B"
+            );
             assertEqual(
                 await page.locator("#profile-avatar-status").textContent(),
                 "Avatar ready.",
@@ -2074,6 +2262,7 @@ async function runE2ETests(): Promise<void> {
             await page.click("#profile-reset");
             assertEqual((await resetResponse).status(), 200, "Profile reset after avatar upload");
             await expectHidden(page, "#profile-modal");
+            await otherTab.close();
             await page.close();
         },
         results

@@ -129,6 +129,8 @@ if [ "$matrix" = "true" ]; then
 fi
 if [ "$coverage" = "true" ]; then LOG_LEVEL=silent node --test --experimental-test-coverage test/unit/*.test.ts test/integration/*.test.ts; fi
 if [ "$mutation" = "true" ]; then
+    # Fault-injected native SQLite crashes must not leave core dumps.
+    ulimit -c 0
     rm -rf .stryker-tmp
     tmp="$(mktemp)"
     trap 'rm -f "$tmp"; rm -rf .stryker-tmp' EXIT

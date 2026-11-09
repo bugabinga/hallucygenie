@@ -23,6 +23,8 @@ jobs:
                   restore-keys: ${{ runner.os }}-npm-
             - name: Setup JS deps
               run: mise run setup --js
+            - name: Setup media tools
+              run: sudo apt-get update && sudo apt-get install -y --no-install-recommends ffmpeg
             - name: Check
               run: mise run check
 
@@ -107,5 +109,11 @@ jobs:
             - uses: jdx/mise-action@v3
               with:
                   cache: true
-            - name: Build image
-              run: mise run image hallucygenie:ci
+            - name: Setup JS deps
+              run: mise run setup --js
+            - name: Setup browsers
+              run: mise run setup --browsers
+            - name: Setup media tools
+              run: sudo apt-get update && sudo apt-get install -y --no-install-recommends ffmpeg
+            - name: Prove release without publication
+              run: mise run release --check hallucygenie:ci

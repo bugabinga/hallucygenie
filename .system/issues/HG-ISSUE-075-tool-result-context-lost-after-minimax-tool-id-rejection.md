@@ -46,7 +46,14 @@ Regression risk:
 - This can burn media quota and confuse kids by generating duplicate assets instead of answering follow-up questions.
 - It also hides a protocol failure behind a superficially successful UI tool card.
 
-Possible fix:
+Implemented repair:
+
+Historical calls, inputs, full text results, errors, and visible reasoning are projected into ordinary provenance-labelled text without replaying provider tool IDs.
+Current-turn media results use durable local asset handles after storage finalization.
+Older records remain retrievable; stored media can be inspected through session-scoped tools.
+Regression coverage: `test/integration/conversation.test.ts`, `test/integration/context-failure.test.ts`, and `test/integration/media-context.test.ts`.
+
+Original investigation:
 
 - Investigate why MiniMax rejects the returned `tool_result` id immediately after accepting the `tool_use` stream.
 - Do not silently end the turn with only tool protocol rows when provider continuation fails.

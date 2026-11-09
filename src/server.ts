@@ -72,7 +72,7 @@ import {
 } from "./db.ts";
 
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
-import { dirname } from "node:path";
+import { basename, dirname, resolve } from "node:path";
 import { Readable } from "node:stream";
 import { createLogger, nextReqId } from "./log.ts";
 
@@ -83,24 +83,6 @@ function longTextSummary(text: string): string {
     return `${compact.slice(0, 180)}${compact.length > 180 ? "…" : ""} (${text.length} chars)`;
 }
 
-function compactLongSpeechInput(args: Record<string, unknown>): Record<string, unknown> {
-    const text = typeof args.text === "string" ? args.text : "";
-    const out: Record<string, unknown> = {
-        text_summary: longTextSummary(text),
-        text_length: text.length
-    };
-    for (const key of ["voice_id", "speed", "volume", "pitch"] as const) {
-        if (args[key] !== undefined) out[key] = args[key];
-    }
-    return out;
-}
-
-function publicToolInput(
-    toolName: string,
-    args: Record<string, unknown>
-): Record<string, unknown> {
-    return toolName === "generate_long_speech" ? compactLongSpeechInput(args) : args;
-}
 import type { DatabaseSync as Database } from "node:sqlite";
 import {
     type AgentEvent,
@@ -116,6 +98,9 @@ import {
     safeToolResultForUser,
     type SteerQueue
 } from "./agent.ts";
+import { CONVERSATION_TOOLS, projectConversation, readConversation } from "./conversation.ts";
+import { assertNoRawAssetDataInMessage } from "./db.ts";
+import { inspectMediaFile } from "./media.ts";
 import { MINIMAX_BASE, MUSIC_DISABLED_MESSAGE, type ToolResult, VIDEO_MODEL } from "./tools.ts";
 
 const steerQueues = new Map<string, SteerQueue>();
@@ -266,6 +251,14 @@ function validateChatBody(body: unknown):
         }
     }
 
+    if (obj.messages.length !== 1 || obj.messages[0].role !== "user") {
+        return { ok: false, error: "Exactly one user message is required." };
+    }
+    try {
+        assertNoRawAssetDataInMessage(obj.messages[0].content);
+    } catch {
+        return { ok: false, error: "Raw media is not allowed in chat." };
+    }
     return {
         ok: true,
         body: obj as unknown as ChatRequestBody
@@ -275,7 +268,7 @@ function validateChatBody(body: unknown):
 // ── Static file serving ──────────────────────────────────────────────
 
 import { readFile, stat } from "node:fs/promises";
-import { join, resolve, sep } from "node:path";
+import { join, sep } from "node:path";
 
 const MIME_TYPES: Record<string, string> = {
     ".html": "text/html; charset=utf-8",
@@ -332,9 +325,6 @@ async function serveStaticFile(path: string): Promise<Response | null> {
 // Anthropic-format payload internally.
 
 function contentForPersistence(msg: ChatMessage, savedTool: ToolResult | null): string {
-    if (msg.role === "assistant") {
-        return msg.tool_calls ? "" : sanitizeAssistantMediaMarkup(msg.content);
-    }
     if (savedTool) {
         if (savedTool.type === "error") return `Error: ${savedTool.content}`;
         if (savedTool.type === "image" && savedTool.urls?.length) return savedTool.urls.join("\n");
@@ -378,24 +368,7 @@ export async function handleChat(
 
     // Load existing history from DB for this session
     if (sessionId) {
-        const history = getMessages(database, sessionId);
-        for (const row of history) {
-            // MiniMax rejects replayed historical tool_result ids. Keep saved tool rows
-            // for assets/history, but never resend old tool protocol messages to chat.
-            if (row.role === "tool") continue;
-            if (row.role === "assistant" && row.tool_calls_json) continue;
-
-            const content = row.role === "assistant"
-                ? sanitizeAssistantMediaMarkup(row.content)
-                : row.content;
-            if (row.role === "assistant" && !content.trim()) continue;
-
-            const msg: ChatMessage = {
-                role: row.role as ChatMessage["role"],
-                content
-            };
-            messages.push(msg);
-        }
+        messages.push(...projectConversation(getMessages(database, sessionId)));
     }
 
     // Append new user messages
@@ -441,6 +414,8 @@ export async function handleChat(
     }
     // Get or create steer queue for this session
     const steerQueue = sessionId ? getOrCreateSteerQueue(sessionId) : undefined;
+    // Previously accepted steering is already in the loaded committed history.
+    if (steerQueue) drainSteer(steerQueue);
 
     // Set up SSE stream
     const { readable, writable } = new TransformStream<Uint8Array, Uint8Array>();
@@ -453,7 +428,7 @@ export async function handleChat(
     // Run agent loop in background, streaming events to SSE
     (async () => {
         try {
-            const finalMessages = await runAgentLoop(
+            await runAgentLoop(
                 contextMessages,
                 apiKey,
                 async (event: AgentEvent) => {
@@ -503,50 +478,11 @@ export async function handleChat(
                             break;
                         }
                         case "tool_result": {
-                            if (!event.result) throw new Error("tool_result event missing result");
-                            // Save image/audio assets to disk
-                            const saved = sessionId
-                                ? await saveAssetFile(
-                                    event.result,
-                                    sessionId,
-                                    event.name ?? "",
-                                    event.prompt ?? null,
-                                    event.args
-                                )
-                                : event.result;
-                            if (event.id) {
-                                savedToolResults.set(event.id, saved);
-                                const consumed = consumedQuotaByToolId.get(event.id);
-                                if (consumed && saved.type === "error") {
-                                    releaseQuota(database, consumed.feature, consumed.amount);
-                                    consumedQuotaByToolId.delete(event.id);
-                                }
-                            }
-                            if (
-                                sessionId
-                                && getSession(database, sessionId)
-                                && event.name
-                                && event.args
-                            ) {
-                                try {
-                                    recordToolInputHistory(database, {
-                                        session_id: sessionId,
-                                        origin: "agent",
-                                        tool_name: event.name,
-                                        input: event.args,
-                                        status: saved.type === "error" ? "failed" : "succeeded",
-                                        asset_id: assetIdFromToolResult(saved),
-                                        provider: event.result.provider
-                                    });
-                                } catch (err) {
-                                    log.warn("tool history save failed", { error: String(err) });
-                                }
-                            }
                             const sseData = `event: tool_result\ndata: ${
                                 JSON.stringify({
                                     id: event.id,
                                     name: event.name,
-                                    result: publicToolResult(saved),
+                                    result: publicToolResult(event.result!),
                                     input: event.args
                                 })
                             }\n\n`;
@@ -561,61 +497,144 @@ export async function handleChat(
                 },
                 steerQueue,
                 sessionId
-                    ? (toolName: string, _args: Record<string, unknown>, toolId?: string) => {
-                        const feature = featureForTool(toolName);
-                        if (!feature) return null;
-                        const amount = quotaAmountForTool(toolName, _args);
-                        if (consumeQuota(database, feature, amount) !== null) {
-                            if (toolId) consumedQuotaByToolId.set(toolId, { feature, amount });
-                            return null;
+                    ? async (toolName: string, _args: Record<string, unknown>, toolId?: string) => {
+                        if (toolName === "read_conversation") {
+                            return readConversation(database, sessionId, _args);
                         }
-                        return {
-                            type: "error" as const,
-                            content: `Daily ${feature} quota is used up.`
-                        };
+                        if (toolName === "inspect_asset") {
+                            const { asset_id: assetId, question } = _args;
+                            if (
+                                typeof assetId !== "string" || !/^asset_[0-9a-f-]+$/i.test(assetId)
+                                || typeof question !== "string" || !question.trim()
+                            ) {
+                                return {
+                                    type: "error" as const,
+                                    content: "Invalid asset inspection input."
+                                };
+                            }
+                            const asset = getAsset(database, assetId);
+                            if (
+                                !asset || asset.session_id !== sessionId
+                                || basename(asset.filename) !== asset.filename
+                            ) {
+                                return {
+                                    type: "error" as const,
+                                    content: "Invalid asset for this session."
+                                };
+                            }
+                            return inspectMediaFile(
+                                resolve("data/assets", asset.session_id, asset.filename),
+                                asset.mime_type,
+                                question,
+                                apiKey
+                            );
+                        }
+                        const feature = featureForTool(toolName);
+                        if (feature) {
+                            const amount = quotaAmountForTool(toolName, _args);
+                            if (consumeQuota(database, feature, amount) === null) {
+                                return {
+                                    type: "error" as const,
+                                    content: `Daily ${feature} quota is used up.`
+                                };
+                            }
+                            if (toolId) consumedQuotaByToolId.set(toolId, { feature, amount });
+                        }
+                        try {
+                            const args = await explicitExecutionArgs(
+                                { name: toolName, args: _args },
+                                database,
+                                sessionId
+                            );
+                            return safeToolResultForUser(
+                                toolName,
+                                await executeToolSafely(toolName, args, apiKey)
+                            );
+                        } catch {
+                            return {
+                                type: "error" as const,
+                                content: "Invalid session asset reference."
+                            };
+                        }
                     }
-                    : undefined
+                    : undefined,
+                {
+                    tools: sessionId ? CONVERSATION_TOOLS : [],
+                    onMessage: sessionId
+                        ? (msg) => {
+                            if (msg.role === "user") return; // Steering is durable before acknowledgement.
+                            const savedTool = msg.tool_call_id
+                                ? savedToolResults.get(msg.tool_call_id) ?? null
+                                : null;
+                            saveMessage(
+                                database,
+                                sessionId,
+                                msg.role,
+                                contentForPersistence(msg, savedTool),
+                                msg.tool_calls ? JSON.stringify(msg.tool_calls) : null,
+                                msg.tool_call_id ?? null,
+                                msg.thinking ?? null
+                            );
+                        }
+                        : undefined,
+                    onToolResult: async (event) => {
+                        if (!event.result) throw new Error("tool_result event missing result");
+                        // Save image/audio assets to disk
+                        const saved = sessionId
+                            ? await saveAssetFile(
+                                event.result,
+                                sessionId,
+                                event.name ?? "",
+                                event.prompt ?? null,
+                                event.args
+                            )
+                            : event.result;
+                        if (event.id) {
+                            savedToolResults.set(event.id, saved);
+                            const consumed = consumedQuotaByToolId.get(event.id);
+                            if (consumed && saved.type === "error") {
+                                releaseQuota(database, consumed.feature, consumed.amount);
+                                consumedQuotaByToolId.delete(event.id);
+                            }
+                        }
+                        if (
+                            sessionId
+                            && getSession(database, sessionId)
+                            && event.name
+                            && event.args
+                        ) {
+                            try {
+                                recordToolInputHistory(database, {
+                                    session_id: sessionId,
+                                    origin: "agent",
+                                    tool_name: event.name,
+                                    input: event.args,
+                                    status: saved.type === "error" ? "failed" : "succeeded",
+                                    asset_id: assetIdFromToolResult(saved),
+                                    provider: event.result.provider
+                                });
+                            } catch (err) {
+                                log.warn("tool history save failed", { error: String(err) });
+                            }
+                        }
+                        return saved;
+                    }
+                }
             );
-
-            // Save assistant messages and tool results to DB
-            if (sessionId) {
-                // Find new messages (those beyond what we sent)
-                // Use contextMessages.length, not messages.length, because finalMessages
-                // is built from the trimmed context, not the full untrimmed array.
-                const existingCount = contextMessages.length;
-                for (let i = existingCount; i < finalMessages.length; i++) {
-                    const msg = finalMessages[i];
-                    // Store tool_calls as JSON for Anthropic message reconstruction
-                    const toolCallsJson = msg.tool_calls ? JSON.stringify(msg.tool_calls) : null;
-                    const savedTool = msg.tool_call_id
-                        ? (savedToolResults.get(msg.tool_call_id) ?? null)
-                        : null;
-                    const content = contentForPersistence(msg, savedTool);
-                    const thinking = msg.role === "assistant" && msg.thinking?.trim()
-                        ? msg.thinking
-                        : null;
-                    saveMessage(
-                        database,
-                        sessionId,
-                        msg.role,
-                        content,
-                        toolCallsJson,
-                        msg.tool_call_id ?? null,
-                        thinking
-                    );
-                }
-
-                if (steerQueue) {
-                    for (const msg of drainSteer(steerQueue)) {
-                        saveMessage(database, sessionId, "user", msg);
-                    }
-                }
-            }
         } catch (err) {
-            const errorEvent = `event: error\ndata: ${JSON.stringify({ error: String(err) })}\n\n`;
-            await writer.write(encoder.encode(errorEvent));
+            log.warn("chat interrupted", { error: err instanceof Error ? err.name : "unknown" });
+            const error = "Chat interrupted. Please try again.";
+            if (sessionId) saveMessage(database, sessionId, "assistant", `[Error: ${error}]`);
+            try {
+                await writer.write(
+                    encoder.encode(`event: error\ndata: ${JSON.stringify({ error })}\n\n`)
+                );
+            } catch { /* Client disconnected; committed records remain available. */ }
         } finally {
-            await writer.close();
+            if (steerQueue) drainSteer(steerQueue);
+            try {
+                await writer.close();
+            } catch { /* Client disconnected. */ }
         }
     })();
 
@@ -790,10 +809,12 @@ async function localReferenceAssetDataUrl(
 }
 
 async function explicitExecutionArgs(
-    directive: DirectToolExecution,
+    directive: { name: string; args: Record<string, unknown>; },
     database: Database,
     sessionId?: string
 ): Promise<Record<string, unknown>> {
+    const { allow_data_url: _untrustedFlag, ...publicArgs } = directive.args;
+    directive = { ...directive, args: publicArgs };
     if (directive.name === "generate_image") {
         const referenceAssetId = directive.args.reference_asset_id;
         if (typeof referenceAssetId !== "string") return directive.args;
@@ -1008,6 +1029,8 @@ function handleDirectToolExecution(
     const writer = writable.getWriter();
     const encoder = new TextEncoder();
     const toolCallId = `direct_${randomUUID()}`;
+    let resultCommitted = false;
+    let reservation: { feature: string; amount: number; } | null = null;
 
     const writeSse = async (event: string | null, data: unknown) => {
         const prefix = event ? `event: ${event}\n` : "";
@@ -1016,7 +1039,21 @@ function handleDirectToolExecution(
 
     (async () => {
         try {
-            const publicInput = publicToolInput(directive.name, directive.args);
+            const publicInput = directive.args;
+            if (sessionId) {
+                saveMessage(
+                    database,
+                    sessionId,
+                    "assistant",
+                    "",
+                    JSON.stringify([{
+                        id: toolCallId,
+                        name: directive.name,
+                        input: publicInput
+                    }]),
+                    null
+                );
+            }
             await writeSse("tool_start", {
                 id: toolCallId,
                 name: directive.name,
@@ -1028,6 +1065,7 @@ function handleDirectToolExecution(
             const quotaBlocked = feature
                 ? consumeQuota(database, feature, quotaAmount) === null
                 : false;
+            if (feature && !quotaBlocked) reservation = { feature, amount: quotaAmount };
             const executionArgs = quotaBlocked
                 ? directive.args
                 : await explicitExecutionArgs(directive, database, sessionId);
@@ -1122,6 +1160,7 @@ function handleDirectToolExecution(
             if (feature && !quotaBlocked && saved.type === "error") {
                 releaseQuota(database, feature, quotaAmount);
             }
+            reservation = null;
 
             if (sessionId && getSession(database, sessionId)) {
                 try {
@@ -1139,30 +1178,7 @@ function handleDirectToolExecution(
                 }
             }
 
-            await writeSse("tool_result", {
-                id: toolCallId,
-                name: directive.name,
-                result: publicToolResult(saved),
-                input: publicInput
-            });
-            if (sessionId && saved.type !== "error" && clearCreateDraftOnSuccess) {
-                deleteDraft(database, sessionId, "create");
-            }
-            await writer.write(encoder.encode("data: [DONE]\n\n"));
-
             if (sessionId) {
-                saveMessage(
-                    database,
-                    sessionId,
-                    "assistant",
-                    "",
-                    JSON.stringify([{
-                        id: toolCallId,
-                        name: directive.name,
-                        input: publicInput
-                    }]),
-                    null
-                );
                 saveMessage(
                     database,
                     sessionId,
@@ -1176,10 +1192,34 @@ function handleDirectToolExecution(
                     toolCallId
                 );
             }
-        } catch (err) {
-            await writeSse("error", { error: String(err) });
+            resultCommitted = true;
+            await writeSse("tool_result", {
+                id: toolCallId,
+                name: directive.name,
+                result: publicToolResult(saved),
+                input: publicInput
+            });
+            if (sessionId && saved.type !== "error" && clearCreateDraftOnSuccess) {
+                deleteDraft(database, sessionId, "create");
+            }
+            await writer.write(encoder.encode("data: [DONE]\n\n"));
+        } catch (cause) {
+            if (reservation) releaseQuota(database, reservation.feature, reservation.amount);
+            const error = cause instanceof Error
+                    && /^(?:reference image|analyze image) (?:asset (?:invalid|requires a session|not found)|type invalid|must be PNG or JPG|too large)$/
+                        .test(cause.message)
+                ? cause.message
+                : "Invalid tool input or interrupted execution.";
+            if (sessionId && !resultCommitted) {
+                saveMessage(database, sessionId, "tool", `Error: ${error}`, null, toolCallId);
+            }
+            try {
+                await writeSse("error", { error });
+            } catch { /* Disconnected client. */ }
         } finally {
-            await writer.close();
+            try {
+                await writer.close();
+            } catch { /* Disconnected client. */ }
         }
     })();
 
@@ -1756,8 +1796,21 @@ export async function handleRequest(req: Request): Promise<Response> {
             ) {
                 return jsonResponse({ error: "Missing required field: message" }, 400);
             }
-            const queue = getOrCreateSteerQueue(resolveSessionId(req, database));
-            queueSteer(queue, (parsed as { message: string; }).message);
+            let sessionId: string;
+            try {
+                sessionId = resolveExistingSessionId(req, database);
+            } catch {
+                return jsonResponse({ error: "Session not found" }, 404);
+            }
+            const message = (parsed as { message: string; }).message;
+            try {
+                assertNoRawAssetDataInMessage(message);
+            } catch {
+                return jsonResponse({ error: "Raw media is not allowed in steering." }, 400);
+            }
+            saveMessage(database, sessionId, "user", message);
+            const queue = getOrCreateSteerQueue(sessionId);
+            queueSteer(queue, message);
             return jsonResponse({ ok: true });
         }
 
@@ -1795,7 +1848,8 @@ export async function handleRequest(req: Request): Promise<Response> {
         if (dbOrErr instanceof Response) return dbOrErr;
         const database = dbOrErr;
 
-        const sessionId = resolveSessionId(req, database);
+        const sessionId = validateSessionId(req) ?? new URL(req.url).searchParams.get("session_id")
+            ?? getOrCreateActiveSessionId(database);
 
         const assetId = path.slice("/asset/".length);
         const asset = getAsset(database, assetId);
@@ -1808,7 +1862,7 @@ export async function handleRequest(req: Request): Promise<Response> {
             return new Response(file, {
                 headers: {
                     "Content-Type": asset.mime_type,
-                    "Cache-Control": "public, max-age=31536000"
+                    "Cache-Control": "private, no-store"
                 }
             });
         } catch {

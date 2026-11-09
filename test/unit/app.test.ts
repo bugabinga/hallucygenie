@@ -5,7 +5,7 @@
 import assert from "node:assert/strict";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
-import { after, before, describe, it } from "node:test";
+import { after, afterEach, before, describe, it } from "node:test";
 import { fileURLToPath } from "node:url";
 import {
     imageCreateValidationError,
@@ -26,6 +26,29 @@ const ORIGINAL_FETCH = Object.getOwnPropertyDescriptor(globalThis, "fetch")?.val
 
 after(() => {
     globalThis.fetch = ORIGINAL_FETCH;
+});
+
+function waitForAppInit(win: Window): Promise<void> {
+    if (win.document.documentElement.dataset.hgReady === "1") return Promise.resolve();
+    return new Promise((resolve, reject) => {
+        const observer = new win.MutationObserver(() => {
+            if (win.document.documentElement.dataset.hgReady !== "1") return;
+            observer.disconnect();
+            clearTimeout(timeout);
+            resolve();
+        });
+        const timeout = setTimeout(() => {
+            observer.disconnect();
+            reject(new Error("App initialization did not finish"));
+        }, 2000);
+        observer.observe(win.document.documentElement, { attributes: true });
+    });
+}
+
+afterEach(async () => {
+    if (globalThis.document?.documentElement.dataset.hgReady === "0") {
+        await waitForAppInit(globalThis.window as unknown as Window);
+    }
 });
 
 function writeSnapshot(name: string, html: string): void {
@@ -81,13 +104,6 @@ function* parseSSEChunk(chunk: string): Generator<SSEEvent> {
     if (currentData) {
         yield { event: currentEvent, data: currentData };
     }
-}
-
-// API helpers
-function createApiHeaders(): Record<string, string> {
-    return {
-        "Content-Type": "application/json"
-    };
 }
 
 // Tool emojis
@@ -208,8 +224,8 @@ describe("SSE Parsing", () => {
 // ── API Headers ────────────────────────────────────────────────────────
 
 describe("API Headers", () => {
-    it("includes content type only", () => {
-        const headers = createApiHeaders();
+    it("production headers include content type without a selected session", () => {
+        const headers = appCreateApiHeaders();
         assert.equal(headers["Content-Type"], "application/json");
         assert.equal("X-Session-Id" in headers, false);
     });
@@ -1104,6 +1120,7 @@ function createTestWindow(options?: ConstructorParameters<typeof Window>[0]): Wi
 import {
     autoResizeInput,
     closeLightbox,
+    createApiHeaders as appCreateApiHeaders,
     createElement,
     deleteProfile,
     fetchHistory,
@@ -3133,6 +3150,61 @@ describe("init event binding", () => {
         assert.equal(input.placeholder, "Say hi");
     });
 
+    it("pins multipart image uploads to the displayed project without overriding Content-Type", async () => {
+        setupFullDOM();
+        doc.querySelector("#create-analyze-form")?.insertAdjacentHTML(
+            "afterbegin",
+            "<button id=\"analyze-dropzone\" type=\"button\">Drop image</button><input id=\"analyze-file\" type=\"file\"><p id=\"analyze-file-status\"></p><div id=\"analyze-file-preview\" hidden></div>"
+        );
+        const uploads: Array<{ path: string; headers: Headers; }> = [];
+        globalThis.fetch = async (input, options) => {
+            const path = String(input);
+            if (options?.body instanceof FormData) {
+                uploads.push({ path, headers: new Headers(options.headers) });
+                return Response.json({
+                    assetId: "uploaded-image",
+                    assetUrl: "/asset/uploaded-image",
+                    profile: {
+                        version: 1,
+                        username: "",
+                        interests: "",
+                        hates: "",
+                        favorites: "",
+                        avatar: { type: "asset", value: "uploaded-image" },
+                        updatedAt: 0
+                    }
+                });
+            }
+            return Response.json({ messages: [], assets: [], items: [], draft: null });
+        };
+        init();
+        await new Promise(resolve => setTimeout(resolve, 20));
+        doc.body.insertAdjacentHTML(
+            "beforeend",
+            "<select id=\"session-select\" data-session-id=\"displayed-a\"><option value=\"displayed-a\" selected>A</option></select>"
+        );
+        for (const id of ["analyze-file", "img-reference-file", "profile-avatar-upload"]) {
+            const input = doc.querySelector(`#${id}`) as HTMLInputElement;
+            const file = new win.File(["png"], "project.png", { type: "image/png" });
+            Object.defineProperty(input, "files", { value: [file], configurable: true });
+            input.dispatchEvent(new win.Event("change", { bubbles: true }));
+            await new Promise(resolve => setTimeout(resolve, 30));
+        }
+        assert.deepEqual(uploads.map(upload => upload.path), [
+            "/api/analyze-image",
+            "/api/reference-image",
+            "/api/profile/avatar"
+        ]);
+        for (const upload of uploads) {
+            assert.equal(upload.headers.get("X-Session-Id"), "displayed-a", upload.path);
+            assert.equal(
+                upload.headers.has("Content-Type"),
+                false,
+                "browser owns multipart boundary"
+            );
+        }
+    });
+
     it("Create image reference upload validates, previews, fails, and clears", async () => {
         setupFullDOM();
         const calls: string[] = [];
@@ -3150,6 +3222,7 @@ describe("init event binding", () => {
         };
         init();
 
+        await waitForAppInit(win);
         const fileInput = doc.querySelector("#img-reference-file") as HTMLInputElement;
         const asset = doc.querySelector("#img-reference-asset") as HTMLInputElement;
         const status = doc.querySelector("#img-reference-status") as HTMLElement;
@@ -3977,8 +4050,12 @@ describe("init event binding", () => {
         videoRecent.dataset.kind = "video";
         doc.querySelector("[data-panel=\"video\"]")?.appendChild(videoRecent);
         const calls: string[] = [];
+        const historyHeaders: Headers[] = [];
         globalThis.fetch = (url: string, init?: RequestInit) => {
             calls.push(`${init?.method ?? "GET"} ${url}`);
+            if (String(url).startsWith("/api/create-history")) {
+                historyHeaders.push(new Headers(init?.headers));
+            }
             if (url === "/api/profile") {
                 return Promise.resolve(
                     new Response(
@@ -4024,6 +4101,12 @@ describe("init event binding", () => {
         };
         init();
 
+        await waitForAppInit(win);
+        historyHeaders.length = 0;
+        doc.body.insertAdjacentHTML(
+            "beforeend",
+            "<select id=\"session-select\" data-session-id=\"displayed-a\"><option value=\"displayed-a\" selected>A</option></select>"
+        );
         doc.querySelector<HTMLButtonElement>(".create-tab[data-tab=\"video\"]")?.click();
         await new Promise((resolve) => setTimeout(resolve, 30));
         doc.querySelector<HTMLButtonElement>(".create-recent[data-kind=\"video\"] .recent-button")
@@ -4038,6 +4121,10 @@ describe("init event binding", () => {
             ?.click();
         await new Promise((resolve) => setTimeout(resolve, 30));
         assert.ok(calls.includes("DELETE /api/create-history/hist_1"));
+        assert.ok(historyHeaders.length >= 3, "history read, deletion and reload exercised");
+        for (const headers of historyHeaders) {
+            assert.equal(headers.get("X-Session-Id"), "displayed-a");
+        }
     });
 
     it("Session controls switch chats, create chats, and restore scoped drafts", async () => {
@@ -4432,6 +4519,7 @@ describe("init event binding", () => {
             });
             init();
             await restored;
+            await waitForAppInit(win);
             (doc.querySelector("#create-btn") as HTMLButtonElement).click();
             assert.equal(feature.value, "saved-feature");
             assert.equal(
@@ -4794,7 +4882,7 @@ describe("sendSteer", () => {
 });
 
 describe("fetchHistory", () => {
-    it("returns messages from API without request headers", async () => {
+    it("returns messages using production headers with no selected session", async () => {
         let request: RequestInit | undefined;
         globalThis.fetch = (_url: string, init?: RequestInit) => {
             request = init;
@@ -4807,7 +4895,7 @@ describe("fetchHistory", () => {
         };
 
         const msgs = await fetchHistory();
-        assert.equal(request, undefined);
+        assert.deepEqual(request?.headers, { "Content-Type": "application/json" });
         assert.equal(msgs.length, 1);
         assert.equal(msgs[0].role, "user");
         assert.equal(msgs[0].content, "hi");
@@ -5303,7 +5391,7 @@ describe("init accessibility behavior", () => {
         assert.equal(doc.activeElement, opener);
     });
 
-    it("blocks new session while streaming when confirmation is rejected", async () => {
+    it("keeps the displayed session when new-chat and switch confirmations are rejected", async () => {
         const { doc } = setupDOM();
         const sessionSelect = doc.createElement("select");
         sessionSelect.id = "session-select";
@@ -5312,6 +5400,7 @@ describe("init accessibility behavior", () => {
         doc.body.append(sessionSelect, sessionNew);
 
         let newSessionPosts = 0;
+        let activationPosts = 0;
         let confirmCalls = 0;
         let resolveChat!: (response: Response) => void;
         globalThis.confirm = () => {
@@ -5325,13 +5414,14 @@ describe("init accessibility behavior", () => {
                     resolveChat = resolve;
                 });
             }
+            if (url.includes("/activate")) activationPosts++;
             if (url === "/api/sessions" && init?.method === "POST") newSessionPosts += 1;
             if (url === "/api/sessions") {
                 return Promise.resolve(
                     new Response(
                         JSON.stringify({
                             activeSessionId: "s1",
-                            sessions: [{ id: "s1", name: "New Chat" }]
+                            sessions: [{ id: "s1", name: "New Chat" }, { id: "s2", name: "Other" }]
                         }),
                         { status: 200, headers: { "Content-Type": "application/json" } }
                     )
@@ -5378,16 +5468,152 @@ describe("init accessibility behavior", () => {
         };
 
         init();
+        await new Promise(resolve => setTimeout(resolve, 20));
+        assert.equal(sessionSelect.value, "s1", "displayed session initialized");
         const sendPromise = sendMessage("keep streaming");
         await Promise.resolve();
         sessionNew.click();
 
         assert.equal(confirmCalls, 1);
         assert.equal(newSessionPosts, 0);
+        sessionSelect.value = "s2";
+        sessionSelect.dispatchEvent(new Event("change", { bubbles: true }));
+        assert.equal(confirmCalls, 2);
+        assert.equal(activationPosts, 0);
+        assert.equal(sessionSelect.value, "s1");
+        assert.equal(appCreateApiHeaders()["X-Session-Id"], "s1");
 
         resolveChat(createSSEResponse([sseDone()]));
         await sendPromise;
     });
+
+    it("reports readiness only after sessions, history and drafts finish loading", async () => {
+        const { doc } = setupDOM();
+        doc.body.insertAdjacentHTML("beforeend", "<select id=\"session-select\"></select>");
+        const pending = new Map<string, (response: Response) => void>();
+        globalThis.fetch = async (input) => {
+            const path = String(input);
+            if (["/api/sessions", "/api/history", "/api/draft/create"].includes(path)) {
+                return await new Promise<Response>(resolve => pending.set(path, resolve));
+            }
+            return Response.json({
+                version: 1,
+                username: "",
+                interests: "",
+                hates: "",
+                favorites: "",
+                avatar: { type: "asset", value: "" },
+                updatedAt: 0,
+                draft: null
+            });
+        };
+        init();
+        assert.notEqual(doc.documentElement.dataset.hgReady, "1");
+        pending.get("/api/sessions")!(Response.json({
+            activeSessionId: "ready-session",
+            sessions: [{ id: "ready-session", name: "Ready" }]
+        }));
+        await new Promise(resolve => setTimeout(resolve, 0));
+        assert.notEqual(doc.documentElement.dataset.hgReady, "1");
+        assert.ok(pending.has("/api/history"));
+        pending.get("/api/history")!(Response.json({ messages: [] }));
+        await new Promise(resolve => setTimeout(resolve, 0));
+        assert.notEqual(doc.documentElement.dataset.hgReady, "1");
+        assert.ok(pending.has("/api/draft/create"));
+        pending.get("/api/draft/create")!(Response.json({ draft: null }));
+        await new Promise(resolve => setTimeout(resolve, 0));
+        assert.equal(doc.documentElement.dataset.hgReady, "1");
+        assert.equal(appCreateApiHeaders()["X-Session-Id"], "ready-session");
+    });
+
+    for (const action of ["switch", "new"] as const) {
+        it(`accepts chat and Create after cancelling a stream to ${action} sessions`, async () => {
+            const { doc } = setupDOM();
+            const select = doc.createElement("select");
+            select.id = "session-select";
+            const button = doc.createElement("button");
+            button.id = "session-new";
+            doc.body.append(select, button);
+            let active = "s1";
+            const calls: Array<{ path: string; method: string; session: string | null; }> = [];
+            let chatCount = 0;
+            globalThis.confirm = () => true;
+            globalThis.fetch = async (input, options) => {
+                const path = String(input);
+                const method = options?.method ?? "GET";
+                const session = new Headers(options?.headers).get("X-Session-Id");
+                calls.push({ path, method, session });
+                if (path === "/api/chat") {
+                    if (++chatCount === 1) {
+                        return await new Promise<Response>((_resolve, reject) => {
+                            options?.signal?.addEventListener("abort", () => {
+                                reject(new DOMException("Cancelled", "AbortError"));
+                            }, { once: true });
+                        });
+                    }
+                    return createSSEResponse([sseDone()]);
+                }
+                if (path === "/api/create-tool") return createSSEResponse([sseDone()]);
+                if (path.endsWith("/activate") || (path === "/api/sessions" && method === "POST")) {
+                    active = "s2";
+                }
+                if (path === "/api/draft/chat" && method === "GET") {
+                    return Response.json({ draft: { text: `Draft for ${active}` } });
+                }
+                return Response.json({
+                    activeSessionId: active,
+                    sessions: [{ id: "s1", name: "First" }, { id: "s2", name: "Second" }],
+                    messages: [],
+                    assets: [],
+                    items: [],
+                    draft: null,
+                    version: 1,
+                    username: "",
+                    interests: "",
+                    hates: "",
+                    favorites: "",
+                    avatar: { type: "asset", value: "" },
+                    updatedAt: 0
+                });
+            };
+            init();
+            await new Promise(resolve => setTimeout(resolve, 20));
+            const oldResponse = sendMessage("old project request");
+            await Promise.resolve();
+            if (action === "switch") {
+                select.value = "s2";
+                select.dispatchEvent(new Event("change", { bubbles: true }));
+            } else button.click();
+            await oldResponse;
+            await new Promise(resolve => setTimeout(resolve, 20));
+            assert.equal(select.value, "s2");
+            assert.equal(
+                (doc.querySelector("#chat-input") as HTMLTextAreaElement).value,
+                "Draft for s2"
+            );
+            assert.equal(
+                calls.filter(call => call.method === "DELETE").length,
+                0,
+                "cancellation preserves drafts"
+            );
+            await sendMessage("new project request");
+            assert.equal(
+                chatCount,
+                2,
+                "new project starts chat instead of steering the cancelled response"
+            );
+            await sendCreateTool(
+                "generate_image",
+                { prompt: "new project image" },
+                "New project image"
+            );
+            assert.equal(
+                calls.some(call => call.path === "/api/create-tool" && call.session === "s2"),
+                true
+            );
+            assert.equal(calls.some(call => call.path === "/api/steer"), false);
+        });
+    }
 });
 
 // ── HG-ISSUE-007/008/009: Asset URL handling, quota refresh, assets refresh ──
@@ -5602,7 +5828,7 @@ describe("loadAssets", () => {
         // Wait for async fetch + render
         await new Promise((r) => setTimeout(r, 50));
 
-        assert.equal(requestOpts, undefined);
+        assert.deepEqual(requestOpts?.headers, { "Content-Type": "application/json" });
 
         const cards = doc.querySelectorAll(".asset-card");
         assert.equal(cards.length, 3, "should render asset cards");

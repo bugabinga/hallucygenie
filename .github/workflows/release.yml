@@ -42,6 +42,8 @@ jobs:
               run: mise run setup --js
             - name: Setup browsers
               run: mise run setup --browsers
+            - name: Setup media tools
+              run: sudo apt-get update && sudo apt-get install -y --no-install-recommends ffmpeg
             - name: Prove release artifact locally
               run: RELEASE_TAG="$RELEASE_TAG" mise run release --check "$IMAGE:$RELEASE_TAG"
             - name: Login to GHCR

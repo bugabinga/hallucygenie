@@ -928,14 +928,13 @@ describe("font vendoring health", () => {
 });
 
 describe("frontend session identity health", () => {
-    it("does not create browser-owned session IDs or send X-Session-Id", () => {
+    it("does not create or persist browser-owned session IDs", () => {
         assert.equal(appTs.includes("crypto.randomUUID()"), false);
         assert.equal(appTs.includes("hallucygenie_session_id"), false);
         assert.equal(appTs.includes("LEGACY_SESSION_KEY"), false);
-        assert.equal(appTs.includes("X-Session-Id"), false);
     });
 
-    it("uses active-session asset API URLs without session query", () => {
+    it("uses server asset URLs without the legacy session selector", () => {
         assert.match(appTs, /asset\.url/);
         assert.match(appTs, /asset\.download_url/);
         assert.equal(appTs.includes("?s="), false);
@@ -1004,11 +1003,6 @@ describe("constitution health", () => {
         assert.equal(serverTs.includes("const assetId = nextReqId()"), false);
         assert.equal(serverTs.includes("`direct_$" + "{nextReqId()}`"), false);
         assert.match(serverTs, /randomUUID/);
-    });
-
-    it("drains leftover steering messages after agent turns", () => {
-        assert.match(serverTs, /drainSteer/);
-        assert.match(serverTs, /saveMessage\(database, sessionId, "user", msg\)/);
     });
 
     it("mise commands have no constitution wrapper ceremony", () => {
@@ -1373,7 +1367,7 @@ describe("project metadata health", () => {
 describe("GitHub Actions health", () => {
     it("emits required status contexts and fails integration unless every dependency succeeds", () => {
         const gate = ciYml.match(
-            /name: check \+ unit \+ integration \+ e2e\n([\s\S]*?)(?=\n    \w+:|$)/
+            /name: check \+ unit \+ integration \+ e2e\n([\s\S]*?)(?=\n {4}\w+:|$)/
         )?.[1];
         assert.ok(gate, "required integration status context missing");
         assert.match(gate, /needs: \[check, e2e\]/);
@@ -1447,7 +1441,8 @@ describe("GitHub Actions health", () => {
 
     it("builds and releases containers without local act clutter", () => {
         assert.match(ciYml, /image:/);
-        assert.match(ciYml, /run: mise run image hallucygenie:ci/);
+        assert.match(ciYml, /run: mise run release --check hallucygenie:ci/);
+        assert.doesNotMatch(ciYml, /mise run image --push|git tag/);
         assert.match(releaseYml, /tags:\n\s+- "v\*\.\*\.\*"/);
         assert.match(releaseYml, /ghcr\.io\/bugabinga\/hallucygenie/);
         assert.match(releaseYml, /permissions:\n\s+contents: read\n\s+packages: write/);
