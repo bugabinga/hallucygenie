@@ -1,6 +1,6 @@
 {
     "name": "hallucygenie",
-    "version": "1.0.2",
+    "version": "1.0.3",
     "license": "MIT",
     "type": "module",
     "packageManager": "npm@11.18.0",

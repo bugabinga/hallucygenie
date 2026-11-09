@@ -28,6 +28,7 @@ const dprintJson = readFileSync("dprint.json", "utf-8");
 const biomeJson = readFileSync("biome.json", "utf-8");
 const sqruffConfig = readFileSync(".sqruff", "utf-8");
 const packageJson = readFileSync("package.json", "utf-8");
+const releaseVersion = (JSON.parse(packageJson) as { version: string; }).version;
 const lefthookYml = readFileSync("lefthook.yml", "utf-8");
 const ciYml = readFileSync(".github/workflows/ci.yml", "utf-8");
 const releaseYml = readFileSync(".github/workflows/release.yml", "utf-8");
@@ -191,7 +192,10 @@ describe("index.html health", () => {
         assert.equal(modal?.getAttribute("role"), "dialog");
         assert.equal(modal?.getAttribute("aria-modal"), "true");
         assert.equal(modal?.getAttribute("aria-labelledby"), "whats-new-title");
-        assert.match(modal?.textContent ?? "", /What’s new in v1\.0/);
+        assert.equal(
+            doc.querySelector("#whats-new-title")?.textContent,
+            `✨ What’s new in v${releaseVersion}`
+        );
         assert.match(modal?.textContent ?? "", /video/i);
         assert.match(modal?.textContent ?? "", /reference/i);
         assert.match(modal?.textContent ?? "", /long narration/i);
@@ -1348,12 +1352,12 @@ describe("project metadata health", () => {
         assert.match(readmeMd, /License-MIT/);
         assert.match(readmeMd, /Dark little genie/);
         assert.match(readmeMd, /chat, image, voice, and song/);
-        assert.match(readmeMd, /ghcr\.io\/bugabinga\/hallucygenie:v1\.0\.2/);
+        assert.ok(readmeMd.includes(`ghcr.io/bugabinga/hallucygenie:v${releaseVersion}`));
         assert.match(readmeMd, /MINIMAX_API_KEY/);
         assert.match(readmeMd, /No built-in auth/);
         assert.match(readmeMd, /data\//);
         assert.match(readmeMd, /mise run release --check/);
-        assert.match(readmeMd, /mise run release v1\.0\.2/);
+        assert.ok(readmeMd.includes(`mise run release v${releaseVersion}`));
         assert.match(readmeMd, /opens the release image in Chrome/);
         assert.match(readmeMd, /Made with love, hand-vibing AI, and bugabinga\./);
     });
@@ -1375,7 +1379,7 @@ describe("project metadata health", () => {
             license: string;
             version: string;
         };
-        assert.equal(pkg.version, "1.0.2");
+        assert.match(pkg.version, /^\d+\.\d+\.\d+$/);
         assert.equal(pkg.license, "MIT");
         assert.match(licenseMd, /^MIT License/);
         assert.match(licenseMd, /Copyright \(c\) 2026 bugabinga/);

@@ -27,7 +27,7 @@ Open <http://localhost:3000>.
 ## Run release image
 
 ```sh
-podman pull ghcr.io/bugabinga/hallucygenie:v1.0.2
+podman pull ghcr.io/bugabinga/hallucygenie:v1.0.3
 podman run --rm \
   --name hallucygenie \
   -p 127.0.0.1:3000:3000 \
@@ -35,7 +35,7 @@ podman run --rm \
   -v "$PWD/data:/app/data" \
   --health-cmd 'node --eval "fetch(\"http://127.0.0.1:3000/api/health\").then((r)=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"' \
   --health-interval 30s --health-timeout 3s --health-start-period 5s --health-retries 3 \
-  ghcr.io/bugabinga/hallucygenie:v1.0.2
+  ghcr.io/bugabinga/hallucygenie:v1.0.3
 ```
 
 Then open <http://localhost:3000>.
@@ -57,8 +57,8 @@ Then open <http://localhost:3000>.
 ## Release
 
 ```sh
-RELEASE_TAG=v1.0.2 mise run release --check ghcr.io/bugabinga/hallucygenie:v1.0.2
-mise run release v1.0.2
+RELEASE_TAG=v1.0.3 mise run release --check ghcr.io/bugabinga/hallucygenie:v1.0.3
+mise run release v1.0.3
 ```
 
 `mise run release` opens the release image in Chrome, asks for manual approval, tags, and pushes.

@@ -1,12 +1,29 @@
 # Changelog
 
-## Unreleased
+## 1.0.3 - 2026-11-09
 
-### Container
+### Kid notes
 
-• Release publication now pushes the version tag and `latest` from the same image.
+• Chats keep their own history when switching sessions.
+• Chat replies stream more reliably, with clearer error handling and a dismissible steering hint.
+
+### Parent notes
+
+• Container runtime moves from Bun to Node 26.4.0.
+• Release publication pushes `v1.0.3` and `latest` from the same image.
 • Quadlet deployments can follow `latest` with Podman registry auto-updates, including future major versions.
-• Runtime env and database schema are unchanged.
+• Runtime env is unchanged; no built-in auth has been added.
+• Back up `data/` before upgrading; the non-root container needs write access to it.
+
+### Database
+
+• SQLite schema remains version 14; no new migration or destructive data change.
+• Existing migration files received SQL formatting and lint annotations only.
+• SQLite access now uses Node's built-in driver; existing data and assets remain in `data/`.
+
+### Fixed issues
+
+• Release includes the session, streaming, and safety fixes since `v1.0.2`; no issue status is reopened by this release.
 
 ## 1.0.2 - 2026-06-12
 
