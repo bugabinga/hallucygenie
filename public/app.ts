@@ -299,7 +299,9 @@ async function clearDraft(kind: "chat" | "create"): Promise<void> {
 }
 
 async function fetchCreateHistory(kind: string): Promise<CreateHistoryItem[]> {
-    const resp = await fetch(`/api/create-history?kind=${encodeURIComponent(kind)}&limit=5`);
+    const resp = await fetch(`/api/create-history?kind=${encodeURIComponent(kind)}&limit=5`, {
+        headers: createApiHeaders()
+    });
     if (!resp.ok) return [];
     return ((await resp.json()) as { items: CreateHistoryItem[]; }).items;
 }
@@ -1387,7 +1389,7 @@ function finishStreaming(): void {
 function cancelActiveStream(): void {
     activeStreamController?.abort();
     if (!isStreaming) return;
-    lyricsWriteResolve?.("");
+    setLyricsWriteResolve(null);
     capturedLyricsText = null;
     streamHadError = true;
     finishStreaming();

@@ -4050,8 +4050,12 @@ describe("init event binding", () => {
         videoRecent.dataset.kind = "video";
         doc.querySelector("[data-panel=\"video\"]")?.appendChild(videoRecent);
         const calls: string[] = [];
+        const historyHeaders: Headers[] = [];
         globalThis.fetch = (url: string, init?: RequestInit) => {
             calls.push(`${init?.method ?? "GET"} ${url}`);
+            if (String(url).startsWith("/api/create-history")) {
+                historyHeaders.push(new Headers(init?.headers));
+            }
             if (url === "/api/profile") {
                 return Promise.resolve(
                     new Response(
@@ -4097,6 +4101,12 @@ describe("init event binding", () => {
         };
         init();
 
+        await waitForAppInit(win);
+        historyHeaders.length = 0;
+        doc.body.insertAdjacentHTML(
+            "beforeend",
+            "<select id=\"session-select\" data-session-id=\"displayed-a\"><option value=\"displayed-a\" selected>A</option></select>"
+        );
         doc.querySelector<HTMLButtonElement>(".create-tab[data-tab=\"video\"]")?.click();
         await new Promise((resolve) => setTimeout(resolve, 30));
         doc.querySelector<HTMLButtonElement>(".create-recent[data-kind=\"video\"] .recent-button")
@@ -4111,6 +4121,10 @@ describe("init event binding", () => {
             ?.click();
         await new Promise((resolve) => setTimeout(resolve, 30));
         assert.ok(calls.includes("DELETE /api/create-history/hist_1"));
+        assert.ok(historyHeaders.length >= 3, "history read, deletion and reload exercised");
+        for (const headers of historyHeaders) {
+            assert.equal(headers.get("X-Session-Id"), "displayed-a");
+        }
     });
 
     it("Session controls switch chats, create chats, and restore scoped drafts", async () => {

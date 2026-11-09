@@ -1756,6 +1756,58 @@ async function runE2ETests(): Promise<void> {
                 throw new Error(`Generated lyrics draft did not survive reload: ${lyrics}`);
             }
 
+            const sessionA = await page.locator("#session-select").inputValue();
+            const pendingDraftWrites: Promise<unknown>[] = [];
+            page.on("request", request => {
+                if (request.url().endsWith("/api/draft/create") && request.method() === "PUT") {
+                    pendingDraftWrites.push(
+                        request.response().then(response => response?.finished())
+                    );
+                }
+            });
+            let releaseCreate!: () => void;
+            const createGate = new Promise<void>(resolve => {
+                releaseCreate = resolve;
+            });
+            await page.route("**/api/create-tool", async route => {
+                await createGate;
+                await route.abort().catch(() => undefined);
+            });
+            const improving = page.waitForRequest(request =>
+                request.url().endsWith("/api/create-tool")
+            );
+            await page.click("#write-lyrics-btn");
+            assertEqual(
+                (await improving).postDataJSON().input.mode,
+                "edit",
+                "Improving existing lyrics"
+            );
+            const savedBeforeCancel = page.waitForResponse(response =>
+                response.url().endsWith("/api/draft/create")
+                && response.request().method() === "PUT"
+            );
+            await page.click("#create-close");
+            await savedBeforeCancel;
+            const nextReady = page.waitForResponse(response =>
+                response.url().endsWith("/api/draft/create")
+                && response.request().method() === "GET"
+            );
+            page.once("dialog", dialog => {
+                void dialog.accept();
+            });
+            await page.click("#session-new");
+            await nextReady;
+            releaseCreate();
+            await page.unroute("**/api/create-tool");
+            await Promise.all(pendingDraftWrites);
+            const savedAfterCancel = await page.request.get(`${BASE_URL}/api/draft/create`, {
+                headers: { "X-Session-Id": sessionA }
+            });
+            assertEqual(
+                (await savedAfterCancel.json()).draft.music.lyrics,
+                lyrics,
+                "Cancelling improvement preserves original session lyrics"
+            );
             await page.close();
         },
         results
