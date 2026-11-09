@@ -1370,6 +1370,15 @@ function finishStreaming(): void {
     setStreamingUI(false);
 }
 
+function cancelActiveStream(): void {
+    activeStreamController?.abort();
+    if (!isStreaming) return;
+    lyricsWriteResolve?.("");
+    capturedLyricsText = null;
+    streamHadError = true;
+    finishStreaming();
+}
+
 // Exported so init() can set/unset lyricsWriteResolve
 function setLyricsWriteResolve(fn: ((value: string) => void) | null): void {
     lyricsWriteResolve = fn;
@@ -1968,7 +1977,7 @@ export function init(): void {
     }
 
     async function reloadActiveSessionUi(): Promise<void> {
-        activeStreamController?.abort();
+        cancelActiveStream();
         clearChatUi();
         await loadHistory();
         await restoreDrafts();
@@ -1983,7 +1992,7 @@ export function init(): void {
             return;
         }
         ++sessionRefresh;
-        activeStreamController?.abort();
+        cancelActiveStream();
         try {
             await activateSession(id);
             await refreshSessions();
@@ -2007,7 +2016,7 @@ export function init(): void {
         if (isStreaming && !confirm("A response is still running. Start a new chat anyway?")) {
             return;
         }
-        activeStreamController?.abort();
+        cancelActiveStream();
         void createNewSession()
             .then(() => refreshSessions())
             .then(reloadActiveSessionUi)

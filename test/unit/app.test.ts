@@ -5392,6 +5392,95 @@ describe("init accessibility behavior", () => {
         resolveChat(createSSEResponse([sseDone()]));
         await sendPromise;
     });
+
+    for (const action of ["switch", "new"] as const) {
+        it(`accepts chat and Create after cancelling a stream to ${action} sessions`, async () => {
+            const { doc } = setupDOM();
+            const select = doc.createElement("select");
+            select.id = "session-select";
+            const button = doc.createElement("button");
+            button.id = "session-new";
+            doc.body.append(select, button);
+            let active = "s1";
+            const calls: Array<{ path: string; method: string; session: string | null; }> = [];
+            let chatCount = 0;
+            globalThis.confirm = () => true;
+            globalThis.fetch = async (input, options) => {
+                const path = String(input);
+                const method = options?.method ?? "GET";
+                const session = new Headers(options?.headers).get("X-Session-Id");
+                calls.push({ path, method, session });
+                if (path === "/api/chat") {
+                    if (++chatCount === 1) {
+                        return await new Promise<Response>((_resolve, reject) => {
+                            options?.signal?.addEventListener("abort", () => {
+                                reject(new DOMException("Cancelled", "AbortError"));
+                            }, { once: true });
+                        });
+                    }
+                    return createSSEResponse([sseDone()]);
+                }
+                if (path === "/api/create-tool") return createSSEResponse([sseDone()]);
+                if (path.endsWith("/activate") || (path === "/api/sessions" && method === "POST")) {
+                    active = "s2";
+                }
+                if (path === "/api/draft/chat" && method === "GET") {
+                    return Response.json({ draft: { text: `Draft for ${active}` } });
+                }
+                return Response.json({
+                    activeSessionId: active,
+                    sessions: [{ id: "s1", name: "First" }, { id: "s2", name: "Second" }],
+                    messages: [],
+                    assets: [],
+                    items: [],
+                    draft: null,
+                    version: 1,
+                    username: "",
+                    interests: "",
+                    hates: "",
+                    favorites: "",
+                    avatar: { type: "asset", value: "" },
+                    updatedAt: 0
+                });
+            };
+            init();
+            await new Promise(resolve => setTimeout(resolve, 20));
+            const oldResponse = sendMessage("old project request");
+            await Promise.resolve();
+            if (action === "switch") {
+                select.value = "s2";
+                select.dispatchEvent(new Event("change", { bubbles: true }));
+            } else button.click();
+            await oldResponse;
+            await new Promise(resolve => setTimeout(resolve, 20));
+            assert.equal(select.value, "s2");
+            assert.equal(
+                (doc.querySelector("#chat-input") as HTMLTextAreaElement).value,
+                "Draft for s2"
+            );
+            assert.equal(
+                calls.filter(call => call.method === "DELETE").length,
+                0,
+                "cancellation preserves drafts"
+            );
+            await sendMessage("new project request");
+            assert.equal(
+                chatCount,
+                2,
+                "new project starts chat instead of steering the cancelled response"
+            );
+            await sendCreateTool(
+                "generate_image",
+                { prompt: "new project image" },
+                "New project image"
+            );
+            assert.equal(
+                calls.some(call => call.path === "/api/create-tool" && call.session === "s2"),
+                true
+            );
+            assert.equal(calls.some(call => call.path === "/api/steer"), false);
+        });
+    }
 });
 
 // ── HG-ISSUE-007/008/009: Asset URL handling, quota refresh, assets refresh ──
