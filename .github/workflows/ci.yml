@@ -60,6 +60,18 @@ jobs:
                   HG_E2E_BROWSER: ${{ matrix.browser }}
                   HG_E2E_DEVICE: ${{ matrix.device }}
 
+    integration:
+        name: check + unit + integration + e2e
+        needs: [check, e2e]
+        if: ${{ always() }}
+        runs-on: ubuntu-latest
+        steps:
+            - name: Require check and every E2E variant
+              env:
+                  CHECK_RESULT: ${{ needs.check.result }}
+                  E2E_RESULT: ${{ needs.e2e.result }}
+              run: test "$CHECK_RESULT" = success && test "$E2E_RESULT" = success
+
     mutation:
         name: mutation
         runs-on: ubuntu-latest
@@ -87,7 +99,7 @@ jobs:
                   if-no-files-found: ignore
 
     image:
-        name: image build
+        name: container build
         runs-on: ubuntu-latest
         timeout-minutes: 20
         steps:

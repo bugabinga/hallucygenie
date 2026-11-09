@@ -1196,6 +1196,7 @@ describe("SSE streaming from Anthropic endpoint", () => {
     });
 
     it("rejects Create music before naming, quota, assets, or upstream", async () => {
+        const previousApiKey = process.env.MINIMAX_API_KEY;
         const sessionId = "disabled-create-music";
         const database = requireDb();
         createSession(database, sessionId, "Disabled music");
@@ -1206,6 +1207,7 @@ describe("SSE streaming from Anthropic endpoint", () => {
             return new Response("{}", { status: 200 });
         };
         try {
+            process.env.MINIMAX_API_KEY = "test-key";
             const response = await handleRequest(makeRequest("POST", "/api/create-tool", {
                 tool_name: "generate_music",
                 input: { prompt: "boss fight" }
@@ -1220,6 +1222,8 @@ describe("SSE streaming from Anthropic endpoint", () => {
             assert.equal(getUsageToday(database).music ?? 0, usageBefore);
         } finally {
             globalThis.fetch = REAL_FETCH;
+            if (previousApiKey === undefined) delete process.env.MINIMAX_API_KEY;
+            else process.env.MINIMAX_API_KEY = previousApiKey;
         }
     });
 
