@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+• Patrol analysis/review uses vision-capable Z.AI GLM-5.3-Flash; coding uses MiniMax-M3.1-Flash through Pi 1.5.1.
 • Stop repeated tool-use loops after 20 provider turns without discarding completed observations.
 • Use kid-friendly volume labels and check bounded image/voice controls.
 • Update npm dependencies and GitHub Actions; keep build-script approval explicit.

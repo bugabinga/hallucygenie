@@ -3,7 +3,7 @@ node = "26.4.0"
 gh = "2.96.0"
 gitleaks = "8.30.1"
 jq = "1.8.2"
-"npm:@mariozechner/pi-coding-agent" = "0.73.1"
+"npm:@earendil-works/pi-coding-agent" = "1.5.1"
 "pipx:sqruff" = "0.39.0"
 
 [tasks.setup]

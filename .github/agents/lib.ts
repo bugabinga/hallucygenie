@@ -10,6 +10,11 @@ import { join } from "node:path";
 
 export type PiRole = "analyze" | "code";
 
+const ROLE_MODELS = {
+    analyze: { provider: "zai", model: "glm-5.3-flash", keyEnv: "ZAI_API_KEY" },
+    code: { provider: "minimax", model: "MiniMax-M3.1-Flash", keyEnv: "MINIMAX_API_KEY" }
+} as const;
+
 // Set up isolated agent dir with models.json for custom model definitions
 const agentDir = mkdtempSync(join(tmpdir(), "pi-agent-cfg-"));
 process.once("exit", () => rmSync(agentDir, { recursive: true, force: true }));
@@ -344,16 +349,29 @@ export function runPi(
     opts: { allowFail?: boolean; } = {}
 ): boolean {
     const label = role === "analyze" ? "Pass 1 (analyze)" : "Pass 2 (code)";
-    const result = spawnSync("pi", args, {
-        stdio: "inherit",
-        env: { ...process.env, PI_OFFLINE: "1", PI_CODING_AGENT_DIR: agentDir },
-        timeout
-    });
-
     const fail = (code: number) => {
         if (opts.allowFail) return false;
         process.exit(code);
     };
+    const { provider, model, keyEnv } = ROLE_MODELS[role];
+    if (!process.env[keyEnv]?.trim()) {
+        console.error(`${label}: missing ${keyEnv}; no provider fallback.`);
+        return fail(1);
+    }
+    console.log(`${label}: ${provider}/${model} (high thinking)`);
+    const result = spawnSync("pi", [
+        "--provider",
+        provider,
+        "--model",
+        model,
+        "--thinking",
+        "high",
+        ...args
+    ], {
+        stdio: "inherit",
+        env: { ...process.env, PI_OFFLINE: "1", PI_CODING_AGENT_DIR: agentDir },
+        timeout
+    });
 
     if (result.error) {
         const code = (result.error as NodeJS.ErrnoException).code;

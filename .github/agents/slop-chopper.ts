@@ -12,8 +12,8 @@
  *      lean branches drink the morning light
  *
  * ╔════════════════════════════════════════════╗
- * ║ Pass 1: minimax/M3 -> mark                 ║
- * ║ Pass 2: minimax/M2.5 -> chop               ║
+ * ║ Pass 1: vision analysis -> mark            ║
+ * ║ Pass 2: implementation -> chop             ║
  * ╚════════════════════════════════════════════╝
  */
 import { writeFileSync } from "node:fs";
@@ -28,19 +28,13 @@ const existingPr = prepareExistingPr("slop-chopper", "agent/slop-chopper-");
 
 if (existingPr) {
     console.log(
-        `\n=== Repair existing PR #${existingPr.number} (minimax/MiniMax-M2.5-highspeed) ===\n`
+        `\n=== Repair existing PR #${existingPr.number} ===\n`
     );
     runPi(
         "code",
         [
             "-p",
             ...piFlags,
-            "--provider",
-            "minimax",
-            "--model",
-            "MiniMax-M2.5-highspeed",
-            "--thinking",
-            "off",
             "--tools",
             "read,edit,write,bash,grep,find",
             `Repair existing slop-chopper PR #${existingPr.number}.
@@ -70,19 +64,13 @@ No talk. Repair. Test. Write notes. Done.`
 }
 
 // --- Pass 1: analyze ---
-console.log("\n=== Pass 1: Analyze (minimax/MiniMax-M3) ===\n");
+console.log("\n=== Pass 1: Analyze ===\n");
 
 runPi(
     "analyze",
     [
         "-p",
         ...piFlags,
-        "--provider",
-        "minimax",
-        "--model",
-        "MiniMax-M3",
-        "--thinking",
-        "high",
         "--tools",
         "read,write,grep,find,ls",
         `Analyst. Write tool only. Target: /tmp/pi-agent-findings.md
@@ -122,19 +110,13 @@ if (findings === "NO_SLOP_FOUND" || findings.length === 0) {
 }
 
 // --- Pass 2: clean ---
-console.log("\n=== Pass 2: Clean (minimax/MiniMax-M2.5-highspeed) ===\n");
+console.log("\n=== Pass 2: Clean ===\n");
 
 runPi(
     "code",
     [
         "-p",
         ...piFlags,
-        "--provider",
-        "minimax",
-        "--model",
-        "MiniMax-M2.5-highspeed",
-        "--thinking",
-        "off",
         "--tools",
         "read,edit,write,bash,grep,find",
         `Coder. Remove slop.
