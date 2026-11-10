@@ -36,14 +36,19 @@ jobs:
             - uses: actions/create-github-app-token@v3
               id: app-token
               with:
-                  app-id: ${{ secrets.AGENT_BOT_APP_ID }}
+                  client-id: ${{ secrets.AGENT_BOT_APP_ID }}
                   private-key: ${{ secrets.AGENT_BOT_PRIVATE_KEY }}
-            - uses: actions/checkout@v6.0.3
+            - uses: actions/checkout@v7.0.1
               with:
                   token: ${{ steps.app-token.outputs.token }}
-            - uses: jdx/mise-action@v3
+                  persist-credentials: false
+            - uses: jdx/mise-action@v4.2.0
               with:
                   cache: true
+            - name: Configure GitHub authentication
+              env:
+                  GH_TOKEN: ${{ steps.app-token.outputs.token }}
+              run: gh auth setup-git --hostname github.com
             - run: mise run setup
             - run: node .github/agents/speck-ferkel.ts
               env:
@@ -113,14 +118,19 @@ jobs:
             - uses: actions/create-github-app-token@v3
               id: app-token
               with:
-                  app-id: ${{ secrets.AGENT_BOT_APP_ID }}
+                  client-id: ${{ secrets.AGENT_BOT_APP_ID }}
                   private-key: ${{ secrets.AGENT_BOT_PRIVATE_KEY }}
-            - uses: actions/checkout@v6.0.3
+            - uses: actions/checkout@v7.0.1
               with:
                   token: ${{ steps.app-token.outputs.token }}
-            - uses: jdx/mise-action@v3
+                  persist-credentials: false
+            - uses: jdx/mise-action@v4.2.0
               with:
                   cache: true
+            - name: Configure GitHub authentication
+              env:
+                  GH_TOKEN: ${{ steps.app-token.outputs.token }}
+              run: gh auth setup-git --hostname github.com
             - run: mise run setup
             - run: node .github/agents/trouble-maker.ts
               env:
@@ -189,14 +199,19 @@ jobs:
             - uses: actions/create-github-app-token@v3
               id: app-token
               with:
-                  app-id: ${{ secrets.AGENT_BOT_APP_ID }}
+                  client-id: ${{ secrets.AGENT_BOT_APP_ID }}
                   private-key: ${{ secrets.AGENT_BOT_PRIVATE_KEY }}
-            - uses: actions/checkout@v6.0.3
+            - uses: actions/checkout@v7.0.1
               with:
                   token: ${{ steps.app-token.outputs.token }}
-            - uses: jdx/mise-action@v3
+                  persist-credentials: false
+            - uses: jdx/mise-action@v4.2.0
               with:
                   cache: true
+            - name: Configure GitHub authentication
+              env:
+                  GH_TOKEN: ${{ steps.app-token.outputs.token }}
+              run: gh auth setup-git --hostname github.com
             - run: mise run setup
             - run: node .github/agents/slop-chopper.ts
               env:
@@ -265,14 +280,19 @@ jobs:
             - uses: actions/create-github-app-token@v3
               id: app-token
               with:
-                  app-id: ${{ secrets.AGENT_BOT_APP_ID }}
+                  client-id: ${{ secrets.AGENT_BOT_APP_ID }}
                   private-key: ${{ secrets.AGENT_BOT_PRIVATE_KEY }}
-            - uses: actions/checkout@v6.0.3
+            - uses: actions/checkout@v7.0.1
               with:
                   token: ${{ steps.app-token.outputs.token }}
-            - uses: jdx/mise-action@v3
+                  persist-credentials: false
+            - uses: jdx/mise-action@v4.2.0
               with:
                   cache: true
+            - name: Configure GitHub authentication
+              env:
+                  GH_TOKEN: ${{ steps.app-token.outputs.token }}
+              run: gh auth setup-git --hostname github.com
             - run: mise run setup
             - run: node .github/agents/robotnik.ts
               env:
@@ -343,12 +363,13 @@ jobs:
             - uses: actions/create-github-app-token@v3
               id: app-token
               with:
-                  app-id: ${{ secrets.AGENT_BOT_APP_ID }}
+                  client-id: ${{ secrets.AGENT_BOT_APP_ID }}
                   private-key: ${{ secrets.AGENT_BOT_PRIVATE_KEY }}
-            - uses: actions/checkout@v6.0.3
+            - uses: actions/checkout@v7.0.1
               with:
                   token: ${{ steps.app-token.outputs.token }}
-            - uses: jdx/mise-action@v3
+                  persist-credentials: false
+            - uses: jdx/mise-action@v4.2.0
               with:
                   cache: true
             - run: mise run setup

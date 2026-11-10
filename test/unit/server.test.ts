@@ -4660,7 +4660,7 @@ describe("Session, draft, and create-history APIs", () => {
 
     it("records explicit tool directive in chat with origin=chat", async () => {
         const db = requireDb();
-        const sessionId = resolveSessionId(new Request("http://localhost/api/state"), db);
+        const sessionId = createSession(db, undefined, "Explicit directive origin").id;
         saveMessage(db, sessionId, "user", "seed");
 
         const prevKey = process.env.MINIMAX_API_KEY;
@@ -4683,7 +4683,7 @@ describe("Session, draft, and create-history APIs", () => {
             const resp = await handleRequest(
                 new Request("http://localhost/api/chat", {
                     method: "POST",
-                    headers: { "Content-Type": "application/json" },
+                    headers: { "Content-Type": "application/json", "X-Session-Id": sessionId },
                     body: JSON.stringify({
                         messages: [
                             {

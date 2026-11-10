@@ -13,7 +13,7 @@
  * ╚════════════════════════════════════════════╝
  */
 import { spawnSync } from "node:child_process";
-import { existsSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { runPi } from "./lib.ts";
@@ -26,6 +26,7 @@ const MARKER = "<!-- hallucygenie-janitor -->";
 const HUMAN_REVIEWER = process.env.JANITOR_HUMAN_REVIEWER || OWNER;
 const timeout = 8 * 60 * 1000;
 const tmp = mkdtempSync(join(tmpdir(), "hg-janitor-"));
+process.once("exit", () => rmSync(tmp, { recursive: true, force: true }));
 
 const JANITOR_LABELS = {
     "needs-fix": "janitor:needs-fix",
@@ -200,9 +201,10 @@ function listOpenBotPrs() {
     return prs.filter(
         (pr) =>
             pr.headRefName.startsWith("agent/")
-            && ["app/hallucygenie-agent-bot", "app/github-actions"].includes(
-                pr.author.login
-            )
+            && ["app/bugabinga-agent-bot", "app/hallucygenie-agent-bot", "app/github-actions"]
+                .includes(
+                    pr.author.login
+                )
     );
 }
 
@@ -558,12 +560,28 @@ ${shellBlock(truncate(diff || "No diff available.", 20_000))}
 `;
 }
 
+function fallbackComment(pr: PrListItem) {
+    return `${MARKER}
+
+## Janitor status: needs-human
+
+## Checklist
+- [ ] Janitor AI review did not complete successfully.
+
+## CI
+Automated janitor review could not complete for PR #${pr.number}.
+
+## Notes for owning agent
+No code action. Human should rerun janitor or review this PR manually.
+`;
+}
+
 function reviewPr(pr: PrListItem) {
     const contextPath = join(tmp, `pr-${pr.number}-context.md`);
     const outputPath = join(tmp, `pr-${pr.number}-comment.md`);
     writeFileSync(contextPath, buildContext(pr));
 
-    runPi(
+    const ok = runPi(
         "analyze",
         [
             "-p",
@@ -573,8 +591,6 @@ function reviewPr(pr: PrListItem) {
             "minimax",
             "--model",
             "MiniMax-M3",
-            "--thinking",
-            "medium",
             "--tools",
             "read,write",
             `You are hallucygenie janitor.
@@ -616,9 +632,14 @@ Decision rules:
 
 No extra output. Just write the file.`
         ],
-        timeout
+        timeout,
+        { allowFail: true }
     );
 
+    if (!ok) {
+        console.log(`Janitor AI failed for PR #${pr.number}; writing human-review fallback.`);
+        writeFileSync(outputPath, fallbackComment(pr));
+    }
     if (!existsSync(outputPath)) {
         throw new Error(`Janitor did not write ${outputPath}`);
     }

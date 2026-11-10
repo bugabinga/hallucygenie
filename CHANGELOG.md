@@ -1,5 +1,14 @@
 # Changelog
 
+## Unreleased
+
+• Stop repeated tool-use loops after 20 provider turns without discarding completed observations.
+• Use kid-friendly volume labels and check bounded image/voice controls.
+• Update npm dependencies and GitHub Actions; keep build-script approval explicit.
+• Janitor failures produce needs-human status, including interrupted partial reviews, instead of silently ending review.
+• Scope bot Git authentication to GitHub and keep checkout credentials out of the worktree.
+• SQLite schema remains version 14; no migration or deployment is included in these maintenance changes.
+
 ## 1.0.3 - 2026-11-09
 
 ### Kid notes

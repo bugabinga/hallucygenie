@@ -541,7 +541,7 @@ export async function runAgentLoop(
         await onEvent({ type: "text", content });
     }
 
-    while (true) {
+    for (let turn = 0; turn < 20; turn++) {
         await onEvent({ type: "thinking_reset" });
 
         let loopMessages = buildContext(localMessages);
@@ -867,4 +867,7 @@ export async function runAgentLoop(
         await onEvent({ type: "done" });
         return localMessages;
     }
+    await failure("[Error: Tool-use limit reached. Please try again.]");
+    await onEvent({ type: "done" });
+    return localMessages;
 }
