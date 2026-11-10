@@ -25,6 +25,7 @@ import {
     toAnthropicPayload
 } from "../../src/agent.ts";
 import type { AgentEvent, OnBeforeTool } from "../../src/agent.ts";
+import type { ChatMessage } from "../../src/server.ts";
 import { getToolDefinitions, MUSIC_DISABLED_MESSAGE } from "../../src/tools.ts";
 
 type ProviderDiagnosticResult = { provider?: { status_msg?: string; }; };
@@ -320,6 +321,94 @@ describe("runAgentLoop", () => {
 
     afterEach(() => {
         globalThis.fetch = _origFetch;
+    });
+
+    it("stops after 20 tool turns while retaining and persisting all observations", {
+        timeout: 5000
+    }, async () => {
+        let requests = 0;
+        globalThis.fetch = async () => {
+            requests++;
+            if (requests > 20) return anthropicResponse(textResponse(["Unexpected extra turn"]));
+            return anthropicResponse(toolUseResponse(`call_${requests}`, "test_tool", "{}"));
+        };
+
+        const { events, onEvent } = collectEvents();
+        const persisted: ChatMessage[] = [];
+        const messages = await runAgentLoop(
+            [{ role: "user", content: "keep using the tool" }],
+            "test-key",
+            onEvent,
+            undefined,
+            () => ({ type: "text", content: "observation" }),
+            {
+                tools: [{
+                    name: "test_tool",
+                    description: "test",
+                    input_schema: { type: "object" }
+                }],
+                onMessage: message => {
+                    persisted.push(message);
+                },
+                onToolResult: event => event.result!
+            }
+        );
+
+        assert.equal(requests, 20);
+        assert.equal(messages.filter(message => message.role === "tool").length, 20);
+        assert.equal(events.filter(event => event.type === "tool_result").length, 20);
+        assert.equal(persisted.filter(message => message.role === "tool").length, 20);
+        const acknowledgement = "[Error: Tool-use limit reached. Please try again.]";
+        assert.equal(
+            messages.filter(message =>
+                message.role === "assistant" && message.content === acknowledgement
+            ).length,
+            1
+        );
+        assert.equal(
+            persisted.filter(message =>
+                message.role === "assistant" && message.content === acknowledgement
+            ).length,
+            1
+        );
+        assert.equal(
+            events.filter(event => event.type === "text" && event.content === acknowledgement)
+                .length,
+            1
+        );
+        assert.equal(events.filter(event => event.type === "done").length, 1);
+    });
+
+    it("accepts a normal final answer on provider turn 20", { timeout: 5000 }, async () => {
+        let requests = 0;
+        globalThis.fetch = async () => {
+            requests++;
+            return anthropicResponse(
+                requests < 20
+                    ? toolUseResponse(`call_${requests}`, "test_tool", "{}")
+                    : textResponse(["Finished"])
+            );
+        };
+
+        const { events, onEvent } = collectEvents();
+        const messages = await runAgentLoop(
+            [{ role: "user", content: "use tool then answer" }],
+            "test-key",
+            onEvent,
+            undefined,
+            () => ({ type: "text", content: "observation" }),
+            {
+                tools: [{
+                    name: "test_tool",
+                    description: "test",
+                    input_schema: { type: "object" }
+                }]
+            }
+        );
+
+        assert.equal(requests, 20);
+        assert.equal(messages.at(-1)?.content, "Finished");
+        assert.equal(events.filter(event => event.type === "done").length, 1);
     });
 
     it("handles text-only response (no tools)", async () => {

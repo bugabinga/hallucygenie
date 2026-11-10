@@ -281,6 +281,7 @@ describe("index.html health", () => {
 
     it("uses kid-friendly controls for bounded Create params", () => {
         const doc = parseIndex();
+        assert.equal(doc.querySelector("#img-ratio")?.tagName.toLowerCase(), "select");
         assert.equal(doc.querySelector("#img-count")?.tagName.toLowerCase(), "select");
         assert.equal(doc.querySelector("#img-size")?.tagName.toLowerCase(), "select");
         assert.equal(doc.querySelector("#img-seed")?.getAttribute("type"), "hidden");
@@ -302,6 +303,34 @@ describe("index.html health", () => {
                 group.getAttribute("label")
             ),
             ["English", "Deutsch", "Europe", "Rest"]
+        );
+    });
+
+    it("voice-volume slider has low/normal/loud range labels per HG-SPEC-016", () => {
+        const doc = parseIndex();
+        const volumeRange = doc.querySelector("#voice-volume");
+        assert.ok(volumeRange, "#voice-volume must exist");
+        const labels = Array.from(
+            volumeRange!.parentElement!.querySelectorAll(".range-labels span")
+        ).map((s) => visibleText(s));
+        assert.deepEqual(
+            labels,
+            ["low", "normal", "loud"],
+            "voice-volume slider ticks must be low/normal/loud per spec"
+        );
+    });
+
+    it("voice-pitch slider has deep/normal/high range labels per HG-SPEC-016", () => {
+        const doc = parseIndex();
+        const pitchRange = doc.querySelector("#voice-pitch");
+        assert.ok(pitchRange, "#voice-pitch must exist");
+        const labels = Array.from(
+            pitchRange!.parentElement!.querySelectorAll(".range-labels span")
+        ).map((s) => visibleText(s));
+        assert.deepEqual(
+            labels,
+            ["deep", "normal", "high"],
+            "voice-pitch slider ticks must be deep/normal/high per spec"
         );
     });
 
@@ -1081,8 +1110,8 @@ describe("formatter and linter health", () => {
     it("uses dprint, Biome, and sqruff instead of Prettier", () => {
         assert.equal(existsSync(`.${legacyFormatter}rc`), false);
         assert.equal(existsSync(`.${legacyFormatter}ignore`), false);
-        assert.match(packageJson, /"dprint": "0\.55\.1"/);
-        assert.match(packageJson, /"@biomejs\/biome": "2\.5\.3"/);
+        assert.match(packageJson, /"dprint": "0\.57\.1"/);
+        assert.match(packageJson, /"@biomejs\/biome": "2\.5\.12"/);
         assert.doesNotMatch(packageJson, new RegExp(legacyFormatter));
         assert.match(dprintJson, /typescript-0\.96\.1\.wasm/);
         assert.match(dprintJson, /pretty_yaml-v0\.6\.0\.wasm/);
@@ -1390,7 +1419,7 @@ describe("GitHub Actions health", () => {
     it("runs check, e2e matrix, and mutation through mise", () => {
         assert.doesNotMatch(ciYml, /MINIMAX_(?:API_)?KEY/);
         assert.doesNotMatch(dependabotYml, /MINIMAX_(?:API_)?KEY/);
-        assert.match(ciYml, /uses: jdx\/mise-action@v3/);
+        assert.match(ciYml, /uses: jdx\/mise-action@v4\.2\.0/);
         assert.match(ciYml, /run: mise run setup --js/);
         assert.match(ciYml, /run: mise run setup --browsers/);
         assert.match(ciYml, /run: mise run check/);
@@ -1409,15 +1438,22 @@ describe("GitHub Actions health", () => {
 
     it("agent PR workflows fix then test before commit", () => {
         assert.doesNotMatch(agentsYml, /browser-actions\/setup-chrome|Install sqruff|tool: just/);
-        assert.match(agentsYml, /uses: jdx\/mise-action@v3/);
+        assert.match(agentsYml, /uses: jdx\/mise-action@v4\.2\.0/);
+        assert.match(agentsYml, /client-id: \$\{\{ secrets\.AGENT_BOT_APP_ID \}\}/);
+        assert.doesNotMatch(agentsYml, /app-id:/);
+        assert.equal((agentsYml.match(/persist-credentials: false/g) ?? []).length, 5);
+        assert.equal(
+            (agentsYml.match(/gh auth setup-git --hostname github\.com/g) ?? []).length,
+            4
+        );
         assert.equal((agentsYml.match(/mise run check --fix\n\s+mise run test/g) ?? []).length, 8);
         assert.doesNotMatch(agentsYml, /mise run fmt \|\| true|mise run ready|mise run fix/);
         assert.match(slopChopperAgent, /Run "mise run check --fix" && "mise run test" after/);
     });
 
     it("caches deps and uploads mutation HTML artifacts", () => {
-        assert.match(ciYml, /actions\/checkout@v6\.0\.3/);
-        assert.match(ciYml, /jdx\/mise-action@v3/);
+        assert.match(ciYml, /actions\/checkout@v7\.0\.1/);
+        assert.match(ciYml, /jdx\/mise-action@v4\.2\.0/);
         assert.match(ciYml, /cache: true/);
         assert.match(ciYml, /path: ~\/\.cache\/ms-playwright/);
         assert.match(
@@ -1429,7 +1465,7 @@ describe("GitHub Actions health", () => {
             ciYml,
             /key: \$\{\{ runner\.os \}\}-npm-\$\{\{ hashFiles\('package-lock\.json'\) \}\}/
         );
-        assert.match(ciYml, /actions\/upload-artifact@v7\.0\.1/);
+        assert.match(ciYml, /actions\/upload-artifact@v7\.0\.2/);
         assert.match(ciYml, /if: \$\{\{ always\(\) \}\}/);
         assert.match(ciYml, /name: mutation-reports/);
         assert.match(ciYml, /path: reports\/mutation\//);
