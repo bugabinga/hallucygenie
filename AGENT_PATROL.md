@@ -41,8 +41,13 @@ Autonomous CI agents. One PR per agent. Janitor keeps them honest.
 
 ## Models/secrets
 
-- Patrol LLM provider: MiniMax only.
-- CI secret: `MINIMAX_API_KEY`.
+- Analysis and janitor review: Z.AI `glm-5.3-flash`, including vision.
+- Coding and repairs: MiniMax `MiniMax-M3.1-Flash`.
+- Both roles use high thinking; selection lives in `.github/agents/lib.ts`, without provider fallback.
+- Pi CLI: `@earendil-works/pi-coding-agent@1.5.1`, pinned in `mise.toml`.
+- CI secrets: `ZAI_API_KEY` and `MINIMAX_API_KEY` in GitHub environment `AI api keys`; environment secrets override repository secrets.
+- Z.AI uses its Coding Plan endpoint; the operator must supply a Coding Plan key, since endpoint selection alone does not prevent PAYG billing.
+- `models.json` configures endpoints/env references; Pi’s pinned built-in catalog supplies model capabilities.
 - GitHub writes use the Agent Bot GitHub App token.
 
 ## Human ops

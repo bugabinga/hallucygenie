@@ -12,8 +12,8 @@
  *      sparks fly where assumptions sleep
  *
  * ╔════════════════════════════════════════════╗
- * ║ Pass 1: minimax/M3 -> accuse               ║
- * ║ Pass 2: minimax/M2.5 -> repair             ║
+ * ║ Pass 1: vision analysis -> accuse          ║
+ * ║ Pass 2: implementation -> repair           ║
  * ╚════════════════════════════════════════════╝
  */
 import { readdirSync, writeFileSync } from "node:fs";
@@ -39,19 +39,13 @@ const existingPr = prepareExistingPr("trouble-maker", "agent/trouble-maker-");
 
 if (existingPr) {
     console.log(
-        `\n=== Repair existing PR #${existingPr.number} (minimax/MiniMax-M2.5-highspeed) ===\n`
+        `\n=== Repair existing PR #${existingPr.number} ===\n`
     );
     runPi(
         "code",
         [
             "-p",
             ...piFlags,
-            "--provider",
-            "minimax",
-            "--model",
-            "MiniMax-M2.5-highspeed",
-            "--thinking",
-            "off",
             "--tools",
             "read,edit,write,bash,grep,find",
             `Repair existing trouble-maker PR #${existingPr.number}.
@@ -81,19 +75,13 @@ No talk. Repair. Test. Write notes. Done.`
 }
 
 // --- Pass 1: analyze ---
-console.log("\n=== Pass 1: Analyze (minimax/MiniMax-M3) ===\n");
+console.log("\n=== Pass 1: Analyze ===\n");
 
 runPi(
     "analyze",
     [
         "-p",
         ...piFlags,
-        "--provider",
-        "minimax",
-        "--model",
-        "MiniMax-M3",
-        "--thinking",
-        "high",
         "--tools",
         "read,write,grep,find,ls",
         `Read src/. Find bugs only (crashes, wrong behavior, null derefs, races).
@@ -119,19 +107,13 @@ if (findings === "NO_ISSUES_FOUND" || findings.length === 0) {
 }
 
 // --- Pass 2: fix ---
-console.log("\n=== Pass 2: Fix (minimax/MiniMax-M2.5-highspeed) ===\n");
+console.log("\n=== Pass 2: Fix ===\n");
 
 runPi(
     "code",
     [
         "-p",
         ...piFlags,
-        "--provider",
-        "minimax",
-        "--model",
-        "MiniMax-M2.5-highspeed",
-        "--thinking",
-        "off",
         "--tools",
         "read,edit,write,bash,grep,find",
         `Fix these bugs:

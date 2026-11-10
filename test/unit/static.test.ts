@@ -1552,31 +1552,48 @@ describe("agent patrol health", () => {
         assert.ok(patrolDoc.split("\n").length <= 80);
     });
 
-    it("uses only MiniMax LLM provider secrets", () => {
-        for (const text of [agentsYml, janitorAgent, robotnikAgent]) {
-            assert.doesNotMatch(text, /ZAI_API_KEY|--provider",\s*\n\s*"zai"|glm-5\.1/);
+    it("wires both provider secrets to every worker and ZAI to janitor", () => {
+        assert.equal(
+            (agentsYml.match(/MINIMAX_API_KEY: \$\{\{ secrets\.MINIMAX_API_KEY \}\}/g) ?? [])
+                .length,
+            4
+        );
+        assert.equal(
+            (agentsYml.match(/ZAI_API_KEY: \$\{\{ secrets\.ZAI_API_KEY \}\}/g) ?? []).length,
+            5
+        );
+        assert.equal((agentsYml.match(/environment: AI api keys/g) ?? []).length, 5);
+        for (
+            const name of ["speck-ferkel", "trouble-maker", "slop-chopper", "robotnik", "janitor"]
+        ) {
+            const agent = readFileSync(".github/agents/" + name + ".ts", "utf-8");
+            assert.doesNotMatch(agent, /"--provider"|"--model"|"--thinking"/);
+            assert.match(agent, /runPi\(/);
+            assert.equal(
+                (agent.match(/runPi\(\s*"analyze"/g) ?? []).length,
+                name === "robotnik" ? 0 : 1
+            );
+            assert.equal(
+                (agent.match(/runPi\(\s*"code"/g) ?? []).length,
+                name === "janitor" ? 0 : 2
+            );
         }
-        assert.match(agentsYml, /MINIMAX_API_KEY: \$\{\{ secrets\.MINIMAX_API_KEY \}\}/);
-        assert.match(janitorAgent, /--provider",\s*\n\s*"minimax"/);
-        assert.match(janitorAgent, /--model",\s*\n\s*"MiniMax-M3"/);
-        assert.match(robotnikAgent, /--provider",\s*\n\s*"minimax"/);
-        assert.match(robotnikAgent, /--model",\s*\n\s*"MiniMax-M3"/);
+        assert.match(commandConfig, /"npm:@earendil-works\/pi-coding-agent" = "1\.5\.1"/);
+        assert.doesNotMatch(commandConfig, /@mariozechner\/pi-coding-agent/);
     });
 
-    it("ships valid MiniMax model config for CI agents", () => {
-        const config = JSON.parse(agentModelsJson) as {
-            providers: {
-                minimax: { api: string; models: Array<{ id: string; input: string[]; }>; };
-            };
-        };
-        assert.equal(config.providers.minimax.api, "anthropic-messages");
-        assert.deepEqual(
-            config.providers.minimax.models.map((model) => model.id),
-            ["MiniMax-M3", "MiniMax-M2.5-highspeed"]
-        );
-        assert.deepEqual(config.providers.minimax.models[0].input, ["text", "image"]);
-        assert.deepEqual(config.providers.minimax.models[1].input, ["text"]);
-        assert.doesNotMatch(agentModelsJson, /"video"|zai|glm-5\.1|ZAI_API_KEY/);
+    it("uses native model catalogs with explicit provider endpoints and env keys", () => {
+        const config = JSON.parse(agentModelsJson);
+        assert.deepEqual(config.providers, {
+            minimax: {
+                baseUrl: "https://api.minimax.io/anthropic",
+                apiKey: "$MINIMAX_API_KEY"
+            },
+            zai: {
+                baseUrl: "https://api.z.ai/api/coding/paas/v4",
+                apiKey: "$ZAI_API_KEY"
+            }
+        });
     });
 
     it("syncs triage labels and requests human review on needs-human", () => {

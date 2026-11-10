@@ -9,7 +9,7 @@
  *      one ticket wakes, one branch takes wing
  *
  * ╔════════════════════════════════════════════╗
- * ║ Run: MiniMax-M3 -> fix issue               ║
+ * ║ Run: role-selected model -> fix issue      ║
  * ╚════════════════════════════════════════════╝
  */
 import { existsSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
@@ -99,19 +99,13 @@ if (existingPr) {
         : "";
 
     console.log(
-        `\n=== Repair existing PR #${existingPr.number} (minimax/MiniMax-M3) ===\n`
+        `\n=== Repair existing PR #${existingPr.number} ===\n`
     );
     runPi(
         "code",
         [
             "-p",
             ...piFlags,
-            "--provider",
-            "minimax",
-            "--model",
-            "MiniMax-M3",
-            "--thinking",
-            "medium",
             "--tools",
             "read,edit,write,bash,grep,find",
             `Repair existing robotnik PR #${existingPr.number}.
@@ -160,12 +154,6 @@ runPi(
     [
         "-p",
         ...piFlags,
-        "--provider",
-        "minimax",
-        "--model",
-        "MiniMax-M3",
-        "--thinking",
-        "medium",
         "--tools",
         "read,edit,write,bash,grep,find",
         `You are robotnik, the issue fixer.

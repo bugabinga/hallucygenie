@@ -53,6 +53,7 @@ jobs:
             - run: node .github/agents/speck-ferkel.ts
               env:
                   MINIMAX_API_KEY: ${{ secrets.MINIMAX_API_KEY }}
+                  ZAI_API_KEY: ${{ secrets.ZAI_API_KEY }}
                   GH_TOKEN: ${{ steps.app-token.outputs.token }}
             - name: Agent report
               if: always()
@@ -135,6 +136,7 @@ jobs:
             - run: node .github/agents/trouble-maker.ts
               env:
                   MINIMAX_API_KEY: ${{ secrets.MINIMAX_API_KEY }}
+                  ZAI_API_KEY: ${{ secrets.ZAI_API_KEY }}
                   GH_TOKEN: ${{ steps.app-token.outputs.token }}
             - name: Agent report
               if: always()
@@ -216,6 +218,7 @@ jobs:
             - run: node .github/agents/slop-chopper.ts
               env:
                   MINIMAX_API_KEY: ${{ secrets.MINIMAX_API_KEY }}
+                  ZAI_API_KEY: ${{ secrets.ZAI_API_KEY }}
                   GH_TOKEN: ${{ steps.app-token.outputs.token }}
             - name: Agent report
               if: always()
@@ -297,6 +300,7 @@ jobs:
             - run: node .github/agents/robotnik.ts
               env:
                   MINIMAX_API_KEY: ${{ secrets.MINIMAX_API_KEY }}
+                  ZAI_API_KEY: ${{ secrets.ZAI_API_KEY }}
                   GH_TOKEN: ${{ steps.app-token.outputs.token }}
             - name: Agent report
               if: always()
@@ -377,4 +381,4 @@ jobs:
               run: node .github/agents/janitor.ts
               env:
                   GH_TOKEN: ${{ steps.app-token.outputs.token }}
-                  MINIMAX_API_KEY: ${{ secrets.MINIMAX_API_KEY }}
+                  ZAI_API_KEY: ${{ secrets.ZAI_API_KEY }}

@@ -9,7 +9,7 @@
  *      green lights hum after the broom
  *
  * ╔════════════════════════════════════════════╗
- * ║ Review: minimax/M3                         ║
+ * ║ Review: vision analysis                    ║
  * ╚════════════════════════════════════════════╝
  */
 import { spawnSync } from "node:child_process";
@@ -587,10 +587,6 @@ function reviewPr(pr: PrListItem) {
             "-p",
             "--no-session",
             "--no-prompt-templates",
-            "--provider",
-            "minimax",
-            "--model",
-            "MiniMax-M3",
             "--tools",
             "read,write",
             `You are hallucygenie janitor.
