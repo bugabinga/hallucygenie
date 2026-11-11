@@ -100,6 +100,14 @@ import {
 } from "./agent.ts";
 import { CONVERSATION_TOOLS, projectConversation, readConversation } from "./conversation.ts";
 import { assertNoRawAssetDataInMessage } from "./db.ts";
+import {
+    clearMcpCredential,
+    closeMcpConnections,
+    getMcpStatus,
+    getMcpToolDefinitions,
+    setMcpCredential,
+    warmMcpConnections
+} from "./mcp.ts";
 import { inspectMediaFile } from "./media.ts";
 import { MINIMAX_BASE, MUSIC_DISABLED_MESSAGE, type ToolResult, VIDEO_MODEL } from "./tools.ts";
 
@@ -426,6 +434,7 @@ export async function handleChat(
     let assistantTurnStarts = 0;
 
     // Run agent loop in background, streaming events to SSE
+    const mcpTools = await getMcpToolDefinitions(database);
     (async () => {
         try {
             await runAgentLoop(
@@ -559,7 +568,7 @@ export async function handleChat(
                     }
                     : undefined,
                 {
-                    tools: sessionId ? CONVERSATION_TOOLS : [],
+                    tools: sessionId ? [...CONVERSATION_TOOLS, ...mcpTools] : mcpTools,
                     onMessage: sessionId
                         ? (msg) => {
                             if (msg.role === "user") return; // Steering is durable before acknowledgement.
@@ -1646,6 +1655,43 @@ export async function handleRequest(req: Request): Promise<Response> {
             return jsonResponse(deleteUserProfile(database));
         }
 
+        if (path === "/api/mcp" && method === "GET") {
+            return jsonResponse(await getMcpStatus(database));
+        }
+
+        const mcpCredentialMatch = path.match(/^\/api\/mcp\/([^/]+)\/credential$/);
+        if (mcpCredentialMatch && method === "PUT") {
+            const entryId = decodeURIComponent(mcpCredentialMatch[1]!);
+            let secret: unknown;
+            try {
+                secret = ((await req.json()) as { secret?: unknown; }).secret;
+            } catch {
+                return jsonResponse({ error: "Invalid JSON body" }, 400);
+            }
+            if (typeof secret !== "string" || secret.trim().length === 0) {
+                return jsonResponse({ error: "secret must be a non-empty string" }, 400);
+            }
+            try {
+                const { toolCount } = await setMcpCredential(database, entryId, secret.trim());
+                log.info("mcp credential stored", { mcpId: entryId, toolCount });
+                return jsonResponse({ ok: true, toolCount });
+            } catch (err) {
+                log.warn("mcp credential probe failed", { mcpId: entryId });
+                return jsonResponse(
+                    { error: String(err instanceof Error ? err.message : err) },
+                    502
+                );
+            }
+        }
+
+        const mcpMatch = path.match(/^\/api\/mcp\/([^/]+)$/);
+        if (mcpMatch && method === "DELETE") {
+            const entryId = decodeURIComponent(mcpMatch[1]!);
+            await clearMcpCredential(database, entryId);
+            log.info("mcp credential removed", { mcpId: entryId });
+            return jsonResponse({ ok: true });
+        }
+
         if (path === "/api/sessions" && method === "GET") {
             const activeId = getOrCreateActiveSessionId(database);
             return jsonResponse({ activeSessionId: activeId, sessions: listSessions(database) });
@@ -2012,6 +2058,9 @@ export function initDatabase(dbPath = "data/hallucygenie.db"): Database {
     const dir = dirname(dbPath);
     mkdirSync(dir, { recursive: true });
     db = initDb(dbPath);
+    // Best-effort warm-up: reconnect credential-set MCP servers so chat tools
+    // survive server restarts without anyone opening the Integrations panel.
+    void warmMcpConnections(db).catch(() => {});
     return db;
 }
 
@@ -2417,6 +2466,7 @@ export function startServer(port = PORT): Server {
 let shuttingDown = false;
 
 export async function shutdown(): Promise<void> {
+    await closeMcpConnections();
     if (shuttingDown) return;
     shuttingDown = true;
     if (server) {

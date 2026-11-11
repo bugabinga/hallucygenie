@@ -2106,6 +2106,80 @@ textarea,
 
 /* ── Utility ────────────────────────────────────────────────────────── */
 
+/* ── MCP integrations (Profile modal) ─────────────────────────────── */
+
+.integrations {
+    margin-top: 1rem;
+    padding-top: 0.75rem;
+    border-top: 1px solid var(--line, #444);
+}
+
+.integrations h3 {
+    margin: 0 0 0.25rem;
+    font-size: 1rem;
+}
+
+.integrations-hint {
+    margin: 0 0 0.5rem;
+    color: var(--muted, #999);
+    font-size: 0.85rem;
+}
+
+.mcp-row {
+    padding: 0.5rem 0;
+    border-bottom: 1px solid var(--line, #333);
+}
+
+.mcp-row:last-child {
+    border-bottom: none;
+}
+
+.mcp-heading {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.mcp-status {
+    font-size: 0.75rem;
+    font-weight: 700;
+}
+
+.mcp-status.connected {
+    color: var(--ok, #4caf50);
+}
+
+.mcp-status.disconnected {
+    color: var(--muted, #999);
+}
+
+.mcp-description {
+    margin: 0.15rem 0 0.4rem;
+    color: var(--muted, #999);
+    font-size: 0.8rem;
+}
+
+.mcp-controls {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.4rem;
+    align-items: center;
+}
+
+.mcp-key-input {
+    flex: 1;
+    min-width: 10rem;
+    padding: 0.35rem 0.5rem;
+    font-size: 0.85rem;
+}
+
+.mcp-error {
+    margin: 0.3rem 0;
+    color: var(--bad, #f66);
+    font-size: 0.8rem;
+    overflow-wrap: anywhere;
+}
+
 [hidden] {
     display: none;
 }

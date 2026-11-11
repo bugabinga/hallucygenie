@@ -18,7 +18,8 @@ RUN npm exec -- esbuild public/app.ts \
 
 FROM node:${NODE_VERSION}-bookworm-slim AS runtime
 RUN apt-get update && apt-get install -y --no-install-recommends ffmpeg \
-    && rm -rf /var/lib/apt/lists/*
+    && rm -rf /var/lib/apt/lists/* \
+    && npm install -g --no-audit --no-fund zubeid-youtube-mcp-server@1
 ARG VERSION=1.0.0
 WORKDIR /app
 ENV NODE_ENV=production \

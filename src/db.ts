@@ -5,6 +5,8 @@ import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { DatabaseSync as Database } from "node:sqlite";
 
+export type { Database };
+
 // ── Quota Limits (MiniMax Plus-Highspeed plan) ──────────────────────
 
 export const QUOTAS: Record<string, number> = {
@@ -628,6 +630,30 @@ export function getPreferences(db: Database): Record<string, string> {
         result[row.key] = row.value;
     }
     return result;
+}
+
+// ── MCP credentials ─────────────────────────────────────────────
+
+/** Store the secret credential (API key or token) for one MCP integration. */
+export function saveMcpCredential(db: Database, mcpId: string, secret: string): void {
+    db.prepare(
+        `INSERT INTO mcp_credentials (mcp_id, secret, updated_at)
+     VALUES (?, ?, datetime('now'))
+     ON CONFLICT(mcp_id) DO UPDATE SET secret = excluded.secret, updated_at = excluded.updated_at`
+    ).run(mcpId, secret);
+}
+
+/** Read the stored credential for one MCP integration, if connected. */
+export function getMcpCredential(db: Database, mcpId: string): string | null {
+    const row = db.prepare("SELECT secret FROM mcp_credentials WHERE mcp_id = ?").get(mcpId) as
+        | { secret: string; }
+        | undefined;
+    return row?.secret ?? null;
+}
+
+/** Remove the stored credential for one MCP integration. */
+export function deleteMcpCredential(db: Database, mcpId: string): void {
+    db.prepare("DELETE FROM mcp_credentials WHERE mcp_id = ?").run(mcpId);
 }
 
 // ── Usage Tracking ──────────────────────────────────────────────────

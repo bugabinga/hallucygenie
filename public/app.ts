@@ -2133,10 +2133,113 @@ export function init(): void {
         updateProfileAvatarPreview(profile);
     }
 
+    async function loadIntegrations(): Promise<void> {
+        const list = document.querySelector("#mcp-list") as HTMLElement | null;
+        if (!list) return;
+        const response = await fetch("/api/mcp");
+        if (!response.ok) throw new Error(`Failed to load integrations (${response.status})`);
+        const servers = (await response.json()) as Array<{
+            id: string;
+            label: string;
+            description: string;
+            credentialSet: boolean;
+            connected: boolean;
+            toolCount: number;
+            error: string | null;
+        }>;
+        list.replaceChildren();
+        for (const server of servers) {
+            const row = document.createElement("div");
+            row.className = "mcp-row";
+            const heading = document.createElement("div");
+            heading.className = "mcp-heading";
+            const name = document.createElement("strong");
+            name.textContent = server.label;
+            const status = document.createElement("span");
+            status.className = server.connected
+                ? "mcp-status connected"
+                : "mcp-status disconnected";
+            status.textContent = server.connected
+                ? `Connected · ${server.toolCount} tools`
+                : server.error
+                ? "Connect failed"
+                : "Not connected";
+            heading.append(name, status);
+            const description = document.createElement("p");
+            description.className = "mcp-description";
+            description.textContent = server.description;
+            const controls = document.createElement("div");
+            controls.className = "mcp-controls";
+            const keyInput = document.createElement("input");
+            keyInput.type = "password";
+            keyInput.className = "mcp-key-input";
+            keyInput.placeholder = `${server.label} API key`;
+            keyInput.autocomplete = "off";
+            keyInput.setAttribute("aria-label", `${server.label} API key`);
+            const connectButton = document.createElement("button");
+            connectButton.type = "button";
+            connectButton.className = "btn-secondary mcp-connect";
+            connectButton.textContent = server.credentialSet ? "Update key" : "Connect";
+            connectButton.addEventListener("click", async () => {
+                const secret = keyInput.value.trim();
+                if (!secret) {
+                    showError("Enter an API key first.");
+                    return;
+                }
+                connectButton.disabled = true;
+                try {
+                    const response = await fetch(`/api/mcp/${server.id}/credential`, {
+                        method: "PUT",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({ secret })
+                    });
+                    if (!response.ok) {
+                        const body = (await response.json().catch(() => ({}))) as {
+                            error?: string;
+                        };
+                        throw new Error(body.error ?? `Failed (${response.status})`);
+                    }
+                    await loadIntegrations();
+                } catch (error) {
+                    showError(error instanceof Error ? error.message : String(error));
+                } finally {
+                    connectButton.disabled = false;
+                }
+            });
+            controls.append(keyInput, connectButton);
+            if (server.credentialSet) {
+                const disconnectButton = document.createElement("button");
+                disconnectButton.type = "button";
+                disconnectButton.className = "btn-secondary mcp-disconnect";
+                disconnectButton.textContent = "Disconnect";
+                disconnectButton.addEventListener("click", async () => {
+                    disconnectButton.disabled = true;
+                    try {
+                        await fetch(`/api/mcp/${server.id}`, { method: "DELETE" });
+                        await loadIntegrations();
+                    } finally {
+                        disconnectButton.disabled = false;
+                    }
+                });
+                controls.append(disconnectButton);
+            }
+            if (server.error) {
+                const errorLine = document.createElement("p");
+                errorLine.className = "mcp-error";
+                errorLine.textContent = server.error;
+                row.append(heading, description, errorLine, controls);
+            } else {
+                row.append(heading, description, controls);
+            }
+            list.append(row);
+        }
+    }
+
     async function loadProfileIntoForm(): Promise<void> {
         const profile = await fetchProfile();
         setCurrentProfile(profile);
         fillProfileForm(profile);
+        await loadIntegrations();
     }
 
     function getProfileModalFocusable(): HTMLElement[] {

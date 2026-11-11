@@ -18,7 +18,8 @@
         "happy-dom": "^21.0.4",
         "lefthook": "^2.1.12",
         "nock": "^14.0.17",
-        "playwright": "^1.62.1"
+        "playwright": "^1.62.1",
+        "zubeid-youtube-mcp-server": "^1.0.2"
     },
     "dependencies": {
         "marked": "18.0.11"
