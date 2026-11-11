@@ -105,7 +105,8 @@ import {
     closeMcpConnections,
     getMcpStatus,
     getMcpToolDefinitions,
-    setMcpCredential
+    setMcpCredential,
+    warmMcpConnections
 } from "./mcp.ts";
 import { inspectMediaFile } from "./media.ts";
 import { MINIMAX_BASE, MUSIC_DISABLED_MESSAGE, type ToolResult, VIDEO_MODEL } from "./tools.ts";
@@ -2057,6 +2058,12 @@ export function initDatabase(dbPath = "data/hallucygenie.db"): Database {
     const dir = dirname(dbPath);
     mkdirSync(dir, { recursive: true });
     db = initDb(dbPath);
+    // Reconnect credential-set MCP servers so chat tools survive restarts.
+    // Skipped in test environments: spawning MCP servers in tests hangs the
+    // suite and is unnecessary — getMcpStatus warms on first panel open.
+    if (process.env.NODE_ENV !== "test") {
+        void warmMcpConnections(db).catch(() => {});
+    }
     return db;
 }
 

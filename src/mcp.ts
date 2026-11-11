@@ -63,7 +63,12 @@ export const MCP_SERVERS: readonly McpServerCatalogEntry[] = [
             "Cut, convert, concatenate, and clean up video and audio files inside the app's data directory.",
         envKeys: [],
         commandCandidates: [
-            ...localBinCandidates("ffmpeg-mcp"),
+            // The npm bin wrapper has no shebang → execve falls back to /bin/sh
+            // → guaranteed failure. Spawn node directly on the built JS instead.
+            [
+                process.execPath,
+                join(process.cwd(), "node_modules", "ffmpeg-mcp-server", "build", "index.js")
+            ],
             ["ffmpeg-mcp"],
             ["npx", "-y", `${FFMPEG_PACKAGE}@1`]
         ],
@@ -286,7 +291,13 @@ export async function getMcpToolDefinitions(
         const secret = entry.autoConnect === true ? "" : getMcpCredential(db, entry.id);
         if (secret === null) continue;
         const connection = connections.get(entry.id);
-        if (!connection) continue;
+        if (!connection) {
+            // Warm up auto-connect entries on first chat request; never blocks.
+            if (entry.autoConnect === true) {
+                void ensureConnectedWith(entry, "").catch(() => {});
+            }
+            continue;
+        }
         for (const tool of connection.tools) {
             definitions.push({
                 name: `mcp__${entry.id}__${tool.name}`,
