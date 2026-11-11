@@ -1,6 +1,8 @@
 // HallucyGenie — Tool definitions and execution
 // Active image, speech, lyrics, video, search, and analysis tools; music audio is disabled.
 
+import { executeMcpTool } from "./mcp.ts";
+
 // ── Types ────────────────────────────────────────────────────────────
 
 export interface ToolDefinition {
@@ -408,6 +410,9 @@ export async function executeTool(
             return webSearch(args.query as string, apiKey);
 
         default:
+            if (name.startsWith("mcp__")) {
+                return executeMcpTool(name, args);
+            }
             return { type: "error", content: `Unknown tool: ${name}` };
     }
 }

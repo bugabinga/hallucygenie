@@ -2022,7 +2022,38 @@ async function runE2ETests(): Promise<void> {
         results
     );
 
-    // Test 17: Profile saves via DB and survives localStorage clearing
+    // Test 17b: Integrations panel — YouTube connect/disconnect through real routes
+    await runTest(
+        "integrations panel connects and disconnects YouTube",
+        async () => {
+            const page = await newPage(browser);
+            await waitForApp(page, { dismissOnboarding: true });
+
+            await page.click("#profile-btn");
+            await expectVisible(page, "#integrations-section");
+            await expectVisible(page, "#integrations-title");
+            await expectVisible(page, "#mcp-list");
+            const youtubeRow = page.locator(".mcp-row", { hasText: "YouTube" });
+            await youtubeRow.locator(".mcp-key-input").fill("test-youtube-key-e2e");
+            await youtubeRow.locator(".mcp-connect").click();
+            await youtubeRow.locator(".mcp-status.connected").waitFor({
+                state: "visible",
+                timeout: 30000
+            });
+            const connectedText = await youtubeRow.locator(".mcp-status.connected").textContent();
+            assertEqual(connectedText, "Connected · 10 tools", "YouTube tool count");
+            await youtubeRow.locator(".mcp-disconnect").click();
+            await youtubeRow.locator(".mcp-status.disconnected").waitFor({
+                state: "visible",
+                timeout: 15000
+            });
+
+            await page.close();
+        },
+        results
+    );
+
+    // Test 18: (placeholder to preserve numbering flow)
     await runTest(
         "profile saves via DB and survives localStorage clearing",
         async () => {
@@ -2054,6 +2085,11 @@ async function runE2ETests(): Promise<void> {
             await page.click("#profile-btn");
             await expectVisible(page, "#profile-modal");
             await reloadedProfileLoad;
+            await page.waitForFunction(
+                () =>
+                    (document.getElementById("profile-username") as HTMLInputElement | null)?.value
+                        === "GamerKid"
+            );
             const username = await page.locator("#profile-username").inputValue();
             const interests = await page.locator("#profile-interests").inputValue();
             const avatarAsset = await page.locator("#profile-avatar-asset").inputValue();

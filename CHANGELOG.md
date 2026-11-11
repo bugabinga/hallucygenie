@@ -2,13 +2,14 @@
 
 ## Unreleased
 
+• MCP integrations: Profile → Integrations panel connects tool servers (YouTube first); tools appear as mcp__<server>__<tool> in chat. Zero-dep JSON-RPC stdio client; generic registry; credentials stored in SQLite (schema 15).
 • Patrol analysis/review uses vision-capable Z.AI GLM-5.3-Flash; coding uses MiniMax-M3.1-Flash through Pi 1.5.1.
 • Stop repeated tool-use loops after 20 provider turns without discarding completed observations.
 • Use kid-friendly volume labels and check bounded image/voice controls.
 • Update npm dependencies and GitHub Actions; keep build-script approval explicit.
 • Janitor failures produce needs-human status, including interrupted partial reviews, instead of silently ending review.
 • Scope bot Git authentication to GitHub and keep checkout credentials out of the worktree.
-• SQLite schema remains version 14; no migration or deployment is included in these maintenance changes.
+• SQLite schema is now version 15 (MCP credentials table added); no breaking migration.
 
 ## 1.0.3 - 2026-11-09
 
