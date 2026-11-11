@@ -2180,6 +2180,12 @@ textarea,
     overflow-wrap: anywhere;
 }
 
+.mcp-builtin {
+    color: var(--ok, #4caf50);
+    font-size: 0.75rem;
+    font-weight: 700;
+}
+
 [hidden] {
     display: none;
 }

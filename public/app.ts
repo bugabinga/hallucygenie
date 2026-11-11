@@ -2146,6 +2146,7 @@ export function init(): void {
             connected: boolean;
             toolCount: number;
             error: string | null;
+            autoConnect: boolean;
         }>;
         list.replaceChildren();
         for (const server of servers) {
@@ -2170,58 +2171,65 @@ export function init(): void {
             description.textContent = server.description;
             const controls = document.createElement("div");
             controls.className = "mcp-controls";
-            const keyInput = document.createElement("input");
-            keyInput.type = "password";
-            keyInput.className = "mcp-key-input";
-            keyInput.placeholder = `${server.label} API key`;
-            keyInput.autocomplete = "off";
-            keyInput.setAttribute("aria-label", `${server.label} API key`);
-            const connectButton = document.createElement("button");
-            connectButton.type = "button";
-            connectButton.className = "btn-secondary mcp-connect";
-            connectButton.textContent = server.credentialSet ? "Update key" : "Connect";
-            connectButton.addEventListener("click", async () => {
-                const secret = keyInput.value.trim();
-                if (!secret) {
-                    showError("Enter an API key first.");
-                    return;
-                }
-                connectButton.disabled = true;
-                try {
-                    const response = await fetch(`/api/mcp/${server.id}/credential`, {
-                        method: "PUT",
-                        headers: { "Content-Type": "application/json" },
-                        body: JSON.stringify({ secret })
-                    });
-                    if (!response.ok) {
-                        const body = (await response.json().catch(() => ({}))) as {
-                            error?: string;
-                        };
-                        throw new Error(body.error ?? `Failed (${response.status})`);
+            if (server.autoConnect) {
+                const builtin = document.createElement("span");
+                builtin.className = "mcp-builtin";
+                builtin.textContent = "Built-in";
+                controls.append(builtin);
+            } else {
+                const keyInput = document.createElement("input");
+                keyInput.type = "password";
+                keyInput.className = "mcp-key-input";
+                keyInput.placeholder = `${server.label} API key`;
+                keyInput.autocomplete = "off";
+                keyInput.setAttribute("aria-label", `${server.label} API key`);
+                const connectButton = document.createElement("button");
+                connectButton.type = "button";
+                connectButton.className = "btn-secondary mcp-connect";
+                connectButton.textContent = server.credentialSet ? "Update key" : "Connect";
+                connectButton.addEventListener("click", async () => {
+                    const secret = keyInput.value.trim();
+                    if (!secret) {
+                        showError("Enter an API key first.");
+                        return;
                     }
-                    await loadIntegrations();
-                } catch (error) {
-                    showError(error instanceof Error ? error.message : String(error));
-                } finally {
-                    connectButton.disabled = false;
-                }
-            });
-            controls.append(keyInput, connectButton);
-            if (server.credentialSet) {
-                const disconnectButton = document.createElement("button");
-                disconnectButton.type = "button";
-                disconnectButton.className = "btn-secondary mcp-disconnect";
-                disconnectButton.textContent = "Disconnect";
-                disconnectButton.addEventListener("click", async () => {
-                    disconnectButton.disabled = true;
+                    connectButton.disabled = true;
                     try {
-                        await fetch(`/api/mcp/${server.id}`, { method: "DELETE" });
+                        const response = await fetch(`/api/mcp/${server.id}/credential`, {
+                            method: "PUT",
+                            headers: { "Content-Type": "application/json" },
+                            body: JSON.stringify({ secret })
+                        });
+                        if (!response.ok) {
+                            const body = (await response.json().catch(() => ({}))) as {
+                                error?: string;
+                            };
+                            throw new Error(body.error ?? `Failed (${response.status})`);
+                        }
                         await loadIntegrations();
+                    } catch (error) {
+                        showError(error instanceof Error ? error.message : String(error));
                     } finally {
-                        disconnectButton.disabled = false;
+                        connectButton.disabled = false;
                     }
                 });
-                controls.append(disconnectButton);
+                controls.append(keyInput, connectButton);
+                if (server.credentialSet) {
+                    const disconnectButton = document.createElement("button");
+                    disconnectButton.type = "button";
+                    disconnectButton.className = "btn-secondary mcp-disconnect";
+                    disconnectButton.textContent = "Disconnect";
+                    disconnectButton.addEventListener("click", async () => {
+                        disconnectButton.disabled = true;
+                        try {
+                            await fetch(`/api/mcp/${server.id}`, { method: "DELETE" });
+                            await loadIntegrations();
+                        } finally {
+                            disconnectButton.disabled = false;
+                        }
+                    });
+                    controls.append(disconnectButton);
+                }
             }
             if (server.error) {
                 const errorLine = document.createElement("p");

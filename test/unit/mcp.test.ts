@@ -16,14 +16,24 @@ process.env.MINIMAX_API_KEY = "test-key-for-mcp-tests";
 const stubServer = new URL("../fixtures/mcp-stub-server.mjs", import.meta.url).pathname;
 
 describe("mcp catalog", () => {
-    it("registers YouTube with env keys and spawn candidates", async () => {
+    it("registers YouTube and FFmpeg with correct spawn and auth config", async () => {
         const { MCP_SERVERS } = await import("../../src/mcp.ts");
-        assert.equal(MCP_SERVERS.length, 1);
-        const entry = MCP_SERVERS[0];
-        assert.equal(entry.id, "youtube");
-        assert.equal(entry.label, "YouTube");
-        assert.deepEqual(entry.envKeys, ["YOUTUBE_API_KEY"]);
-        assert.ok(entry.commandCandidates.length >= 2, "needs local + fallback spawn candidates");
+        assert.equal(MCP_SERVERS.length, 2);
+        const youtube = MCP_SERVERS[0];
+        assert.equal(youtube.id, "youtube");
+        assert.equal(youtube.label, "YouTube");
+        assert.deepEqual(youtube.envKeys, ["YOUTUBE_API_KEY"]);
+        assert.ok(youtube.autoConnect !== true);
+        assert.ok(youtube.commandCandidates.length >= 2, "needs local + fallback spawn candidates");
+        const ffmpeg = MCP_SERVERS[1];
+        assert.equal(ffmpeg.id, "ffmpeg");
+        assert.equal(ffmpeg.label, "FFmpeg");
+        assert.equal(ffmpeg.autoConnect, true);
+        assert.deepEqual(ffmpeg.envKeys, []);
+        assert.ok(
+            ffmpeg.buildEnv && ffmpeg.buildEnv().FFMPEG_MCP_WORKSPACE !== undefined,
+            "ffmpeg workspace must be set"
+        );
     });
 });
 

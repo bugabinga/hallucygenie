@@ -105,8 +105,7 @@ import {
     closeMcpConnections,
     getMcpStatus,
     getMcpToolDefinitions,
-    setMcpCredential,
-    warmMcpConnections
+    setMcpCredential
 } from "./mcp.ts";
 import { inspectMediaFile } from "./media.ts";
 import { MINIMAX_BASE, MUSIC_DISABLED_MESSAGE, type ToolResult, VIDEO_MODEL } from "./tools.ts";
@@ -2058,9 +2057,6 @@ export function initDatabase(dbPath = "data/hallucygenie.db"): Database {
     const dir = dirname(dbPath);
     mkdirSync(dir, { recursive: true });
     db = initDb(dbPath);
-    // Best-effort warm-up: reconnect credential-set MCP servers so chat tools
-    // survive server restarts without anyone opening the Integrations panel.
-    void warmMcpConnections(db).catch(() => {});
     return db;
 }
 

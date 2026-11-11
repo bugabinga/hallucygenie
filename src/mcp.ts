@@ -6,6 +6,7 @@
  * env mapping). The UI renders the registry generically.
  */
 import { existsSync } from "node:fs";
+import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { type Database, deleteMcpCredential, getMcpCredential, saveMcpCredential } from "./db.ts";
 import { createLogger } from "./log.ts";
@@ -22,14 +23,19 @@ export interface McpServerCatalogEntry {
     envKeys: string[];
     /** Spawn candidates, tried in order: dev node_modules/.bin, global bin, npx fallback. */
     commandCandidates: string[][];
+    /** Auto-connect servers need no credential and are always enabled. */
+    autoConnect?: boolean;
+    /** Env vars derived from the runtime environment (workspace paths etc.). */
+    buildEnv?: () => Record<string, string>;
 }
 
 const YOUTUBE_PACKAGE = "zubeid-youtube-mcp-server";
+const FFMPEG_PACKAGE = "ffmpeg-mcp-server";
 
-function localBinCandidates(): string[][] {
+function localBinCandidates(packageName: string): string[][] {
     try {
         const bin = fileURLToPath(
-            new URL("../node_modules/.bin/" + YOUTUBE_PACKAGE, import.meta.url)
+            new URL("../node_modules/.bin/" + packageName, import.meta.url)
         );
         return existsSync(bin) ? [[bin]] : [];
     } catch {
@@ -45,10 +51,24 @@ export const MCP_SERVERS: readonly McpServerCatalogEntry[] = [
             "Search videos, read transcripts, and look up channels and playlists through the YouTube Data API.",
         envKeys: ["YOUTUBE_API_KEY"],
         commandCandidates: [
-            ...localBinCandidates(),
+            ...localBinCandidates(YOUTUBE_PACKAGE),
             [YOUTUBE_PACKAGE],
             ["npx", "-y", `${YOUTUBE_PACKAGE}@1`]
         ]
+    },
+    {
+        id: "ffmpeg",
+        label: "FFmpeg",
+        description:
+            "Cut, convert, concatenate, and clean up video and audio files inside the app's data directory.",
+        envKeys: [],
+        commandCandidates: [
+            ...localBinCandidates("ffmpeg-mcp"),
+            ["ffmpeg-mcp"],
+            ["npx", "-y", `${FFMPEG_PACKAGE}@1`]
+        ],
+        autoConnect: true,
+        buildEnv: () => ({ FFMPEG_MCP_WORKSPACE: resolve(process.cwd(), "data") })
     }
 ] as const;
 
@@ -64,6 +84,7 @@ export interface McpStatus {
     connected: boolean;
     toolCount: number;
     error: string | null;
+    autoConnect: boolean;
 }
 
 interface Connection {
@@ -94,7 +115,7 @@ function invalidateConnecting(entryId: string): void {
 }
 
 function credentialEnv(entry: McpServerCatalogEntry, secret: string): Record<string, string> {
-    const env: Record<string, string> = {};
+    const env: Record<string, string> = { ...entry.buildEnv?.() };
     entry.envKeys.forEach((key, index) => {
         if (index === 0) env[key] = secret;
     });
@@ -171,13 +192,15 @@ function connectedOnly(entry: McpServerCatalogEntry): Connection {
 export async function getMcpStatus(db: Database): Promise<McpStatus[]> {
     const statuses: McpStatus[] = [];
     for (const entry of MCP_SERVERS) {
-        const credentialSet = getMcpCredential(db, entry.id) !== null;
+        const credentialSet = entry.autoConnect === true || getMcpCredential(db, entry.id) !== null;
         let connected = false;
         let toolCount = 0;
         let error: string | null = null;
         if (credentialSet) {
             try {
-                const secret = getMcpCredential(db, entry.id)!;
+                const secret = entry.autoConnect === true
+                    ? ""
+                    : (getMcpCredential(db, entry.id) ?? "");
                 const connection = await ensureConnectedWith(entry, secret);
                 connected = true;
                 toolCount = connection.tools.length;
@@ -197,7 +220,8 @@ export async function getMcpStatus(db: Database): Promise<McpStatus[]> {
             credentialSet,
             connected,
             toolCount,
-            error
+            error,
+            autoConnect: entry.autoConnect === true
         });
     }
     return statuses;
@@ -211,6 +235,9 @@ export async function setMcpCredential(
 ): Promise<{ toolCount: number; }> {
     const entry = mcpCatalogEntry(entryId);
     if (!entry) throw new Error(`Unknown MCP integration: ${entryId}`);
+    if (entry.autoConnect === true) {
+        throw new Error(`Built-in integration ${entry.label} does not need a key`);
+    }
     saveMcpCredential(db, entry.id, secret);
     invalidateConnecting(entry.id);
     const previous = connections.get(entry.id);
@@ -230,7 +257,11 @@ export async function setMcpCredential(
 
 /** Remove the credential and drop the connection. */
 export async function clearMcpCredential(db: Database, entryId: string): Promise<void> {
-    if (!mcpCatalogEntry(entryId)) throw new Error(`Unknown MCP integration: ${entryId}`);
+    const entry = mcpCatalogEntry(entryId);
+    if (!entry) throw new Error(`Unknown MCP integration: ${entryId}`);
+    if (entry.autoConnect === true) {
+        throw new Error(`Built-in integration ${entry.label} cannot be disconnected`);
+    }
     deleteMcpCredential(db, entryId);
     invalidateConnecting(entryId);
     const connection = connections.get(entryId);
@@ -252,7 +283,8 @@ export async function getMcpToolDefinitions(
         { name: string; description: string; input_schema: Record<string, unknown>; }
     > = [];
     for (const entry of MCP_SERVERS) {
-        if (getMcpCredential(db, entry.id) === null) continue;
+        const secret = entry.autoConnect === true ? "" : getMcpCredential(db, entry.id);
+        if (secret === null) continue;
         const connection = connections.get(entry.id);
         if (!connection) continue;
         for (const tool of connection.tools) {
@@ -294,7 +326,7 @@ export async function executeMcpTool(
 /** Best-effort reconnect of credential-set servers (called at server startup). */
 export async function warmMcpConnections(db: Database): Promise<void> {
     for (const entry of MCP_SERVERS) {
-        const secret = getMcpCredential(db, entry.id);
+        const secret = entry.autoConnect === true ? "" : getMcpCredential(db, entry.id);
         if (secret === null || connections.has(entry.id)) continue;
         try {
             await ensureConnectedWith(entry, secret);
