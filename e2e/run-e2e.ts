@@ -2085,6 +2085,11 @@ async function runE2ETests(): Promise<void> {
             await page.click("#profile-btn");
             await expectVisible(page, "#profile-modal");
             await reloadedProfileLoad;
+            await page.waitForFunction(
+                () =>
+                    (document.getElementById("profile-username") as HTMLInputElement | null)?.value
+                        === "GamerKid"
+            );
             const username = await page.locator("#profile-username").inputValue();
             const interests = await page.locator("#profile-interests").inputValue();
             const avatarAsset = await page.locator("#profile-avatar-asset").inputValue();
