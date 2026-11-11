@@ -103,6 +103,9 @@ export class McpStdioClient {
             });
             child.stdout?.setEncoding("utf8");
             child.stdout?.on("data", (chunk: string) => this.consume(chunk));
+            // A child that exits mid-write delivers EPIPE on the stdin socket;
+            // without this handler the error terminates the whole server.
+            child.stdin?.on("error", () => this.failAll(`${this.label} MCP stdin pipe broken`));
             await this.request("initialize", {
                 protocolVersion: PROTOCOL_VERSION,
                 capabilities: {},

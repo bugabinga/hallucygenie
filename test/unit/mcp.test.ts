@@ -103,6 +103,11 @@ describe("mcp bridge over stub server", () => {
 
             const unknown = await executeMcpTool("mcp__youtube__nope", {});
             assert.equal(unknown.type, "error");
+
+            // Regression: a child that exits mid-request must not crash the
+            // server with an unhandled EPIPE on the stdin socket.
+            const postClose = await executeMcpTool("mcp__youtube__echo_text", { text: "x" });
+            assert.ok(postClose.type === "text" || postClose.type === "error");
         } finally {
             await closeMcpConnections();
             _setSpawnOverride(null);
