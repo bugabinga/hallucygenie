@@ -10,6 +10,19 @@ import { type ChildProcess, spawn } from "node:child_process";
 
 const PROTOCOL_VERSION = "2024-11-05";
 const REQUEST_TIMEOUT_MS = 90_000;
+const ALLOWLISTED_ENV_KEYS = [
+    "PATH",
+    "HOME",
+    "TMPDIR",
+    "LANG",
+    "LC_ALL",
+    "NODE_ENV",
+    "YOUTUBE_API_KEY",
+    "YOUTUBE_API_KEY2",
+    "YOUTUBE_API_KEY3",
+    "YOUTUBE_TRANSCRIPT_LANG",
+    "FFMPEG_MCP_WORKSPACE"
+] as const;
 
 export interface McpToolInfo {
     name: string;
@@ -61,6 +74,17 @@ export class McpStdioClient {
     }
 
     /** Last stderr lines from the server, for operator diagnostics. Never logged at info. */
+    private buildEnv(): Record<string, string> {
+        const env: Record<string, string> = {};
+        for (const key of ALLOWLISTED_ENV_KEYS) {
+            if (process.env[key] !== undefined) env[key] = process.env[key]!;
+        }
+        for (const [key, value] of Object.entries(this.env)) {
+            env[key] = value;
+        }
+        return env;
+    }
+
     diagnostics(): string {
         return this.stderrTail.slice(-2000);
     }
@@ -77,11 +101,9 @@ export class McpStdioClient {
         if (this.initPromise) return this.initPromise;
         this.initPromise = (async () => {
             const child = _spawnOverride
-                ? _spawnOverride(this.command, this.args, {
-                    env: { ...process.env, ...this.env } as Record<string, string>
-                })
+                ? _spawnOverride(this.command, this.args, { env: this.buildEnv() })
                 : spawn(this.command, this.args, {
-                    env: { ...process.env, ...this.env },
+                    env: this.buildEnv(),
                     stdio: ["pipe", "pipe", "pipe"]
                 });
             this.child = child;
