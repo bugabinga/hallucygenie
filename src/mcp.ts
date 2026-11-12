@@ -81,6 +81,16 @@ export function mcpCatalogEntry(id: string): McpServerCatalogEntry | undefined {
     return MCP_SERVERS.find((entry) => entry.id === id);
 }
 
+function isNegativeCached(entryId: string): boolean {
+    const until = negativeCache.get(entryId);
+    if (until === undefined) return false;
+    if (Date.now() >= until) {
+        negativeCache.delete(entryId);
+        return false;
+    }
+    return true;
+}
+
 export interface McpStatus {
     id: string;
     label: string;
@@ -100,6 +110,8 @@ interface Connection {
 const connections = new Map<string, Connection>();
 const connecting = new Map<string, Promise<Connection | null>>();
 const connectEpochs = new Map<string, number>();
+const negativeCache = new Map<string, number>(); // entry id → retry-after timestamp
+const NEGATIVE_CACHE_MS = 60_000;
 let closed = false;
 
 /** Test seam: closeMcpConnections permanently stops connects; tests reset it. */
@@ -278,35 +290,65 @@ export async function clearMcpCredential(db: Database, entryId: string): Promise
 
 /** MCP tools for every connected server, exposed to the model as mcp__<id>__<tool>.
  *
- * Chat start must never block on an MCP spawn: this reads cached connections only.
- * The Integrations panel (status probe / credential save) warms the cache up.
+ * Lazily warms credential-set servers with a 3 s bounded wait so tools
+ * survive restarts without the user visiting the Integrations panel.
+ * Failures are negative-cached for 60 s to avoid re-spawning broken servers.
  */
 export async function getMcpToolDefinitions(
     db: Database
-): Promise<Array<{ name: string; description: string; input_schema: Record<string, unknown>; }>> {
-    const definitions: Array<
-        { name: string; description: string; input_schema: Record<string, unknown>; }
-    > = [];
+): Promise<
+    Array<{ name: string; description: string; input_schema: Record<string, unknown>; }>
+> {
+    const definitions: Array<{
+        name: string;
+        description: string;
+        input_schema: Record<string, unknown>;
+    }> = [];
+    const warmups: Array<Promise<void>> = [];
     for (const entry of MCP_SERVERS) {
+        if (isNegativeCached(entry.id)) continue;
         const secret = entry.autoConnect === true ? "" : getMcpCredential(db, entry.id);
         if (secret === null) continue;
-        const connection = connections.get(entry.id);
-        if (!connection) {
-            // Warm up auto-connect entries on first chat request; never blocks.
-            if (entry.autoConnect === true) {
-                void ensureConnectedWith(entry, "").catch(() => {});
+
+        const cached = connections.get(entry.id);
+        if (cached) {
+            for (const tool of cached.tools) {
+                definitions.push({
+                    name: `mcp__${entry.id}__${tool.name}`,
+                    description: tool.description ?? tool.name,
+                    input_schema: (tool.inputSchema ?? {
+                        type: "object"
+                    }) as Record<string, unknown>
+                });
             }
             continue;
         }
-        for (const tool of connection.tools) {
-            definitions.push({
-                name: `mcp__${entry.id}__${tool.name}`,
-                description: tool.description ?? tool.name,
-                input_schema: (tool.inputSchema ?? { type: "object" }) as Record<string, unknown>
+
+        const warm = ensureConnectedWith(entry, secret)
+            .then((connection) => {
+                for (const tool of connection.tools) {
+                    definitions.push({
+                        name: `mcp__${entry.id}__${tool.name}`,
+                        description: tool.description ?? tool.name,
+                        input_schema: (tool.inputSchema ?? {
+                            type: "object"
+                        }) as Record<string, unknown>
+                    });
+                }
+            })
+            .catch(() => {
+                negativeCache.set(entry.id, Date.now() + NEGATIVE_CACHE_MS);
             });
-        }
+        warmups.push(warm);
+    }
+    if (warmups.length > 0) {
+        await Promise.race([Promise.all(warmups), sleep(3000)]);
     }
     return definitions;
+}
+
+function sleep(ms: number): Promise<void> {
+    return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 /** Route an mcp__<id>__<tool> call to its server. Returns a Genie ToolResult. */

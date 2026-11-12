@@ -2484,6 +2484,7 @@ export function isShuttingDown(): boolean {
  */
 export function resetStateForTesting(): void {
     shuttingDown = false;
+    void closeMcpConnections();
     if (db) {
         try {
             db.close();

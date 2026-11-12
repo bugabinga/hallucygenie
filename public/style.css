@@ -2186,6 +2186,18 @@ textarea,
     font-weight: 700;
 }
 
+.mcp-help {
+    margin: 0.15rem 0 0.4rem;
+    color: var(--muted, #999);
+    font-size: 0.78rem;
+    overflow-wrap: anywhere;
+}
+
+.mcp-help a {
+    color: var(--accent, #7aa2f7);
+    text-decoration: underline;
+}
+
 [hidden] {
     display: none;
 }

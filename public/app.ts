@@ -2183,6 +2183,18 @@ export function init(): void {
                 keyInput.placeholder = `${server.label} API key`;
                 keyInput.autocomplete = "off";
                 keyInput.setAttribute("aria-label", `${server.label} API key`);
+                if (server.id === "youtube") {
+                    const help = document.createElement("p");
+                    help.className = "mcp-help";
+                    const link = document.createElement("a");
+                    link.href = "https://console.cloud.google.com/apis/credentials";
+                    link.target = "_blank";
+                    link.rel = "noopener noreferrer";
+                    link.textContent = "Get a free YouTube API key →";
+                    help.append(link);
+                    help.append(" — enable YouTube Data API v3, create an API key, paste it here.");
+                    controls.append(help);
+                }
                 const connectButton = document.createElement("button");
                 connectButton.type = "button";
                 connectButton.className = "btn-secondary mcp-connect";
