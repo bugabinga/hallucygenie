@@ -8,22 +8,22 @@
         "prepare": "git rev-parse --git-dir >/dev/null 2>&1 || exit 0; lefthook install"
     },
     "devDependencies": {
-        "@biomejs/biome": "2.5.12",
+        "@biomejs/biome": "2.6.8",
         "@stryker-mutator/core": "^10.0.0",
         "@stryker-mutator/typescript-checker": "^10.0.0",
         "@types/nock": "^11.1.0",
-        "@types/node": "^26.4.1",
-        "dprint": "0.57.1",
+        "@types/node": "^26.6.6",
+        "dprint": "0.65.0",
         "esbuild": "^0.28.2",
         "ffmpeg-mcp-server": "^1.0.4",
         "happy-dom": "^21.0.4",
-        "lefthook": "^2.1.12",
-        "nock": "^14.0.17",
-        "playwright": "^1.62.1",
+        "lefthook": "^2.2.2",
+        "nock": "^15.0.6",
+        "playwright": "^1.65.1",
         "zubeid-youtube-mcp-server": "^1.0.2"
     },
     "dependencies": {
-        "marked": "18.0.11"
+        "marked": "18.2.1"
     },
     "allowScripts": {
         "dprint": true,
