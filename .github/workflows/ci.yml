@@ -13,7 +13,7 @@ jobs:
         timeout-minutes: 20
         steps:
             - uses: actions/checkout@v7.0.1
-            - uses: jdx/mise-action@v4.2.0
+            - uses: jdx/mise-action@v5.2.10
               with:
                   cache: true
             - uses: actions/cache@v6.1.0
@@ -39,7 +39,7 @@ jobs:
                 device: [desktop, mobile]
         steps:
             - uses: actions/checkout@v7.0.1
-            - uses: jdx/mise-action@v4.2.0
+            - uses: jdx/mise-action@v5.2.10
               with:
                   cache: true
             - uses: actions/cache@v6.1.0
@@ -80,7 +80,7 @@ jobs:
         timeout-minutes: 60
         steps:
             - uses: actions/checkout@v7.0.1
-            - uses: jdx/mise-action@v4.2.0
+            - uses: jdx/mise-action@v5.2.10
               with:
                   cache: true
             - uses: actions/cache@v6.1.0
@@ -106,7 +106,7 @@ jobs:
         timeout-minutes: 20
         steps:
             - uses: actions/checkout@v7.0.1
-            - uses: jdx/mise-action@v4.2.0
+            - uses: jdx/mise-action@v5.2.10
               with:
                   cache: true
             - name: Setup JS deps
