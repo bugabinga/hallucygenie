@@ -198,6 +198,10 @@ function jsonResponse(
     return new Response(JSON.stringify(data), { status, headers });
 }
 
+function errorMessage(err: unknown): string {
+    return err instanceof Error ? err.message : String(err);
+}
+
 function sseResponse(stream: ReadableStream<Uint8Array>): Response {
     return new Response(stream, {
         headers: {
@@ -1420,94 +1424,110 @@ function saveProfileAvatar(
     return profile;
 }
 
-async function handleProfileAvatarUpload(req: Request, database: Database): Promise<Response> {
+interface ImageUploadOptions<T = unknown> {
+    /** Form field holding the uploaded file. */
+    field: string;
+    allowedMimes: string[];
+    maxBytes: number;
+    toolName: string;
+    prompt: string;
+    missingFileError: string;
+    invalidMimeError: string;
+    tooLargeError: string;
+    saveFailedError: string;
+    /** Runs after validation and before the asset is stored. May throw. */
+    prepare?: (form: FormData) => T;
+    toResponse: (
+        saved: ToolResult,
+        assetId: string,
+        prepared: T | undefined
+    ) => Record<string, unknown>;
+}
+
+/** Shared upload path: validate the file, store it as an asset, map the result. */
+async function handleImageUpload<T = unknown>(
+    req: Request,
+    database: Database,
+    options: ImageUploadOptions<T>
+): Promise<Response> {
     try {
         const sessionId = resolveExistingSessionId(req, database);
         const form = await req.formData();
-        const file = form.get("avatar");
-        if (!(file instanceof File)) return jsonResponse({ error: "avatar file required" }, 400);
-        if (!isAllowedImageMime(file.type, AVATAR_IMAGE_MIMES)) {
-            return jsonResponse({ error: "avatar image type invalid" }, 400);
+        const file = form.get(options.field);
+        if (!(file instanceof File)) {
+            return jsonResponse({ error: options.missingFileError }, 400);
         }
-        if (file.size > 2 * 1024 * 1024) {
-            return jsonResponse({ error: "avatar image too large" }, 400);
+        if (!isAllowedImageMime(file.type, options.allowedMimes)) {
+            return jsonResponse({ error: options.invalidMimeError }, 400);
         }
-        const profileJson = String(form.get("profile") ?? "{}");
-        const profileInput = JSON.parse(profileJson) as unknown;
+        if (file.size > options.maxBytes) {
+            return jsonResponse({ error: options.tooLargeError }, 400);
+        }
+        const prepared = options.prepare ? options.prepare(form) : undefined;
         const saved = saveAssetBuffer(
             "image",
             Buffer.from(await file.arrayBuffer()),
             file.type,
             sessionId,
-            "profile_avatar",
-            "Uploaded profile avatar",
+            options.toolName,
+            options.prompt,
             { source: "upload" }
         );
         const assetId = assetIdFromToolResult(saved);
-        if (!assetId) throw new Error("avatar asset save failed");
-        const profile = saveProfileAvatar(database, profileInput, assetId);
-        return jsonResponse({ profile, assetUrl: saved.content });
+        if (!assetId) throw new Error(options.saveFailedError);
+        return jsonResponse(options.toResponse(saved, assetId, prepared));
     } catch (err) {
-        return jsonResponse({ error: String(err instanceof Error ? err.message : err) }, 400);
+        return jsonResponse({ error: errorMessage(err) }, 400);
     }
+}
+
+async function handleProfileAvatarUpload(req: Request, database: Database): Promise<Response> {
+    return handleImageUpload(req, database, {
+        field: "avatar",
+        allowedMimes: AVATAR_IMAGE_MIMES,
+        maxBytes: 2 * 1024 * 1024,
+        toolName: "profile_avatar",
+        prompt: "Uploaded profile avatar",
+        missingFileError: "avatar file required",
+        invalidMimeError: "avatar image type invalid",
+        tooLargeError: "avatar image too large",
+        saveFailedError: "avatar asset save failed",
+        prepare: (form) => JSON.parse(String(form.get("profile") ?? "{}")) as unknown,
+        toResponse: (saved, assetId, profileInput) => ({
+            profile: saveProfileAvatar(database, profileInput, assetId),
+            assetUrl: saved.content
+        })
+    });
 }
 
 async function handleAnalyzeImageUpload(req: Request, database: Database): Promise<Response> {
-    try {
-        const sessionId = resolveExistingSessionId(req, database);
-        const form = await req.formData();
-        const file = form.get("image");
-        if (!(file instanceof File)) return jsonResponse({ error: "image file required" }, 400);
-        if (!isAllowedImageMime(file.type, ANALYZE_IMAGE_MIMES)) {
-            return jsonResponse({ error: "image type must be PNG, JPG, GIF, or WebP" }, 400);
-        }
-        if (file.size > 20 * 1024 * 1024) return jsonResponse({ error: "image too large" }, 400);
-        const saved = saveAssetBuffer(
-            "image",
-            Buffer.from(await file.arrayBuffer()),
-            file.type,
-            sessionId,
-            "analyze_image",
-            "Uploaded image for analysis",
-            { source: "upload" }
-        );
-        const assetId = assetIdFromToolResult(saved);
-        if (!assetId) throw new Error("analyze image asset save failed");
-        return jsonResponse({ assetId, assetUrl: saved.content });
-    } catch (err) {
-        return jsonResponse({ error: String(err instanceof Error ? err.message : err) }, 400);
-    }
+    return handleImageUpload(req, database, {
+        field: "image",
+        allowedMimes: ANALYZE_IMAGE_MIMES,
+        maxBytes: 20 * 1024 * 1024,
+        toolName: "analyze_image",
+        prompt: "Uploaded image for analysis",
+        missingFileError: "image file required",
+        invalidMimeError: "image type must be PNG, JPG, GIF, or WebP",
+        tooLargeError: "image too large",
+        saveFailedError: "analyze image asset save failed",
+        toResponse: (saved, assetId) => ({ assetId, assetUrl: saved.content })
+    });
 }
 
 async function handleReferenceImageUpload(req: Request, database: Database): Promise<Response> {
-    try {
-        const sessionId = resolveExistingSessionId(req, database);
-        const form = await req.formData();
-        const file = form.get("image");
-        if (!(file instanceof File)) {
-            return jsonResponse({ error: "reference image required" }, 400);
-        }
-        if (!isAllowedImageMime(file.type, REFERENCE_IMAGE_MIMES)) {
-            return jsonResponse({ error: "reference image must be PNG or JPG" }, 400);
-        }
-        if (file.size > 20 * 1024 * 1024) {
-            return jsonResponse({ error: "reference image too large" }, 400);
-        }
-        const saved = saveAssetBuffer(
-            "image",
-            Buffer.from(await file.arrayBuffer()),
-            file.type,
-            sessionId,
-            "reference_image",
-            "Uploaded character reference",
-            { source: "upload" }
-        );
-        const assetId = assetIdFromToolResult(saved);
-        if (!assetId) throw new Error("reference image asset save failed");
-        return jsonResponse({ assetId, assetUrl: saved.content });
-    } catch (err) {
-        return jsonResponse({ error: String(err instanceof Error ? err.message : err) }, 400);
-    }
+    return handleImageUpload(req, database, {
+        field: "image",
+        allowedMimes: REFERENCE_IMAGE_MIMES,
+        maxBytes: 20 * 1024 * 1024,
+        toolName: "reference_image",
+        prompt: "Uploaded character reference",
+        missingFileError: "reference image required",
+        invalidMimeError: "reference image must be PNG or JPG",
+        tooLargeError: "reference image too large",
+        saveFailedError: "reference image asset save failed",
+        toResponse: (saved, assetId) => ({ assetId, assetUrl: saved.content })
+    });
 }
 
 async function handleProfileAvatarGenerate(req: Request, database: Database): Promise<Response> {
@@ -1535,7 +1555,7 @@ async function handleProfileAvatarGenerate(req: Request, database: Database): Pr
         const savedProfile = saveProfileAvatar(database, profile, assetId);
         return jsonResponse({ profile: savedProfile, assetUrl: saved.content });
     } catch (err) {
-        return jsonResponse({ error: String(err instanceof Error ? err.message : err) }, 400);
+        return jsonResponse({ error: errorMessage(err) }, 400);
     }
 }
 
@@ -1643,10 +1663,7 @@ export async function handleRequest(req: Request): Promise<Response> {
                 parsed = await req.json();
                 return jsonResponse(saveUserProfile(database, parsed));
             } catch (err) {
-                return jsonResponse(
-                    { error: String(err instanceof Error ? err.message : err) },
-                    400
-                );
+                return jsonResponse({ error: errorMessage(err) }, 400);
             }
         }
 
@@ -1676,10 +1693,7 @@ export async function handleRequest(req: Request): Promise<Response> {
                 return jsonResponse({ ok: true, toolCount });
             } catch (err) {
                 log.warn("mcp credential probe failed", { mcpId: entryId });
-                return jsonResponse(
-                    { error: String(err instanceof Error ? err.message : err) },
-                    502
-                );
+                return jsonResponse({ error: errorMessage(err) }, 502);
             }
         }
 
@@ -1723,10 +1737,7 @@ export async function handleRequest(req: Request): Promise<Response> {
                     session: renameSession(database, matchedSessionId, obj.name)
                 });
             } catch (err) {
-                return jsonResponse(
-                    { error: String(err instanceof Error ? err.message : err) },
-                    400
-                );
+                return jsonResponse({ error: errorMessage(err) }, 400);
             }
         }
 
@@ -1762,10 +1773,7 @@ export async function handleRequest(req: Request): Promise<Response> {
                     )
                 });
             } catch (err) {
-                return jsonResponse(
-                    { error: String(err instanceof Error ? err.message : err) },
-                    400
-                );
+                return jsonResponse({ error: errorMessage(err) }, 400);
             }
         }
 
@@ -2237,12 +2245,20 @@ const GENERATED_AUDIO_MIMES = new Set([
     "audio/opus"
 ]);
 const GENERATED_AUDIO_BUNDLE_MIMES = new Set(["application/x-tar", "application/tar"]);
+const GENERATED_AUDIO_DOWNLOAD_MIMES = new Set([
+    ...GENERATED_AUDIO_MIMES,
+    ...GENERATED_AUDIO_BUNDLE_MIMES
+]);
 const GENERATED_VIDEO_MIMES = new Set(["video/mp4"]);
 
-async function readResponseBytesCapped(resp: Response, maxBytes: number): Promise<Buffer> {
+async function readResponseBytesCapped(
+    resp: Response,
+    maxBytes: number,
+    label: string
+): Promise<Buffer> {
     if (!resp.body) {
         const buf = Buffer.from(await resp.arrayBuffer());
-        if (buf.byteLength > maxBytes) throw new Error("image download too large");
+        if (buf.byteLength > maxBytes) throw new Error(`${label} download too large`);
         return buf;
     }
     const reader = resp.body.getReader();
@@ -2253,48 +2269,43 @@ async function readResponseBytesCapped(resp: Response, maxBytes: number): Promis
         if (done) break;
         if (!value) continue;
         total += value.byteLength;
-        if (total > maxBytes) throw new Error("image download too large");
+        if (total > maxBytes) throw new Error(`${label} download too large`);
         chunks.push(value);
     }
     return Buffer.concat(chunks.map((chunk) => Buffer.from(chunk)));
 }
 
-async function downloadImageAsset(url: string): Promise<{ buf: Buffer; mime: string; }> {
+/** Fetch an http(s) asset, enforcing the MIME allow-list and the byte cap. */
+async function downloadAsset(
+    url: string,
+    allowedMimes: Set<string>,
+    maxBytes: number,
+    label: string
+): Promise<{ buf: Buffer; mime: string; }> {
     const parsed = new URL(url);
     if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
-        throw new Error("image asset URL must be http(s)");
+        throw new Error(`${label} asset URL must be http(s)`);
     }
 
     const resp = await fetch(url);
-    if (!resp.ok) throw new Error(`image download failed: ${resp.status}`);
+    if (!resp.ok) throw new Error(`${label} download failed: ${resp.status}`);
 
     const mime = resp.headers.get("Content-Type")?.split(";")[0]?.trim().toLowerCase() ?? "";
-    if (!GENERATED_IMAGE_MIMES.has(mime)) {
-        throw new Error(`image download returned ${mime || "unknown"}`);
+    if (!allowedMimes.has(mime)) {
+        throw new Error(`${label} download returned ${mime || "unknown"}`);
     }
     const contentLength = Number(resp.headers.get("Content-Length") ?? "0");
-    if (contentLength > MAX_GENERATED_IMAGE_BYTES) throw new Error("image download too large");
+    if (contentLength > maxBytes) throw new Error(`${label} download too large`);
 
-    return { buf: await readResponseBytesCapped(resp, MAX_GENERATED_IMAGE_BYTES), mime };
+    return { buf: await readResponseBytesCapped(resp, maxBytes, label), mime };
+}
+
+async function downloadImageAsset(url: string): Promise<{ buf: Buffer; mime: string; }> {
+    return downloadAsset(url, GENERATED_IMAGE_MIMES, MAX_GENERATED_IMAGE_BYTES, "image");
 }
 
 async function downloadVideoAsset(url: string): Promise<{ buf: Buffer; mime: string; }> {
-    const parsed = new URL(url);
-    if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
-        throw new Error("video asset URL must be http(s)");
-    }
-
-    const resp = await fetch(url);
-    if (!resp.ok) throw new Error(`video download failed: ${resp.status}`);
-
-    const mime = resp.headers.get("Content-Type")?.split(";")[0]?.trim().toLowerCase() ?? "";
-    if (!GENERATED_VIDEO_MIMES.has(mime)) {
-        throw new Error(`video download returned ${mime || "unknown"}`);
-    }
-    const contentLength = Number(resp.headers.get("Content-Length") ?? "0");
-    if (contentLength > MAX_GENERATED_VIDEO_BYTES) throw new Error("video download too large");
-
-    return { buf: await readResponseBytesCapped(resp, MAX_GENERATED_VIDEO_BYTES), mime };
+    return downloadAsset(url, GENERATED_VIDEO_MIMES, MAX_GENERATED_VIDEO_BYTES, "video");
 }
 
 function audioMimeForFilename(filename: string): string | null {
@@ -2329,21 +2340,12 @@ function extractAudioFromTar(buf: Buffer): { buf: Buffer; mime: string; } {
 }
 
 async function downloadAudioAsset(url: string): Promise<{ buf: Buffer; mime: string; }> {
-    const parsed = new URL(url);
-    if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
-        throw new Error("audio asset URL must be http(s)");
-    }
-
-    const resp = await fetch(url);
-    if (!resp.ok) throw new Error(`audio download failed: ${resp.status}`);
-
-    const mime = resp.headers.get("Content-Type")?.split(";")[0]?.trim().toLowerCase() ?? "";
-    if (!GENERATED_AUDIO_MIMES.has(mime) && !GENERATED_AUDIO_BUNDLE_MIMES.has(mime)) {
-        throw new Error(`audio download returned ${mime || "unknown"}`);
-    }
-    const contentLength = Number(resp.headers.get("Content-Length") ?? "0");
-    if (contentLength > MAX_GENERATED_AUDIO_BYTES) throw new Error("audio download too large");
-    const buf = await readResponseBytesCapped(resp, MAX_GENERATED_AUDIO_BYTES);
+    const { buf, mime } = await downloadAsset(
+        url,
+        GENERATED_AUDIO_DOWNLOAD_MIMES,
+        MAX_GENERATED_AUDIO_BYTES,
+        "audio"
+    );
     if (GENERATED_AUDIO_BUNDLE_MIMES.has(mime)) return extractAudioFromTar(buf);
     return { buf, mime };
 }

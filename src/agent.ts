@@ -299,13 +299,8 @@ export function buildContext(
                 usedTokens += msgTokens;
                 i--;
             }
-        } else if (msg.role === "assistant" && msg.tool_calls && msg.tool_calls.length > 0) {
-            if (usedTokens + msgTokens > remainingBudget) break;
-            result.unshift(msg);
-            usedTokens += msgTokens;
-            i--;
         } else {
-            // Regular message (user, assistant text-only, etc.)
+            // Regular message (user, assistant text-only, assistant with tool calls)
             if (usedTokens + msgTokens > remainingBudget) break;
             result.unshift(msg);
             usedTokens += msgTokens;
@@ -358,11 +353,6 @@ export function stripModelControlPlaceholders(text: string): string {
         .join("\n");
 }
 
-function isInternalMediaToolBoilerplate(line: string): boolean {
-    return /^Generated (?:(?:\d+ )?images?|audio|video) with [A-Za-z0-9_]+\. The UI displays (?:the result|it) in a tool card\. Do not embed .+\.?$/
-        .test(line.trim());
-}
-
 function isInternalMediaToolBoilerplatePrefix(line: string): boolean {
     return /^Generated (?:(?:\d+ )?images?|audio|video) with [A-Za-z0-9_]+\.?(?:$| The UI(?: displays?)?.*)/
         .test(line.trim());
@@ -373,8 +363,7 @@ function stripInternalMediaToolBoilerplate(text: string): string {
         .split("\n")
         .filter((line) => {
             const trimmed = line.trim();
-            return !isInternalMediaToolBoilerplate(trimmed)
-                && !isInternalMediaToolBoilerplatePrefix(trimmed);
+            return !isInternalMediaToolBoilerplatePrefix(trimmed);
         })
         .join("\n");
 }
