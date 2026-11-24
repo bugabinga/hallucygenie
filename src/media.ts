@@ -24,7 +24,8 @@ const AUDIO_TYPES = new Set([
     "audio/ogg",
     "audio/webm"
 ]);
-const AUDIO_FORMATS = new Set([
+/** Supported audio containers, ordered. */
+const AUDIO_FORMATS = [
     "mp3",
     "wav",
     "flac",
@@ -34,7 +35,11 @@ const AUDIO_FORMATS = new Set([
     "ogg",
     "matroska",
     "webm"
-]);
+];
+/** ffprobe/ffmpeg demuxer names; MP4 files are demuxed by the "mov" demuxer. */
+const AUDIO_DEMUXERS = AUDIO_FORMATS.filter((format) => format !== "mp4");
+const AUDIO_FORMAT_SET = new Set(AUDIO_FORMATS);
+const AUDIO_FORMAT_WHITELIST = AUDIO_DEMUXERS.join(",");
 
 class InspectionError extends Error {
     readonly stage: string;
@@ -64,7 +69,7 @@ async function probe(filePath: string): Promise<Record<string, unknown>> {
         "-protocol_whitelist",
         "file,pipe",
         "-format_whitelist",
-        "mp3,wav,flac,mov,aac,ogg,matroska,webm",
+        AUDIO_FORMAT_WHITELIST,
         "-show_entries",
         "format=format_name,duration:stream=index,codec_type,duration,start_time",
         "-of",
@@ -167,7 +172,7 @@ async function transcribe(
                 "-protocol_whitelist",
                 "file,pipe",
                 "-format_whitelist",
-                "mp3,wav,flac,mov,aac,ogg,matroska,webm",
+                AUDIO_FORMAT_WHITELIST,
                 "-ss",
                 String(offset),
                 "-i",
@@ -350,7 +355,7 @@ export async function inspectMediaFile(
                 (video
                     && (!formats.includes("mp4")
                         || !streams.some((stream) => stream.codec_type === "video")))
-                || (!video && (!formats.some((name) => AUDIO_FORMATS.has(name)) || !audio))
+                || (!video && (!formats.some((name) => AUDIO_FORMAT_SET.has(name)) || !audio))
             ) {
                 throw new InspectionError(
                     "input",

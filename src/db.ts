@@ -848,174 +848,163 @@ export interface ProviderDiagnosticRow {
     provider_file_id?: string | null;
 }
 
-export interface VideoTaskRow extends ProviderDiagnosticRow {
+export type TaskStatus =
+    | "pending"
+    | "running"
+    | "succeeded"
+    | "failed"
+    | "timeout"
+    | "cancelled";
+
+export interface TaskRowBase extends ProviderDiagnosticRow {
     id: string;
     session_id: string;
     provider_task_id: string;
-    status: "pending" | "running" | "succeeded" | "failed" | "timeout" | "cancelled";
-    prompt: string;
+    status: TaskStatus;
     file_id: string | null;
     asset_id: string | null;
     error: string | null;
     created_at: number;
     updated_at: number;
+}
+
+export type TaskPatch = Partial<
+    Pick<
+        TaskRowBase,
+        | "provider_task_id"
+        | "status"
+        | "file_id"
+        | "asset_id"
+        | "error"
+        | "provider_stage"
+        | "provider_status_code"
+        | "provider_status_msg"
+        | "provider_file_id"
+    >
+>;
+
+const PROVIDER_COLUMNS = [
+    "provider_stage",
+    "provider_status_code",
+    "provider_status_msg",
+    "provider_file_id"
+] as const;
+
+function providerValues(task: ProviderDiagnosticRow): (string | number | null)[] {
+    return [
+        task.provider_stage ?? null,
+        task.provider_status_code ?? null,
+        task.provider_status_msg ?? null,
+        task.provider_file_id ?? null
+    ];
+}
+
+function saveTaskRow(
+    db: Database,
+    table: string,
+    task: TaskRowBase,
+    extraColumns: string[],
+    extraValues: (string | null)[]
+): void {
+    const columns = [
+        "id",
+        "session_id",
+        "provider_task_id",
+        "status",
+        ...extraColumns,
+        "file_id",
+        "asset_id",
+        "error",
+        ...PROVIDER_COLUMNS,
+        "created_at",
+        "updated_at"
+    ];
+    const values = [
+        task.id,
+        task.session_id,
+        task.provider_task_id,
+        task.status,
+        ...extraValues,
+        task.file_id,
+        task.asset_id,
+        task.error,
+        ...providerValues(task),
+        task.created_at,
+        task.updated_at
+    ];
+    const placeholders = columns.map(() => "?").join(", ");
+    db.prepare(
+        `INSERT INTO ${table} (${columns.join(", ")})
+         VALUES (${placeholders})`
+    ).run(...values);
+}
+
+function updateTaskRow(db: Database, table: string, id: string, patch: TaskPatch): void {
+    const current = db.prepare(`SELECT * FROM ${table} WHERE id = ?`).get(id) as
+        | TaskRowBase
+        | undefined;
+    if (!current) throw new Error(`${table} not found`);
+    const next = { ...current, ...patch, updated_at: Date.now() };
+    assertNoRawAssetDataInMessage(JSON.stringify(next));
+    db.prepare(
+        `UPDATE ${table}
+         SET provider_task_id = ?, status = ?, file_id = ?, asset_id = ?, error = ?, provider_stage = ?, provider_status_code = ?, provider_status_msg = ?, provider_file_id = ?, updated_at = ?
+         WHERE id = ?`
+    ).run(
+        next.provider_task_id,
+        next.status,
+        next.file_id,
+        next.asset_id,
+        next.error,
+        ...providerValues(next),
+        next.updated_at,
+        id
+    );
+}
+
+function listTaskRows<T>(db: Database, table: string, sessionId: string): T[] {
+    return db
+        .prepare(`SELECT * FROM ${table} WHERE session_id = ? ORDER BY updated_at DESC`)
+        .all(sessionId) as unknown as T[];
+}
+
+export interface VideoTaskRow extends TaskRowBase {
+    prompt: string;
 }
 
 export function saveVideoTask(db: Database, task: VideoTaskRow): void {
     assertNoRawAssetDataInMessage(JSON.stringify(task));
-    db.prepare(
-        `INSERT INTO video_tasks (id, session_id, provider_task_id, status, prompt, file_id, asset_id, error, provider_stage, provider_status_code, provider_status_msg, provider_file_id, created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
-    ).run(
-        task.id,
-        task.session_id,
-        task.provider_task_id,
-        task.status,
-        task.prompt,
-        task.file_id,
-        task.asset_id,
-        task.error,
-        task.provider_stage ?? null,
-        task.provider_status_code ?? null,
-        task.provider_status_msg ?? null,
-        task.provider_file_id ?? null,
-        task.created_at,
-        task.updated_at
-    );
+    saveTaskRow(db, "video_tasks", task, ["prompt"], [task.prompt]);
 }
 
-export function updateVideoTask(
-    db: Database,
-    id: string,
-    patch: Partial<
-        Pick<
-            VideoTaskRow,
-            | "provider_task_id"
-            | "status"
-            | "file_id"
-            | "asset_id"
-            | "error"
-            | "provider_stage"
-            | "provider_status_code"
-            | "provider_status_msg"
-            | "provider_file_id"
-        >
-    >
-): void {
-    const current = db.prepare("SELECT * FROM video_tasks WHERE id = ?").get(id) as
-        | VideoTaskRow
-        | undefined;
-    if (!current) throw new Error("video task not found");
-    const next = { ...current, ...patch, updated_at: Date.now() };
-    assertNoRawAssetDataInMessage(JSON.stringify(next));
-    db.prepare(
-        `UPDATE video_tasks
-         SET provider_task_id = ?, status = ?, file_id = ?, asset_id = ?, error = ?, provider_stage = ?, provider_status_code = ?, provider_status_msg = ?, provider_file_id = ?, updated_at = ?
-         WHERE id = ?`
-    ).run(
-        next.provider_task_id,
-        next.status,
-        next.file_id,
-        next.asset_id,
-        next.error,
-        next.provider_stage ?? null,
-        next.provider_status_code ?? null,
-        next.provider_status_msg ?? null,
-        next.provider_file_id ?? null,
-        next.updated_at,
-        id
-    );
+export function updateVideoTask(db: Database, id: string, patch: TaskPatch): void {
+    updateTaskRow(db, "video_tasks", id, patch);
 }
 
 export function listVideoTasks(db: Database, sessionId: string): VideoTaskRow[] {
-    return db
-        .prepare("SELECT * FROM video_tasks WHERE session_id = ? ORDER BY updated_at DESC")
-        .all(sessionId) as unknown as VideoTaskRow[];
+    return listTaskRows<VideoTaskRow>(db, "video_tasks", sessionId);
 }
 
-export interface AsyncTtsTaskRow extends ProviderDiagnosticRow {
-    id: string;
-    session_id: string;
-    provider_task_id: string;
-    status: "pending" | "running" | "succeeded" | "failed" | "timeout" | "cancelled";
+export interface AsyncTtsTaskRow extends TaskRowBase {
     text_summary: string;
     voice_id: string | null;
-    file_id: string | null;
-    asset_id: string | null;
-    error: string | null;
-    created_at: number;
-    updated_at: number;
 }
 
 export function saveAsyncTtsTask(db: Database, task: AsyncTtsTaskRow): void {
     assertNoRawAssetDataInMessage(JSON.stringify(task));
-    db.prepare(
-        `INSERT INTO async_tts_tasks (id, session_id, provider_task_id, status, text_summary, voice_id, file_id, asset_id, error, provider_stage, provider_status_code, provider_status_msg, provider_file_id, created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
-    ).run(
-        task.id,
-        task.session_id,
-        task.provider_task_id,
-        task.status,
-        task.text_summary,
-        task.voice_id,
-        task.file_id,
-        task.asset_id,
-        task.error,
-        task.provider_stage ?? null,
-        task.provider_status_code ?? null,
-        task.provider_status_msg ?? null,
-        task.provider_file_id ?? null,
-        task.created_at,
-        task.updated_at
+    saveTaskRow(
+        db,
+        "async_tts_tasks",
+        task,
+        ["text_summary", "voice_id"],
+        [task.text_summary, task.voice_id]
     );
 }
 
-export function updateAsyncTtsTask(
-    db: Database,
-    id: string,
-    patch: Partial<
-        Pick<
-            AsyncTtsTaskRow,
-            | "provider_task_id"
-            | "status"
-            | "file_id"
-            | "asset_id"
-            | "error"
-            | "provider_stage"
-            | "provider_status_code"
-            | "provider_status_msg"
-            | "provider_file_id"
-        >
-    >
-): void {
-    const current = db.prepare("SELECT * FROM async_tts_tasks WHERE id = ?").get(id) as
-        | AsyncTtsTaskRow
-        | undefined;
-    if (!current) throw new Error("async tts task not found");
-    const next = { ...current, ...patch, updated_at: Date.now() };
-    assertNoRawAssetDataInMessage(JSON.stringify(next));
-    db.prepare(
-        `UPDATE async_tts_tasks
-         SET provider_task_id = ?, status = ?, file_id = ?, asset_id = ?, error = ?, provider_stage = ?, provider_status_code = ?, provider_status_msg = ?, provider_file_id = ?, updated_at = ?
-         WHERE id = ?`
-    ).run(
-        next.provider_task_id,
-        next.status,
-        next.file_id,
-        next.asset_id,
-        next.error,
-        next.provider_stage ?? null,
-        next.provider_status_code ?? null,
-        next.provider_status_msg ?? null,
-        next.provider_file_id ?? null,
-        next.updated_at,
-        id
-    );
+export function updateAsyncTtsTask(db: Database, id: string, patch: TaskPatch): void {
+    updateTaskRow(db, "async_tts_tasks", id, patch);
 }
 
 export function listAsyncTtsTasks(db: Database, sessionId: string): AsyncTtsTaskRow[] {
-    return db
-        .prepare("SELECT * FROM async_tts_tasks WHERE session_id = ? ORDER BY updated_at DESC")
-        .all(sessionId) as unknown as AsyncTtsTaskRow[];
+    return listTaskRows<AsyncTtsTaskRow>(db, "async_tts_tasks", sessionId);
 }
