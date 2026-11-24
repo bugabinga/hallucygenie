@@ -525,9 +525,11 @@ export async function runAgentLoop(
         await runtime.onMessage?.(message);
         localMessages.push(message);
     }
-    async function failure(content: string): Promise<void> {
+    async function failAndFinish(content: string): Promise<ChatMessage[]> {
         await append({ role: "assistant", content });
         await onEvent({ type: "text", content });
+        await onEvent({ type: "done" });
+        return localMessages;
     }
 
     for (let turn = 0; turn < 20; turn++) {
@@ -558,9 +560,7 @@ export async function runAgentLoop(
                 body: JSON.stringify(payload)
             });
         } catch (err) {
-            await failure("[Error: Failed to connect to API. Please try again.]");
-            await onEvent({ type: "done" });
-            return localMessages;
+            return await failAndFinish("[Error: Failed to connect to API. Please try again.]");
         }
 
         if (!resp.ok) {
@@ -572,36 +572,29 @@ export async function runAgentLoop(
                 });
 
                 // Observations are already retained; never echo private model-context metadata.
-                await failure("Your tool results are above. You can keep chatting.");
-
-                await onEvent({ type: "done" });
-                return localMessages;
+                return await failAndFinish("Your tool results are above. You can keep chatting.");
             }
             if (isContextWindowError(resp.status, errorText)) {
                 log.warn("minimax context window exceeded", {
                     status: resp.status,
                     error: truncateLogText(errorText)
                 });
-                await failure(
+                return await failAndFinish(
                     "[Error: Conversation exceeds the model context limit. Please narrow the request.]"
                 );
-                await onEvent({ type: "done" });
-                return localMessages;
             }
             log.warn("minimax api error", {
                 status: resp.status,
                 error: truncateLogText(errorText)
             });
-            await failure(apiErrorMessageForUser(resp.status));
-            await onEvent({ type: "done" });
-            return localMessages;
+            return await failAndFinish(apiErrorMessageForUser(resp.status));
         }
 
         if (!resp.body) {
             log.warn("minimax api response has null body");
-            await failure("I got an empty response from the server. Please try again.");
-            await onEvent({ type: "done" });
-            return localMessages;
+            return await failAndFinish(
+                "I got an empty response from the server. Please try again."
+            );
         }
 
         // Process the Anthropic SSE stream
@@ -727,20 +720,11 @@ export async function runAgentLoop(
 
         // Handle finish: if tool_use, execute tools and loop
         if (stopReason === "tool_use" && toolCalls.size > 0) {
-            const calls = [...toolCalls.values()];
-
-            // Fix malformed JSON arguments
-            for (const tc of calls) {
-                if (!tc.input) {
-                    tc.input = "{}";
-                } else {
-                    try {
-                        JSON.parse(tc.input);
-                    } catch {
-                        tc.input = "{}";
-                    }
-                }
-            }
+            const calls = [...toolCalls.values()].map((tc) => ({
+                id: tc.id,
+                name: tc.name,
+                args: parseToolArguments(tc.input)
+            }));
 
             // Add assistant message with tool_use content blocks
             await append({
@@ -751,13 +735,13 @@ export async function runAgentLoop(
                 tool_calls: calls.map((tc) => ({
                     id: tc.id,
                     name: tc.name,
-                    input: parseToolArguments(tc.input)
+                    input: tc.args
                 }))
             });
 
             // Execute each tool
             for (const tc of calls) {
-                const args = parseToolArguments(tc.input);
+                const args = tc.args;
 
                 await onEvent({
                     type: "tool_start",
@@ -856,7 +840,5 @@ export async function runAgentLoop(
         await onEvent({ type: "done" });
         return localMessages;
     }
-    await failure("[Error: Tool-use limit reached. Please try again.]");
-    await onEvent({ type: "done" });
-    return localMessages;
+    return await failAndFinish("[Error: Tool-use limit reached. Please try again.]");
 }

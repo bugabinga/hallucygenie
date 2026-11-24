@@ -547,7 +547,7 @@ export async function handleChat(
                             if (consumeQuota(database, feature, amount) === null) {
                                 return {
                                     type: "error" as const,
-                                    content: `Daily ${feature} quota is used up.`
+                                    content: quotaExhaustedMessage(feature)
                                 };
                             }
                             if (toolId) consumedQuotaByToolId.set(toolId, { feature, amount });
@@ -757,6 +757,10 @@ function featureForTool(name: string): "image" | "speech" | "music" | "lyrics" |
     if (name === "generate_music" || name === "generate_music_cover") return "music";
     if (name === "generate_lyrics") return "lyrics";
     return null;
+}
+
+function quotaExhaustedMessage(feature: "image" | "speech" | "music" | "lyrics"): string {
+    return `Daily ${feature} quota is used up.`;
 }
 
 function quotaAmountForTool(name: string, args: Record<string, unknown>): number {
@@ -1077,6 +1081,9 @@ function handleDirectToolExecution(
             const quotaBlocked = feature
                 ? consumeQuota(database, feature, quotaAmount) === null
                 : false;
+            const quotaError: ToolResult | null = quotaBlocked && feature
+                ? { type: "error", content: quotaExhaustedMessage(feature) }
+                : null;
             if (feature && !quotaBlocked) reservation = { feature, amount: quotaAmount };
             const executionArgs = quotaBlocked
                 ? directive.args
@@ -1097,7 +1104,7 @@ function handleDirectToolExecution(
                     prompt: directive.prompt ?? "",
                     file_id: null,
                     asset_id: null,
-                    error: quotaBlocked ? `Daily ${feature} quota is used up.` : null,
+                    error: quotaError?.content ?? null,
                     created_at: now,
                     updated_at: now
                 });
@@ -1115,14 +1122,13 @@ function handleDirectToolExecution(
                         : null,
                     file_id: null,
                     asset_id: null,
-                    error: quotaBlocked ? `Daily ${feature} quota is used up.` : null,
+                    error: quotaError?.content ?? null,
                     created_at: now,
                     updated_at: now
                 });
             }
-            const rawResult = quotaBlocked
-                ? { type: "error" as const, content: `Daily ${feature} quota is used up.` }
-                : await executeToolSafely(directive.name, executionArgs, apiKey);
+            const rawResult = quotaError
+                ?? await executeToolSafely(directive.name, executionArgs, apiKey);
             const result = quotaBlocked
                 ? rawResult
                 : safeToolResultForUser(directive.name, rawResult);
@@ -1538,7 +1544,7 @@ async function handleProfileAvatarGenerate(req: Request, database: Database): Pr
         const profileInput = await req.json();
         const profile = saveUserProfile(database, profileInput);
         if (consumeQuota(database, "image") === null) {
-            return jsonResponse({ error: "Daily image quota is used up." }, 429);
+            return jsonResponse({ error: quotaExhaustedMessage("image") }, 429);
         }
         const args = { prompt: profileAvatarPrompt(profile), aspect_ratio: "1:1" };
         const result = safeToolResultForUser(
