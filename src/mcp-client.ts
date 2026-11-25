@@ -85,10 +85,6 @@ export class McpStdioClient {
         return env;
     }
 
-    diagnostics(): string {
-        return this.stderrTail.slice(-2000);
-    }
-
     private failAll(message: string): void {
         for (const pending of this.pending.values()) {
             clearTimeout(pending.timer);

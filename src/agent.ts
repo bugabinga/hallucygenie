@@ -12,7 +12,7 @@ import {
     MINIMAX_MODEL,
     MUSIC_DISABLED_MESSAGE
 } from "./tools.ts";
-export { MINIMAX_BASE, MINIMAX_MODEL };
+export { MINIMAX_MODEL };
 import type { ToolResult } from "./tools.ts";
 
 const log = createLogger({ service: "agent" });
@@ -529,6 +529,11 @@ export async function runAgentLoop(
         await append({ role: "assistant", content });
         await onEvent({ type: "text", content });
     }
+    async function failAndReturn(content: string): Promise<ChatMessage[]> {
+        await failure(content);
+        await onEvent({ type: "done" });
+        return localMessages;
+    }
 
     for (let turn = 0; turn < 20; turn++) {
         await onEvent({ type: "thinking_reset" });
@@ -557,10 +562,8 @@ export async function runAgentLoop(
                 },
                 body: JSON.stringify(payload)
             });
-        } catch (err) {
-            await failure("[Error: Failed to connect to API. Please try again.]");
-            await onEvent({ type: "done" });
-            return localMessages;
+        } catch {
+            return await failAndReturn("[Error: Failed to connect to API. Please try again.]");
         }
 
         if (!resp.ok) {
@@ -572,36 +575,29 @@ export async function runAgentLoop(
                 });
 
                 // Observations are already retained; never echo private model-context metadata.
-                await failure("Your tool results are above. You can keep chatting.");
-
-                await onEvent({ type: "done" });
-                return localMessages;
+                return await failAndReturn("Your tool results are above. You can keep chatting.");
             }
             if (isContextWindowError(resp.status, errorText)) {
                 log.warn("minimax context window exceeded", {
                     status: resp.status,
                     error: truncateLogText(errorText)
                 });
-                await failure(
+                return await failAndReturn(
                     "[Error: Conversation exceeds the model context limit. Please narrow the request.]"
                 );
-                await onEvent({ type: "done" });
-                return localMessages;
             }
             log.warn("minimax api error", {
                 status: resp.status,
                 error: truncateLogText(errorText)
             });
-            await failure(apiErrorMessageForUser(resp.status));
-            await onEvent({ type: "done" });
-            return localMessages;
+            return await failAndReturn(apiErrorMessageForUser(resp.status));
         }
 
         if (!resp.body) {
             log.warn("minimax api response has null body");
-            await failure("I got an empty response from the server. Please try again.");
-            await onEvent({ type: "done" });
-            return localMessages;
+            return await failAndReturn(
+                "I got an empty response from the server. Please try again."
+            );
         }
 
         // Process the Anthropic SSE stream
@@ -766,7 +762,7 @@ export async function runAgentLoop(
                     args
                 });
 
-                const substituted = await onBeforeTool?.(tc.name, args, tc.id) ?? null;
+                const substituted = await onBeforeTool?.(tc.name, args, tc.id);
                 const result = substituted
                     ?? safeToolResultForUser(
                         tc.name,
@@ -856,7 +852,5 @@ export async function runAgentLoop(
         await onEvent({ type: "done" });
         return localMessages;
     }
-    await failure("[Error: Tool-use limit reached. Please try again.]");
-    await onEvent({ type: "done" });
-    return localMessages;
+    return await failAndReturn("[Error: Tool-use limit reached. Please try again.]");
 }

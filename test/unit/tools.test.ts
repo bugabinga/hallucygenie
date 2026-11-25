@@ -14,7 +14,6 @@ import {
     getToolDefinitions,
     MINIMAX_BASE,
     MUSIC_DISABLED_MESSAGE,
-    musicCoverPreprocess,
     textToSpeech,
     webSearch
 } from "../../src/tools.ts";
@@ -799,7 +798,7 @@ describe("disabled music generation", () => {
 // ── music cover ─────────────────────────────────────────────────────
 
 describe("disabled music cover", () => {
-    it("rejects generation and preprocessing without calling upstream", async () => {
+    it("rejects generation without calling upstream", async () => {
         let calls = 0;
         globalThis.fetch = async () => {
             calls++;
@@ -809,10 +808,6 @@ describe("disabled music cover", () => {
         const generated = await generateMusicCover(
             { prompt: "spooky boss", lyrics: "[Verse] hi", cover_feature_id: "cover-1" },
             API_KEY
-        );
-        await assert.rejects(
-            () => musicCoverPreprocess({ audio_url: "https://example.com/a.mp3" }, API_KEY),
-            new RegExp(MUSIC_DISABLED_MESSAGE)
         );
         assert.deepEqual(generated, { type: "error", content: MUSIC_DISABLED_MESSAGE });
         assert.equal(calls, 0);
