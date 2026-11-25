@@ -16,8 +16,6 @@ export const QUOTAS: Record<string, number> = {
     lyrics: 100
 };
 
-const QUOTA_WARNING_THRESHOLD = 0.8;
-
 function expectRow<T>(row: T | null | undefined, message: string): T {
     if (!row) throw new Error(message);
     return row;
@@ -607,17 +605,6 @@ export function getMessages(db: Database, sessionId: string): MessageRow[] {
 // ── Preference CRUD ─────────────────────────────────────────────────
 
 /**
- * Save or update a preference (upsert).
- */
-export function savePreference(db: Database, key: string, value: string): void {
-    db.prepare(
-        `INSERT INTO preferences (key, value, updated_at)
-     VALUES (?, ?, datetime('now'))
-     ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = datetime('now')`
-    ).run(key, value);
-}
-
-/**
  * Get all preferences as a { key: value } object.
  */
 export function getPreferences(db: Database): Record<string, string> {
@@ -659,18 +646,6 @@ export function deleteMcpCredential(db: Database, mcpId: string): void {
 // ── Usage Tracking ──────────────────────────────────────────────────
 
 /**
- * Increment usage count for a feature today.
- * Inserts a new row if none exists for today + feature.
- */
-export function trackUsage(db: Database, feature: string): void {
-    db.prepare(
-        `INSERT INTO daily_usage (date, feature, count)
-     VALUES (date('now'), ?, 1)
-     ON CONFLICT(date, feature) DO UPDATE SET count = count + 1`
-    ).run(feature);
-}
-
-/**
  * Get today's usage counts for all tracked features.
  * Returns { speech: N, image: N, music: N } — only includes features with usage.
  */
@@ -686,36 +661,6 @@ export function getUsageToday(db: Database): Record<string, number> {
 }
 
 // ── Quota Enforcement ───────────────────────────────────────────────
-
-export interface QuotaStatus {
-    used: number;
-    limit: number;
-    remaining: number;
-    warning: boolean;
-    blocked: boolean;
-}
-
-/**
- * Check quota status for a feature.
- * Returns usage info and whether the quota is warned (80%) or blocked (100%).
- */
-export function checkQuota(db: Database, feature: string): QuotaStatus {
-    const limit = QUOTAS[feature] ?? 0;
-    if (limit === 0) {
-        return { used: 0, limit: 0, remaining: 0, warning: false, blocked: false };
-    }
-
-    const row = db
-        .prepare("SELECT count FROM daily_usage WHERE date = date('now') AND feature = ?")
-        .get(feature) as { count: number; } | undefined;
-
-    const used = row?.count ?? 0;
-    const remaining = Math.max(0, limit - used);
-    const warning = used >= limit * QUOTA_WARNING_THRESHOLD;
-    const blocked = used >= limit;
-
-    return { used, limit, remaining, warning, blocked };
-}
 
 /**
  * Atomically check and consume quota for a feature.
@@ -925,12 +870,6 @@ export function updateVideoTask(
         next.updated_at,
         id
     );
-}
-
-export function listVideoTasks(db: Database, sessionId: string): VideoTaskRow[] {
-    return db
-        .prepare("SELECT * FROM video_tasks WHERE session_id = ? ORDER BY updated_at DESC")
-        .all(sessionId) as unknown as VideoTaskRow[];
 }
 
 export interface AsyncTtsTaskRow extends ProviderDiagnosticRow {

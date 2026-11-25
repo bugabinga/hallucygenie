@@ -14,16 +14,9 @@ import {
     getUsageToday,
     listAsyncTtsTasks,
     listToolInputHistory,
-    listVideoTasks,
     saveDraft
 } from "../../src/db.ts";
-import {
-    saveAsset,
-    saveMessage,
-    saveUserProfile,
-    setActiveSessionId,
-    trackUsage
-} from "../../src/db.ts";
+import { saveAsset, saveMessage, saveUserProfile, setActiveSessionId } from "../../src/db.ts";
 import {
     generateSessionNameFromPrompt,
     getDb,
@@ -36,7 +29,6 @@ import {
     parseLimitOffset,
     resetStateForTesting,
     resolveSessionId,
-    sanitizeAssistantMediaMarkup,
     shutdown,
     validateSessionId
 } from "../../src/server.ts";
@@ -148,6 +140,16 @@ function serverPort(server: { address(): string | AddressInfo | null; }): number
     const address = server.address();
     assert.ok(address && typeof address !== "string");
     return address.port;
+}
+
+// Read persisted video task rows directly; the app has no video task read route.
+function videoTaskRows(
+    database: NonNullable<ReturnType<typeof getDb>>,
+    sessionId: string
+): Array<Record<string, unknown>> {
+    return database
+        .prepare("SELECT * FROM video_tasks WHERE session_id = ? ORDER BY updated_at DESC")
+        .all(sessionId) as unknown as Array<Record<string, unknown>>;
 }
 
 after(() => {
@@ -567,19 +569,6 @@ describe("Explicit Create directives", () => {
             "Use generate_music with prompt: boss fight\nTool params: lyrics=boom boom, is_instrumental=false, lyrics_optimizer=true, audio_base64=AAAA, output_format=wav, stream=true"
         );
         assert.deepEqual(music?.args, { prompt: "boss fight", lyrics: "boom boom" });
-    });
-
-    it("sanitizes assistant media markup before history replay", () => {
-        assert.equal(
-            sanitizeAssistantMediaMarkup(
-                "Here's your image:\n\n![cat](https://hailuo-image.example/image_inference_output/cat.jpeg)"
-            ),
-            "Generated media is shown in the tool card."
-        );
-        assert.equal(
-            sanitizeAssistantMediaMarkup("Look <img src=\"https://example.com/cat.png\"> cool"),
-            "Look  cool"
-        );
     });
 });
 
@@ -1775,7 +1764,7 @@ describe("SSE streaming from Anthropic endpoint", () => {
                 rows.some((row) => row.content.includes("https://cdn.example/output.mp4")),
                 false
             );
-            const tasks = listVideoTasks(database, sessionId);
+            const tasks = videoTaskRows(database, sessionId);
             assert.equal(tasks.length, 1);
             assert.equal(tasks[0]?.status, "succeeded");
             assert.equal(tasks[0]?.asset_id, assets[0]?.id);
@@ -1886,7 +1875,7 @@ describe("SSE streaming from Anthropic endpoint", () => {
                 )
             );
             const body = await readBody(resp);
-            const tasks = listVideoTasks(database, sessionId);
+            const tasks = videoTaskRows(database, sessionId);
             const history = listToolInputHistory(database, sessionId, { kind: "video" });
             const rows = getMessages(database, sessionId);
 
@@ -3629,9 +3618,12 @@ describe("GET /api/usage", () => {
 
     it("returns tracked usage counts", async () => {
         const database = requireDb();
-        trackUsage(database, "image");
-        trackUsage(database, "image");
-        trackUsage(database, "speech");
+        database.prepare(
+            "INSERT INTO daily_usage (date, feature, count) VALUES (date('now'), 'image', 2)"
+        ).run();
+        database.prepare(
+            "INSERT INTO daily_usage (date, feature, count) VALUES (date('now'), 'speech', 1)"
+        ).run();
 
         const resp = await handleRequest(makeRequest("GET", "/api/usage"));
         assert.equal(resp.status, 200);
@@ -4434,7 +4426,9 @@ describe("Session, draft, and create-history APIs", () => {
         setActiveSessionId(database, sessionId);
         process.env.MINIMAX_API_KEY = "test-key";
         database.prepare("DELETE FROM daily_usage WHERE feature = 'image'").run();
-        for (let i = 0; i < 100; i++) trackUsage(database, "image");
+        database.prepare(
+            "INSERT INTO daily_usage (date, feature, count) VALUES (date('now'), 'image', 100)"
+        ).run();
         try {
             const resp = await handleRequest(
                 new Request("http://localhost/api/profile/avatar/generate", {

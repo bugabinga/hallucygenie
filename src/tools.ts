@@ -71,16 +71,6 @@ export interface GenerateMusicCoverOptions {
     cover_feature_id: string;
 }
 
-export interface MusicCoverPreprocessOptions {
-    audio_url?: string;
-    audio_base64?: string;
-}
-
-export interface MusicCoverPreprocessResult {
-    cover_feature_id: string;
-    lyrics: string;
-}
-
 export interface AnalyzeImageOptions {
     image_url: string;
     prompt?: string;
@@ -857,13 +847,6 @@ export async function generateMusicCover(
     _apiKey: string
 ): Promise<ToolResult> {
     return { type: "error", content: MUSIC_DISABLED_MESSAGE };
-}
-
-export async function musicCoverPreprocess(
-    _input: MusicCoverPreprocessOptions,
-    _apiKey: string
-): Promise<MusicCoverPreprocessResult> {
-    throw new Error(MUSIC_DISABLED_MESSAGE);
 }
 
 /** Write or revise lyrics through the supported text model, never the legacy music API. */

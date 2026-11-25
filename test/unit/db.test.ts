@@ -19,7 +19,6 @@ import {
     archiveSession,
     assertNoRawAssetDataInMessage,
     autoNameSession,
-    checkQuota,
     consumeQuota,
     createSession,
     deleteDraft,
@@ -50,10 +49,8 @@ import {
     saveAsyncTtsTask,
     saveDraft,
     saveMessage,
-    savePreference,
     saveUserProfile,
     setActiveSessionId,
-    trackUsage,
     updateAsyncTtsTask
 } from "../../src/db.ts";
 
@@ -63,6 +60,24 @@ function freshDb(): Database {
     const migrationsDir = join(import.meta.dirname ?? ".", "..", "..", "migrations");
     runMigrations(db, migrationsDir);
     return db;
+}
+
+// Helper: write one preference row directly (preferences have no app write path)
+function savePreferenceRow(db: Database, key: string, value: string): void {
+    db.prepare(
+        `INSERT INTO preferences (key, value, updated_at)
+     VALUES (?, ?, datetime('now'))
+     ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = datetime('now')`
+    ).run(key, value);
+}
+
+// Helper: write today's usage count directly
+function saveUsageRow(db: Database, feature: string, count: number): void {
+    db.prepare(
+        `INSERT INTO daily_usage (date, feature, count)
+     VALUES (date('now'), ?, ?)
+     ON CONFLICT(date, feature) DO UPDATE SET count = excluded.count`
+    ).run(feature, count);
 }
 
 // Helper: create a temp dir with specific migration files
@@ -690,18 +705,18 @@ describe("Preference CRUD", () => {
         db = freshDb();
     });
 
-    it("saves and retrieves preferences", () => {
-        savePreference(db, "theme", "dark");
-        savePreference(db, "language", "en");
+    it("retrieves stored preferences", () => {
+        savePreferenceRow(db, "theme", "dark");
+        savePreferenceRow(db, "language", "en");
 
         const prefs = getPreferences(db);
         assert.equal(prefs.theme, "dark");
         assert.equal(prefs.language, "en");
     });
 
-    it("upserts existing preference", () => {
-        savePreference(db, "theme", "dark");
-        savePreference(db, "theme", "light");
+    it("reads the latest value for an updated preference", () => {
+        savePreferenceRow(db, "theme", "dark");
+        savePreferenceRow(db, "theme", "light");
 
         const prefs = getPreferences(db);
         assert.equal(prefs.theme, "light");
@@ -715,7 +730,7 @@ describe("Preference CRUD", () => {
 
     it("handles special characters in values", () => {
         const special = "value with \"quotes\" & <tags> 'apostrophes'";
-        savePreference(db, "special", special);
+        savePreferenceRow(db, "special", special);
 
         const prefs = getPreferences(db);
         assert.equal(prefs.special, special);
@@ -732,18 +747,15 @@ describe("Usage Tracking", () => {
     });
 
     it("tracks usage for a feature", () => {
-        trackUsage(db, "speech");
-        trackUsage(db, "speech");
-        trackUsage(db, "speech");
+        saveUsageRow(db, "speech", 3);
 
         const usage = getUsageToday(db);
         assert.equal(usage.speech, 3);
     });
 
     it("tracks multiple features independently", () => {
-        trackUsage(db, "speech");
-        trackUsage(db, "speech");
-        trackUsage(db, "image");
+        saveUsageRow(db, "speech", 2);
+        saveUsageRow(db, "image", 1);
 
         const usage = getUsageToday(db);
         assert.equal(usage.speech, 2);
@@ -751,152 +763,17 @@ describe("Usage Tracking", () => {
         assert.equal(usage.music, undefined);
     });
 
-    it("returns empty object when no usage", () => {
-        const usage = getUsageToday(db);
-        assert.deepEqual(usage, {});
-    });
-});
-
-// ── Step 4: Quota Enforcement Tests ─────────────────────────────────
-
-describe("Quota Enforcement", () => {
-    let db: Database;
-
-    beforeEach(() => {
-        db = freshDb();
-    });
-
-    it("returns correct status when under limit", () => {
-        trackUsage(db, "speech");
-
-        const status = checkQuota(db, "speech");
-        assert.equal(status.used, 1);
-        assert.equal(status.limit, 9000);
-        assert.equal(status.remaining, 8999);
-        assert.equal(status.warning, false);
-        assert.equal(status.blocked, false);
-    });
-
-    it("shows warning at 80% threshold", () => {
-        // Speech limit is 9000, 80% = 7200
-        // Insert directly to set exact count
-        db.prepare(
-            "INSERT INTO daily_usage (date, feature, count) VALUES (date('now'), 'speech', 7200)"
-        ).run();
-
-        const status = checkQuota(db, "speech");
-        assert.equal(status.used, 7200);
-        assert.equal(status.warning, true);
-        assert.equal(status.blocked, false);
-    });
-
-    it("blocks at 100% limit", () => {
-        db.prepare(
-            "INSERT INTO daily_usage (date, feature, count) VALUES (date('now'), 'speech', 9000)"
-        ).run();
-
-        const status = checkQuota(db, "speech");
-        assert.equal(status.used, 9000);
-        assert.equal(status.warning, true);
-        assert.equal(status.blocked, true);
-    });
-
-    it("blocks when over limit", () => {
-        db.prepare(
-            "INSERT INTO daily_usage (date, feature, count) VALUES (date('now'), 'speech', 9999)"
-        ).run();
-
-        const status = checkQuota(db, "speech");
-        assert.equal(status.used, 9999);
-        assert.equal(status.blocked, true);
-        assert.equal(status.remaining, 0);
-    });
-
-    it("resets for a different date (daily reset)", () => {
-        // Insert usage for yesterday
+    it("counts only today's usage", () => {
         db.prepare(
             "INSERT INTO daily_usage (date, feature, count) VALUES (date('now', '-1 day'), 'speech', 9000)"
         ).run();
 
-        const status = checkQuota(db, "speech");
-        assert.equal(status.used, 0);
-        assert.equal(status.blocked, false);
+        assert.deepEqual(getUsageToday(db), {});
     });
 
-    it("tracks multiple features independently for quotas", () => {
-        db.prepare(
-            "INSERT INTO daily_usage (date, feature, count) VALUES (date('now'), 'image', 100)"
-        ).run();
-
-        const imageStatus = checkQuota(db, "image");
-        assert.equal(imageStatus.blocked, true);
-
-        const speechStatus = checkQuota(db, "speech");
-        assert.equal(speechStatus.blocked, false);
-        assert.equal(speechStatus.used, 0);
-    });
-
-    it("returns safe default for unknown feature", () => {
-        const status = checkQuota(db, "unknown_feature");
-        assert.equal(status.used, 0);
-        assert.equal(status.limit, 0);
-        assert.equal(status.remaining, 0);
-        assert.equal(status.warning, false);
-        assert.equal(status.blocked, false);
-    });
-
-    it("snapshot: quota status JSON at various usage levels", () => {
-        trackUsage(db, "image");
-        trackUsage(db, "image");
-
-        const status = checkQuota(db, "image");
-        assert.deepEqual(
-            {
-                used: status.used,
-                limit: status.limit,
-                remaining: status.remaining,
-                warning: status.warning,
-                blocked: status.blocked
-            },
-            { used: 2, limit: 100, remaining: 98, warning: false, blocked: false }
-        );
-    });
-
-    it("snapshot: quota status at warning threshold", () => {
-        // Image limit = 100, 80% = 80
-        db.prepare(
-            "INSERT INTO daily_usage (date, feature, count) VALUES (date('now'), 'image', 80)"
-        ).run();
-
-        const status = checkQuota(db, "image");
-        assert.deepEqual(
-            {
-                used: status.used,
-                limit: status.limit,
-                remaining: status.remaining,
-                warning: status.warning,
-                blocked: status.blocked
-            },
-            { used: 80, limit: 100, remaining: 20, warning: true, blocked: false }
-        );
-    });
-
-    it("snapshot: quota status at blocked threshold", () => {
-        db.prepare(
-            "INSERT INTO daily_usage (date, feature, count) VALUES (date('now'), 'music', 100)"
-        ).run();
-
-        const status = checkQuota(db, "music");
-        assert.deepEqual(
-            {
-                used: status.used,
-                limit: status.limit,
-                remaining: status.remaining,
-                warning: status.warning,
-                blocked: status.blocked
-            },
-            { used: 100, limit: 100, remaining: 0, warning: true, blocked: true }
-        );
+    it("returns empty object when no usage", () => {
+        const usage = getUsageToday(db);
+        assert.deepEqual(usage, {});
     });
 });
 
@@ -972,7 +849,7 @@ describe("consumeQuota", () => {
 
     it("allows consumption when quota is available", () => {
         assert.equal(consumeQuota(db, "image"), 1);
-        assert.equal(checkQuota(db, "image").used, 1);
+        assert.equal(getUsageToday(db).image, 1);
     });
 
     it("returns null when quota is exhausted", () => {
@@ -981,7 +858,7 @@ describe("consumeQuota", () => {
         }
 
         assert.equal(consumeQuota(db, "image"), null);
-        assert.equal(checkQuota(db, "image").used, QUOTAS.image);
+        assert.equal(getUsageToday(db).image, QUOTAS.image);
     });
 
     it("does not increment count beyond limit", () => {
@@ -992,7 +869,7 @@ describe("consumeQuota", () => {
         assert.equal(consumeQuota(db, "image"), 100);
         assert.equal(consumeQuota(db, "image"), null);
         assert.equal(consumeQuota(db, "image"), null);
-        assert.equal(checkQuota(db, "image").used, 100);
+        assert.equal(getUsageToday(db).image, 100);
     });
 
     it("does not increment any quota feature beyond its limit", () => {
@@ -1002,7 +879,7 @@ describe("consumeQuota", () => {
             ).run(feature, limit);
 
             assert.equal(consumeQuota(db, feature), null, feature);
-            assert.equal(checkQuota(db, feature).used, limit, feature);
+            assert.equal(getUsageToday(db)[feature], limit, feature);
         }
     });
 
@@ -1014,33 +891,33 @@ describe("consumeQuota", () => {
     it("consumes independently for different features", () => {
         assert.equal(consumeQuota(db, "image"), 1);
         assert.equal(consumeQuota(db, "music"), 1);
-        assert.equal(checkQuota(db, "image").used, 1);
-        assert.equal(checkQuota(db, "music").used, 1);
+        assert.equal(getUsageToday(db).image, 1);
+        assert.equal(getUsageToday(db).music, 1);
     });
 
     it("consumes speech quota by character amount", () => {
         assert.equal(consumeQuota(db, "speech", 5), 5);
-        assert.equal(checkQuota(db, "speech").used, 5);
+        assert.equal(getUsageToday(db).speech, 5);
         assert.equal(consumeQuota(db, "speech", QUOTAS.speech - 5), QUOTAS.speech);
         assert.equal(consumeQuota(db, "speech", 1), null);
-        assert.equal(checkQuota(db, "speech").used, QUOTAS.speech);
+        assert.equal(getUsageToday(db).speech, QUOTAS.speech);
     });
 
     it("releases consumed quota after failed attempts", () => {
         assert.equal(consumeQuota(db, "image"), 1);
         releaseQuota(db, "image");
-        assert.equal(checkQuota(db, "image").used, 0);
+        assert.equal(getUsageToday(db).image, 0);
     });
 
     it("releases speech quota by character amount", () => {
         assert.equal(consumeQuota(db, "speech", 5), 5);
         releaseQuota(db, "speech", 3);
-        assert.equal(checkQuota(db, "speech").used, 2);
+        assert.equal(getUsageToday(db).speech, 2);
     });
 
     it("releaseQuota never decrements below zero", () => {
         releaseQuota(db, "image");
-        assert.equal(checkQuota(db, "image").used, 0);
+        assert.equal(getUsageToday(db).image ?? 0, 0);
     });
 
     it("rejects consumption when remaining quota is insufficient", () => {
@@ -1048,12 +925,12 @@ describe("consumeQuota", () => {
         db.prepare(
             "INSERT INTO daily_usage (date, feature, count) VALUES (date('now'), 'image', 97)"
         ).run();
-        assert.equal(checkQuota(db, "image").used, 97);
+        assert.equal(getUsageToday(db).image, 97);
 
         // Trying to consume 5 when only 3 remaining should fail
         assert.equal(consumeQuota(db, "image", 5), null);
         // Count should remain 97, not 102 (which would exceed limit of 100)
-        assert.equal(checkQuota(db, "image").used, 97);
+        assert.equal(getUsageToday(db).image, 97);
     });
 });
 
